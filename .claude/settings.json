@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "Bash(curl -s \"https://web.qualityautomacao.com.br/INTEGRACAO/VENDA?limite=2\" -H \"x-api-key: f89021bf-d9e5-481d-b6a0-52a00673cd1d\")"
+    ]
+  }
+}

@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+/* Habilita dark mode via classe (.dark no html) no Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+}
+
+*, *::before, *::after {
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
+}
+
+html {
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background-color: #f8fafc;
+  color: #0f172a;
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
+}
+
+code, pre, .font-mono, [class*="font-mono"] {
+  font-family: 'Geist Mono', ui-monospace, monospace !important;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Fundo geral do app + vignette (usa CSS custom para alternar com dark) */
+.app-bg { background-color: #f8fafc; }
+.app-vignette { background: linear-gradient(to bottom, transparent, transparent, rgba(255,255,255,0.4)); }
+html.dark .app-bg { background-color: #0b1220; }
+html.dark .app-vignette { background: linear-gradient(to bottom, transparent, transparent, rgba(11, 18, 32, 0.55)); }
+
+/* Degrade sutil em cards com fundo branco e bordas arredondadas.
+   Evita afetar inputs, selects e outros elementos interativos. */
+.bg-white.rounded-xl,
+.bg-white.rounded-2xl,
+.bg-white.rounded-lg.shadow-sm,
+.bg-white.rounded-lg.shadow-md,
+.bg-white.rounded-xl.shadow-sm,
+.bg-white.rounded-2xl.shadow-sm,
+.bg-white.rounded-xl.shadow-md,
+.bg-white.rounded-2xl.shadow-md {
+  background-color: #ffffff;
+  background-image: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+/* Evita o degrade em elementos que NAO sao cards: em dropdowns, tooltips e pickers */
+[role="combobox"].bg-white.rounded-xl,
+[role="listbox"].bg-white.rounded-xl,
+input.bg-white,
+select.bg-white,
+textarea.bg-white,
+button.bg-white {
+  background-image: none;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * DARK MODE — overrides globais (ativa via classe .dark no <html>)
+ * Paleta base: slate-900 bg, slate-800 cards, slate-700 borders, slate-200 texto
+ * ════════════════════════════════════════════════════════════ */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0b1220;
+  color: #e2e8f0;
+}
+
+/* ─── Backgrounds ───────────────────────────────── */
+html.dark .bg-white { background-color: #1e293b !important; background-image: linear-gradient(180deg, #1e293b 0%, #172033 100%) !important; }
+/* variantes de bg-white com opacidade (bg-white/60, bg-white/80, etc.) */
+html.dark .bg-white\/40, html.dark .bg-white\/50, html.dark .bg-white\/60, html.dark .bg-white\/70, html.dark .bg-white\/80, html.dark .bg-white\/90, html.dark .bg-white\/95 {
+  background-color: rgba(30, 41, 59, 0.85) !important;
+  background-image: none !important;
+}
+html.dark input.bg-white, html.dark select.bg-white, html.dark textarea.bg-white, html.dark button.bg-white {
+  background-color: #0f172a !important;
+  background-image: none !important;
+  color: #e2e8f0;
+}
+html.dark .bg-gray-50, html.dark .bg-slate-50 { background-color: #0f172a !important; }
+html.dark .bg-gray-100, html.dark .bg-slate-100 { background-color: #1e293b !important; }
+html.dark .bg-gray-200 { background-color: #334155 !important; }
+html.dark .bg-gray-900 { background-color: #f1f5f9 !important; color: #0f172a !important; }
+
+html.dark .bg-gray-50\/30, html.dark .bg-gray-50\/40, html.dark .bg-gray-50\/50, html.dark .bg-gray-50\/60, html.dark .bg-gray-50\/80 { background-color: rgba(15, 23, 42, 0.55) !important; }
+html.dark .bg-gray-100\/50, html.dark .bg-gray-100\/60, html.dark .bg-gray-100\/80 { background-color: rgba(30, 41, 59, 0.7) !important; }
+html.dark .hover\:bg-gray-50:hover, html.dark .hover\:bg-gray-50\/50:hover, html.dark .hover\:bg-gray-50\/30:hover { background-color: rgba(51, 65, 85, 0.35) !important; }
+html.dark .hover\:bg-gray-100:hover, html.dark .hover\:bg-gray-100\/60:hover { background-color: rgba(51, 65, 85, 0.5) !important; }
+
+/* Cores sutis (blue-50, emerald-50, etc.) ficam com opacidade menor para nao ofuscar */
+html.dark .bg-blue-50,     html.dark .bg-blue-50\/30,     html.dark .bg-blue-50\/50,     html.dark .bg-blue-50\/60     { background-color: rgba(59, 130, 246, 0.12) !important; color: #93c5fd !important; }
+html.dark .bg-emerald-50,  html.dark .bg-emerald-50\/30,  html.dark .bg-emerald-50\/40,  html.dark .bg-emerald-50\/50  { background-color: rgba(16, 185, 129, 0.13) !important; color: #6ee7b7 !important; }
+html.dark .bg-red-50,      html.dark .bg-red-50\/30,      html.dark .bg-red-50\/40,      html.dark .bg-red-50\/50      { background-color: rgba(239, 68, 68, 0.13) !important; color: #fca5a5 !important; }
+html.dark .bg-amber-50,    html.dark .bg-amber-50\/30,    html.dark .bg-amber-50\/40,    html.dark .bg-amber-50\/50    { background-color: rgba(245, 158, 11, 0.13) !important; color: #fcd34d !important; }
+html.dark .bg-orange-50,   html.dark .bg-orange-50\/30,   html.dark .bg-orange-50\/40,   html.dark .bg-orange-50\/50   { background-color: rgba(249, 115, 22, 0.13) !important; color: #fdba74 !important; }
+html.dark .bg-violet-50,   html.dark .bg-violet-50\/30,   html.dark .bg-violet-50\/40,   html.dark .bg-violet-50\/50,
+html.dark .bg-purple-50,   html.dark .bg-purple-50\/30,   html.dark .bg-purple-50\/40,   html.dark .bg-purple-50\/50   { background-color: rgba(139, 92, 246, 0.13) !important; color: #c4b5fd !important; }
+html.dark .bg-cyan-50,     html.dark .bg-cyan-50\/30,     html.dark .bg-cyan-50\/40,     html.dark .bg-cyan-50\/50     { background-color: rgba(6, 182, 212, 0.13) !important; color: #67e8f9 !important; }
+html.dark .bg-indigo-50,   html.dark .bg-indigo-50\/30,   html.dark .bg-indigo-50\/40,   html.dark .bg-indigo-50\/50   { background-color: rgba(99, 102, 241, 0.13) !important; color: #a5b4fc !important; }
+html.dark .bg-slate-50\/50 { background-color: rgba(30, 41, 59, 0.5) !important; }
+
+/* ─── Borders ───────────────────────────────────── */
+html.dark .border-gray-50, html.dark .border-gray-100, html.dark .border-gray-150 { border-color: #263244 !important; }
+html.dark .border-gray-200, html.dark .border-gray-300 { border-color: #334155 !important; }
+html.dark .border-gray-200\/50, html.dark .border-gray-200\/60, html.dark .border-gray-200\/70 { border-color: rgba(51, 65, 85, 0.6) !important; }
+html.dark .border-gray-100\/60 { border-color: rgba(38, 50, 68, 0.6) !important; }
+html.dark .divide-gray-50 > * + *, html.dark .divide-gray-100 > * + * { border-color: #263244 !important; }
+html.dark .divide-gray-200 > * + * { border-color: #334155 !important; }
+
+html.dark .border-blue-100    { border-color: rgba(59, 130, 246, 0.3) !important; }
+html.dark .border-blue-200, html.dark .border-blue-200\/60 { border-color: rgba(59, 130, 246, 0.45) !important; }
+html.dark .border-blue-500    { border-color: #3b82f6 !important; }
+html.dark .border-emerald-100 { border-color: rgba(16, 185, 129, 0.3) !important; }
+html.dark .border-emerald-200, html.dark .border-emerald-200\/60 { border-color: rgba(16, 185, 129, 0.45) !important; }
+html.dark .border-red-100     { border-color: rgba(239, 68, 68, 0.3) !important; }
+html.dark .border-red-200     { border-color: rgba(239, 68, 68, 0.45) !important; }
+html.dark .border-amber-100   { border-color: rgba(245, 158, 11, 0.3) !important; }
+html.dark .border-amber-200   { border-color: rgba(245, 158, 11, 0.45) !important; }
+html.dark .border-orange-100  { border-color: rgba(249, 115, 22, 0.3) !important; }
+html.dark .border-orange-200  { border-color: rgba(249, 115, 22, 0.45) !important; }
+html.dark .border-violet-100, html.dark .border-purple-100  { border-color: rgba(139, 92, 246, 0.3) !important; }
+html.dark .border-violet-200, html.dark .border-purple-200  { border-color: rgba(139, 92, 246, 0.45) !important; }
+
+/* ─── Textos (gray-*) ───────────────────────────── */
+html.dark .text-gray-900 { color: #f1f5f9 !important; }
+html.dark .text-gray-800 { color: #e2e8f0 !important; }
+html.dark .text-gray-700 { color: #cbd5e1 !important; }
+html.dark .text-gray-600 { color: #94a3b8 !important; }
+html.dark .text-gray-500 { color: #94a3b8 !important; }
+html.dark .text-gray-400 { color: #64748b !important; }
+html.dark .text-gray-300 { color: #475569 !important; }
+html.dark .text-gray-200 { color: #334155 !important; }
+html.dark .text-slate-900 { color: #f1f5f9 !important; }
+html.dark .text-slate-800 { color: #e2e8f0 !important; }
+html.dark .text-slate-700 { color: #cbd5e1 !important; }
+html.dark .text-slate-500 { color: #94a3b8 !important; }
+html.dark .text-black { color: #e2e8f0 !important; }
+
+/* Textos coloridos ficam um pouco mais claros (legibilidade em fundo escuro) */
+html.dark .text-blue-600, html.dark .text-blue-700 { color: #93c5fd !important; }
+html.dark .text-emerald-600, html.dark .text-emerald-700, html.dark .text-emerald-800 { color: #6ee7b7 !important; }
+html.dark .text-red-500, html.dark .text-red-600, html.dark .text-red-700 { color: #fca5a5 !important; }
+html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-800 { color: #fcd34d !important; }
+html.dark .text-orange-500, html.dark .text-orange-600, html.dark .text-orange-700 { color: #fdba74 !important; }
+html.dark .text-violet-600, html.dark .text-violet-700, html.dark .text-violet-800, html.dark .text-purple-600, html.dark .text-purple-700 { color: #c4b5fd !important; }
+html.dark .text-cyan-600, html.dark .text-cyan-700 { color: #67e8f9 !important; }
+html.dark .text-indigo-600, html.dark .text-indigo-700 { color: #a5b4fc !important; }
+
+/* ─── Shadows ─────────────────────────────────── */
+html.dark .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3) !important; }
+html.dark .shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.3) !important; }
+html.dark .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.35) !important; }
+html.dark .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4) !important; }
+html.dark .shadow-xl { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.55), 0 8px 10px -6px rgba(0, 0, 0, 0.45) !important; }
+html.dark .shadow-xs { box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.3) !important; }
+
+/* ─── Scrollbar ─────────────────────────────────── */
+html.dark ::-webkit-scrollbar-thumb { background: #334155; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* ─── Inputs de texto / selects ──────────────────── */
+html.dark input, html.dark select, html.dark textarea {
+  color: #e2e8f0;
+}
+html.dark input::placeholder, html.dark textarea::placeholder { color: #64748b; }
+
+/* ─── Tabelas (zebra + headers) ──────────────────── */
+html.dark table { color: #e2e8f0; }
+
+/* ─── Gradients "from-white to-*" (vignettes e overlays) ── */
+html.dark .from-white { --tw-gradient-from: rgba(11, 18, 32, 0) !important; }
+html.dark .to-white\/40 { --tw-gradient-to: rgba(11, 18, 32, 0.55) !important; }
+
+/* ─── Ring / outline (foco de inputs) ──────────────── */
+html.dark .ring-blue-100 { --tw-ring-color: rgba(59, 130, 246, 0.3) !important; }
+html.dark .ring-emerald-100 { --tw-ring-color: rgba(16, 185, 129, 0.3) !important; }
+html.dark .ring-red-100 { --tw-ring-color: rgba(239, 68, 68, 0.3) !important; }
+html.dark .ring-amber-100, html.dark .ring-orange-100 { --tw-ring-color: rgba(245, 158, 11, 0.3) !important; }
+html.dark .ring-gray-100 { --tw-ring-color: rgba(71, 85, 105, 0.4) !important; }
+
+/* ─── Selection / highlight ─────────────────────── */
+html.dark ::selection { background-color: rgba(59, 130, 246, 0.35); color: #f1f5f9; }
+
+/* ─── Degrade sutil em rounded-md / rounded tambem ── */
+html.dark .bg-white.rounded,
+html.dark .bg-white.rounded-md,
+html.dark .bg-white.rounded-lg {
+  background-color: #1e293b !important;
+  background-image: linear-gradient(180deg, #1e293b 0%, #172033 100%) !important;
+}
