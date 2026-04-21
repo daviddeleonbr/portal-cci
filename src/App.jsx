@@ -22,6 +22,7 @@ import RelatoriosCliente, { ClienteRelatoriosHub } from './pages/RelatoriosClien
 import RelatorioDRE from './pages/RelatorioDRE';
 import RelatorioAnaliseLancamentos from './pages/RelatorioAnaliseLancamentos';
 import RelatorioFluxoCaixa from './pages/RelatorioFluxoCaixa';
+import RelatorioEvolucaoMensal from './pages/RelatorioEvolucaoMensal';
 import CciPlanoContas from './pages/CciPlanoContas';
 import CciFornecedores from './pages/CciFornecedores';
 import CciContasPagar from './pages/CciContasPagar';
@@ -102,6 +103,7 @@ export default function App() {
           <Route path="/admin/relatorios-cliente/:clienteId/dre" element={<RelatorioDRE />} />
           <Route path="/admin/relatorios-cliente/:clienteId/analise-lancamentos" element={<RelatorioAnaliseLancamentos />} />
           <Route path="/admin/relatorios-cliente/:clienteId/fluxo-caixa" element={<RelatorioFluxoCaixa />} />
+          <Route path="/admin/relatorios-cliente/:clienteId/evolucao" element={<RelatorioEvolucaoMensal />} />
 
           {/* BPO */}
           <Route path="/admin/bpo/conciliacao-bancaria" element={<BpoConciliacaoBancaria />} />

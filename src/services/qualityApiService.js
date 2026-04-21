@@ -34,13 +34,23 @@ const semaforo = new Semaphore(MAX_CONCURRENT);
 // ─── Cache em memoria + persistente (localStorage para catalogos) ──
 const memCache = new Map();  // key → { data, expiresAt, promise }
 
+// Hash determinista (FNV-1a) do apiKey. 12 chars de prefixo causavam colisao
+// quando duas redes tinham chaves com mesmo inicio (autobem vs trivela), fazendo
+// uma rede ver o cache da outra. Agora o cacheKey cobre a chave inteira.
+function hashApiKey(key) {
+  if (!key) return 'no-key';
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
 function cacheKey(endpoint, params, apiKey = '') {
   // ordena chaves para garantir consistencia
   const sorted = Object.keys(params).sort().reduce((acc, k) => { acc[k] = params[k]; return acc; }, {});
-  // Prefixa com parte da apiKey para isolar caches por REDE diferente
-  // (antes estava compartilhando entre redes - bug).
-  const prefix = apiKey ? String(apiKey).slice(0, 12) : 'no-key';
-  return `${prefix}:${endpoint}:${JSON.stringify(sorted)}`;
+  return `${hashApiKey(apiKey)}:${endpoint}:${JSON.stringify(sorted)}`;
 }
 
 function getFromCache(key) {
@@ -57,14 +67,15 @@ function setCache(key, data, ttl = CACHE_TTL_MS) {
 }
 
 // localStorage para catalogos (sobrevive reload)
-// Prefixo bump (v2) para invalidar caches antigos do formato anterior
-// (que compartilhava dados entre redes por nao incluir apiKey na chave)
-const LOCAL_CACHE_PREFIX = 'q2_';
+// Prefixo bump (v3) para invalidar caches antigos do formato que usava
+// apenas 12 chars de prefixo da apiKey e colidia entre redes diferentes.
+const LOCAL_CACHE_PREFIX = 'q3_';
 
-// Limpeza one-shot de entradas antigas (formato q_*) que persistem do bug anterior
+// Limpeza one-shot de entradas antigas (formatos q_* e q2_*) que persistem
+// de bugs anteriores envolvendo colisao de chaves de cache.
 try {
   Object.keys(localStorage)
-    .filter(k => k.startsWith('q_'))
+    .filter(k => k.startsWith('q_') || k.startsWith('q2_'))
     .forEach(k => localStorage.removeItem(k));
 } catch { /* ignore */ }
 
@@ -88,7 +99,7 @@ function setLocalCache(key, data, ttl = CACHE_TTL_CATALOGO_MS) {
 export function limparCache() {
   memCache.clear();
   Object.keys(localStorage)
-    .filter(k => k.startsWith(LOCAL_CACHE_PREFIX) || k.startsWith('q_'))
+    .filter(k => k.startsWith(LOCAL_CACHE_PREFIX) || k.startsWith('q_') || k.startsWith('q2_'))
     .forEach(k => localStorage.removeItem(k));
 }
 

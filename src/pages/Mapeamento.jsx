@@ -447,7 +447,30 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
           });
           setMapeamentos(mapsDaMascara);
           setMapeamentoVendas(mapVendas || []);
-          setExpandedGrupos(new Set((grps || []).filter(g => ['grupo', 'entrada', 'saida'].includes(g.tipo)).map(g => g.id)));
+          // Para mascaras de fluxo de caixa, auto-expande somente ate a 3a hierarquia
+          // (depth 0 e 1 expandidos -> mostra ate a depth 2 = 3o nivel visivel).
+          // DRE mantem o comportamento antigo (expande tudo).
+          if (isFluxo) {
+            const byId = new Map((grps || []).map(g => [g.id, g]));
+            const depthCache = new Map();
+            const getDepth = (g) => {
+              if (depthCache.has(g.id)) return depthCache.get(g.id);
+              if (!g.parent_id) { depthCache.set(g.id, 0); return 0; }
+              const parent = byId.get(g.parent_id);
+              const d = parent ? getDepth(parent) + 1 : 0;
+              depthCache.set(g.id, d);
+              return d;
+            };
+            const expand = new Set(
+              (grps || [])
+                .filter(g => ['grupo', 'entrada', 'saida'].includes(g.tipo))
+                .filter(g => getDepth(g) < 2)
+                .map(g => g.id)
+            );
+            setExpandedGrupos(expand);
+          } else {
+            setExpandedGrupos(new Set((grps || []).filter(g => ['grupo', 'entrada', 'saida'].includes(g.tipo)).map(g => g.id)));
+          }
         } catch (err) {
           console.error('[Mapeamento] listarGrupos/listarMapeamentos erro:', err);
           showToast('error', `Erro ao carregar dados: ${err?.message || 'veja console'}`);

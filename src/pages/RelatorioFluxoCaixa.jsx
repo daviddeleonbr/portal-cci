@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -14,6 +14,10 @@ import * as contasBancariasService from '../services/clienteContasBancariasServi
 import { formatCurrency } from '../utils/format';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+// Codigo sintetico usado para agrupar movimentos sem planoContaGerencial
+// (ou com plano nao mapeado) no fluxo. Nao colide com codigos reais.
+const SEM_PLANO_PREFIX = '__sem_plano__';
 
 function rangeMes(ano, mes) {
   const mm = String(mes).padStart(2, '0');
@@ -53,18 +57,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
   const [ocultarZeradas, setOcultarZeradas] = useState(true);
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
+  // Modal de inspecao de movimentos de um tipoDocumentoOrigem especifico
 
   // Filtro por tipo de conta no fluxo de caixa:
   //  - bancaria: conta corrente
   //  - caixa: caixa fisico
-  //  - recebimento: adquirente (PagPix/Cielo/Brinks) - recebe de cliente
-  // NAO inclui aplicacao (movimento interno) nem outras (fora do fluxo).
-  const [tiposContaAtivos, setTiposContaAtivos] = useState(() => new Set(['bancaria', 'caixa', 'recebimento']));
+  // Aplicacao (movimento interno) e Outras ficam fora do fluxo por padrao e nao
+  // sao selecionaveis aqui - quando necessario, usa o filtro por conta especifica.
+  const [tiposContaAtivos, setTiposContaAtivos] = useState(
+    () => new Set(['bancaria', 'caixa'])
+  );
   const [contasClassificadas, setContasClassificadas] = useState([]);
 
-  // Transferencias entre contas (transferencia=S) sao EXCLUIDAS por padrao
-  // para evitar duplicidade (ex: repasse PagPix -> Conta Bancaria).
-  const [incluirTransferencias, setIncluirTransferencias] = useState(false);
+  // Transferencias (TRANSFERENCIA/TRANSFERENCIA_BANCARIA/TRANSFERENCIA_SANGRIA)
+  // sempre entram no fluxo - nao ha mais toggle para excluir.
 
   // Filtro por conta especifica (multiselecao). Vazio = todas.
   const [filtroContas, setFiltroContas] = useState(() => new Set());
@@ -165,7 +171,18 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
     setDadosPorMes({});
   }, [mesFinal, qtdMeses, mascaraSelecionada]);
 
-  // ─── Fetch MOVIMENTO_CONTA ────────────────────────────────
+  // Map codigo do titulo a pagar -> objeto completo do titulo.
+  // Usado para: (1) resolver o plano de movimentos TITULO_PAGAR_PAGAMENTO;
+  // (2) detalhar o titulo baixado quando o usuario expande o lancamento.
+  const [tituloPagarMap, setTituloPagarMap] = useState(new Map());
+  // Map codigoPagamento (vem do array nested titulo.pagamento[]) -> lista de titulos.
+  // Usado pra resolver MOVIMENTO_CONTA.documentoOrigemCodigo em pagamentos em lote
+  // (um pagamento pode aparecer em varios titulos = 1 movimento cobre N titulos).
+  const [titulosPorPagamento, setTitulosPorPagamento] = useState(new Map());
+  // Lancamentos expandidos mostram os dados do documento origem quando aplicavel
+  const [expandedLancamentos, setExpandedLancamentos] = useState(new Set());
+
+  // ─── Fetch MOVIMENTO_CONTA + TITULO_PAGAR ─────────────────
   const carregarDados = useCallback(async () => {
     if (!cliente) return;
     if (!cliente.usa_webposto || !cliente.chave_api_id) {
@@ -197,6 +214,49 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
       const mapa = {};
       results.forEach(r => { mapa[r.key] = { movimentos: r.movimentos }; });
       setDadosPorMes(mapa);
+
+      // Busca titulos a pagar num intervalo ampliado (12 meses antes do inicio
+      // do periodo), pra pegar pagamentos de titulos emitidos ha mais tempo.
+      // Ignora erro: se falhar, o TITULO_PAGAR_PAGAMENTO volta pra "sem classificacao".
+      try {
+        const primeiroMes = meses[0];
+        const ultimoMes = meses[meses.length - 1];
+        const rInicio = rangeMes(primeiroMes.ano - 1, primeiroMes.mes);
+        const rFim = rangeMes(ultimoMes.ano, ultimoMes.mes);
+        setLoadingProgress({ atual: total, total, mensagem: 'Buscando titulos a pagar para resolver pagamentos...' });
+        const titulos = await qualityApi.buscarTitulosPagar(chave.chave, {
+          dataInicial: rInicio.dataInicial,
+          dataFinal: rFim.dataFinal,
+          empresaCodigo: cliente.empresa_codigo,
+        });
+        const mapaTitulos = new Map();
+        // Indice reverso: titulo.pagamento[].codigoDocumento -> lista de titulos.
+        // codigoDocumento casa com MOVIMENTO_CONTA.movimentoContaCodigo (onde
+        // tipoDocumentoOrigem = TITULO_PAGAR_PAGAMENTO). Esta e a ligacao real;
+        // um mesmo codigoDocumento pode aparecer em varios titulos = pagamento em lote.
+        const mapaPorPagamento = new Map();
+        (titulos || []).forEach(t => {
+          const cod = t.tituloPagarCodigo ?? t.codigo;
+          if (cod != null) mapaTitulos.set(Number(cod), t);
+          if (Array.isArray(t.pagamento)) {
+            t.pagamento.forEach(p => {
+              const codDoc = p?.codigoDocumento;
+              if (codDoc == null) return;
+              const key = Number(codDoc);
+              if (!Number.isFinite(key)) return;
+              if (!mapaPorPagamento.has(key)) mapaPorPagamento.set(key, []);
+              const lista = mapaPorPagamento.get(key);
+              if (!lista.includes(t)) lista.push(t);
+            });
+          }
+        });
+        setTituloPagarMap(mapaTitulos);
+        setTitulosPorPagamento(mapaPorPagamento);
+      } catch (_) {
+        setTituloPagarMap(new Map());
+        setTitulosPorPagamento(new Map());
+      }
+
       setDadosCarregados(true);
     } catch (err) {
       setError('Erro ao buscar movimentos: ' + err.message);
@@ -223,89 +283,204 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
     return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
   }, [dadosCarregados, loadingDados, reportSolicitado, dadosPorMes, grupos, mapeamentos]);
 
-  // Map contaCodigo -> classificacao (tipo). Se nao tem classif, default = 'bancaria'
+  // Map contaCodigo (sempre como Number) -> classificacao (tipo).
+  // Coagir a Number evita mismatch com m.contaCodigo que pode vir string da API.
   const tipoPorConta = useMemo(() => {
     const m = new Map();
     contasClassificadas.forEach(c => {
-      if (c.ativo !== false) m.set(c.conta_codigo, c.tipo);
+      if (c.ativo !== false) m.set(Number(c.conta_codigo), c.tipo);
     });
     return m;
   }, [contasClassificadas]);
 
-  // Map contaCodigo -> descricao (da CONTA endpoint)
+  // Quantas contas ATIVAS da rede estao classificadas como bancaria/caixa.
+  // Zero = usuario ainda nao classificou nada, fluxo vai sair vazio.
+  const qtdContasFluxo = useMemo(
+    () => contasClassificadas.filter(c => c.ativo !== false && (c.tipo === 'bancaria' || c.tipo === 'caixa')).length,
+    [contasClassificadas],
+  );
+
+  // Map contaCodigo (sempre Number) -> descricao (da CONTA endpoint)
   const descricaoPorConta = useMemo(() => {
     const m = new Map();
     contasMeta.forEach(c => {
       const cod = c.contaCodigo ?? c.codigo;
-      if (cod != null) m.set(cod, c.descricao || c.nome || `Conta #${cod}`);
+      if (cod != null) m.set(Number(cod), c.descricao || c.nome || `Conta #${cod}`);
     });
     return m;
   }, [contasMeta]);
 
-  // Lista de contas que aparecem nos movimentos E passam no filtro de tipo.
-  // Usada para popular o multiselect (so mostra contas elegiveis para fluxo de caixa
-  // da empresa selecionada).
+  // Lista de contas que aparecem nos movimentos da empresa selecionada.
+  // O dropdown so lista contas EXPLICITAMENTE classificadas como bancaria ou caixa
+  // em Cadastros > Clientes. Contas sem classificacao, aplicacao ou outras nao entram.
   const contasDisponiveis = useMemo(() => {
     const set = new Map();
     Object.values(dadosPorMes).forEach(dados => {
       (dados.movimentos || []).forEach(m => {
         if (m.contaCodigo == null) return;
-        const ehTransferencia = m.transferencia === 'S' || m.transferencia === true;
-        if (ehTransferencia && !incluirTransferencias) return;
-        const tipoConta = tipoPorConta.get(m.contaCodigo) || 'bancaria';
-        if (!tiposContaAtivos.has(tipoConta)) return;
-        if (!set.has(m.contaCodigo)) {
-          set.set(m.contaCodigo, descricaoPorConta.get(m.contaCodigo) || `Conta #${m.contaCodigo}`);
+        const cod = Number(m.contaCodigo);
+        const tipoConta = tipoPorConta.get(cod);
+        if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
+        if (!set.has(cod)) {
+          set.set(cod, descricaoPorConta.get(cod) || `Conta #${cod}`);
         }
       });
     });
     return Array.from(set.entries())
       .map(([codigo, nome]) => ({ codigo, nome }))
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, descricaoPorConta, incluirTransferencias]);
+  }, [dadosPorMes, tipoPorConta, descricaoPorConta]);
 
   // ─── Indexar movimentos por conta + mes ───────────────────
   // Crédito = +valor (entrou caixa). Débito = -valor (saiu caixa).
-  // Aplica filtros: transferencias internas + tipo de conta + contas especificas.
+  // Aplica filtros: tipo de conta + contas especificas.
   const { totaisPorConta, lancamentosPorConta } = useMemo(() => {
     const totais = {};
     const lancs = {};
     Object.entries(dadosPorMes).forEach(([mesKey, dados]) => {
       (dados.movimentos || []).forEach(m => {
-        // 0. Filtra transferencias internas (repasse entre contas proprias).
-        //    Quality marca transferencia='S' em ambos os lados do lancamento.
-        //    Excluimos por default para nao duplicar entradas no fluxo.
-        const ehTransferencia = m.transferencia === 'S' || m.transferencia === true;
-        if (ehTransferencia && !incluirTransferencias) return;
-
-        // 1. Filtro por classificacao
-        const tipoConta = tipoPorConta.get(m.contaCodigo) || 'bancaria';
+        if (m.contaCodigo == null) return;
+        const cod = Number(m.contaCodigo);
+        // 1. Filtro por classificacao - precisa ser explicita em Cadastros > Clientes.
+        //    Conta sem classificacao (ou aplicacao/outras) NAO entra no fluxo.
+        const tipoConta = tipoPorConta.get(cod);
+        if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
         if (!tiposContaAtivos.has(tipoConta)) return;
         // 2. Filtro por conta especifica (multiselect); vazio = todas
-        if (filtroContas.size > 0 && !filtroContas.has(m.contaCodigo)) return;
+        if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
 
-        const codigo = String(m.planoContaGerencialCodigo || '');
-        if (!codigo) return;
+        // Movimentos sem planoContaGerencialCodigo (ex: transferencias internas,
+        // caixa, suprimento etc) sao agrupados por tipoDocumentoOrigem num
+        // bucket "Sem classificacao" para nao sumirem do relatorio.
+        let planoBruto = m.planoContaGerencialCodigo;
+        let temPlano = planoBruto != null && planoBruto !== 0 && planoBruto !== '';
+
         const sinal = m.tipo === 'Crédito' ? 1 : -1;
-        const valor = Math.abs(Number(m.valor || 0)) * sinal;
+        const valorAbs = Math.abs(Number(m.valor || 0));
+        const valor = valorAbs * sinal;
+        const idBase = m.codigo || `${m.movimentoContaCodigo}`;
+
+        // ─ TITULO_PAGAR_PAGAMENTO: liga via titulo.pagamento[].codigoDocumento ─
+        //   codigoDocumento == MOVIMENTO_CONTA.movimentoContaCodigo.
+        //   Valor consumido no fluxo vem do TITULO_PAGAR (pagamento[].valorPago),
+        //   NAO do m.valor. Multiplos titulos podem compartilhar o mesmo
+        //   movimentoContaCodigo quando o pagamento foi feito em lote.
+        if (m.tipoDocumentoOrigem === 'TITULO_PAGAR_PAGAMENTO' && m.movimentoContaCodigo != null) {
+          const chave = Number(m.movimentoContaCodigo);
+          const lote = titulosPorPagamento.get(chave);
+          if (Array.isArray(lote) && lote.length > 0) {
+            // Para cada titulo do lote: o valor efetivo no fluxo e o valorPago
+            // do PROPRIO titulo (top-level), nao m.valor nem entry.valor (que
+            // pode vir com o total do lote, comum em lotes do Quality).
+            // Preferencia: entry.valorPago -> t.valorPago -> t.valor.
+            const entradas = lote.map(t => {
+              const entry = Array.isArray(t.pagamento)
+                ? t.pagamento.find(p => Number(p?.codigoDocumento) === chave)
+                : null;
+              const valorDoTitulo = Math.max(0, Number(
+                entry?.valorPago ?? t.valorPago ?? t.valor ?? t.valorTitulo ?? 0
+              ));
+              return { titulo: t, valorTitulo: valorDoTitulo, planoCod: t.planoContaGerencialCodigo };
+            }).filter(x => x.valorTitulo > 0);
+
+            const entradasComPlano = entradas.filter(x => x.planoCod != null && x.planoCod !== 0);
+            const totalTitulos = entradasComPlano.reduce((s, x) => s + x.valorTitulo, 0);
+
+            if (entradasComPlano.length > 0 && totalTitulos > 0) {
+              // Distribui cada pedaco no plano do seu titulo, com o valor do TITULO_PAGAR.
+              entradasComPlano.forEach((x, idx) => {
+                const parcela = x.valorTitulo * sinal;
+                const planoKey = String(x.planoCod);
+                if (!totais[planoKey]) totais[planoKey] = {};
+                totais[planoKey][mesKey] = (totais[planoKey][mesKey] || 0) + parcela;
+                if (!lancs[planoKey]) lancs[planoKey] = [];
+                const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
+                const partLabel = entradasComPlano.length > 1
+                  ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · titulo #${tituloCod ?? '—'}`
+                  : ` · titulo #${tituloCod ?? '—'}`;
+                lancs[planoKey].push({
+                  id: entradasComPlano.length > 1 ? `${idBase}-p${idx}` : idBase,
+                  mesKey,
+                  data: m.dataMovimento,
+                  descricao: `${(m.descricao || '').trim() || '—'}${partLabel}`,
+                  tipoDoc: m.tipoDocumentoOrigem,
+                  movimentoContaCodigo: m.movimentoContaCodigo ?? null,
+                  tituloPagarCodigo: tituloCod,
+                  valor: x.valorTitulo,
+                  sinal,
+                });
+              });
+              return; // movimento distribuido via TITULO_PAGAR, pula o push normal
+            }
+          }
+        }
+
+        const codigo = temPlano
+          ? String(planoBruto)
+          : `${SEM_PLANO_PREFIX}${m.tipoDocumentoOrigem || 'OUTROS'}`;
 
         if (!totais[codigo]) totais[codigo] = {};
         totais[codigo][mesKey] = (totais[codigo][mesKey] || 0) + valor;
 
         if (!lancs[codigo]) lancs[codigo] = [];
         lancs[codigo].push({
-          id: m.codigo || `${m.movimentoContaCodigo}`,
+          id: idBase,
           mesKey,
           data: m.dataMovimento,
           descricao: (m.descricao || '').trim() || '—',
           tipoDoc: m.tipoDocumentoOrigem,
-          valor: Math.abs(Number(m.valor || 0)),
+          movimentoContaCodigo: m.movimentoContaCodigo ?? null,
+          valor: valorAbs,
           sinal,
         });
       });
     });
     return { totaisPorConta: totais, lancamentosPorConta: lancs };
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, incluirTransferencias]);
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento]);
+
+  // ─── Composicao do saldo por conta (saldo inicial + movs = saldo atual) ─
+  // Respeita os mesmos filtros aplicados ao fluxo (bancaria/caixa + multi-select).
+  // Fonte dos saldos: campos saldoAnterior e saldoPosterior/saldo do MOVIMENTO_CONTA.
+  const composicaoSaldo = useMemo(() => {
+    const todos = [];
+    Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => todos.push(m)));
+    todos.sort((a, b) => (a.dataMovimento || '').localeCompare(b.dataMovimento || ''));
+
+    const porConta = new Map();
+    todos.forEach(m => {
+      if (m.contaCodigo == null) return;
+      const cod = Number(m.contaCodigo);
+      const tipoConta = tipoPorConta.get(cod);
+      if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
+      if (!tiposContaAtivos.has(tipoConta)) return;
+      if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
+
+      let atual = porConta.get(cod);
+      if (!atual) {
+        const saldoIniCandidato = m.saldoAnterior ?? m.saldoAnteriorConta;
+        atual = {
+          contaCodigo: cod,
+          contaNome: descricaoPorConta.get(cod) || `Conta #${cod}`,
+          saldoInicial: saldoIniCandidato != null ? Number(saldoIniCandidato) : 0,
+          entradas: 0,
+          saidas: 0,
+          saldoAtual: null,
+        };
+        porConta.set(cod, atual);
+      }
+      const valor = Math.abs(Number(m.valor || 0));
+      if (m.tipo === 'Crédito') atual.entradas += valor;
+      else atual.saidas += valor;
+      const saldoPos = m.saldoPosterior ?? m.saldoApos ?? m.saldo;
+      if (saldoPos != null) atual.saldoAtual = Number(saldoPos);
+    });
+    // Fallback: se nenhum movimento trouxe saldoPosterior, calcula pela variacao.
+    porConta.forEach(c => {
+      if (c.saldoAtual == null) c.saldoAtual = c.saldoInicial + c.entradas - c.saidas;
+    });
+    return Array.from(porConta.values())
+      .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta]);
 
   // ─── Build Fluxo tree ─────────────────────────────────────
   const fluxoTree = useMemo(() => {
@@ -359,6 +534,71 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
       .map(buildNode);
   }, [grupos, mapeamentos, totaisPorConta, lancamentosPorConta, meses]);
 
+  // ─── Grupo sintetico "Sem classificacao" ───────────────────
+  // Captura movimentos que nao foram alocados em nenhum grupo da mascara:
+  //   - Movimentos sem planoContaGerencialCodigo (agrupados por tipoDocumentoOrigem)
+  //   - Planos gerenciais sem mapeamento pra grupo_fluxo
+  // Fica fora do calculo de subtotais/resultado (nao vira "Variacao de Caixa")
+  // pra evitar mascarar inconsistencias do DRE gerencial. E renderizado em bloco
+  // separado abaixo da arvore principal, puramente informativo.
+  const semClassificacaoNode = useMemo(() => {
+    const mappedCodes = new Set(mapeamentos.map(m => String(m.plano_conta_codigo)));
+    const contas = [];
+    Object.entries(totaisPorConta).forEach(([codigo, valoresPorMesAll]) => {
+      if (mappedCodes.has(codigo)) return; // ja entrou em algum grupo
+
+      const semPlano = codigo.startsWith(SEM_PLANO_PREFIX);
+      const tipoDoc = semPlano ? codigo.substring(SEM_PLANO_PREFIX.length) : null;
+      const descricao = semPlano
+        ? (tipoDoc || 'OUTROS').replace(/_/g, ' ')
+        : `Plano #${codigo} (sem mapeamento)`;
+
+      const valoresPorMes = {};
+      let totalPeriodo = 0;
+      meses.forEach(mes => {
+        const v = valoresPorMesAll[mes.key] || 0;
+        valoresPorMes[mes.key] = v;
+        totalPeriodo += v;
+      });
+
+      const lancs = (lancamentosPorConta[codigo] || [])
+        .slice()
+        .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+
+      contas.push({
+        id: `sc-${codigo}`,
+        codigo,
+        descricao,
+        valoresPorMes,
+        totalPeriodo,
+        lancamentos: lancs,
+      });
+    });
+
+    if (contas.length === 0) return null;
+
+    // Ordena por |totalPeriodo| desc para trazer o maior impacto primeiro
+    contas.sort((a, b) => Math.abs(b.totalPeriodo) - Math.abs(a.totalPeriodo));
+
+    const valoresPorMes = {};
+    let totalPeriodo = 0;
+    meses.forEach(mes => {
+      valoresPorMes[mes.key] = contas.reduce((s, c) => s + (c.valoresPorMes[mes.key] || 0), 0);
+      totalPeriodo += valoresPorMes[mes.key];
+    });
+
+    return {
+      id: '__sem_classificacao__',
+      nome: 'Sem classificacao',
+      tipo: 'grupo',
+      contas,
+      children: [],
+      valoresPorMes,
+      totalPeriodo,
+      isSemClassificacao: true,
+    };
+  }, [totaisPorConta, lancamentosPorConta, mapeamentos, meses]);
+
   // ─── Acumulado para subtotais/resultados ───────────────────
   const fluxoComCalculos = useMemo(() => {
     const acumPorMes = {};
@@ -385,6 +625,28 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
     ?? fluxoTree.reduce((s, n) => s + n.totalPeriodo, 0)
   , [fluxoComCalculos, fluxoTree]);
 
+  // Auto-expande o grupo "Sem classificacao" e todas as suas contas (pra que os
+  // lancamentos individuais apareçam abertos por padrao - util pra auditar casos
+  // como TRANSFERENCIA_SANGRIA / TITULO_PAGAR_PAGAMENTO sem plano mapeado).
+  useEffect(() => {
+    if (semClassificacaoNode) {
+      setExpandedGrupos(prev => {
+        if (prev.has('__sem_classificacao__')) return prev;
+        const next = new Set(prev);
+        next.add('__sem_classificacao__');
+        return next;
+      });
+      setExpandedContas(prev => {
+        const next = new Set(prev);
+        let changed = false;
+        (semClassificacaoNode.contas || []).forEach(c => {
+          if (!next.has(c.id)) { next.add(c.id); changed = true; }
+        });
+        return changed ? next : prev;
+      });
+    }
+  }, [semClassificacaoNode]);
+
   const toggleGrupo = (id) => {
     setExpandedGrupos(prev => {
       const next = new Set(prev);
@@ -395,6 +657,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
 
   const toggleConta = (id) => {
     setExpandedContas(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleLancamento = (id) => {
+    setExpandedLancamentos(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -548,7 +818,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
               {[
                 { key: 'bancaria', label: 'Bancaria' },
                 { key: 'caixa', label: 'Caixa' },
-                { key: 'recebimento', label: 'Recebimento' },
               ].map(opt => {
                 const ativo = tiposContaAtivos.has(opt.key);
                 return (
@@ -574,14 +843,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
               open={filtroContasOpen}
               setOpen={setFiltroContasOpen}
             />
-            <button onClick={() => setIncluirTransferencias(!incluirTransferencias)}
-              title="Por padrao transferencias entre contas (transferencia=S) sao excluidas do fluxo. Ative para inclui-las."
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
-                incluirTransferencias ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}>
-              <RefreshCw className="h-3.5 w-3.5" />
-              {incluirTransferencias ? 'Com transferencias' : 'Sem transferencias'}
-            </button>
             <button onClick={() => setOcultarZeradas(!ocultarZeradas)}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
                 ocultarZeradas ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
@@ -599,6 +860,21 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
           <p className="text-xs text-red-700">{error}</p>
         </div>
       )}
+
+      {cliente && qtdContasFluxo === 0 && (
+        <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 flex items-start gap-2 no-print">
+          <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-800">
+            <p className="font-semibold mb-0.5">Nenhuma conta classificada como bancaria ou caixa</p>
+            <p className="text-amber-700">
+              O fluxo de caixa consome apenas contas marcadas como <strong>Conta bancaria</strong> ou <strong>Conta caixa</strong> em
+              Cadastros &rarr; Clientes &rarr; Classificar contas da rede. Enquanto nao houver ao menos uma
+              conta classificada, o relatorio retorna vazio.
+            </p>
+          </div>
+        </div>
+      )}
+
 
       <AnimatePresence mode="wait">
         {!reportSolicitado ? (
@@ -628,7 +904,84 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
           </motion.div>
         ) : (
           <motion.div key="report" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-            className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+            className="space-y-5">
+            {composicaoSaldo.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-blue-500" />
+                  <h3 className="text-sm font-semibold text-gray-800">Composicao do saldo</h3>
+                  <span className="text-[11px] text-gray-400">
+                    · Saldo inicial (dia anterior ao periodo) + movimentos = Saldo atual (fim do periodo)
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50/80 border-b border-gray-100">
+                      <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-2.5">Conta bancaria</th>
+                        <th className="px-4 py-2.5 text-right">Saldo inicial</th>
+                        <th className="px-4 py-2.5 text-right">Entradas</th>
+                        <th className="px-4 py-2.5 text-right">Saidas</th>
+                        <th className="px-4 py-2.5 text-right">Variacao</th>
+                        <th className="px-4 py-2.5 text-right">Saldo atual</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {composicaoSaldo.map(c => {
+                        const variacao = c.entradas - c.saidas;
+                        return (
+                          <tr key={c.contaCodigo} className="hover:bg-gray-50/60">
+                            <td className="px-4 py-2 text-[12px] text-gray-800 truncate max-w-[260px]">{c.contaNome}</td>
+                            <td className="px-4 py-2 text-right font-mono text-[12px] text-gray-700 tabular-nums">
+                              {formatCurrency(c.saldoInicial)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono text-[12px] text-emerald-600 tabular-nums">
+                              +{formatCurrency(c.entradas)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono text-[12px] text-red-600 tabular-nums">
+                              -{formatCurrency(c.saidas)}
+                            </td>
+                            <td className={`px-4 py-2 text-right font-mono text-[12px] tabular-nums font-semibold ${
+                              Math.abs(variacao) < 0.01 ? 'text-gray-500' : variacao > 0 ? 'text-emerald-700' : 'text-red-700'
+                            }`}>
+                              {variacao > 0 ? '+' : ''}{formatCurrency(variacao)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono text-sm font-bold text-gray-900 tabular-nums">
+                              {formatCurrency(c.saldoAtual)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-gray-50/60 border-t border-gray-200">
+                      {(() => {
+                        const tIni = composicaoSaldo.reduce((s, c) => s + c.saldoInicial, 0);
+                        const tEnt = composicaoSaldo.reduce((s, c) => s + c.entradas, 0);
+                        const tSai = composicaoSaldo.reduce((s, c) => s + c.saidas, 0);
+                        const tVar = tEnt - tSai;
+                        const tAtu = composicaoSaldo.reduce((s, c) => s + c.saldoAtual, 0);
+                        return (
+                          <tr className="text-[12px] font-semibold">
+                            <td className="px-4 py-3 text-gray-700">Consolidado</td>
+                            <td className="px-4 py-3 text-right font-mono text-gray-800 tabular-nums">{formatCurrency(tIni)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-emerald-700 tabular-nums">+{formatCurrency(tEnt)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-red-700 tabular-nums">-{formatCurrency(tSai)}</td>
+                            <td className={`px-4 py-3 text-right font-mono tabular-nums ${
+                              Math.abs(tVar) < 0.01 ? 'text-gray-500' : tVar > 0 ? 'text-emerald-700' : 'text-red-700'
+                            }`}>
+                              {tVar > 0 ? '+' : ''}{formatCurrency(tVar)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-gray-900 tabular-nums">{formatCurrency(tAtu)}</td>
+                          </tr>
+                        );
+                      })()}
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between no-print">
               <div className="flex items-center gap-2.5">
                 <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
@@ -674,10 +1027,44 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
                       onToggleGrupo={toggleGrupo}
                       onToggleConta={toggleConta}
                       ocultarZeradas={ocultarZeradas}
+                      expandedLancamentos={expandedLancamentos}
+                      onToggleLancamento={toggleLancamento}
+                      tituloPagarMap={tituloPagarMap}
+                      titulosPorPagamento={titulosPorPagamento}
                     />
                   ))}
+                  {semClassificacaoNode && (ocultarZeradas
+                    ? (semClassificacaoNode.contas || []).some(c => Math.abs(c.totalPeriodo) > 0.01)
+                    : (semClassificacaoNode.contas || []).length > 0
+                  ) && (
+                    <>
+                      <tr>
+                        <td colSpan={meses.length + 2} className="pt-6 pb-2">
+                          <div className="flex items-center gap-2 text-[10px] font-semibold text-amber-700 uppercase tracking-wider">
+                            <AlertCircle className="h-3 w-3" />
+                            Movimentos sem classificacao (nao entram na variacao de caixa)
+                          </div>
+                        </td>
+                      </tr>
+                      <FluxoNodeRows
+                        node={semClassificacaoNode}
+                        depth={0}
+                        meses={meses}
+                        expandedGrupos={expandedGrupos}
+                        expandedContas={expandedContas}
+                        onToggleGrupo={toggleGrupo}
+                        onToggleConta={toggleConta}
+                        ocultarZeradas={ocultarZeradas}
+                        expandedLancamentos={expandedLancamentos}
+                        onToggleLancamento={toggleLancamento}
+                        tituloPagarMap={tituloPagarMap}
+                        titulosPorPagamento={titulosPorPagamento}
+                      />
+                    </>
+                  )}
                 </tbody>
               </table>
+            </div>
             </div>
           </motion.div>
         )}
@@ -687,7 +1074,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
 }
 
 // ─── Recursive row renderer ─────────────────────────────────
-function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onToggleGrupo, onToggleConta, ocultarZeradas }) {
+function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onToggleGrupo, onToggleConta, ocultarZeradas, expandedLancamentos, onToggleLancamento, tituloPagarMap, titulosPorPagamento }) {
   const isCalc = node.tipo === 'subtotal' || node.tipo === 'resultado';
   const isResultado = node.tipo === 'resultado';
   const isExpanded = expandedGrupos.has(node.id);
@@ -769,6 +1156,10 @@ function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onT
             onToggleGrupo={onToggleGrupo}
             onToggleConta={onToggleConta}
             ocultarZeradas={ocultarZeradas}
+            expandedLancamentos={expandedLancamentos}
+            onToggleLancamento={onToggleLancamento}
+            tituloPagarMap={tituloPagarMap}
+            titulosPorPagamento={titulosPorPagamento}
           />
         ))}
       </AnimatePresence>
@@ -779,14 +1170,19 @@ function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onT
         return (
           <ExpandedConta key={conta.id} conta={conta} indent={indent}
             meses={meses} isContaExpanded={isContaExpanded} temLancs={temLancs}
-            onToggleConta={onToggleConta} />
+            onToggleConta={onToggleConta}
+            expandedLancamentos={expandedLancamentos}
+            onToggleLancamento={onToggleLancamento}
+            tituloPagarMap={tituloPagarMap}
+            titulosPorPagamento={titulosPorPagamento}
+          />
         );
       })}
     </>
   );
 }
 
-function ExpandedConta({ conta, indent, meses, isContaExpanded, temLancs, onToggleConta }) {
+function ExpandedConta({ conta, indent, meses, isContaExpanded, temLancs, onToggleConta, expandedLancamentos, onToggleLancamento, tituloPagarMap, titulosPorPagamento }) {
   return (
     <>
       <tr className="border-b border-gray-50 hover:bg-emerald-50/20">
@@ -827,30 +1223,210 @@ function ExpandedConta({ conta, indent, meses, isContaExpanded, temLancs, onTogg
         </td>
       </tr>
 
-      {isContaExpanded && temLancs && conta.lancamentos.map(l => (
-        <tr key={`l-${l.id}`} className="border-b border-gray-50 bg-gray-50/30 hover:bg-emerald-50/20">
-          <td className="px-4 py-1 overflow-hidden" style={{ paddingLeft: 12 + indent + 48 }}>
-            <div className="flex items-center gap-2.5 text-[10.5px] min-w-0">
-              <span className="font-mono text-gray-400 w-14 flex-shrink-0">{formatDataBR(l.data)}</span>
-              <span title={l.descricao} className="text-gray-700 truncate min-w-0 flex-1">{l.descricao}</span>
-              {l.tipoDoc && (
-                <span className="text-[9px] rounded px-1.5 py-0.5 bg-gray-100 text-gray-500 flex-shrink-0">
-                  {l.tipoDoc}
-                </span>
-              )}
-            </div>
-          </td>
-          {meses.map(m => (
-            <td key={`${m.key}-v`} className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] whitespace-nowrap ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-              {l.mesKey === m.key ? formatCurrencyCompact(l.valor * l.sinal) : ''}
-            </td>
-          ))}
-          <td className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] bg-gray-100/40 whitespace-nowrap ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-            {formatCurrencyCompact(l.valor * l.sinal)}
-          </td>
-        </tr>
-      ))}
+      {isContaExpanded && temLancs && conta.lancamentos.map(l => {
+        // Cada lancamento TITULO_PAGAR_PAGAMENTO ja foi gerado por titulo especifico,
+        // entao o ideal e pegar SOMENTE esse titulo (via tituloPagarCodigo do lancamento).
+        // Fallback: se nao temos tituloPagarCodigo, cai no lookup por lote.
+        let titulosDoLancamento = [];
+        if (l.tipoDoc === 'TITULO_PAGAR_PAGAMENTO') {
+          if (l.tituloPagarCodigo != null) {
+            const t = tituloPagarMap?.get(Number(l.tituloPagarCodigo));
+            if (t) titulosDoLancamento = [t];
+          } else if (l.movimentoContaCodigo != null) {
+            const lote = titulosPorPagamento?.get(Number(l.movimentoContaCodigo)) || [];
+            if (lote.length > 0) titulosDoLancamento = lote;
+          }
+        }
+        const podeExpandir = titulosDoLancamento.length > 0;
+        const isLancExpanded = podeExpandir && expandedLancamentos?.has(l.id);
+        return (
+          <React.Fragment key={`l-${l.id}`}>
+            <tr
+              className={`border-b border-gray-50 bg-gray-50/30 hover:bg-emerald-50/20 ${podeExpandir ? 'cursor-pointer' : ''}`}
+              onClick={() => { if (podeExpandir) onToggleLancamento?.(l.id); }}
+            >
+              <td className="px-4 py-1 overflow-hidden" style={{ paddingLeft: 12 + indent + 48 }}>
+                <div className="flex items-center gap-2.5 text-[10.5px] min-w-0">
+                  {podeExpandir ? (
+                    <motion.div animate={{ rotate: isLancExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="flex-shrink-0">
+                      <ChevronRight className="h-2.5 w-2.5 text-gray-400" />
+                    </motion.div>
+                  ) : (
+                    <div className="w-2.5 flex-shrink-0" />
+                  )}
+                  <span className="font-mono text-gray-400 w-14 flex-shrink-0">{formatDataBR(l.data)}</span>
+                  <span title={l.descricao} className="text-gray-700 truncate min-w-0 flex-1">{l.descricao}</span>
+                  {l.tipoDoc && (
+                    <span className="text-[9px] rounded px-1.5 py-0.5 bg-gray-100 text-gray-500 flex-shrink-0">
+                      {l.tipoDoc}
+                    </span>
+                  )}
+                </div>
+              </td>
+              {meses.map(m => (
+                <td key={`${m.key}-v`} className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] whitespace-nowrap ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {l.mesKey === m.key ? formatCurrencyCompact(l.valor * l.sinal) : ''}
+                </td>
+              ))}
+              <td className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] bg-gray-100/40 whitespace-nowrap ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                {formatCurrencyCompact(l.valor * l.sinal)}
+              </td>
+            </tr>
+            {isLancExpanded && titulosDoLancamento.length > 0 && (
+              <tr className="border-b border-gray-100 bg-blue-50/40">
+                <td colSpan={meses.length + 2} className="px-4 py-2" style={{ paddingLeft: 12 + indent + 70 }}>
+                  {titulosDoLancamento.length === 1 ? (
+                    <TituloDetalhe titulo={titulosDoLancamento[0]} valorPago={l.valor * l.sinal} />
+                  ) : (
+                    <TitulosLote
+                      titulos={titulosDoLancamento}
+                      movimentoContaCodigo={l.movimentoContaCodigo}
+                      valorTotalPago={l.valor * l.sinal}
+                    />
+                  )}
+                </td>
+              </tr>
+            )}
+          </React.Fragment>
+        );
+      })}
     </>
+  );
+}
+
+// Renderiza um pagamento em lote (1 movimento -> N titulos). Agrupa por plano
+// gerencial pra que o usuario veja quanto foi pago em cada plano.
+function TitulosLote({ titulos, movimentoContaCodigo, valorTotalPago }) {
+  const chave = movimentoContaCodigo != null ? Number(movimentoContaCodigo) : null;
+  // Soma o valorPago da entry em titulo.pagamento[] cujo codigoDocumento bate
+  // com o movimentoContaCodigo (i.e., o pagamento especifico deste movimento).
+  const valorNoLote = (t) => {
+    if (chave != null && Array.isArray(t.pagamento)) {
+      const entry = t.pagamento.find(p => Number(p?.codigoDocumento) === chave);
+      if (entry) return Number(entry.valorPago ?? entry.valor ?? 0);
+    }
+    return Number(t.valor ?? t.valorTitulo ?? 0);
+  };
+
+  const porPlano = new Map();
+  titulos.forEach(t => {
+    const planoCod = t.planoContaGerencialCodigo;
+    const planoLabel = planoCod != null && planoCod !== 0
+      ? (t.planoContaGerencialDescricao ? `${planoCod} - ${t.planoContaGerencialDescricao}` : `Plano #${planoCod}`)
+      : 'Sem plano gerencial';
+    if (!porPlano.has(planoLabel)) porPlano.set(planoLabel, { codigo: planoCod, titulos: [], valor: 0 });
+    const g = porPlano.get(planoLabel);
+    g.titulos.push(t);
+    g.valor += valorNoLote(t);
+  });
+  const grupos = Array.from(porPlano.entries()).map(([label, g]) => ({ label, ...g }))
+    .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
+  const totalCalculado = grupos.reduce((s, g) => s + g.valor, 0);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">
+          Pagamento em lote · {titulos.length} titulos em {grupos.length} {grupos.length === 1 ? 'conta gerencial' : 'contas gerenciais'}
+        </p>
+        <p className="text-[10px] text-gray-500">
+          Soma dos titulos: <strong className="text-gray-700">{formatCurrencyCompact(totalCalculado)}</strong>
+          {' · '}
+          Valor do movimento: <strong className="text-gray-700">{formatCurrencyCompact(Math.abs(valorTotalPago))}</strong>
+        </p>
+      </div>
+      <div className="space-y-1">
+        {grupos.map((g, i) => (
+          <div key={i} className="rounded-md bg-white/70 border border-blue-100 overflow-hidden">
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-blue-100/40 border-b border-blue-100">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[10px] font-semibold text-blue-800 truncate">{g.label}</span>
+                <span className="text-[9px] text-blue-600 bg-white/60 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                  {g.titulos.length} {g.titulos.length === 1 ? 'titulo' : 'titulos'}
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-semibold text-blue-800 tabular-nums flex-shrink-0">
+                {formatCurrencyCompact(g.valor)}
+              </span>
+            </div>
+            <table className="w-full text-[10px]">
+              <thead className="text-gray-400">
+                <tr>
+                  <th className="text-left px-2.5 py-1 font-medium">Titulo #</th>
+                  <th className="text-left px-2.5 py-1 font-medium">Documento</th>
+                  <th className="text-left px-2.5 py-1 font-medium">Vencimento</th>
+                  <th className="text-left px-2.5 py-1 font-medium">Fornecedor</th>
+                  <th className="text-right px-2.5 py-1 font-medium">Valor no lote</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.titulos.map((t, idx) => (
+                  <tr key={idx} className="border-t border-gray-50">
+                    <td className="px-2.5 py-1 font-mono text-gray-500">{t.tituloPagarCodigo ?? t.codigo ?? '—'}</td>
+                    <td className="px-2.5 py-1 text-gray-700">{t.numeroDocumento || t.documento || '—'}</td>
+                    <td className="px-2.5 py-1 font-mono text-gray-500">{formatDataBR(t.dataVencimento || t.vencimento)}</td>
+                    <td className="px-2.5 py-1 text-gray-700 truncate max-w-[200px]">
+                      {t.fornecedorNome || t.fornecedor || t.razao || t.razaoSocial || (t.fornecedorCodigo != null ? `#${t.fornecedorCodigo}` : '—')}
+                    </td>
+                    <td className="px-2.5 py-1 text-right font-mono tabular-nums text-gray-700">
+                      {formatCurrencyCompact(valorNoLote(t))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TituloDetalhe({ titulo, valorPago }) {
+  const fornecedor = titulo.fornecedorNome || titulo.fornecedor || titulo.razao || titulo.razaoSocial
+    || (titulo.fornecedorCodigo != null ? `#${titulo.fornecedorCodigo}` : null);
+  const plano = titulo.planoContaGerencialDescricao
+    ? `${titulo.planoContaGerencialCodigo ?? ''} - ${titulo.planoContaGerencialDescricao}`.trim()
+    : (titulo.planoContaGerencialCodigo != null ? `#${titulo.planoContaGerencialCodigo}` : null);
+  const centroCusto = titulo.centroCustoDescricao
+    ? `${titulo.centroCustoCodigo ?? ''} - ${titulo.centroCustoDescricao}`.trim()
+    : (titulo.centroCustoCodigo != null && titulo.centroCustoCodigo !== 0 ? `#${titulo.centroCustoCodigo}` : null);
+
+  const campos = [
+    { label: 'Titulo #',        valor: titulo.tituloPagarCodigo ?? titulo.codigo },
+    { label: 'Numero Doc',      valor: titulo.numeroDocumento || titulo.documento },
+    { label: 'Parcela',         valor: titulo.parcela ?? titulo.numeroParcela },
+    { label: 'Emissao',         valor: titulo.dataEmissao ? formatDataBR(titulo.dataEmissao) : null },
+    { label: 'Vencimento',      valor: (titulo.dataVencimento || titulo.vencimento) ? formatDataBR(titulo.dataVencimento || titulo.vencimento) : null },
+    { label: 'Data pagamento',  valor: titulo.dataPagamento ? formatDataBR(titulo.dataPagamento) : null },
+    { label: 'Valor titulo',    valor: titulo.valor != null || titulo.valorTitulo != null ? formatCurrencyCompact(Number(titulo.valor ?? titulo.valorTitulo ?? 0)) : null },
+    { label: 'Valor pago',      valor: formatCurrencyCompact(Math.abs(valorPago)) },
+    { label: 'Valor saldo',     valor: titulo.valorSaldo != null ? formatCurrencyCompact(Number(titulo.valorSaldo)) : null },
+    { label: 'Juros',           valor: Number(titulo.valorJuros) > 0 ? formatCurrencyCompact(Number(titulo.valorJuros)) : null },
+    { label: 'Multa',           valor: Number(titulo.valorMulta) > 0 ? formatCurrencyCompact(Number(titulo.valorMulta)) : null },
+    { label: 'Desconto',        valor: Number(titulo.valorDesconto) > 0 ? formatCurrencyCompact(Number(titulo.valorDesconto)) : null },
+    { label: 'Acrescimo',       valor: Number(titulo.valorAcrescimo) > 0 ? formatCurrencyCompact(Number(titulo.valorAcrescimo)) : null },
+    { label: 'Fornecedor',      valor: fornecedor },
+    { label: 'Plano gerencial', valor: plano },
+    { label: 'Centro custo',    valor: centroCusto },
+    { label: 'Portador',        valor: titulo.portadorDescricao || (titulo.portadorCodigo != null && titulo.portadorCodigo !== 0 ? `#${titulo.portadorCodigo}` : null) },
+    { label: 'Situacao',        valor: titulo.situacao },
+    { label: 'Natureza',        valor: titulo.natureza },
+    { label: 'Historico',       valor: titulo.historico || titulo.observacao || titulo.descricao },
+  ].filter(c => c.valor != null && c.valor !== '');
+
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Titulo a pagar · TITULO_PAGAR</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1 text-[10.5px]">
+        {campos.map((c, i) => (
+          <div key={i} className="min-w-0">
+            <span className="text-gray-500">{c.label}: </span>
+            <span className="text-gray-800 font-medium break-words">{c.valor}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -939,3 +1515,4 @@ function MultiSelectContas({ contas, selecionadas, onChange, open, setOpen }) {
     </div>
   );
 }
+

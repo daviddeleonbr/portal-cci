@@ -8,13 +8,12 @@ export const TIPOS_CONTA = [
   { key: 'bancaria',    label: 'Conta bancaria',               hint: 'Aparece na conciliacao bancaria e no fluxo de caixa', incluir: true },
   { key: 'aplicacao',   label: 'Conta aplicacao',              hint: 'Aparece na conciliacao bancaria (nao entra no fluxo)', incluir: true },
   { key: 'caixa',       label: 'Conta caixa',                  hint: 'Caixa administrativo + fluxo de caixa',               incluir: false },
-  { key: 'recebimento', label: 'Conta recebimento (adquirente)', hint: 'PagPix, Cielo, Brinks etc — entradas de cliente no fluxo', incluir: false },
   { key: 'outras',      label: 'Outras contas',                hint: 'Oculta em todos os relatorios',                        incluir: false },
 ];
 
 export const TIPOS_PARA_CONCILIACAO = TIPOS_CONTA.filter(t => t.incluir).map(t => t.key);
 export const TIPOS_PARA_CAIXA_ADMIN = ['caixa'];
-export const TIPOS_PARA_FLUXO_CAIXA = ['bancaria', 'caixa', 'recebimento'];
+export const TIPOS_PARA_FLUXO_CAIXA = ['bancaria', 'caixa'];
 
 // Lista classificacoes de uma rede (chave_api)
 export async function listarPorRede(chaveApiId) {
@@ -71,22 +70,33 @@ export async function atualizar(id, campos) {
 export async function sincronizarComQuality(chaveApiId, contasQuality) {
   if (!chaveApiId || !Array.isArray(contasQuality)) return [];
   const existentes = await listarPorRede(chaveApiId);
-  const mapaExistentes = new Map(existentes.map(r => [r.conta_codigo, r]));
+  // Usa Number como chave do Map (evita mismatch string/number)
+  const mapaExistentes = new Map(existentes.map(r => [Number(r.conta_codigo), r]));
 
+  // Dedup primeiro: Quality pode retornar o mesmo contaCodigo mais de uma vez
+  const vistosNovos = new Set();
   const novos = [];
   for (const c of contasQuality) {
-    const codigo = c.contaCodigo ?? c.codigo;
-    if (codigo == null) continue;
+    const codigoRaw = c.contaCodigo ?? c.codigo;
+    if (codigoRaw == null) continue;
+    const codigo = Number(codigoRaw);
+    if (!Number.isFinite(codigo)) continue;
     const descricao = c.descricao || c.nome || c.contaDescricao || null;
     const existente = mapaExistentes.get(codigo);
-    if (!existente) {
+    if (existente) {
+      if (descricao && existente.descricao !== descricao) {
+        await atualizar(existente.id, { descricao });
+      }
+    } else if (!vistosNovos.has(codigo)) {
+      vistosNovos.add(codigo);
       novos.push({ chave_api_id: chaveApiId, conta_codigo: codigo, descricao, tipo: 'bancaria', ativo: true });
-    } else if (descricao && existente.descricao !== descricao) {
-      await atualizar(existente.id, { descricao });
     }
   }
   if (novos.length) {
-    const { error } = await supabase.from('cliente_contas_bancarias').insert(novos);
+    // upsert defensivo (ignora caso o registro apareca entre o listarPorRede e o insert)
+    const { error } = await supabase
+      .from('cliente_contas_bancarias')
+      .upsert(novos, { onConflict: 'chave_api_id,conta_codigo', ignoreDuplicates: true });
     if (error) throw error;
   }
   return listarPorRede(chaveApiId);

@@ -54,10 +54,10 @@ const RELATORIOS = [
   {
     id: 'evolucao',
     nome: 'Evolucao Mensal',
-    descricao: 'Comparativo mes a mes',
+    descricao: 'Vendas, margens e insights estrategicos mes a mes',
     icon: BarChart3,
     color: 'cyan',
-    disponivel: false,
+    disponivel: true,
   },
 ];
 
