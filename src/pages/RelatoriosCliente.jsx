@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import * as clientesService from '../services/clientesService';
+import { useAnonimizador } from '../services/anonimizarService';
 
 // Catalogo de relatorios disponiveis
 const RELATORIOS = [
@@ -59,12 +60,21 @@ const RELATORIOS = [
     color: 'cyan',
     disponivel: true,
   },
+  {
+    id: 'analise-ia',
+    nome: 'Analise de Vendas (IA)',
+    descricao: 'Diagnostico comercial com Claude: mix, margens, oportunidades',
+    icon: Sparkles,
+    color: 'violet',
+    disponivel: true,
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════
 // Hub - lista de clientes
 // ═══════════════════════════════════════════════════════════
 export default function RelatoriosCliente() {
+  const { labelEmpresa, labelRede, labelCnpj } = useAnonimizador();
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -164,7 +174,7 @@ export default function RelatoriosCliente() {
         <div className="space-y-3">
           {redes.map((rede, i) => {
             const expanded = expandedRedes.has(rede.id);
-            const nomeRede = rede.chaveApi?.nome || 'Sem rede';
+            const nomeRede = labelRede(rede.chaveApi?.nome || 'Sem rede', rede.id);
             const provedor = rede.chaveApi?.provedor || '';
             const usaWebposto = rede.empresas.some(c => c.usa_webposto);
             return (
@@ -215,6 +225,24 @@ export default function RelatoriosCliente() {
                         <Wallet className="h-3 w-3" />
                         Fluxo da Rede
                       </Link>
+                      <Link
+                        to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/analise-lancamentos`}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Analise de lancamentos consolidada de todas as empresas da rede"
+                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-colors shadow-sm"
+                      >
+                        <FlaskConical className="h-3 w-3" />
+                        Lanc. da Rede
+                      </Link>
+                      <Link
+                        to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/analise-ia`}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Analise de vendas da rede com IA"
+                        className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all shadow-sm"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Analise IA da Rede
+                      </Link>
                     </>
                   )}
                 </button>
@@ -228,11 +256,11 @@ export default function RelatoriosCliente() {
                           className="block bg-white rounded-lg border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all group">
                           <div className="flex items-center gap-3">
                             <div className="h-9 w-9 rounded-md bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-700 font-semibold text-sm flex items-center justify-center flex-shrink-0">
-                              {(c.nome || '?').charAt(0).toUpperCase()}
+                              {(labelEmpresa(c) || '?').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-[13px] font-medium text-gray-900 truncate">{c.nome}</p>
-                              {c.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{c.cnpj}</p>}
+                              <p className="text-[13px] font-medium text-gray-900 truncate">{labelEmpresa(c)}</p>
+                              {c.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{labelCnpj(c.cnpj)}</p>}
                             </div>
                             <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                           </div>
@@ -256,6 +284,7 @@ export default function RelatoriosCliente() {
 export function ClienteRelatoriosHub() {
   const { clienteId } = useParams();
   const navigate = useNavigate();
+  const { labelEmpresa, labelCnpj } = useAnonimizador();
   const [cliente, setCliente] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -290,12 +319,12 @@ export function ClienteRelatoriosHub() {
         </button>
         <div className="flex items-center gap-3 min-w-0">
           <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
-            {(cliente.nome || '?').charAt(0).toUpperCase()}
+            {(labelEmpresa(cliente) || '?').charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 truncate">{cliente.nome}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 truncate">{labelEmpresa(cliente)}</h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
-              {cliente.cnpj && <span className="font-mono">{cliente.cnpj}</span>}
+              {cliente.cnpj && <span className="font-mono">{labelCnpj(cliente.cnpj)}</span>}
               {cliente.usa_webposto && (
                 <>
                   <span>&middot;</span>

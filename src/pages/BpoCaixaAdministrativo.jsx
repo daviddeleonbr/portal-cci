@@ -11,6 +11,7 @@ import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
 import { formatCurrency } from '../utils/format';
+import { useAnonimizador } from '../services/anonimizarService';
 
 function toLocalDateStr(d) {
   const y = d.getFullYear();
@@ -71,6 +72,7 @@ function sanitizarCnpj(s) {
 }
 
 export default function BpoCaixaAdministrativo() {
+  const { labelEmpresa, labelRede } = useAnonimizador();
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
   const [redeId, setRedeId] = useState('');
@@ -159,7 +161,7 @@ export default function BpoCaixaAdministrativo() {
         return (m || []).map(mv => ({
           ...mv,
           _empresaId: emp.id,
-          _empresaNome: emp.nome,
+          _empresaNome: labelEmpresa(emp),
           _empresaCnpj: emp.cnpj,
           empresaCodigo: Number(emp.empresa_codigo),
         }));
@@ -511,7 +513,7 @@ export default function BpoCaixaAdministrativo() {
               {chavesApi.map(ch => {
                 const qtd = clientes.filter(c => c.chave_api_id === ch.id).length;
                 return (
-                  <option key={ch.id} value={ch.id}>{ch.nome} · {qtd} empresa{qtd === 1 ? '' : 's'}</option>
+                  <option key={ch.id} value={ch.id}>{labelRede(ch.nome, ch.id)} · {qtd} empresa{qtd === 1 ? '' : 's'}</option>
                 );
               })}
             </select>
@@ -596,7 +598,7 @@ export default function BpoCaixaAdministrativo() {
               <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-blue-500" />
                 <h3 className="text-sm font-semibold text-gray-800">Saldo por caixa</h3>
-                <span className="text-[11px] text-gray-400">· {redeAtual?.nome || 'rede'} · {treeSaldos.length} empresas · inicial + movimentos = atual</span>
+                <span className="text-[11px] text-gray-400">· {redeAtual ? labelRede(redeAtual.nome, redeAtual.id) : 'rede'} · {treeSaldos.length} empresas · inicial + movimentos = atual</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

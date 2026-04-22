@@ -15,6 +15,7 @@ import * as vendasMapService from '../services/mapeamentoVendasService';
 import { TIPOS_VENDA } from '../services/mapeamentoVendasService';
 import * as qualityApi from '../services/qualityApiService';
 import { formatCurrency } from '../utils/format';
+import { useAnonimizador } from '../services/anonimizarService';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -44,6 +45,7 @@ function formatDuracao(ms) {
 // Quando passado, a DRE agrega as empresas da rede usando o mesmo mapeamento
 // (mapeamento_empresa_contas e sempre por chave_api_id).
 export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto } = {}) {
+  const { labelEmpresa, labelCnpj } = useAnonimizador();
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
   const navigate = useNavigate();
@@ -765,7 +767,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             </h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Building2 className="h-3 w-3" />
-              <span className="truncate">{cliente.nome}</span>
+              <span className="truncate">{labelEmpresa(cliente)}</span>
               {modoRede && cliente._empresaCodigos && (
                 <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
                   · {cliente._empresaCodigos.length} empresas
@@ -887,7 +889,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         <div style={{ marginBottom: '20px', borderBottom: '2px solid #000', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>DRE Gerencial</h1>
-            <p style={{ fontSize: '10pt', margin: '4px 0' }}>{cliente.nome}{cliente.cnpj ? ` - CNPJ ${cliente.cnpj}` : ''}</p>
+            <p style={{ fontSize: '10pt', margin: '4px 0' }}>{labelEmpresa(cliente)}{cliente.cnpj ? ` - CNPJ ${labelCnpj(cliente.cnpj)}` : ''}</p>
             <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Periodo: {periodoLabel} &middot; Mascara: {mascaraSelecionada?.nome}</p>
           </div>
           <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#444', lineHeight: 1.25, flexShrink: 0 }}>
@@ -985,8 +987,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                     {resultadoPorEmpresa.empresas.map((p, i) => (
                       <tr key={p.empresaCodigo} className="hover:bg-gray-50/60">
                         <td className="px-4 py-2 text-[11px] text-gray-400 font-mono">{i + 1}</td>
-                        <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa?.nome || `#${p.empresaCodigo}`}</td>
-                        <td className="px-4 py-2 text-[11px] text-gray-500 font-mono">{p.empresa?.cnpj || '—'}</td>
+                        <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa ? labelEmpresa(p.empresa) : `#${p.empresaCodigo}`}</td>
+                        <td className="px-4 py-2 text-[11px] text-gray-500 font-mono">{p.empresa?.cnpj ? labelCnpj(p.empresa.cnpj) : '—'}</td>
                         <td className={`px-4 py-2 text-right font-mono text-[12.5px] font-semibold tabular-nums ${p.total >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                           {formatCurrency(p.total)}
                         </td>
@@ -1107,6 +1109,7 @@ const TIPS = [
 ];
 
 function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
+  const { labelEmpresa } = useAnonimizador();
   const [tipIndex, setTipIndex] = useState(0);
   const pct = stageLabel ? 100 : (progress.total > 0 ? Math.round((progress.atual / progress.total) * 100) : 0);
   const mensagemAtual = stageLabel || progress.mensagem || 'Iniciando...';
@@ -1153,7 +1156,7 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
           {/* Title */}
           <h3 className="text-base font-semibold text-gray-900 mb-1">Montando seu relatorio</h3>
           <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            Estamos buscando os lancamentos de <strong>{cliente.nome}</strong> no periodo de <strong>{periodoLabel}</strong> e do mesmo periodo no ano anterior.
+            Estamos buscando os lancamentos de <strong>{labelEmpresa(cliente)}</strong> no periodo de <strong>{periodoLabel}</strong> e do mesmo periodo no ano anterior.
           </p>
 
           {/* Progress bar */}

@@ -15,6 +15,7 @@ import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import { agregarVendasItens } from '../services/mapeamentoVendasService';
 import { formatCurrency } from '../utils/format';
+import { useAnonimizador } from '../services/anonimizarService';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -37,6 +38,7 @@ function formatCurrencyCompact(value) {
 }
 
 export default function RelatorioEvolucaoMensal() {
+  const { labelEmpresa } = useAnonimizador();
   const { clienteId } = useParams();
   const navigate = useNavigate();
 
@@ -295,7 +297,7 @@ export default function RelatorioEvolucaoMensal() {
             <h2 className="text-lg font-semibold text-gray-900 truncate">Evolucao Mensal</h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Building2 className="h-3 w-3" />
-              <span className="truncate">{cliente.nome}</span>
+              <span className="truncate">{labelEmpresa(cliente)}</span>
               {cliente.usa_webposto && (
                 <span className="inline-flex items-center gap-1 text-amber-600 ml-1">
                   <Zap className="h-2.5 w-2.5" /> Webposto

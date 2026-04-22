@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Menu, LogOut, Moon, Sun } from 'lucide-react';
+import { Bell, Menu, LogOut, Moon, Sun, EyeOff, Eye } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { logoutAdmin } from '../../lib/auth';
 import { useTheme } from '../../hooks/useTheme';
+import { useAnonimizador } from '../../services/anonimizarService';
 
 export default function Header({ onMenuClick }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -26,6 +27,7 @@ export default function Header({ onMenuClick }) {
   const initials = nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const { tema, alternar } = useTheme();
   const escuro = tema === 'dark';
+  const { ativo: demoAtivo, setAtivo: setDemoAtivo } = useAnonimizador();
 
   const handleLogout = () => {
     logoutAdmin();
@@ -44,6 +46,17 @@ export default function Header({ onMenuClick }) {
       </div>
 
       <div className="flex items-center gap-2">
+        <button onClick={() => setDemoAtivo(!demoAtivo)}
+          title={demoAtivo ? 'Desligar modo demonstracao (mostrar dados reais)' : 'Ligar modo demonstracao (mascarar nome/CNPJ)'}
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            demoAtivo
+              ? 'bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200'
+              : 'text-gray-500 hover:bg-gray-100 border border-transparent'
+          }`}>
+          {demoAtivo ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          <span className="hidden sm:inline">{demoAtivo ? 'Modo demo' : 'Demo'}</span>
+        </button>
+
         <button onClick={alternar}
           title={escuro ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
           className="rounded p-2 text-gray-500 hover:bg-gray-100 transition-colors">

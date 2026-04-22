@@ -25,6 +25,8 @@ import RelatorioFluxoCaixa from './pages/RelatorioFluxoCaixa';
 import RelatorioEvolucaoMensal from './pages/RelatorioEvolucaoMensal';
 import RelatorioDRERede from './pages/RelatorioDRERede';
 import RelatorioFluxoCaixaRede from './pages/RelatorioFluxoCaixaRede';
+import RelatorioAnaliseIA from './pages/RelatorioAnaliseIA';
+import RelatorioAnaliseLancamentosRede from './pages/RelatorioAnaliseLancamentosRede';
 import CciPlanoContas from './pages/CciPlanoContas';
 import CciFornecedores from './pages/CciFornecedores';
 import CciContasPagar from './pages/CciContasPagar';
@@ -112,6 +114,9 @@ export default function App() {
           <Route path="/admin/relatorios-cliente/:clienteId/fluxo-caixa" element={<RelatorioFluxoCaixa />} />
           <Route path="/admin/relatorios-cliente/rede/:chaveApiId/dre" element={<RelatorioDRERede />} />
           <Route path="/admin/relatorios-cliente/rede/:chaveApiId/fluxo-caixa" element={<RelatorioFluxoCaixaRede />} />
+          <Route path="/admin/relatorios-cliente/:clienteId/analise-ia" element={<RelatorioAnaliseIA />} />
+          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/analise-ia" element={<RelatorioAnaliseIA modoRede={true} />} />
+          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/analise-lancamentos" element={<RelatorioAnaliseLancamentosRede />} />
           <Route path="/admin/relatorios-cliente/:clienteId/evolucao" element={<RelatorioEvolucaoMensal />} />
 
           {/* BPO */}

@@ -12,6 +12,7 @@ import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
 import { formatCurrency } from '../utils/format';
+import { useAnonimizador } from '../services/anonimizarService';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -42,6 +43,7 @@ function formatDuracao(ms) {
 // redeContexto (opcional): { nomeRede, chaveApiId, empresaCodigos, empresas }.
 // Quando passado, o Fluxo de Caixa agrega todas as empresas da rede.
 export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeContexto } = {}) {
+  const { labelEmpresa, labelCnpj } = useAnonimizador();
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
   const navigate = useNavigate();
@@ -832,7 +834,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             </h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Building2 className="h-3 w-3" />
-              <span className="truncate">{cliente.nome}</span>
+              <span className="truncate">{labelEmpresa(cliente)}</span>
               {modoRede && cliente._empresaCodigos && (
                 <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
                   · {cliente._empresaCodigos.length} empresas
@@ -864,7 +866,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>Fluxo de Caixa</h1>
-            <p style={{ fontSize: '10pt', margin: '4px 0' }}>{cliente.nome}{cliente.cnpj ? ` - CNPJ ${cliente.cnpj}` : ''}</p>
+            <p style={{ fontSize: '10pt', margin: '4px 0' }}>{labelEmpresa(cliente)}{cliente.cnpj ? ` - CNPJ ${labelCnpj(cliente.cnpj)}` : ''}</p>
             <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Periodo: {periodoLabel} &middot; Mascara: {mascaraSelecionada?.nome}</p>
           </div>
           <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#444', lineHeight: 1.25, flexShrink: 0 }}>
@@ -1055,7 +1057,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       {resultadoPorEmpresa.empresas.map((p, i) => (
                         <tr key={p.empresaCodigo} className="hover:bg-gray-50/60">
                           <td className="px-4 py-2 text-[11px] text-gray-400 font-mono">{i + 1}</td>
-                          <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa?.nome || `#${p.empresaCodigo}`}</td>
+                          <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa ? labelEmpresa(p.empresa) : `#${p.empresaCodigo}`}</td>
                           <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-emerald-600">+{formatCurrency(p.entradas)}</td>
                           <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-red-600">-{formatCurrency(p.saidas)}</td>
                           <td className={`px-4 py-2 text-right font-mono text-[12.5px] font-semibold tabular-nums ${p.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
