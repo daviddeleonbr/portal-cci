@@ -15,6 +15,7 @@ import * as fluxoIA from '../services/fluxoInsightsService';
 import * as geralIA from '../services/diagnosticoGeralService';
 import { carregarApiKey, salvarApiKey, limparApiKey } from '../services/iaSharedHelpers';
 import { useAnonimizador } from '../services/anonimizarService';
+import { useAdminSession } from '../hooks/useAuth';
 import AnaliseIaView from '../components/ia/AnaliseIaView';
 import RelatorioDissertativo from '../components/ia/RelatorioDissertativo';
 import Modal from '../components/ui/Modal';
@@ -25,6 +26,8 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
   const { clienteId, chaveApiId } = useParams();
   const navigate = useNavigate();
   const { labelEmpresa, labelRede, labelCnpj } = useAnonimizador();
+  const session = useAdminSession();
+  const podeUsarIA = (session?.usuario?.permissoes || []).includes('analise_ia');
 
   // Contexto (cliente OU rede virtual)
   const [loading, setLoading] = useState(true);
@@ -212,6 +215,24 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
   };
   const limparChave = () => { limparApiKey(); setApiKey(''); setModalKey(false); };
 
+  if (!podeUsarIA) {
+    return (
+      <div className="max-w-xl mx-auto mt-12 rounded-2xl border border-amber-200 bg-amber-50/50 p-8 text-center">
+        <div className="mx-auto h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+          <Lock className="h-5 w-5 text-amber-700" />
+        </div>
+        <h2 className="text-base font-semibold text-gray-900 mb-1">Analise com IA bloqueada</h2>
+        <p className="text-[13px] text-gray-600 leading-relaxed mb-4">
+          Seu usuario nao tem permissao para acessar as analises com IA. Solicite ao administrador
+          a permissao <strong>Analise com IA (Claude)</strong> em Cadastros &gt; Usuarios do Sistema.
+        </p>
+        <button onClick={() => navigate('/admin/relatorios-cliente')}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 text-[12px] font-semibold transition-colors">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar aos relatorios
+        </button>
+      </div>
+    );
+  }
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }

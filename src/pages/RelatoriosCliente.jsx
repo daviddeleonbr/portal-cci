@@ -9,6 +9,7 @@ import {
 import PageHeader from '../components/ui/PageHeader';
 import * as clientesService from '../services/clientesService';
 import { useAnonimizador } from '../services/anonimizarService';
+import { useAdminSession } from '../hooks/useAuth';
 
 // Catalogo de relatorios disponiveis
 const RELATORIOS = [
@@ -75,6 +76,8 @@ const RELATORIOS = [
 // ═══════════════════════════════════════════════════════════
 export default function RelatoriosCliente() {
   const { labelEmpresa, labelRede, labelCnpj } = useAnonimizador();
+  const session = useAdminSession();
+  const podeUsarIA = (session?.usuario?.permissoes || []).includes('analise_ia');
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -234,15 +237,17 @@ export default function RelatoriosCliente() {
                         <FlaskConical className="h-3 w-3" />
                         Lanc. da Rede
                       </Link>
-                      <Link
-                        to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/analise-ia`}
-                        onClick={(e) => e.stopPropagation()}
-                        title="Analise de vendas da rede com IA"
-                        className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all shadow-sm"
-                      >
-                        <Sparkles className="h-3 w-3" />
-                        Analise IA da Rede
-                      </Link>
+                      {podeUsarIA && (
+                        <Link
+                          to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/analise-ia`}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Analise de vendas da rede com IA"
+                          className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all shadow-sm"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          Analise IA da Rede
+                        </Link>
+                      )}
                     </>
                   )}
                 </button>
@@ -285,6 +290,12 @@ export function ClienteRelatoriosHub() {
   const { clienteId } = useParams();
   const navigate = useNavigate();
   const { labelEmpresa, labelCnpj } = useAnonimizador();
+  const session = useAdminSession();
+  const podeUsarIA = (session?.usuario?.permissoes || []).includes('analise_ia');
+  const relatoriosVisiveis = useMemo(
+    () => RELATORIOS.filter(r => r.id !== 'analise-ia' || podeUsarIA),
+    [podeUsarIA]
+  );
   const [cliente, setCliente] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -346,7 +357,7 @@ export function ClienteRelatoriosHub() {
 
       {/* Reports grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {RELATORIOS.map((r, i) => {
+        {relatoriosVisiveis.map((r, i) => {
           const Icon = r.icon;
           const colors = {
             blue: 'from-blue-500 to-indigo-600',

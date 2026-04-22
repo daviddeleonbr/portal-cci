@@ -17,6 +17,7 @@ export const PERMISSOES_ADMIN = [
   { key: 'fiscal', label: 'Notas Fiscais e Agendamento', grupo: 'Fiscal' },
   { key: 'parametros', label: 'Parametros', grupo: 'Consultoria' },
   { key: 'relatorios_cliente', label: 'Relatorios por Cliente', grupo: 'Consultoria' },
+  { key: 'analise_ia', label: 'Analise com IA (Claude)', grupo: 'Consultoria' },
   { key: 'conciliacao_bancaria', label: 'Conciliacao Bancaria', grupo: 'BPO' },
   { key: 'conciliacao_caixas', label: 'Conciliacao de Caixas', grupo: 'BPO' },
   { key: 'caixa_administrativo', label: 'Caixa Administrativo', grupo: 'BPO' },
