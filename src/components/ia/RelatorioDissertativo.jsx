@@ -270,8 +270,13 @@ function SecoesVendas({ insights, modoRede }) {
 
       {insights.combustiveis && (
         <section className="rd-secao">
-          <h2>4. Analise de Combustiveis por Tipo</h2>
-          {insights.combustiveis.analise_por_tipo && <p>{insights.combustiveis.analise_por_tipo}</p>}
+          <h2>4. Analise de Combustiveis</h2>
+          {insights.combustiveis.analise_por_tipo && (
+            <><h3>Por tipo (Gasolina, Diesel, Etanol, GNV)</h3><p>{insights.combustiveis.analise_por_tipo}</p></>
+          )}
+          {insights.combustiveis.analise_por_produto && (
+            <><h3>Por produto (nome individual)</h3><p>{insights.combustiveis.analise_por_produto}</p></>
+          )}
           {insights.combustiveis.tipos_em_queda?.length > 0 && (
             <>
               <h3>Tipos em queda de volume</h3>
@@ -282,13 +287,114 @@ function SecoesVendas({ insights, modoRede }) {
               </ul>
             </>
           )}
+          {insights.combustiveis.produtos_destaque?.length > 0 && (
+            <>
+              <h3>Produtos em destaque</h3>
+              <ul>
+                {insights.combustiveis.produtos_destaque.map((p, i) => (
+                  <li key={i}><span className="destaque">{p.produto}</span>{p.motivo ? ` — ${p.motivo}` : ''}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {insights.combustiveis.produtos_preocupantes?.length > 0 && (
+            <>
+              <h3>Produtos preocupantes</h3>
+              <ul>
+                {insights.combustiveis.produtos_preocupantes.map((p, i) => (
+                  <li key={i}><span className="destaque">{p.produto}</span>{p.motivo ? ` — ${p.motivo}` : ''}</li>
+                ))}
+              </ul>
+            </>
+          )}
           {insights.combustiveis.mix_ideal && <p><em>{insights.combustiveis.mix_ideal}</em></p>}
+        </section>
+      )}
+
+      {insights.automotivos_analise && (
+        <section className="rd-secao">
+          <h2>5. Analise de Automotivos</h2>
+          {insights.automotivos_analise.interpretacao && <p>{insights.automotivos_analise.interpretacao}</p>}
+          {insights.automotivos_analise.grupos_destaque?.length > 0 && (
+            <>
+              <h3>Grupos em destaque</h3>
+              <ul>
+                {insights.automotivos_analise.grupos_destaque.map((g, i) => (
+                  <li key={i}>
+                    <span className="destaque">{g.grupo}</span>
+                    {g.receita != null ? ` — ${formatCurrency(g.receita)}` : ''}
+                    {g.margem_pct != null ? ` (margem ${Number(g.margem_pct).toFixed(1)}%)` : ''}
+                    {g.porque ? `. ${g.porque}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {insights.automotivos_analise.grupos_problema?.length > 0 && (
+            <>
+              <h3>Grupos em problema</h3>
+              <ul>
+                {insights.automotivos_analise.grupos_problema.map((g, i) => (
+                  <li key={i}>
+                    <span className="destaque">{g.grupo}</span>
+                    {g.motivo ? ` — ${g.motivo}` : ''}
+                    {g.acao ? ` Acao: ${g.acao}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {insights.automotivos_analise.oportunidades?.length > 0 && (
+            <><h3>Oportunidades</h3><ul>{insights.automotivos_analise.oportunidades.map((o, i) => <li key={i}>{o}</li>)}</ul></>
+          )}
+        </section>
+      )}
+
+      {insights.conveniencia_analise && (
+        <section className="rd-secao">
+          <h2>6. Analise de Conveniencia</h2>
+          {insights.conveniencia_analise.interpretacao && <p>{insights.conveniencia_analise.interpretacao}</p>}
+          {insights.conveniencia_analise.grupos_destaque?.length > 0 && (
+            <>
+              <h3>Grupos em destaque</h3>
+              <ul>
+                {insights.conveniencia_analise.grupos_destaque.map((g, i) => (
+                  <li key={i}>
+                    <span className="destaque">{g.grupo}</span>
+                    {g.receita != null ? ` — ${formatCurrency(g.receita)}` : ''}
+                    {g.margem_pct != null ? ` (margem ${Number(g.margem_pct).toFixed(1)}%)` : ''}
+                    {g.porque ? `. ${g.porque}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {insights.conveniencia_analise.grupos_problema?.length > 0 && (
+            <>
+              <h3>Grupos em problema</h3>
+              <ul>
+                {insights.conveniencia_analise.grupos_problema.map((g, i) => (
+                  <li key={i}>
+                    <span className="destaque">{g.grupo}</span>
+                    {g.motivo ? ` — ${g.motivo}` : ''}
+                    {g.acao ? ` Acao: ${g.acao}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {insights.conveniencia_analise.mix_recomendado && (
+            <><h3>Mix recomendado</h3><p>{insights.conveniencia_analise.mix_recomendado}</p></>
+          )}
+          {insights.conveniencia_analise.oportunidades?.length > 0 && (
+            <><h3>Oportunidades</h3><ul>{insights.conveniencia_analise.oportunidades.map((o, i) => <li key={i}>{o}</li>)}</ul></>
+          )}
         </section>
       )}
 
       {insights.volumes_precos?.analise && (
         <section className="rd-secao">
-          <h2>5. Volumes e Precos</h2>
+          <h2>7. Volumes e Precos</h2>
           <p>{insights.volumes_precos.analise}</p>
           {insights.volumes_precos.observacoes?.length > 0 && (
             <ul>{insights.volumes_precos.observacoes.map((o, i) => <li key={i}>{o}</li>)}</ul>
@@ -298,7 +404,7 @@ function SecoesVendas({ insights, modoRede }) {
 
       {insights.alertas_produtos && (
         <section className="rd-secao">
-          <h2>6. Produtos em Movimento</h2>
+          <h2>8. Produtos em Movimento</h2>
           {insights.alertas_produtos.produtos_em_queda?.length > 0 && (
             <>
               <h3>Produtos em queda</h3>
@@ -330,9 +436,67 @@ function SecoesVendas({ insights, modoRede }) {
         </section>
       )}
 
+      {insights.formas_pagamento && (
+        <section className="rd-secao">
+          <h2>9. Formas de Pagamento</h2>
+          {insights.formas_pagamento.interpretacao && <p>{insights.formas_pagamento.interpretacao}</p>}
+          {insights.formas_pagamento.distribuicao?.length > 0 && (
+            <table className="rd-tabela longa">
+              <thead>
+                <tr>
+                  <th>Forma</th>
+                  <th className="num">Valor</th>
+                  <th className="num">% Receita</th>
+                  <th className="num">Qtd</th>
+                  <th className="num">Ticket medio</th>
+                  <th className="num">Taxa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {insights.formas_pagamento.distribuicao.map((d, i) => (
+                  <tr key={i}>
+                    <td>{d.forma}</td>
+                    <td className="num">{formatCurrency(d.valor || 0)}</td>
+                    <td className="num">{Number(d.pct_receita ?? d.participacao_pct ?? 0).toFixed(1)}%</td>
+                    <td className="num">{Number(d.qtd_transacoes || 0)}</td>
+                    <td className="num">{formatCurrency(d.ticket_medio || 0)}</td>
+                    <td className="num">{Number(d.custo_pct || 0).toFixed(2)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {insights.formas_pagamento.concentracao_risco && (
+            <p><span className="destaque">Concentracao:</span> {insights.formas_pagamento.concentracao_risco}</p>
+          )}
+          {insights.formas_pagamento.custo_maquineta_estimado && (
+            <p><span className="destaque">Custo estimado de maquineta/taxa:</span> {insights.formas_pagamento.custo_maquineta_estimado}</p>
+          )}
+          {insights.formas_pagamento.recomendacoes?.length > 0 && (
+            <>
+              <h3>Sugestoes</h3>
+              <ul>{insights.formas_pagamento.recomendacoes.map((r, i) => <li key={i}>{r}</li>)}</ul>
+            </>
+          )}
+        </section>
+      )}
+
+      {insights.integridade_dados && (insights.integridade_dados.alertas?.length > 0 || insights.integridade_dados.pct_outros > 0 || insights.integridade_dados.pct_canceladas > 0) && (
+        <section className="rd-secao">
+          <h2>10. Integridade dos Dados</h2>
+          <p>
+            Receita em "Outros" (produtos sem classificacao): <span className="destaque">{Number(insights.integridade_dados.pct_outros || 0).toFixed(1)}%</span>.
+            {' '}Cancelamentos: <span className="destaque">{Number(insights.integridade_dados.pct_canceladas || 0).toFixed(1)}%</span>.
+          </p>
+          {insights.integridade_dados.alertas?.length > 0 && (
+            <ul>{insights.integridade_dados.alertas.map((a, i) => <li key={i}>{a}</li>)}</ul>
+          )}
+        </section>
+      )}
+
       {modoRede && insights.ranking_empresas?.length > 0 && (
         <section className="rd-secao">
-          <h2>7. Ranking de Empresas da Rede</h2>
+          <h2>11. Ranking de Empresas da Rede</h2>
           <table className="rd-tabela longa">
             <thead><tr><th>#</th><th>Empresa</th><th className="num">Receita</th><th className="num">Margem %</th><th className="num">% da Rede</th><th>Avaliacao</th></tr></thead>
             <tbody>
@@ -353,7 +517,7 @@ function SecoesVendas({ insights, modoRede }) {
 
       {modoRede && insights.dispersao && (
         <section className="rd-secao">
-          <h2>8. Analise de Dispersao da Rede</h2>
+          <h2>12. Analise de Dispersao da Rede</h2>
           {insights.dispersao.concentracao && <><h3>Concentracao</h3><p>{insights.dispersao.concentracao}</p></>}
           {insights.dispersao.outliers?.length > 0 && (
             <><h3>Outliers</h3><ul>{insights.dispersao.outliers.map((o, i) => <li key={i}>{o}</li>)}</ul></>

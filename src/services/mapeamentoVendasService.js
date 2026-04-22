@@ -51,6 +51,8 @@ export function classificarItem(item, produtosMap, gruposMap) {
   const produto = produtosMap.get(item.produtoCodigo);
   if (!produto) return 'outros';
 
+  // Combustivel: flag dedicada OU tipoProduto = "C" (fallback)
+  if (produto.combustivel === true || produto.combustivel === 'S' || produto.combustivel === 1) return 'combustivel';
   if (produto.tipoProduto === 'C') return 'combustivel';
 
   const grupo = gruposMap.get(produto.grupoCodigo);

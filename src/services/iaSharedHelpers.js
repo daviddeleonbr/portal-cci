@@ -11,7 +11,9 @@ const MODEL = 'claude-opus-4-7';
 // - user: texto da mensagem do usuario
 // - Modelo claude-opus-4-7 com adaptive thinking (nao retorna texto do thinking)
 // - anthropic-dangerous-direct-browser-access pq e front-end
-export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 8192 }) {
+// max_tokens com adaptive thinking inclui tokens de pensamento — por isso folgado.
+// Com schema expandido (combustiveis detalhado + automotivos + conveniencia), 20k e o minimo seguro.
+export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 20000 }) {
   if (!apiKey) throw new Error('Chave de API nao configurada');
 
   const blocks = Array.isArray(system) ? system : [{ type: 'text', text: String(system) }];
@@ -61,19 +63,42 @@ export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 8192 }
   const data = await res.json();
   const textBlock = (data.content || []).find(b => b.type === 'text');
   if (!textBlock) throw new Error('IA nao retornou conteudo de texto');
-  const insights = extrairJsonDeTexto(textBlock.text);
-  return { insights, usage: data.usage || null, raw: textBlock.text };
+  const stopReason = data.stop_reason || null;
+  try {
+    const insights = extrairJsonDeTexto(textBlock.text);
+    return { insights, usage: data.usage || null, raw: textBlock.text, stop_reason: stopReason };
+  } catch (err) {
+    // Trunca + loga amostra pra diagnostico; se foi max_tokens, avisa explicitamente
+    const amostra = String(textBlock.text || '').slice(-400);
+    const motivo = stopReason === 'max_tokens'
+      ? 'Resposta foi truncada (max_tokens). Tente novamente ou simplifique o payload.'
+      : 'Resposta da IA nao esta em JSON valido';
+    const e = new Error(motivo);
+    e.code = stopReason === 'max_tokens' ? 'MAX_TOKENS' : 'INVALID_JSON';
+    e.amostra = amostra;
+    e.stop_reason = stopReason;
+    console.error('[IA] JSON invalido. stop_reason=', stopReason, 'amostra final:', amostra);
+    throw e;
+  }
 }
 
 export function extrairJsonDeTexto(raw) {
-  try {
-    const cleaned = String(raw).trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/i, '');
-    return JSON.parse(cleaned);
-  } catch (err) {
-    throw new Error('Resposta da IA nao esta em JSON valido');
+  const texto = String(raw || '').trim();
+  // 1) Remove code fences se houver
+  const semFence = texto
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim();
+  // 2) Tenta parse direto
+  try { return JSON.parse(semFence); } catch (_) { /* fallthrough */ }
+  // 3) Tenta extrair o maior bloco {...} no texto (caso tenha prosa ao redor)
+  const primeiroBrace = semFence.indexOf('{');
+  const ultimoBrace = semFence.lastIndexOf('}');
+  if (primeiroBrace >= 0 && ultimoBrace > primeiroBrace) {
+    const candidato = semFence.slice(primeiroBrace, ultimoBrace + 1);
+    try { return JSON.parse(candidato); } catch (_) { /* fallthrough */ }
   }
+  throw new Error('Resposta da IA nao esta em JSON valido');
 }
 
 // ─── Classificacao de tipo de combustivel ─────────────────────

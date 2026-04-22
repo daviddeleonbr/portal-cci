@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import {
   Sparkles, CheckCircle2, AlertTriangle, XCircle, TrendingUp, TrendingDown,
   Target, Lightbulb, HelpCircle, Award, AlertCircle, ListOrdered, Fuel,
-  Layers, Wallet, GitBranch, Calendar, Package, Activity,
+  Layers, Wallet, GitBranch, Calendar, Package, Activity, CreditCard, ShieldAlert,
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/format';
 
@@ -20,8 +20,12 @@ export default function AnaliseIaView({ insights, modoRede = false, usage = null
       {insights.mix_produto && <CardMixProduto mix={insights.mix_produto} />}
       {insights.diagnostico_grupos && <CardDiagnosticoGrupos d={insights.diagnostico_grupos} />}
       {insights.combustiveis && <CardCombustiveis c={insights.combustiveis} />}
+      {insights.automotivos_analise && <CardCategoriaAnalise a={insights.automotivos_analise} titulo="Automotivos" icone={Package} cor="blue" />}
+      {insights.conveniencia_analise && <CardCategoriaAnalise a={insights.conveniencia_analise} titulo="Conveniencia" icone={Package} cor="emerald" />}
       {insights.volumes_precos?.analise && <CardVolumesPrecos v={insights.volumes_precos} />}
       {insights.alertas_produtos && <CardAlertasProdutos a={insights.alertas_produtos} />}
+      {insights.formas_pagamento && <CardFormasPagamento f={insights.formas_pagamento} />}
+      {insights.integridade_dados && <CardIntegridadeDados i={insights.integridade_dados} />}
 
       {/* Cards de DRE */}
       {insights.margens && <CardMargens m={insights.margens} />}
@@ -210,8 +214,19 @@ function CardDiagnosticoGrupos({ d }) {
 
 function CardCombustiveis({ c }) {
   return (
-    <Card icon={Fuel} color="amber" titulo="Analise por tipo de combustivel">
-      {c.analise_por_tipo && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{c.analise_por_tipo}</p>}
+    <Card icon={Fuel} color="amber" titulo="Analise de combustiveis">
+      {c.analise_por_tipo && (
+        <>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Por tipo (Gasolina, Diesel, Etanol, GNV)</p>
+          <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{c.analise_por_tipo}</p>
+        </>
+      )}
+      {c.analise_por_produto && (
+        <>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Por produto (nome individual)</p>
+          <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{c.analise_por_produto}</p>
+        </>
+      )}
       {c.tipos_em_queda?.length > 0 && (
         <>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 mb-2">Tipos em queda</p>
@@ -231,8 +246,102 @@ function CardCombustiveis({ c }) {
           </ul>
         </>
       )}
+      {(c.produtos_destaque?.length > 0 || c.produtos_preocupantes?.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+          {c.produtos_destaque?.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 mb-2">Produtos em destaque</p>
+              <ul className="space-y-1.5">
+                {c.produtos_destaque.map((p, i) => (
+                  <li key={i} className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5">
+                    <p className="text-[12.5px] font-semibold text-gray-900">{p.produto}</p>
+                    <p className="text-[11.5px] text-emerald-700 mt-0.5">{p.motivo}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {c.produtos_preocupantes?.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 mb-2">Produtos preocupantes</p>
+              <ul className="space-y-1.5">
+                {c.produtos_preocupantes.map((p, i) => (
+                  <li key={i} className="rounded-lg border border-red-200 bg-red-50/50 p-2.5">
+                    <p className="text-[12.5px] font-semibold text-gray-900">{p.produto}</p>
+                    <p className="text-[11.5px] text-red-700 mt-0.5">{p.motivo}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
       {c.mix_ideal && (
-        <p className="text-[11.5px] text-gray-600 italic border-t border-gray-100 pt-2 mt-2">{c.mix_ideal}</p>
+        <p className="text-[11.5px] text-gray-600 italic border-t border-gray-100 pt-2 mt-3">{c.mix_ideal}</p>
+      )}
+    </Card>
+  );
+}
+
+function CardCategoriaAnalise({ a, titulo, icone: Icone = Package, cor = 'blue' }) {
+  return (
+    <Card icon={Icone} color={cor} titulo={`Analise de ${titulo}`}>
+      {a.interpretacao && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{a.interpretacao}</p>}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {a.grupos_destaque?.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 mb-2">Grupos em destaque</p>
+            <ul className="space-y-2">
+              {a.grupos_destaque.map((g, i) => (
+                <li key={i} className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[12.5px] font-semibold text-gray-900 flex-1">{g.grupo}</span>
+                    {g.margem_pct != null && (
+                      <span className="font-mono tabular-nums text-[11px] text-emerald-700">{Number(g.margem_pct).toFixed(1)}%</span>
+                    )}
+                  </div>
+                  {g.receita != null && (
+                    <p className="text-[11px] text-gray-600 font-mono tabular-nums">{formatCurrency(g.receita)}</p>
+                  )}
+                  {g.porque && <p className="text-[11.5px] text-emerald-700 mt-1">{g.porque}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {a.grupos_problema?.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 mb-2">Grupos em problema</p>
+            <ul className="space-y-2">
+              {a.grupos_problema.map((g, i) => (
+                <li key={i} className="rounded-lg border border-red-200 bg-red-50/50 p-2.5">
+                  <p className="text-[12.5px] font-semibold text-gray-900">{g.grupo}</p>
+                  {g.motivo && <p className="text-[11.5px] text-red-700 mt-0.5">{g.motivo}</p>}
+                  {g.acao && <p className="text-[11px] text-gray-600 mt-1">Acao: {g.acao}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+      {a.mix_recomendado && (
+        <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-700 mb-1">Mix recomendado</p>
+          <p className="text-[12px] text-gray-700 leading-relaxed">{a.mix_recomendado}</p>
+        </div>
+      )}
+      {a.oportunidades?.length > 0 && (
+        <>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 mt-4">Oportunidades</p>
+          <ul className="space-y-1">
+            {a.oportunidades.map((o, i) => (
+              <li key={i} className="text-[12px] text-gray-700 flex items-start gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-emerald-500 flex-shrink-0 mt-2" />
+                <span>{o}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </Card>
   );
@@ -794,6 +903,103 @@ function CardPerguntas({ perguntas }) {
 }
 
 // ─── Helpers visuais ───────────────────────────────────────────
+
+function CardFormasPagamento({ f }) {
+  if (!f) return null;
+  return (
+    <Card icon={CreditCard} color="indigo" titulo="Formas de pagamento">
+      {f.interpretacao && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{f.interpretacao}</p>}
+      {f.distribuicao?.length > 0 && (
+        <Tabela
+          headers={['Forma / Administradora', 'Valor', '% Receita', 'Qtd', 'Ticket medio', 'Taxa', 'vs YoY']}
+          rows={f.distribuicao.map(d => {
+            const taxaReal = d.fonte_taxa === 'real (ADMINISTRADORA)';
+            return [
+              <span className="font-medium">{d.forma}</span>,
+              <span className="font-mono tabular-nums">{formatCurrency(d.valor || 0)}</span>,
+              <span className="font-mono tabular-nums">{Number(d.pct_receita ?? d.participacao_pct ?? 0).toFixed(1)}%</span>,
+              <span className="font-mono tabular-nums text-gray-500">{Number(d.qtd_transacoes || 0)}</span>,
+              <span className="font-mono tabular-nums">{formatCurrency(d.ticket_medio || 0)}</span>,
+              <span className="inline-flex items-center gap-1">
+                <span className={`font-mono tabular-nums ${taxaReal ? 'text-red-700 font-semibold' : 'text-amber-700'}`}>
+                  {Number(d.custo_pct || 0).toFixed(2)}%
+                </span>
+                <span className={`inline-block rounded-full px-1.5 py-0.5 text-[8.5px] font-bold uppercase ${
+                  taxaReal ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                }`} title={taxaReal ? 'Taxa real da administradora (percentualComissao)' : 'Taxa estimada por heuristica'}>
+                  {taxaReal ? 'real' : 'est.'}
+                </span>
+              </span>,
+              d.variacao_yoy_pct != null ? (
+                <span className={`font-mono tabular-nums font-semibold ${d.variacao_yoy_pct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {d.variacao_yoy_pct >= 0 ? '+' : ''}{Number(d.variacao_yoy_pct).toFixed(1)}%
+                </span>
+              ) : <span className="text-gray-400">—</span>,
+            ];
+          })} />
+      )}
+      {f.concentracao_risco && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 flex items-start gap-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[11.5px] text-amber-900">{f.concentracao_risco}</p>
+        </div>
+      )}
+      {f.custo_maquineta_estimado && (
+        <div className="mt-2 text-[11.5px] text-gray-600">
+          <span className="font-semibold">Custo estimado de maquineta/taxa:</span> {f.custo_maquineta_estimado}
+        </div>
+      )}
+      {f.recomendacoes?.length > 0 && (
+        <>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 mt-3">Sugestoes</p>
+          <ul className="space-y-1">
+            {f.recomendacoes.map((r, i) => (
+              <li key={i} className="text-[12px] text-gray-700 flex items-start gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-indigo-500 flex-shrink-0 mt-2" />
+                <span>{r}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function CardIntegridadeDados({ i }) {
+  if (!i) return null;
+  const temAlerta = (i.alertas?.length || 0) > 0;
+  return (
+    <Card icon={ShieldAlert} color={temAlerta ? 'amber' : 'gray'} titulo="Integridade dos dados">
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5">Receita em "Outros"</p>
+          <p className="text-[13px] font-bold text-gray-800 tabular-nums">
+            {Number(i.pct_outros || 0).toFixed(1)}%
+          </p>
+          <p className="text-[10.5px] text-gray-500">produtos sem classificacao (tipoProduto/tipoGrupo)</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5">Cancelamentos</p>
+          <p className="text-[13px] font-bold text-gray-800 tabular-nums">
+            {Number(i.pct_canceladas || 0).toFixed(1)}%
+          </p>
+          <p className="text-[10.5px] text-gray-500">sobre total de vendas (autorizadas + canceladas)</p>
+        </div>
+      </div>
+      {i.alertas?.length > 0 && (
+        <ul className="space-y-1.5">
+          {i.alertas.map((a, idx) => (
+            <li key={idx} className="text-[12px] text-amber-800 flex items-start gap-1.5">
+              <AlertTriangle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+              <span>{a}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
 
 function Card({ icon: Icon, color, titulo, children }) {
   const colorMap = {
