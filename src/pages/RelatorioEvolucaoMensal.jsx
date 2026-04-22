@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, BarChart3, Loader2, AlertCircle, Building2, Zap, RefreshCw,
   TrendingUp, TrendingDown, Minus, Lightbulb, Target, Droplet, Wrench,
-  ShoppingBag, Printer, ChevronLeft as ChevLeft, ChevronRight,
+  ShoppingBag, Wallet, Printer, ChevronLeft as ChevLeft, ChevronRight,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -564,19 +564,25 @@ function KpiCard({ label, valor, sub, color = 'cyan', trend }) {
   );
 }
 
-// ─── Insights (consultoria) ──────────────────────────────────
+// ─── Analise Consultor (framework especialista postos de combustivel) ──
+// Saida estruturada: Resumo Executivo, Top 3 Problemas, Top 3 Oportunidades,
+// Analise Detalhada (Vendas/DRE/Caixa), Recomendacoes Estrategicas.
 function gerarInsights(mesesDados, totais) {
   const validos = mesesDados.filter(m => !m.semDados && m.receita > 0);
-  if (validos.length < 2) {
-    return {
-      tendenciaReceita: 0, margemTrend: 0,
-      crescimento3m: 0, volatilidade: 0,
-      observacoes: [],
-      recomendacoes: ['Periodo muito curto para gerar insights. Selecione ao menos 3 meses com dados.'],
-    };
-  }
 
-  // Regressao linear simples (slope normalizado) para receita e margem
+  const baseVazia = {
+    margemTrend: 0, crescimentoReceita: 0, volatilidade: 0,
+    shareCombustivel: 0, shareConveniencia: 0, shareAutomotivos: 0,
+    shareDescontos: 0, gapCaixaReceita: 0,
+    melhorReceita: null, piorReceita: null, melhorMargem: null, piorMargem: null,
+    resumoExecutivo: { texto: 'Selecione ao menos 3 meses com dados para gerar a analise consultiva.', saude: 'neutra' },
+    problemas: [], oportunidades: [],
+    analiseDetalhada: { vendas: [], dre: [], caixa: [] },
+    recomendacoes: [],
+  };
+  if (validos.length < 2) return baseVazia;
+
+  // ─── Helpers ────────────────────────────────────────────
   const slope = (arr) => {
     const n = arr.length;
     const xm = (n - 1) / 2;
@@ -585,236 +591,552 @@ function gerarInsights(mesesDados, totais) {
     arr.forEach((v, i) => { num += (i - xm) * (v - ym); den += (i - xm) ** 2; });
     return den === 0 ? 0 : num / den;
   };
-  const media = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const media = (arr) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
 
+  // ─── Metricas base ──────────────────────────────────────
   const receitas = validos.map(m => m.receita);
+  const cmvs = validos.map(m => m.cmv);
+  const lucros = validos.map(m => m.lucroBruto);
   const margens = validos.map(m => m.margem);
+  const variacoesCaixa = validos.map(m => m.variacaoCaixa);
+  const tickets = validos.map(m => m.ticketMedio);
+
   const slopeReceita = slope(receitas);
   const slopeMargem = slope(margens);
-  const mediaReceita = media(receitas);
-  // Tendencia em % sobre a media
-  const tendenciaReceita = mediaReceita > 0 ? (slopeReceita / mediaReceita) * 100 : 0;
-  const margemTrend = slopeMargem; // p.p./mes (direta)
+  const slopeCMV = slope(cmvs);
+  const slopeLucro = slope(lucros);
+  const slopeTicket = slope(tickets);
+  const slopeCaixa = slope(variacoesCaixa);
 
-  // Crescimento: media dos ultimos 3 vs primeiros 3 (ou metade/metade se tiver menos de 6)
+  const mediaReceita = media(receitas);
+  const mediaMargem = media(margens);
+
   const half = Math.max(1, Math.floor(validos.length / 2));
   const metadeInicial = validos.slice(0, half);
   const metadeFinal = validos.slice(-half);
   const rIni = media(metadeInicial.map(m => m.receita));
   const rFim = media(metadeFinal.map(m => m.receita));
+  const cmvIni = media(metadeInicial.map(m => m.cmv));
+  const cmvFim = media(metadeFinal.map(m => m.cmv));
+  const ticketIni = media(metadeInicial.map(m => m.ticketMedio));
+  const ticketFim = media(metadeFinal.map(m => m.ticketMedio));
   const crescimentoReceita = rIni > 0 ? ((rFim - rIni) / rIni) * 100 : 0;
+  const crescimentoCMV = cmvIni > 0 ? ((cmvFim - cmvIni) / cmvIni) * 100 : 0;
+  const crescimentoTicket = ticketIni > 0 ? ((ticketFim - ticketIni) / ticketIni) * 100 : 0;
+  const tendenciaReceita = mediaReceita > 0 ? (slopeReceita / mediaReceita) * 100 : 0;
+  const margemTrend = slopeMargem;
 
-  // Volatilidade (desvio padrao / media)
   const variancia = receitas.reduce((s, v) => s + (v - mediaReceita) ** 2, 0) / receitas.length;
   const volatilidade = mediaReceita > 0 ? (Math.sqrt(variancia) / mediaReceita) * 100 : 0;
 
-  // Melhor e pior mes
   const melhorReceita = [...validos].sort((a, b) => b.receita - a.receita)[0];
   const piorReceita = [...validos].sort((a, b) => a.receita - b.receita)[0];
   const melhorMargem = [...validos].sort((a, b) => b.margem - a.margem)[0];
   const piorMargem = [...validos].sort((a, b) => a.margem - b.margem)[0];
 
-  // Mix
   const totalReceita = totais.receita || 1;
   const shareCombustivel = (totais.receitaCombustivel / totalReceita) * 100;
   const shareConveniencia = (totais.receitaConveniencia / totalReceita) * 100;
   const shareAutomotivos = (totais.receitaAutomotivos / totalReceita) * 100;
+  const shareDescontos = (totais.descontos / totalReceita) * 100;
+  const shareCanceladas = (totais.vendasCanceladas / totalReceita) * 100;
+  const gapCaixaReceita = totais.receita > 0 ? ((totais.entradasCaixa - totais.receita) / totais.receita) * 100 : 0;
 
-  // Descontos
-  const shareDescontos = totalReceita > 0 ? (totais.descontos / totalReceita) * 100 : 0;
+  const mesesCaixaNegativo = validos.filter(m => m.variacaoCaixa < 0).length;
+  const mesesPrejuizo = validos.filter(m => m.lucroBruto < 0).length;
+  const mesesMargemBaixa = validos.filter(m => m.margem > 0 && m.margem < 8).length;
 
-  // Caixa: diferenca entre receita e entradasCaixa
-  const entradasCaixa = totais.entradasCaixa;
-  const gapCaixaReceita = totais.receita > 0 ? ((entradasCaixa - totais.receita) / totais.receita) * 100 : 0;
+  // ─── Resumo Executivo ───────────────────────────────────
+  // Saude: critica (prejuizo/margem<5%/caixa consistente neg) | alerta | boa
+  let saude = 'boa';
+  if (mesesPrejuizo > 0 || mediaMargem < 5 || (mesesCaixaNegativo > validos.length / 2)) saude = 'critica';
+  else if (mediaMargem < 10 || slopeMargem < -0.3 || shareCombustivel > 90 || mesesCaixaNegativo >= 2) saude = 'alerta';
 
-  // ─── Observacoes (leitura) ───────────────────────────────
-  const observacoes = [];
+  const resumoExecutivo = {
+    saude,
+    texto: [
+      `O posto gerou ${formatCurrency(totais.receita)} de receita bruta em ${validos.length} mes(es), com margem bruta media de ${mediaMargem.toFixed(2)}%. `,
+      `${slopeMargem >= 0 ? 'A margem esta em trajetoria estavel ou de melhora' : 'A margem bruta esta em queda'}; `,
+      `${crescimentoReceita >= 0 ? 'a receita cresceu' : 'a receita caiu'} ${formatPct(crescimentoReceita)} comparando o inicio e o fim do periodo. `,
+      `Mix atual: combustivel ${shareCombustivel.toFixed(0)}%, conveniencia ${shareConveniencia.toFixed(0)}%, automotivos ${shareAutomotivos.toFixed(0)}%. `,
+      `Variacao de caixa consolidada de ${formatCurrency(totais.variacaoCaixa)}${mesesCaixaNegativo > 0 ? ` (${mesesCaixaNegativo} mes(es) com caixa negativo)` : ''}. `,
+      saude === 'critica'
+        ? 'Leitura geral: situacao critica — exige acao imediata no trinomio preco, custo e capital de giro.'
+        : saude === 'alerta'
+        ? 'Leitura geral: operacao funcional, mas com sinais de alerta que merecem atencao nas proximas semanas.'
+        : 'Leitura geral: indicadores saudaveis; agora e o momento de otimizar e expandir onde o retorno e maior.',
+    ].join(''),
+  };
 
-  if (Math.abs(crescimentoReceita) >= 5) {
-    observacoes.push({
-      tipo: crescimentoReceita > 0 ? 'positivo' : 'negativo',
-      titulo: `Receita ${crescimentoReceita > 0 ? 'cresceu' : 'caiu'} ${formatPct(crescimentoReceita)} na segunda metade do periodo`,
-      texto: `Media inicial ${formatCurrency(rIni)} vs media final ${formatCurrency(rFim)}. ${
-        crescimentoReceita > 0
-          ? 'Mantenha o combustivel que motiva o crescimento e expanda o que esta puxando.'
-          : 'Investigue queda de volume vs queda de preco e reforce a acao comercial.'
-      }`,
+  // ─── Problemas (candidatos pontuados por severidade) ─────
+  const problemasCandidatos = [];
+  if (mesesPrejuizo > 0) {
+    problemasCandidatos.push({
+      severidade: 10,
+      titulo: `Prejuizo bruto em ${mesesPrejuizo} mes(es)`,
+      diagnostico: `${mesesPrejuizo} de ${validos.length} meses fecharam com lucro bruto negativo. Isto significa que o posto esta vendendo por um preco inferior ao custo — sem ainda descontar despesas operacionais.`,
+      causaRaiz: 'Preco de venda abaixo do custo, estoque girado em periodo de queda de preco da refinaria, ou descontos fora de controle.',
     });
   }
-
-  if (Math.abs(slopeMargem) >= 0.3) {
-    observacoes.push({
-      tipo: slopeMargem > 0 ? 'positivo' : 'negativo',
-      titulo: `Margem bruta ${slopeMargem > 0 ? 'melhorando' : 'deteriorando'} ~${Math.abs(slopeMargem).toFixed(1)} p.p./mes`,
-      texto: slopeMargem > 0
-        ? 'A cada mes a margem aumenta de forma consistente — sinal de poder de precificacao ou melhor mix.'
-        : 'Margem esta caindo — revisar precos, custo de aquisicao e mix de produtos (conveniencia tem margem mais alta que combustivel).',
+  if (mediaMargem < 8) {
+    problemasCandidatos.push({
+      severidade: 9,
+      titulo: `Margem bruta media critica: ${mediaMargem.toFixed(2)}%`,
+      diagnostico: `A margem media do periodo esta ${mediaMargem < 5 ? 'muito abaixo' : 'abaixo'} do minimo saudavel para o setor (10-15%). Todo o esforco operacional pode estar sendo drenado por precificacao ineficiente.`,
+      causaRaiz: 'Combustivel respondendo por quase todo o mix e sem compensacao em produtos de maior margem (conveniencia, lubrificantes, servicos).',
+    });
+  } else if (slopeMargem < -0.5) {
+    problemasCandidatos.push({
+      severidade: 7,
+      titulo: `Margem bruta em queda acelerada: ${slopeMargem.toFixed(2)} p.p./mes`,
+      diagnostico: `Perda de ${Math.abs(slopeMargem).toFixed(1)} pontos percentuais por mes. Se a trajetoria continuar, em poucos meses a margem ficara inviavel.`,
+      causaRaiz: 'Repasse de alta de custo nao acompanhado no preco final OU politica de desconto mais agressiva que o necessario.',
     });
   }
-
-  if (shareCombustivel >= 85) {
-    observacoes.push({
-      tipo: 'atencao',
-      titulo: `Receita muito concentrada em combustivel (${shareCombustivel.toFixed(1)}%)`,
-      texto: `Combustiveis rendem margem baixa. Conveniencia representa apenas ${shareConveniencia.toFixed(1)}% e costuma trazer margem 3-5x maior. Avalie layout da loja, sortimento e campanhas cruzadas.`,
-    });
-  } else if (shareConveniencia >= 15) {
-    observacoes.push({
-      tipo: 'positivo',
-      titulo: `Conveniencia saudavel: ${shareConveniencia.toFixed(1)}% da receita`,
-      texto: 'Mix diversificado reduz dependencia do preco de combustivel. Mantenha ativa a vitrine e a gestao de perecivel.',
+  if (shareCombustivel > 92 && shareConveniencia < 3) {
+    problemasCandidatos.push({
+      severidade: 8,
+      titulo: `Dependencia extrema do combustivel (${shareCombustivel.toFixed(1)}%)`,
+      diagnostico: `Conveniencia e servicos representam menos de ${(100 - shareCombustivel).toFixed(0)}% da receita. Qualquer oscilacao no preco do combustivel impacta diretamente o resultado.`,
+      causaRaiz: 'Loja de conveniencia subutilizada, falta de servicos complementares (lavagem, troca de oleo) ou precificacao nao competitiva nesses itens.',
     });
   }
-
-  if (shareDescontos >= 2) {
-    observacoes.push({
-      tipo: 'atencao',
-      titulo: `Descontos concedidos somam ${formatCurrency(totais.descontos)} (${shareDescontos.toFixed(1)}% da receita)`,
-      texto: 'Volume de descontos alto. Verifique politica promocional e se descontos estao chegando ao cliente-alvo (B2B ou fidelidade).',
+  if (mesesCaixaNegativo >= Math.ceil(validos.length / 2)) {
+    problemasCandidatos.push({
+      severidade: 9,
+      titulo: `Caixa negativo em ${mesesCaixaNegativo} de ${validos.length} meses`,
+      diagnostico: `O negocio esta consumindo mais caixa do que gera na maior parte do periodo. Isso tende a escalar para dependencia de credito.`,
+      causaRaiz: 'Descasamento entre prazo de recebimento (cartao D+30, frotistas D+15/30) e pagamento de fornecedores (a vista na distribuidora).',
     });
   }
-
-  if (Math.abs(gapCaixaReceita) >= 15 && totais.entradasCaixa > 0) {
-    observacoes.push({
-      tipo: gapCaixaReceita < 0 ? 'atencao' : 'informativo',
-      titulo: `Gap entre receita e entradas de caixa: ${formatPct(gapCaixaReceita)}`,
-      texto: gapCaixaReceita < 0
-        ? 'Entradas de caixa estao menores que a receita registrada. Pode indicar vendas a prazo (duplicatas nao recebidas) ou cartoes a compensar. Monitorar aging.'
-        : 'Entradas de caixa acima da receita do periodo — provavelmente recebimento de vendas de periodos anteriores.',
+  if (gapCaixaReceita < -20 && totais.entradasCaixa > 0) {
+    problemasCandidatos.push({
+      severidade: 7,
+      titulo: `Receita nao esta virando caixa: gap de ${formatPct(gapCaixaReceita)}`,
+      diagnostico: `As entradas de caixa foram ${Math.abs(gapCaixaReceita).toFixed(0)}% inferiores a receita registrada. Indica contas a receber crescentes ou vendas via cartao/duplicata com DSO elevado.`,
+      causaRaiz: 'Aumento de venda a prazo, atraso de repasse de adquirente ou inadimplencia de frotistas.',
     });
-  }
-
-  if (volatilidade >= 25) {
-    observacoes.push({
-      tipo: 'atencao',
-      titulo: `Alta volatilidade de receita (${volatilidade.toFixed(1)}% do coeficiente de variacao)`,
-      texto: `Melhor mes: ${melhorReceita.label} (${formatCurrency(melhorReceita.receita)}). Pior: ${piorReceita.label} (${formatCurrency(piorReceita.receita)}). Identificar sazonalidade ajuda no planejamento de estoque e compras.`,
-    });
-  }
-
-  if (melhorMargem && piorMargem && (melhorMargem.margem - piorMargem.margem) >= 3) {
-    observacoes.push({
-      tipo: 'informativo',
-      titulo: `Melhor margem: ${melhorMargem.label} (${melhorMargem.margem.toFixed(2)}%); pior: ${piorMargem.label} (${piorMargem.margem.toFixed(2)}%)`,
-      texto: `Diferenca de ${(melhorMargem.margem - piorMargem.margem).toFixed(2)} p.p. entre os dois meses. Analise o que mudou na precificacao ou mix.`,
-    });
-  }
-
-  // ─── Recomendacoes acionaveis ─────────────────────────────
-  const recomendacoes = [];
-
-  if (shareCombustivel >= 80) {
-    recomendacoes.push('Diversificar receita via conveniencia e servicos (troca de oleo, lavagem) pode elevar a margem consolidada em 3-7 p.p. sem exigir mais caixa.');
-  }
-  if (slopeMargem < 0) {
-    recomendacoes.push('Reprecifique produtos de conveniencia com base em competitividade local — sao eles que puxam a margem quando o combustivel esta pressionado.');
   }
   if (shareDescontos >= 3) {
-    recomendacoes.push('Audite sua politica de descontos: separe frota (B2B) de varejo e documente criterios para aprovacao acima de X%.');
+    problemasCandidatos.push({
+      severidade: 6,
+      titulo: `Descontos concedidos altos: ${formatCurrency(totais.descontos)} (${shareDescontos.toFixed(1)}% da receita)`,
+      diagnostico: `O equivalente a ${formatPct(shareDescontos)} da receita esta sendo dado em desconto. Em margens apertadas, isso pode consumir todo o lucro.`,
+      causaRaiz: 'Politica de desconto descentralizada (gerente/frentista aprovando sem regra clara) OU concorrencia agressiva obrigando a competir em preco.',
+    });
   }
-  if (totais.variacaoCaixa < 0 && crescimentoReceita >= 0) {
-    recomendacoes.push('Receita crescendo + caixa caindo sugere aumento de capital de giro: avalie prazos de recebimento (cartao, frotistas) vs pagamento de fornecedores.');
+  if (shareCanceladas >= 1.5) {
+    problemasCandidatos.push({
+      severidade: 5,
+      titulo: `Vendas canceladas relevantes: ${formatCurrency(totais.vendasCanceladas)} (${shareCanceladas.toFixed(1)}% da receita)`,
+      diagnostico: 'Cancelamentos acima de 1% sinalizam problema operacional: erro de emissao, abastecimento errado, cliente desistindo.',
+      causaRaiz: 'Treinamento de frentistas, pressao de fila na pista ou problema tecnico nas bombas.',
+    });
   }
-  if (totais.ticketMedio > 0 && validos.length >= 3) {
-    const ticketIni = media(metadeInicial.map(m => m.ticketMedio));
-    const ticketFim = media(metadeFinal.map(m => m.ticketMedio));
-    const deltaTicket = ticketIni > 0 ? ((ticketFim - ticketIni) / ticketIni) * 100 : 0;
-    if (Math.abs(deltaTicket) >= 5) {
-      recomendacoes.push(
-        `Ticket medio ${deltaTicket > 0 ? 'subiu' : 'caiu'} ${formatPct(deltaTicket)} no periodo. ${
-          deltaTicket > 0
-            ? 'Reforce o cross-sell no frentista para manter o aumento.'
-            : 'Avalie se a queda e de preco (combustivel) ou de mix (cliente migrando para itens baratos).'
-        }`
-      );
-    }
+  if (slopeCMV > 0 && slopeReceita <= 0) {
+    problemasCandidatos.push({
+      severidade: 8,
+      titulo: 'CMV subindo sem aumento de receita',
+      diagnostico: 'Custo total de produtos vendidos esta aumentando enquanto a receita esta estavel ou caindo — compressao direta de margem.',
+      causaRaiz: 'Repasse de preco da distribuidora sem ajuste no preco de venda ou estoque comprado a preco mais alto sendo escoado agora.',
+    });
   }
-  if (shareConveniencia < 5 && shareCombustivel >= 90) {
-    recomendacoes.push('Loja de conveniencia pouco relevante — definir meta de 10% da receita em 6 meses via reformas de ponta de gondola e parceria com marcas.');
+  if (crescimentoCMV > crescimentoReceita + 5) {
+    problemasCandidatos.push({
+      severidade: 6,
+      titulo: `Custos crescendo mais rapido que a receita (${formatPct(crescimentoCMV - crescimentoReceita)} de diferenca)`,
+      diagnostico: `CMV cresceu ${formatPct(crescimentoCMV)} enquanto a receita variou ${formatPct(crescimentoReceita)}. O resultado e perda de eficiencia.`,
+      causaRaiz: 'Gestao de compras reativa (sem negociacao) ou mix piorando (vendendo mais produto de baixa margem).',
+    });
   }
-  if (recomendacoes.length === 0) {
-    recomendacoes.push('Indicadores estaveis. Foque em aprofundar a gestao por centro de custo e pricing dinamico de conveniencia.');
+
+  const problemas = problemasCandidatos.sort((a, b) => b.severidade - a.severidade).slice(0, 3);
+
+  // ─── Oportunidades ───────────────────────────────────────
+  const oportunidadesCandidatas = [];
+  if (shareConveniencia < 8) {
+    oportunidadesCandidatas.push({
+      impacto: 9,
+      titulo: 'Expandir loja de conveniencia',
+      potencial: `Cada ${(5 - shareConveniencia).toFixed(0)} p.p. adicionais em conveniencia (margem tipica 25-40%) podem elevar a margem bruta consolidada em 1-3 p.p.`,
+      acao: 'Reformular sortimento, ativar pontos quentes (caixa, bomba), parcerias com marcas para promocionar giro de alto-margem.',
+    });
+  }
+  if (shareAutomotivos < 3) {
+    oportunidadesCandidatas.push({
+      impacto: 7,
+      titulo: 'Explorar produtos automotivos e servicos',
+      potencial: `Aditivo, lubrificante, arla e servicos (troca de oleo, lavagem) tem margem 40-60%. Cada R$ 10 mil/mes em automotivos adiciona ~R$ 4-6 mil de lucro bruto.`,
+      acao: 'Treinar frentista para oferecimento consultivo de aditivo/oleo na bomba; parceria com oficina local.',
+    });
+  }
+  if (slopeCaixa > 0 && totais.variacaoCaixa > 0) {
+    oportunidadesCandidatas.push({
+      impacto: 6,
+      titulo: 'Capital de giro com folga — hora de aplicar',
+      potencial: `O caixa esta gerando ${formatCurrency(slopeCaixa)} a mais por mes em media. Em 12 meses isso seria ${formatCurrency(slopeCaixa * 12)}.`,
+      acao: 'Aplicar o excedente em CDB/Tesouro de curto prazo ou antecipar recebiveis apenas quando a taxa for menor que o custo do dinheiro.',
+    });
+  }
+  if (slopeTicket > 0) {
+    oportunidadesCandidatas.push({
+      impacto: 6,
+      titulo: `Ticket medio subindo (${formatPct(crescimentoTicket)} no periodo)`,
+      potencial: 'O cliente esta gastando mais por visita. Sinal verde para intensificar venda cruzada (combustivel + conveniencia + automotivos).',
+      acao: 'Treinar frentistas em roteiro de abordagem e criar combo de produtos no caixa.',
+    });
+  }
+  if (shareCombustivel > 85 && mesesCaixaNegativo <= 1) {
+    oportunidadesCandidatas.push({
+      impacto: 7,
+      titulo: 'Estruturar venda B2B para frotas',
+      potencial: 'Com caixa estavel e alta dependencia de combustivel, uma carteira B2B de frotas pode trazer volume previsivel e recorrente.',
+      acao: 'Criar politica comercial para frotas (preco por volume, prazo de pagamento, relatorio mensal), prospectar construtoras/locadoras locais.',
+    });
+  }
+  if (volatilidade >= 20 && volatilidade < 40) {
+    oportunidadesCandidatas.push({
+      impacto: 5,
+      titulo: `Exploracao de sazonalidade (CV ${volatilidade.toFixed(1)}%)`,
+      potencial: `Receita varia entre ${formatCurrency(piorReceita?.receita || 0)} e ${formatCurrency(melhorReceita?.receita || 0)}. Com previsibilidade melhor, da pra comprar mais barato nos meses de queda.`,
+      acao: 'Montar calendario comercial: promocoes, estoque planejado e escala de funcionarios ajustada a sazonalidade detectada.',
+    });
+  }
+  if (mediaMargem >= 12) {
+    oportunidadesCandidatas.push({
+      impacto: 6,
+      titulo: `Margem saudavel (${mediaMargem.toFixed(1)}%) — investir em volume`,
+      potencial: 'Margem acima de 12% cria espaco pra investir em campanhas agressivas de preco ou fidelidade sem quebrar o resultado.',
+      acao: 'Programa de fidelidade (ex: desconto por visita recorrente), campanha em horarios de baixo movimento.',
+    });
+  }
+
+  const oportunidades = oportunidadesCandidatas.sort((a, b) => b.impacto - a.impacto).slice(0, 3);
+
+  // ─── Analise Detalhada ───────────────────────────────────
+  const analiseDetalhada = {
+    vendas: [],
+    dre: [],
+    caixa: [],
+  };
+
+  // Vendas
+  analiseDetalhada.vendas.push({
+    titulo: 'Mix de receita',
+    texto: `Combustiveis ${formatCurrency(totais.receitaCombustivel)} (${shareCombustivel.toFixed(1)}%), Conveniencia ${formatCurrency(totais.receitaConveniencia)} (${shareConveniencia.toFixed(1)}%), Automotivos ${formatCurrency(totais.receitaAutomotivos)} (${shareAutomotivos.toFixed(1)}%).`,
+  });
+  if (melhorReceita && piorReceita && melhorReceita.key !== piorReceita.key) {
+    analiseDetalhada.vendas.push({
+      titulo: 'Picos e vales',
+      texto: `Melhor mes: ${melhorReceita.label} (${formatCurrency(melhorReceita.receita)}). Pior: ${piorReceita.label} (${formatCurrency(piorReceita.receita)}). Diferenca de ${formatCurrency(melhorReceita.receita - piorReceita.receita)} (${((melhorReceita.receita - piorReceita.receita) / (piorReceita.receita || 1) * 100).toFixed(1)}%).`,
+    });
+  }
+  if (tickets.some(t => t > 0)) {
+    analiseDetalhada.vendas.push({
+      titulo: 'Ticket medio',
+      texto: `Media do periodo: ${formatCurrency(totais.ticketMedio)} em ${totais.qtdVendas.toLocaleString('pt-BR')} vendas. Tendencia: ${slopeTicket > 0 ? 'crescente' : slopeTicket < 0 ? 'decrescente' : 'estavel'} (${crescimentoTicket >= 0 ? '+' : ''}${crescimentoTicket.toFixed(1)}% no periodo).`,
+    });
+  }
+  if (shareCanceladas >= 0.5) {
+    analiseDetalhada.vendas.push({
+      titulo: 'Vendas canceladas',
+      texto: `${formatCurrency(totais.vendasCanceladas)} em cancelamentos (${shareCanceladas.toFixed(2)}% da receita). Auditar causa operacional se o indicador persistir.`,
+    });
+  }
+
+  // DRE
+  analiseDetalhada.dre.push({
+    titulo: 'Lucro bruto e margem',
+    texto: `Receita ${formatCurrency(totais.receita)} − CMV ${formatCurrency(totais.cmv)} = Lucro bruto ${formatCurrency(totais.lucroBruto)}. Margem media ${mediaMargem.toFixed(2)}% (${slopeMargem >= 0 ? 'melhorando' : 'piorando'} ${Math.abs(slopeMargem).toFixed(2)} p.p./mes).`,
+  });
+  analiseDetalhada.dre.push({
+    titulo: 'Comportamento do CMV',
+    texto: `Crescimento do CMV: ${formatPct(crescimentoCMV)}; crescimento da receita: ${formatPct(crescimentoReceita)}. ${
+      crescimentoCMV > crescimentoReceita
+        ? 'CMV avancando mais rapido — sinal de pressao sobre o resultado.'
+        : 'Receita acompanhando ou superando CMV — resultado preservado.'
+    }`,
+  });
+  if (totais.descontos > 0 || totais.acrescimos > 0) {
+    analiseDetalhada.dre.push({
+      titulo: 'Descontos e acrescimos',
+      texto: `${formatCurrency(totais.descontos)} em descontos (${shareDescontos.toFixed(2)}% da receita) vs ${formatCurrency(totais.acrescimos)} em acrescimos. Saldo liquido: ${formatCurrency(totais.acrescimos - totais.descontos)}.`,
+    });
+  }
+
+  // Fluxo de Caixa
+  analiseDetalhada.caixa.push({
+    titulo: 'Geracao de caixa',
+    texto: `Entradas ${formatCurrency(totais.entradasCaixa)} − Saidas ${formatCurrency(totais.saidasCaixa)} = Variacao ${formatCurrency(totais.variacaoCaixa)}. ${
+      totais.variacaoCaixa >= 0
+        ? 'Negocio gerando caixa no consolidado.'
+        : 'Negocio consumindo caixa no consolidado — ponto critico.'
+    }`,
+  });
+  analiseDetalhada.caixa.push({
+    titulo: 'Lucro x Caixa',
+    texto: `Lucro bruto ${formatCurrency(totais.lucroBruto)} vs variacao de caixa ${formatCurrency(totais.variacaoCaixa)}. Gap de receita/entradas: ${formatPct(gapCaixaReceita)}. ${
+      gapCaixaReceita < -10
+        ? 'Caixa significativamente abaixo da receita — evidencia de aumento de contas a receber.'
+        : gapCaixaReceita > 10
+        ? 'Entradas acima da receita — recebimento de vendas anteriores, bom sinal para giro.'
+        : 'Caixa alinhado com a receita — conversao saudavel.'
+    }`,
+  });
+  if (mesesCaixaNegativo > 0) {
+    const mesesNegativosLabels = validos.filter(m => m.variacaoCaixa < 0).map(m => m.label).join(', ');
+    analiseDetalhada.caixa.push({
+      titulo: 'Periodos criticos',
+      texto: `${mesesCaixaNegativo} mes(es) com caixa negativo: ${mesesNegativosLabels}. Avaliar se foi evento pontual ou tendencia.`,
+    });
+  }
+
+  // ─── Recomendacoes estrategicas ──────────────────────────
+  const recomendacoes = [];
+  if (mesesPrejuizo > 0 || mediaMargem < 8) {
+    recomendacoes.push({
+      acao: 'Revisar precos de combustivel com base em custo real de reposicao (metodo UEPS) e nao em custo medio.',
+      justificativa: 'Em momentos de alta de preco na refinaria, usar custo medio subestima o custo de reposicao e corroi a margem.',
+    });
+  }
+  if (shareCombustivel >= 85) {
+    recomendacoes.push({
+      acao: 'Definir meta de 10% da receita em conveniencia em 6-12 meses.',
+      justificativa: 'A cada p.p. que conveniencia ganha (margem 25-40%) vs combustivel (margem 4-8%), a margem consolidada sobe ~0,3 p.p.',
+    });
+  }
+  if (slopeMargem < 0) {
+    recomendacoes.push({
+      acao: 'Reprecificar o sortimento de conveniencia e automotivos semanalmente com base em pesquisa de concorrencia local.',
+      justificativa: 'Nesses itens a elasticidade e menor e voce ganha margem. O combustivel ja esta quase commodity.',
+    });
+  }
+  if (shareDescontos >= 2.5) {
+    recomendacoes.push({
+      acao: 'Centralizar aprovacao de desconto: regra escrita, teto por perfil de cliente (varejo, fidelidade, frota) e relatorio semanal.',
+      justificativa: 'Politica solta de desconto e o vazamento de margem mais silencioso e recorrente do setor.',
+    });
+  }
+  if (gapCaixaReceita < -10) {
+    recomendacoes.push({
+      acao: 'Mapear DSO por meio de pagamento: cartao, frota, duplicata. Negociar antecipacao onde o custo for menor que 1% a.m.',
+      justificativa: 'Receita sem caixa pressiona capital de giro e cria dependencia de conta-garantida/cheque especial, que tem custo bem maior.',
+    });
+  }
+  if (mesesCaixaNegativo >= 2) {
+    recomendacoes.push({
+      acao: 'Construir reserva operacional equivalente a 30-45 dias de despesa fixa.',
+      justificativa: 'Postos operam com margem apertada; um mes ruim de preco da distribuidora pode travar a operacao se nao houver colchao.',
+    });
+  }
+  if (shareConveniencia >= 8 && mediaMargem >= 10) {
+    recomendacoes.push({
+      acao: 'Implantar programa de fidelidade (pontos ou cashback) com gatilho no app/POS.',
+      justificativa: 'Voce ja tem margem para absorver o custo do programa; em troca aumenta frequencia, que e o principal driver de ticket medio.',
+    });
+  }
+  if (recomendacoes.length < 3) {
+    recomendacoes.push({
+      acao: 'Implantar gestao por centro de custo (pista, conveniencia, lavagem) para isolar performance e decisoes de investimento.',
+      justificativa: 'Sem separar os centros, o resultado positivo de um oculta o prejuizo de outro.',
+    });
   }
 
   return {
-    tendenciaReceita,
     margemTrend,
     crescimentoReceita,
     volatilidade,
-    melhorReceita,
-    piorReceita,
-    melhorMargem,
-    piorMargem,
     shareCombustivel,
     shareConveniencia,
     shareAutomotivos,
     shareDescontos,
     gapCaixaReceita,
-    observacoes,
-    recomendacoes,
+    melhorReceita,
+    piorReceita,
+    melhorMargem,
+    piorMargem,
+    resumoExecutivo,
+    problemas,
+    oportunidades,
+    analiseDetalhada,
+    recomendacoes: recomendacoes.slice(0, 5),
   };
 }
 
 function InsightsConsultor({ insights, totais }) {
-  const iconMap = {
-    positivo: { Icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-200' },
-    negativo: { Icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50', ring: 'ring-red-200' },
-    atencao: { Icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-200' },
-    informativo: { Icon: Lightbulb, color: 'text-blue-600', bg: 'bg-blue-50', ring: 'ring-blue-200' },
+  const saudeCfg = {
+    boa:     { color: 'text-emerald-700', bg: 'bg-emerald-50', ring: 'ring-emerald-200', label: 'SAUDE BOA', Icon: TrendingUp },
+    alerta:  { color: 'text-amber-700',   bg: 'bg-amber-50',   ring: 'ring-amber-200',   label: 'SINAIS DE ALERTA', Icon: AlertCircle },
+    critica: { color: 'text-red-700',     bg: 'bg-red-50',     ring: 'ring-red-200',     label: 'SITUACAO CRITICA', Icon: AlertCircle },
+    neutra:  { color: 'text-gray-600',    bg: 'bg-gray-50',    ring: 'ring-gray-200',    label: 'DADOS INSUFICIENTES', Icon: Lightbulb },
   };
+  const saude = saudeCfg[insights.resumoExecutivo?.saude || 'neutra'];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* Mix de receita */}
-      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-          <Target className="h-4 w-4 text-violet-600" />
-          <h3 className="text-sm font-semibold text-gray-800">Mix de receita</h3>
+    <div className="space-y-5">
+      {/* 1. RESUMO EXECUTIVO + MIX */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className={`lg:col-span-2 rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden ${saude.bg}`}>
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+            <saude.Icon className={`h-4 w-4 ${saude.color}`} />
+            <h3 className={`text-sm font-bold ${saude.color} uppercase tracking-wider`}>1. Resumo executivo</h3>
+            <span className={`ml-auto text-[10px] font-bold ${saude.color} ring-1 ${saude.ring} bg-white/60 rounded-full px-2 py-0.5`}>
+              {saude.label}
+            </span>
+          </div>
+          <div className="p-5">
+            <p className={`text-[13px] leading-relaxed ${saude.color === 'text-emerald-700' ? 'text-emerald-900' : saude.color === 'text-amber-700' ? 'text-amber-900' : saude.color === 'text-red-700' ? 'text-red-900' : 'text-gray-700'}`}>
+              {insights.resumoExecutivo?.texto}
+            </p>
+          </div>
         </div>
-        <div className="p-4 space-y-3">
-          <MixLinha icon={Droplet} label="Combustiveis" valor={totais.receitaCombustivel} total={totais.receita} color="amber" />
-          <MixLinha icon={Wrench} label="Automotivos" valor={totais.receitaAutomotivos} total={totais.receita} color="slate" />
-          <MixLinha icon={ShoppingBag} label="Conveniencia" valor={totais.receitaConveniencia} total={totais.receita} color="emerald" />
-        </div>
-      </div>
-
-      {/* Observacoes */}
-      <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-amber-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Analise do consultor</h3>
-          <span className="text-[11px] text-gray-400">· observacoes automaticas + recomendacoes estrategicas</span>
-        </div>
-        <div className="p-4 space-y-3">
-          {insights.observacoes.length === 0 && (
-            <p className="text-xs text-gray-500 italic">Nenhuma anomalia relevante detectada no periodo — indicadores dentro da banda tipica.</p>
-          )}
-          {insights.observacoes.map((o, i) => {
-            const cfg = iconMap[o.tipo] || iconMap.informativo;
-            return (
-              <div key={i} className={`rounded-lg ${cfg.bg} ring-1 ${cfg.ring} p-3 flex items-start gap-2.5`}>
-                <cfg.Icon className={`h-4 w-4 ${cfg.color} flex-shrink-0 mt-0.5`} />
-                <div className="min-w-0">
-                  <p className={`text-[12.5px] font-semibold ${cfg.color}`}>{o.titulo}</p>
-                  <p className="text-[11.5px] text-gray-700 mt-0.5 leading-relaxed">{o.texto}</p>
-                </div>
-              </div>
-            );
-          })}
-
-          <div className="pt-3 border-t border-gray-100">
-            <p className="text-[11px] font-semibold text-violet-700 uppercase tracking-wider mb-2">Recomendacoes estrategicas</p>
-            <ul className="space-y-1.5">
-              {insights.recomendacoes.map((r, i) => (
-                <li key={i} className="flex items-start gap-2 text-[12px] text-gray-700">
-                  <span className="h-1.5 w-1.5 rounded-full bg-violet-500 mt-1.5 flex-shrink-0" />
-                  <span className="leading-relaxed">{r}</span>
-                </li>
-              ))}
-            </ul>
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+            <Target className="h-4 w-4 text-violet-600" />
+            <h3 className="text-sm font-semibold text-gray-800">Mix de receita</h3>
+          </div>
+          <div className="p-4 space-y-3">
+            <MixLinha icon={Droplet} label="Combustiveis" valor={totais.receitaCombustivel} total={totais.receita} color="amber" />
+            <MixLinha icon={Wrench} label="Automotivos" valor={totais.receitaAutomotivos} total={totais.receita} color="slate" />
+            <MixLinha icon={ShoppingBag} label="Conveniencia" valor={totais.receitaConveniencia} total={totais.receita} color="emerald" />
           </div>
         </div>
       </div>
+
+      {/* 2. TOP 3 PROBLEMAS */}
+      <div className="bg-white rounded-2xl border border-red-200/60 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-red-100 bg-red-50/40 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <h3 className="text-sm font-bold text-red-900 uppercase tracking-wider">2. Principais problemas encontrados</h3>
+          <span className="text-[11px] text-red-600/70">· ordenados por severidade</span>
+        </div>
+        <div className="p-4">
+          {insights.problemas.length === 0 ? (
+            <p className="text-sm text-gray-500 italic">Nenhum problema critico detectado neste periodo.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {insights.problemas.map((p, i) => (
+                <div key={i} className="rounded-xl border border-red-200 bg-white p-3 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-full bg-red-600 text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <p className="text-[13px] font-bold text-red-900 leading-tight">{p.titulo}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Diagnostico</p>
+                    <p className="text-[11.5px] text-gray-700 leading-relaxed">{p.diagnostico}</p>
+                  </div>
+                  <div className="mt-auto pt-2 border-t border-red-100">
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Causa raiz</p>
+                    <p className="text-[11.5px] text-gray-700 leading-relaxed">{p.causaRaiz}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. TOP 3 OPORTUNIDADES */}
+      <div className="bg-white rounded-2xl border border-emerald-200/60 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-emerald-100 bg-emerald-50/40 flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-emerald-600" />
+          <h3 className="text-sm font-bold text-emerald-900 uppercase tracking-wider">3. Oportunidades de melhoria</h3>
+          <span className="text-[11px] text-emerald-600/70">· ordenadas por impacto</span>
+        </div>
+        <div className="p-4">
+          {insights.oportunidades.length === 0 ? (
+            <p className="text-sm text-gray-500 italic">Sem oportunidades evidentes detectadas automaticamente neste periodo.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {insights.oportunidades.map((o, i) => (
+                <div key={i} className="rounded-xl border border-emerald-200 bg-white p-3 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <p className="text-[13px] font-bold text-emerald-900 leading-tight">{o.titulo}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Potencial</p>
+                    <p className="text-[11.5px] text-gray-700 leading-relaxed">{o.potencial}</p>
+                  </div>
+                  <div className="mt-auto pt-2 border-t border-emerald-100">
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Como ativar</p>
+                    <p className="text-[11.5px] text-gray-700 leading-relaxed">{o.acao}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 4. ANALISE DETALHADA */}
+      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-blue-600" />
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">4. Analise detalhada</h3>
+          <span className="text-[11px] text-gray-500">· leitura cruzada por bloco</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+          <BlocoDetalhe icon={ShoppingBag} titulo="Vendas" cor="text-cyan-700" itens={insights.analiseDetalhada.vendas} />
+          <BlocoDetalhe icon={Target} titulo="DRE" cor="text-violet-700" itens={insights.analiseDetalhada.dre} />
+          <BlocoDetalhe icon={Wallet} titulo="Fluxo de Caixa" cor="text-emerald-700" itens={insights.analiseDetalhada.caixa} />
+        </div>
+      </div>
+
+      {/* 5. RECOMENDACOES ESTRATEGICAS */}
+      <div className="bg-white rounded-2xl border border-violet-200/60 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-violet-100 bg-violet-50/40 flex items-center gap-2">
+          <Lightbulb className="h-4 w-4 text-violet-600" />
+          <h3 className="text-sm font-bold text-violet-900 uppercase tracking-wider">5. Recomendacoes estrategicas</h3>
+          <span className="text-[11px] text-violet-600/70">· acoes priorizadas para os proximos 30-90 dias</span>
+        </div>
+        <div className="p-4 space-y-2.5">
+          {insights.recomendacoes.map((r, i) => (
+            <div key={i} className="flex items-start gap-3 rounded-lg border border-violet-100 bg-violet-50/30 p-3">
+              <span className="h-6 w-6 rounded-full bg-violet-600 text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">
+                {i + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12.5px] font-semibold text-violet-900 leading-snug">{r.acao}</p>
+                <p className="text-[11.5px] text-gray-700 mt-1 leading-relaxed">
+                  <span className="font-semibold text-gray-600">Por que: </span>
+                  {r.justificativa}
+                </p>
+              </div>
+            </div>
+          ))}
+          {insights.recomendacoes.length === 0 && (
+            <p className="text-sm text-gray-500 italic">Sem recomendacoes nesta analise.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlocoDetalhe({ icon: Icon, titulo, cor, itens }) {
+  return (
+    <div className="p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Icon className={`h-4 w-4 ${cor}`} />
+        <p className={`text-[12px] font-bold ${cor} uppercase tracking-wider`}>{titulo}</p>
+      </div>
+      {itens.length === 0 ? (
+        <p className="text-[11px] text-gray-400 italic">Sem dados no periodo.</p>
+      ) : (
+        <ul className="space-y-2.5">
+          {itens.map((it, i) => (
+            <li key={i} className="text-[12px]">
+              <p className="font-semibold text-gray-800 mb-0.5">{it.titulo}</p>
+              <p className="text-[11.5px] text-gray-600 leading-relaxed">{it.texto}</p>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

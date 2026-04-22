@@ -195,6 +195,28 @@ export default function RelatoriosCliente() {
                       <Zap className="h-2.5 w-2.5" /> Webposto
                     </span>
                   )}
+                  {usaWebposto && rede.chaveApiId && (
+                    <>
+                      <Link
+                        to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/dre`}
+                        onClick={(e) => e.stopPropagation()}
+                        title="DRE consolidada da rede"
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-colors shadow-sm"
+                      >
+                        <FileBarChart className="h-3 w-3" />
+                        DRE da Rede
+                      </Link>
+                      <Link
+                        to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/fluxo-caixa`}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Fluxo de Caixa consolidado da rede"
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-colors shadow-sm"
+                      >
+                        <Wallet className="h-3 w-3" />
+                        Fluxo da Rede
+                      </Link>
+                    </>
+                  )}
                 </button>
 
                 {/* Grid de empresas (expansivel) */}

@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Wallet, Loader2, AlertCircle, RefreshCw, Search, TrendingUp, TrendingDown,
-  ArrowDownToLine, ArrowUpFromLine, Calendar, FileText,
+  ArrowDownToLine, ArrowUpFromLine, Calendar, FileText, Building2, ChevronRight,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Modal from '../components/ui/Modal';
@@ -28,7 +28,14 @@ function formatDataBR(s) {
   return y && m && d ? `${d}/${m}/${y}` : s;
 }
 
-// Resolve a pessoa envolvida no movimento (mesma logica da Conciliacao Bancaria)
+const NOMES_MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function formatMesAno(mesKey) {
+  if (!mesKey || mesKey === 'sem-data') return 'Sem data';
+  const [y, m] = String(mesKey).split('-');
+  const idx = Number(m) - 1;
+  return (NOMES_MESES[idx] || m) + ' / ' + y;
+}
+
 function resolvePessoa(m, mapaClientesQ, mapaFornecedores) {
   const t = String(m?.tipoPessoa || '').trim().toUpperCase();
   const pessoaId = m?.pessoaCodigo ?? m?.codigoPessoa ?? m?.clienteCodigo ?? m?.fornecedorCodigo ?? m?.funcionarioCodigo ?? null;
@@ -67,12 +74,11 @@ export default function BpoCaixaAdministrativo() {
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
   const [redeId, setRedeId] = useState('');
-  const [clienteId, setClienteId] = useState('');
-  const [cliente, setCliente] = useState(null);
   const [dataInicial, setDataInicial] = useState(ontemStr());
   const [dataFinal, setDataFinal] = useState(ontemStr());
   const [loading, setLoading] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState({ atual: 0, total: 0, mensagem: '' });
   const [movimentos, setMovimentos] = useState([]);
   const [planoContas, setPlanoContas] = useState([]);
   const [contas, setContas] = useState([]);
@@ -84,8 +90,14 @@ export default function BpoCaixaAdministrativo() {
 
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('todos');
-  const [filtroConta, setFiltroConta] = useState('');
   const [detalheMov, setDetalheMov] = useState(null);
+
+  // Expansoes da arvore (empresa → conta → mes → dia → lancamentos)
+  const [saldoEmpresasExpandidas, setSaldoEmpresasExpandidas] = useState(new Set());
+  const [movEmpresasExpandidas, setMovEmpresasExpandidas] = useState(new Set());
+  const [movContasExpandidas, setMovContasExpandidas] = useState(new Set());
+  const [movMesesExpandidos, setMovMesesExpandidos] = useState(new Set());
+  const [movDiasExpandidos, setMovDiasExpandidos] = useState(new Set());
 
   useEffect(() => {
     (async () => {
@@ -106,46 +118,55 @@ export default function BpoCaixaAdministrativo() {
   const empresasDaRede = useMemo(() => {
     if (!redeId) return [];
     return clientes
-      .filter(c => c.chave_api_id === redeId)
+      .filter(c => c.chave_api_id === redeId && c.status !== 'inativo')
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   }, [redeId, clientes]);
 
   useEffect(() => {
-    if (clienteId && !empresasDaRede.some(c => c.id === clienteId)) setClienteId('');
-  }, [redeId, empresasDaRede, clienteId]);
-
-  useEffect(() => {
-    setCliente(clientes.find(c => c.id === clienteId) || null);
     setCarregado(false);
     setMovimentos([]);
-  }, [clienteId, clientes]);
-
-  useEffect(() => {
-    setCarregado(false);
-    setMovimentos([]);
-  }, [dataInicial, dataFinal]);
+  }, [redeId, dataInicial, dataFinal]);
 
   const carregar = useCallback(async () => {
-    if (!cliente) return;
+    if (!redeId || empresasDaRede.length === 0) { setError('Selecione uma rede com empresas Webposto ativas.'); return; }
     if (!dataInicial || !dataFinal) { setError('Informe o periodo.'); return; }
     if (dataInicial > dataFinal) { setError('Data inicial nao pode ser maior que a final.'); return; }
     setLoadingDados(true);
     setError(null);
     try {
       const chaves = await mapService.listarChavesApi();
-      const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada para este cliente');
+      const chave = chaves.find(c => c.id === redeId);
+      if (!chave) throw new Error('Chave API da rede nao encontrada');
 
-      const filtros = { dataInicial, dataFinal, empresaCodigo: cliente.empresa_codigo };
-      const [movs, plano, ctas, cliQ, forn, classif] = await Promise.all([
-        qualityApi.buscarMovimentoConta(chave.chave, filtros),
+      // Catalogos (sao por rede, nao por empresa — buscamos uma vez so)
+      setLoadingProgress({ atual: 0, total: empresasDaRede.length + 1, mensagem: 'Carregando catalogos da rede...' });
+      const [plano, ctas, cliQ, forn, classif] = await Promise.all([
         qualityApi.buscarPlanoContasGerencial(chave.chave).catch(() => []),
         qualityApi.buscarContas(chave.chave).catch(() => []),
         qualityApi.buscarClientesQuality(chave.chave).catch(() => []),
         qualityApi.buscarFornecedoresQuality(chave.chave).catch(() => []),
-        contasBancariasService.listarPorRede(cliente.chave_api_id).catch(() => []),
+        contasBancariasService.listarPorRede(redeId).catch(() => []),
       ]);
-      setMovimentos(movs || []);
+
+      // Movimentos por empresa em paralelo
+      let atual = 0;
+      const movsPorEmpresa = await Promise.all(empresasDaRede.map(async (emp) => {
+        const filtros = { dataInicial, dataFinal, empresaCodigo: emp.empresa_codigo };
+        const m = await qualityApi.buscarMovimentoConta(chave.chave, filtros).catch(() => []);
+        atual++;
+        setLoadingProgress({ atual, total: empresasDaRede.length, mensagem: `${emp.nome}: ${m?.length || 0} movimentos` });
+        // Anota cada movimento com empresaId/empresaNome para a arvore
+        return (m || []).map(mv => ({
+          ...mv,
+          _empresaId: emp.id,
+          _empresaNome: emp.nome,
+          _empresaCnpj: emp.cnpj,
+          empresaCodigo: Number(emp.empresa_codigo),
+        }));
+      }));
+
+      const todosMovs = movsPorEmpresa.flat();
+      setMovimentos(todosMovs);
       setPlanoContas(plano || []);
       setContas(ctas || []);
       setClientesQuality(cliQ || []);
@@ -157,7 +178,7 @@ export default function BpoCaixaAdministrativo() {
     } finally {
       setLoadingDados(false);
     }
-  }, [cliente, dataInicial, dataFinal]);
+  }, [redeId, empresasDaRede, dataInicial, dataFinal]);
 
   const mapaPlanoContas = useMemo(() => {
     const m = new Map();
@@ -194,14 +215,15 @@ export default function BpoCaixaAdministrativo() {
     const m = new Map();
     contasClassificadas.forEach(c => {
       if (c.ativo !== false && contasBancariasService.TIPOS_PARA_CAIXA_ADMIN.includes(c.tipo)) {
-        m.set(c.conta_codigo, c);
+        m.set(Number(c.conta_codigo), c);
       }
     });
     return m;
   }, [contasClassificadas]);
 
-  const contaEhCaixa = (contaCodigo) => contasCaixa.has(contaCodigo);
+  const contaEhCaixa = (contaCodigo) => contasCaixa.has(Number(contaCodigo));
 
+  // Enriquece + calcula saldo corrente por (empresa, conta)
   const movimentosEnriquecidos = useMemo(() => {
     const movs = movimentos.filter(m => contaEhCaixa(m.contaCodigo));
     const normalizados = movs.map(m => {
@@ -210,7 +232,11 @@ export default function BpoCaixaAdministrativo() {
       const isCredito = m.tipo === 'Crédito' || m.tipo === 'Credito' || m.tipo === 'C';
       const pessoa = resolvePessoa(m, mapaClientesQ, mapaFornecedores);
       return {
-        id: m.codigo || m.movimentoContaCodigo,
+        id: `${m._empresaId}-${m.codigo || m.movimentoContaCodigo}`,
+        empresaId: m._empresaId,
+        empresaNome: m._empresaNome,
+        empresaCnpj: m._empresaCnpj,
+        empresaCodigo: Number(m.empresaCodigo),
         data: m.dataMovimento,
         descricao: (m.descricao || '').trim() || '—',
         documento: m.documento || m.numeroDocumento || '',
@@ -218,7 +244,7 @@ export default function BpoCaixaAdministrativo() {
         valor: Math.abs(Number(m.valor || 0)),
         planoCodigo: m.planoContaGerencialCodigo,
         planoNome: plano?.planoContaGerencialNome || plano?.nome || plano?.descricao || '—',
-        contaCodigo: m.contaCodigo,
+        contaCodigo: Number(m.contaCodigo),
         contaNome: conta?.descricao || conta?.nome || conta?.contaDescricao || (m.contaCodigo ? `Caixa #${m.contaCodigo}` : '—'),
         contraparte: pessoa.razao,
         pessoaTipo: pessoa.tipo,
@@ -228,27 +254,36 @@ export default function BpoCaixaAdministrativo() {
         saldoAnterior: m.saldoAnterior ?? m.saldoAnteriorConta ?? null,
         saldoPosterior: m.saldoPosterior ?? m.saldoApos ?? m.saldoAtual ?? null,
       };
-    }).sort((a, b) => (a.data || '').localeCompare(b.data || '') || a.id - b.id);
+    }).sort((a, b) =>
+      (a.empresaNome || '').localeCompare(b.empresaNome || '')
+      || (a.contaNome || '').localeCompare(b.contaNome || '')
+      || (a.data || '').localeCompare(b.data || '')
+    );
 
+    // Saldo corrente por chave composta (empresa|conta)
+    const chave = (m) => `${m.empresaId}|${m.contaCodigo}`;
     const saldoCorrente = new Map();
-    const saldoInicialPorConta = new Map();
+    const saldoInicialPorChave = new Map();
     normalizados.forEach(m => {
-      if (!saldoInicialPorConta.has(m.contaCodigo)) {
+      const k = chave(m);
+      if (!saldoInicialPorChave.has(k)) {
         const inicial = m.saldoAnterior != null ? Number(m.saldoAnterior) : 0;
-        saldoInicialPorConta.set(m.contaCodigo, inicial);
-        saldoCorrente.set(m.contaCodigo, inicial);
+        saldoInicialPorChave.set(k, inicial);
+        saldoCorrente.set(k, inicial);
       }
     });
     return normalizados.map(m => {
+      const k = chave(m);
       const delta = m.tipo === 'credito' ? m.valor : -m.valor;
-      let novoSaldo;
-      if (m.saldoPosterior != null) novoSaldo = Number(m.saldoPosterior);
-      else novoSaldo = Number(saldoCorrente.get(m.contaCodigo) || 0) + delta;
-      saldoCorrente.set(m.contaCodigo, novoSaldo);
+      const novoSaldo = m.saldoPosterior != null
+        ? Number(m.saldoPosterior)
+        : Number(saldoCorrente.get(k) || 0) + delta;
+      saldoCorrente.set(k, novoSaldo);
       return { ...m, saldoAtual: novoSaldo };
     });
   }, [movimentos, mapaPlanoContas, mapaContas, mapaClientesQ, mapaFornecedores, contasCaixa]);
 
+  // Totais globais
   const totais = useMemo(() => {
     let entradas = 0, saidas = 0;
     movimentosEnriquecidos.forEach(m => {
@@ -258,61 +293,218 @@ export default function BpoCaixaAdministrativo() {
     return { entradas, saidas, saldo: entradas - saidas };
   }, [movimentosEnriquecidos]);
 
-  const composicao = useMemo(() => {
-    const porConta = new Map();
+  // Arvore saldo por empresa > conta
+  const treeSaldos = useMemo(() => {
+    const empresas = new Map(); // empresaId → { empresa, contas: Map<contaCodigo, {...}> }
     movimentosEnriquecidos.forEach(m => {
-      const atual = porConta.get(m.contaCodigo) || {
-        contaCodigo: m.contaCodigo, contaNome: m.contaNome,
-        saldoInicial: m.saldoAnterior != null ? Number(m.saldoAnterior) : 0,
-        entradas: 0, saidas: 0, saldoAtual: 0,
-      };
-      if (m.tipo === 'credito') atual.entradas += m.valor;
-      else atual.saidas += m.valor;
-      atual.saldoAtual = m.saldoAtual;
-      porConta.set(m.contaCodigo, atual);
-    });
-    return Array.from(porConta.values()).sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
-  }, [movimentosEnriquecidos]);
-
-  const contasDisponiveis = useMemo(() => {
-    const set = new Map();
-    movimentosEnriquecidos.forEach(m => {
-      if (m.contaCodigo != null && !set.has(m.contaCodigo)) {
-        set.set(m.contaCodigo, m.contaNome);
+      if (!empresas.has(m.empresaId)) {
+        empresas.set(m.empresaId, {
+          empresaId: m.empresaId,
+          empresaNome: m.empresaNome,
+          empresaCnpj: m.empresaCnpj,
+          contas: new Map(),
+        });
       }
+      const emp = empresas.get(m.empresaId);
+      if (!emp.contas.has(m.contaCodigo)) {
+        emp.contas.set(m.contaCodigo, {
+          contaCodigo: m.contaCodigo,
+          contaNome: m.contaNome,
+          saldoInicial: m.saldoAnterior != null ? Number(m.saldoAnterior) : 0,
+          entradas: 0,
+          saidas: 0,
+          saldoAtual: 0,
+        });
+      }
+      const c = emp.contas.get(m.contaCodigo);
+      if (m.tipo === 'credito') c.entradas += m.valor;
+      else c.saidas += m.valor;
+      c.saldoAtual = m.saldoAtual;
     });
-    return Array.from(set.entries())
-      .map(([codigo, nome]) => ({ codigo, nome }))
-      .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    // Converte em array + totaliza por empresa
+    return Array.from(empresas.values())
+      .map(emp => {
+        const contas = Array.from(emp.contas.values())
+          .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
+        const totSaldoInicial = contas.reduce((s, c) => s + c.saldoInicial, 0);
+        const totEntradas = contas.reduce((s, c) => s + c.entradas, 0);
+        const totSaidas = contas.reduce((s, c) => s + c.saidas, 0);
+        const totSaldoAtual = contas.reduce((s, c) => s + c.saldoAtual, 0);
+        return {
+          ...emp,
+          contas,
+          saldoInicial: totSaldoInicial,
+          entradas: totEntradas,
+          saidas: totSaidas,
+          variacao: totEntradas - totSaidas,
+          saldoAtual: totSaldoAtual,
+        };
+      })
+      .sort((a, b) => (a.empresaNome || '').localeCompare(b.empresaNome || ''));
   }, [movimentosEnriquecidos]);
 
+  // Filtra movimentos por busca/tipo (mas sem filtro por conta especifica agora - a arvore ja agrupa)
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return movimentosEnriquecidos.filter(m => {
       if (filtroTipo !== 'todos' && m.tipo !== filtroTipo) return false;
-      if (filtroConta && String(m.contaCodigo) !== String(filtroConta)) return false;
       if (!q) return true;
       return m.descricao.toLowerCase().includes(q)
         || m.planoNome.toLowerCase().includes(q)
         || m.contaNome.toLowerCase().includes(q)
+        || m.empresaNome.toLowerCase().includes(q)
         || m.contraparte.toLowerCase().includes(q)
         || String(m.documento).toLowerCase().includes(q);
     });
-  }, [movimentosEnriquecidos, busca, filtroTipo, filtroConta]);
+  }, [movimentosEnriquecidos, busca, filtroTipo]);
+
+  // Arvore movimentos por empresa > conta > mes > dia > lancamentos (usa filtrados)
+  const treeMovimentos = useMemo(() => {
+    const empresas = new Map();
+    filtrados.forEach(m => {
+      if (!empresas.has(m.empresaId)) {
+        empresas.set(m.empresaId, {
+          empresaId: m.empresaId,
+          empresaNome: m.empresaNome,
+          contas: new Map(),
+        });
+      }
+      const emp = empresas.get(m.empresaId);
+      if (!emp.contas.has(m.contaCodigo)) {
+        emp.contas.set(m.contaCodigo, {
+          contaCodigo: m.contaCodigo,
+          contaNome: m.contaNome,
+          entradas: 0,
+          saidas: 0,
+          qtdLancs: 0,
+          meses: new Map(),
+        });
+      }
+      const c = emp.contas.get(m.contaCodigo);
+      if (m.tipo === 'credito') c.entradas += m.valor;
+      else c.saidas += m.valor;
+      c.qtdLancs++;
+
+      const dataStr = String(m.data || '');
+      const mesKey = dataStr.slice(0, 7) || 'sem-data';
+      const diaKey = dataStr || 'sem-data';
+
+      if (!c.meses.has(mesKey)) {
+        c.meses.set(mesKey, {
+          mesKey,
+          entradas: 0,
+          saidas: 0,
+          qtdLancs: 0,
+          dias: new Map(),
+        });
+      }
+      const mes = c.meses.get(mesKey);
+      if (m.tipo === 'credito') mes.entradas += m.valor;
+      else mes.saidas += m.valor;
+      mes.qtdLancs++;
+
+      if (!mes.dias.has(diaKey)) {
+        mes.dias.set(diaKey, {
+          diaKey,
+          entradas: 0,
+          saidas: 0,
+          lancamentos: [],
+        });
+      }
+      const dia = mes.dias.get(diaKey);
+      if (m.tipo === 'credito') dia.entradas += m.valor;
+      else dia.saidas += m.valor;
+      dia.lancamentos.push(m);
+    });
+    return Array.from(empresas.values())
+      .map(emp => {
+        const contas = Array.from(emp.contas.values())
+          .map(c => ({
+            ...c,
+            meses: Array.from(c.meses.values())
+              .map(mes => ({
+                ...mes,
+                variacao: mes.entradas - mes.saidas,
+                dias: Array.from(mes.dias.values())
+                  .sort((a, b) => a.diaKey.localeCompare(b.diaKey))
+                  .map(d => ({ ...d, variacao: d.entradas - d.saidas })),
+              }))
+              .sort((a, b) => a.mesKey.localeCompare(b.mesKey)),
+            variacao: c.entradas - c.saidas,
+          }))
+          .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
+        const totEntradas = contas.reduce((s, c) => s + c.entradas, 0);
+        const totSaidas = contas.reduce((s, c) => s + c.saidas, 0);
+        return {
+          ...emp,
+          contas,
+          entradas: totEntradas,
+          saidas: totSaidas,
+          variacao: totEntradas - totSaidas,
+          qtdLancs: contas.reduce((s, c) => s + c.qtdLancs, 0),
+        };
+      })
+      .sort((a, b) => (a.empresaNome || '').localeCompare(b.empresaNome || ''));
+  }, [filtrados]);
+
+  // Auto-expande empresas na primeira carga
+  useEffect(() => {
+    if (!carregado || treeSaldos.length === 0) return;
+    setSaldoEmpresasExpandidas(new Set(treeSaldos.map(e => e.empresaId)));
+    setMovEmpresasExpandidas(new Set(treeSaldos.map(e => e.empresaId)));
+  }, [carregado, treeSaldos]);
+
+  const toggleSaldoEmpresa = (id) => {
+    setSaldoEmpresasExpandidas(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const toggleMovEmpresa = (id) => {
+    setMovEmpresasExpandidas(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const toggleMovConta = (key) => {
+    setMovContasExpandidas(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+  const toggleMovMes = (key) => {
+    setMovMesesExpandidos(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+  const toggleMovDia = (key) => {
+    setMovDiasExpandidos(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }
 
+  const redeAtual = redeId ? chavesApi.find(ch => ch.id === redeId) : null;
+
   return (
     <div>
-      <PageHeader title="Caixa Administrativo" description="Movimentacoes das contas classificadas como 'Conta caixa' (MOVIMENTO_CONTA)" />
+      <PageHeader title="Caixa Administrativo" description="Movimentacoes das contas caixa de toda a rede, organizadas em arvore Empresa > Conta > Lancamentos" />
 
-      {/* Seletor rede + empresa + periodo */}
+      {/* Seletor rede + periodo */}
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_160px_160px_auto] gap-3 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px_160px_auto] gap-3 items-end">
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">1. Rede</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Rede</label>
             <select value={redeId} onChange={(e) => setRedeId(e.target.value)}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
               <option value="">Selecione uma rede...</option>
@@ -325,17 +517,6 @@ export default function BpoCaixaAdministrativo() {
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">2. Empresa</label>
-            <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}
-              disabled={!redeId}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-400">
-              <option value="">{redeId ? 'Selecione uma empresa...' : 'Escolha a rede primeiro'}</option>
-              {empresasDaRede.map(c => (
-                <option key={c.id} value={c.id}>{c.nome}{c.cnpj ? ` (${c.cnpj})` : ''}</option>
-              ))}
-            </select>
-          </div>
-          <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">De</label>
             <input type="date" value={dataInicial} onChange={(e) => setDataInicial(e.target.value)}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -345,7 +526,7 @@ export default function BpoCaixaAdministrativo() {
             <input type="date" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
-          <button onClick={carregar} disabled={!cliente || loadingDados}
+          <button onClick={carregar} disabled={!redeId || loadingDados}
             className="flex items-center gap-2 h-10 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Carregar
@@ -360,20 +541,21 @@ export default function BpoCaixaAdministrativo() {
         </div>
       )}
 
-      {!cliente ? (
+      {!redeId ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <Wallet className="h-7 w-7 text-white" />
           </div>
-          <p className="text-sm font-semibold text-gray-900 mb-1">Selecione a rede, a empresa e o periodo</p>
+          <p className="text-sm font-semibold text-gray-900 mb-1">Selecione a rede e o periodo</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            Aparecerao apenas lancamentos de contas classificadas como <strong>Conta caixa</strong> em Cadastros &gt; Clientes.
+            Aparecerao lancamentos de todas as empresas da rede, nas contas marcadas como <strong>Conta caixa</strong> em Cadastros &gt; Clientes.
           </p>
         </div>
       ) : loadingDados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-800">Buscando movimentos de {formatDataBR(dataInicial)} a {formatDataBR(dataFinal)}...</p>
+          <p className="text-sm font-medium text-gray-800 mb-1">{loadingProgress.mensagem || 'Carregando...'}</p>
+          <p className="text-[11px] text-gray-400">{loadingProgress.atual} de {loadingProgress.total}</p>
         </div>
       ) : !carregado ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
@@ -408,19 +590,19 @@ export default function BpoCaixaAdministrativo() {
               color={totais.saldo >= 0 ? 'emerald' : 'red'} />
           </div>
 
-          {/* Composicao por caixa */}
-          {composicao.length > 0 && (
+          {/* Saldo por caixa — arvore empresa > conta */}
+          {treeSaldos.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                 <Wallet className="h-4 w-4 text-blue-500" />
                 <h3 className="text-sm font-semibold text-gray-800">Saldo por caixa</h3>
-                <span className="text-[11px] text-gray-400">· inicial + movimentos = atual</span>
+                <span className="text-[11px] text-gray-400">· {redeAtual?.nome || 'rede'} · {treeSaldos.length} empresas · inicial + movimentos = atual</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50/80 border-b border-gray-100">
                     <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                      <th className="px-4 py-2.5">Caixa</th>
+                      <th className="px-4 py-2.5">Empresa / Caixa</th>
                       <th className="px-4 py-2.5 text-right">Saldo inicial</th>
                       <th className="px-4 py-2.5 text-right">Entradas</th>
                       <th className="px-4 py-2.5 text-right">Saidas</th>
@@ -429,35 +611,78 @@ export default function BpoCaixaAdministrativo() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {composicao.map(c => {
-                      const variacao = c.entradas - c.saidas;
+                    {treeSaldos.map(emp => {
+                      const expandida = saldoEmpresasExpandidas.has(emp.empresaId);
                       return (
-                        <tr key={c.contaCodigo ?? 'sem-conta'} className="hover:bg-gray-50/60">
-                          <td className="px-4 py-2 text-[12px] text-gray-800 truncate max-w-[260px]">{c.contaNome}</td>
-                          <td className="px-4 py-2 text-right font-mono text-[12px] text-gray-700 tabular-nums">{formatCurrency(c.saldoInicial)}</td>
-                          <td className="px-4 py-2 text-right font-mono text-[12px] text-emerald-600 tabular-nums">+{formatCurrency(c.entradas)}</td>
-                          <td className="px-4 py-2 text-right font-mono text-[12px] text-red-600 tabular-nums">-{formatCurrency(c.saidas)}</td>
-                          <td className={`px-4 py-2 text-right font-mono text-[12px] tabular-nums font-semibold ${
-                            variacao === 0 ? 'text-gray-500' : variacao > 0 ? 'text-emerald-700' : 'text-red-700'
-                          }`}>
-                            {variacao > 0 ? '+' : ''}{formatCurrency(variacao)}
-                          </td>
-                          <td className="px-4 py-2 text-right font-mono text-sm font-bold text-gray-900 tabular-nums">{formatCurrency(c.saldoAtual)}</td>
-                        </tr>
+                        <React.Fragment key={emp.empresaId}>
+                          <tr onClick={() => toggleSaldoEmpresa(emp.empresaId)}
+                            className={`cursor-pointer transition-colors ${expandida ? 'bg-blue-50/40' : 'hover:bg-gray-50/60'}`}>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                <motion.div animate={{ rotate: expandida ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                  <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                                </motion.div>
+                                <Building2 className="h-3.5 w-3.5 text-blue-500" />
+                                <span className="text-[12.5px] font-semibold text-gray-900">{emp.empresaNome}</span>
+                                <span className="text-[10px] text-gray-400">{emp.contas.length} caixa{emp.contas.length === 1 ? '' : 's'}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono text-[12px] text-gray-700 tabular-nums">{formatCurrency(emp.saldoInicial)}</td>
+                            <td className="px-4 py-2 text-right font-mono text-[12px] text-emerald-600 tabular-nums">+{formatCurrency(emp.entradas)}</td>
+                            <td className="px-4 py-2 text-right font-mono text-[12px] text-red-600 tabular-nums">-{formatCurrency(emp.saidas)}</td>
+                            <td className={`px-4 py-2 text-right font-mono text-[12px] tabular-nums font-semibold ${
+                              Math.abs(emp.variacao) < 0.01 ? 'text-gray-500' : emp.variacao > 0 ? 'text-emerald-700' : 'text-red-700'
+                            }`}>
+                              {emp.variacao > 0 ? '+' : ''}{formatCurrency(emp.variacao)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono text-sm font-bold text-gray-900 tabular-nums">{formatCurrency(emp.saldoAtual)}</td>
+                          </tr>
+                          {expandida && emp.contas.map(c => {
+                            const variacao = c.entradas - c.saidas;
+                            return (
+                              <tr key={`${emp.empresaId}-${c.contaCodigo}`} className="bg-gray-50/30 hover:bg-gray-50/60">
+                                <td className="px-4 py-1.5" style={{ paddingLeft: 46 }}>
+                                  <span className="text-[11.5px] text-gray-700">{c.contaNome}</span>
+                                </td>
+                                <td className="px-4 py-1.5 text-right font-mono text-[11px] text-gray-600 tabular-nums">{formatCurrency(c.saldoInicial)}</td>
+                                <td className="px-4 py-1.5 text-right font-mono text-[11px] text-emerald-600 tabular-nums">+{formatCurrency(c.entradas)}</td>
+                                <td className="px-4 py-1.5 text-right font-mono text-[11px] text-red-600 tabular-nums">-{formatCurrency(c.saidas)}</td>
+                                <td className={`px-4 py-1.5 text-right font-mono text-[11px] tabular-nums ${
+                                  Math.abs(variacao) < 0.01 ? 'text-gray-500' : variacao > 0 ? 'text-emerald-700' : 'text-red-700'
+                                }`}>
+                                  {variacao > 0 ? '+' : ''}{formatCurrency(variacao)}
+                                </td>
+                                <td className="px-4 py-1.5 text-right font-mono text-[12px] text-gray-800 tabular-nums">{formatCurrency(c.saldoAtual)}</td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
+                  <tfoot className="bg-gray-50/60 border-t border-gray-200">
+                    <tr className="text-[12px] font-semibold">
+                      <td className="px-4 py-3 text-gray-700">Consolidado da rede</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-800">{formatCurrency(treeSaldos.reduce((s, e) => s + e.saldoInicial, 0))}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-emerald-700">+{formatCurrency(totais.entradas)}</td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-red-700">-{formatCurrency(totais.saidas)}</td>
+                      <td className={`px-4 py-3 text-right font-mono tabular-nums ${totais.saldo >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {totais.saldo >= 0 ? '+' : ''}{formatCurrency(totais.saldo)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-900">{formatCurrency(treeSaldos.reduce((s, e) => s + e.saldoAtual, 0))}</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
           )}
 
-          {/* Filtros */}
+          {/* Filtros de busca */}
           <div className="bg-white rounded-xl border border-gray-200/60 p-3 mb-4 flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[220px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input value={busca} onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por descricao, conta, pessoa, documento..."
+                placeholder="Buscar por descricao, empresa, caixa, pessoa, documento..."
                 className="w-full h-9 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
@@ -472,28 +697,20 @@ export default function BpoCaixaAdministrativo() {
                   }`}>{opt.label}</button>
               ))}
             </div>
-            <select value={filtroConta} onChange={(e) => setFiltroConta(e.target.value)}
-              className="h-9 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 min-w-[200px]">
-              <option value="">Todas as caixas</option>
-              {contasDisponiveis.map(c => (
-                <option key={c.codigo} value={c.codigo}>{c.nome}</option>
-              ))}
-            </select>
           </div>
 
-          {/* Tabela */}
+          {/* Movimentos do periodo — arvore empresa > conta > lancamentos */}
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
               <Wallet className="h-4 w-4 text-blue-500" />
               <h3 className="text-sm font-semibold text-gray-800">Movimentos do periodo</h3>
-              <span className="text-[11px] text-gray-400">· {filtrados.length} de {movimentosEnriquecidos.length}</span>
+              <span className="text-[11px] text-gray-400">· {filtrados.length} de {movimentosEnriquecidos.length} lancamentos</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className="px-4 py-2.5">Data</th>
-                    <th className="px-4 py-2.5">Caixa</th>
+                    <th className="px-4 py-2.5">Empresa / Caixa / Data</th>
                     <th className="px-4 py-2.5">Descricao</th>
                     <th className="px-4 py-2.5">Doc.</th>
                     <th className="px-4 py-2.5 text-right">
@@ -510,49 +727,128 @@ export default function BpoCaixaAdministrativo() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filtrados.map(m => (
-                    <tr key={m.id} onClick={() => setDetalheMov(m)}
-                      className="hover:bg-blue-50/60 cursor-pointer transition-colors">
-                      <td className="px-4 py-2 text-[12px] text-gray-700 font-mono tabular-nums">{formatDataBR(m.data)}</td>
-                      <td className="px-4 py-2 text-[12px] text-gray-700 max-w-[220px] truncate">{m.contaNome}</td>
-                      <td className="px-4 py-2 text-[12px] text-gray-800 max-w-[360px] truncate">{m.descricao}</td>
-                      <td className="px-4 py-2 text-[12px] text-gray-500 font-mono">{m.documento || '—'}</td>
-                      <td className="px-4 py-2 text-right font-mono text-sm tabular-nums">
-                        {m.tipo === 'credito' ? (
-                          <span className="text-emerald-600 font-semibold">{formatCurrency(m.valor)}</span>
-                        ) : (<span className="text-gray-300">—</span>)}
-                      </td>
-                      <td className="px-4 py-2 text-right font-mono text-sm tabular-nums">
-                        {m.tipo === 'debito' ? (
-                          <span className="text-red-600 font-semibold">{formatCurrency(m.valor)}</span>
-                        ) : (<span className="text-gray-300">—</span>)}
-                      </td>
-                      <td className="px-4 py-2 text-right font-mono text-sm text-gray-800 tabular-nums font-semibold">
-                        {formatCurrency(m.saldoAtual)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-50/60 border-t border-gray-200">
-                  {(() => {
-                    const totEntrada = filtrados.filter(m => m.tipo === 'credito').reduce((s, m) => s + m.valor, 0);
-                    const totSaida = filtrados.filter(m => m.tipo === 'debito').reduce((s, m) => s + m.valor, 0);
+                  {treeMovimentos.map(emp => {
+                    const empAberta = movEmpresasExpandidas.has(emp.empresaId);
                     return (
-                      <tr className="text-sm font-semibold">
-                        <td className="px-4 py-3 text-gray-700" colSpan={4}>
-                          Totais <span className="text-[11px] font-normal text-gray-500">({filtrados.length} registros)</span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-emerald-700 tabular-nums">{formatCurrency(totEntrada)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-red-700 tabular-nums">{formatCurrency(totSaida)}</td>
-                        <td className={`px-4 py-3 text-right font-mono tabular-nums ${
-                          totEntrada - totSaida >= 0 ? 'text-emerald-700' : 'text-red-700'
-                        }`}>
-                          {(totEntrada - totSaida) >= 0 ? '+' : ''}{formatCurrency(totEntrada - totSaida)}
-                        </td>
-                      </tr>
+                      <React.Fragment key={emp.empresaId}>
+                        <tr onClick={() => toggleMovEmpresa(emp.empresaId)}
+                          className={`cursor-pointer transition-colors ${empAberta ? 'bg-blue-50/40' : 'hover:bg-gray-50/60'}`}>
+                          <td className="px-4 py-2" colSpan={3}>
+                            <div className="flex items-center gap-2">
+                              <motion.div animate={{ rotate: empAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                              </motion.div>
+                              <Building2 className="h-3.5 w-3.5 text-blue-500" />
+                              <span className="text-[12.5px] font-semibold text-gray-900">{emp.empresaNome}</span>
+                              <span className="text-[10px] text-gray-400">{emp.contas.length} caixa{emp.contas.length === 1 ? '' : 's'} · {emp.qtdLancs} lanc.</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono text-[12px] text-emerald-600 tabular-nums font-semibold">+{formatCurrency(emp.entradas)}</td>
+                          <td className="px-4 py-2 text-right font-mono text-[12px] text-red-600 tabular-nums font-semibold">-{formatCurrency(emp.saidas)}</td>
+                          <td className={`px-4 py-2 text-right font-mono text-[12.5px] tabular-nums font-bold ${emp.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {emp.variacao >= 0 ? '+' : ''}{formatCurrency(emp.variacao)}
+                          </td>
+                        </tr>
+                        {empAberta && emp.contas.map(c => {
+                          const contaKey = `${emp.empresaId}-${c.contaCodigo}`;
+                          const contaAberta = movContasExpandidas.has(contaKey);
+                          const variacao = c.entradas - c.saidas;
+                          return (
+                            <React.Fragment key={contaKey}>
+                              <tr onClick={() => toggleMovConta(contaKey)}
+                                className={`cursor-pointer transition-colors ${contaAberta ? 'bg-gray-100/60' : 'hover:bg-gray-50/60 bg-gray-50/30'}`}>
+                                <td className="px-4 py-1.5" colSpan={3} style={{ paddingLeft: 40 }}>
+                                  <div className="flex items-center gap-2">
+                                    <motion.div animate={{ rotate: contaAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                      <ChevronRight className="h-3 w-3 text-gray-400" />
+                                    </motion.div>
+                                    <Wallet className="h-3 w-3 text-gray-500" />
+                                    <span className="text-[11.5px] font-medium text-gray-800">{c.contaNome}</span>
+                                    <span className="text-[10px] text-gray-400">{c.qtdLancs} lanc. · {c.meses.length} m{c.meses.length === 1 ? 'ês' : 'eses'}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-1.5 text-right font-mono text-[11px] text-emerald-600 tabular-nums">+{formatCurrency(c.entradas)}</td>
+                                <td className="px-4 py-1.5 text-right font-mono text-[11px] text-red-600 tabular-nums">-{formatCurrency(c.saidas)}</td>
+                                <td className={`px-4 py-1.5 text-right font-mono text-[11px] tabular-nums font-semibold ${variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                                  {variacao >= 0 ? '+' : ''}{formatCurrency(variacao)}
+                                </td>
+                              </tr>
+                              {contaAberta && c.meses.map(mes => {
+                                const mesKey = `${contaKey}-${mes.mesKey}`;
+                                const mesAberto = movMesesExpandidos.has(mesKey);
+                                return (
+                                  <React.Fragment key={mesKey}>
+                                    <tr onClick={() => toggleMovMes(mesKey)}
+                                      className={`cursor-pointer transition-colors ${mesAberto ? 'bg-blue-50/20' : 'hover:bg-gray-50/40'}`}>
+                                      <td className="px-4 py-1" colSpan={3} style={{ paddingLeft: 72 }}>
+                                        <div className="flex items-center gap-2">
+                                          <motion.div animate={{ rotate: mesAberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                            <ChevronRight className="h-3 w-3 text-gray-400" />
+                                          </motion.div>
+                                          <Calendar className="h-3 w-3 text-indigo-400" />
+                                          <span className="text-[11px] font-medium text-gray-700">{formatMesAno(mes.mesKey)}</span>
+                                          <span className="text-[10px] text-gray-400">{mes.qtdLancs} lanc. · {mes.dias.length} dia{mes.dias.length === 1 ? '' : 's'}</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-1 text-right font-mono text-[11px] text-emerald-600 tabular-nums">+{formatCurrency(mes.entradas)}</td>
+                                      <td className="px-4 py-1 text-right font-mono text-[11px] text-red-600 tabular-nums">-{formatCurrency(mes.saidas)}</td>
+                                      <td className={`px-4 py-1 text-right font-mono text-[11px] tabular-nums font-medium ${mes.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                                        {mes.variacao >= 0 ? '+' : ''}{formatCurrency(mes.variacao)}
+                                      </td>
+                                    </tr>
+                                    {mesAberto && mes.dias.map(dia => {
+                                      const diaKey = `${mesKey}-${dia.diaKey}`;
+                                      const diaAberto = movDiasExpandidos.has(diaKey);
+                                      return (
+                                        <React.Fragment key={diaKey}>
+                                          <tr onClick={() => toggleMovDia(diaKey)}
+                                            className={`cursor-pointer transition-colors ${diaAberto ? 'bg-blue-50/10' : 'hover:bg-gray-50/30'}`}>
+                                            <td className="px-4 py-1" colSpan={3} style={{ paddingLeft: 104 }}>
+                                              <div className="flex items-center gap-2">
+                                                <motion.div animate={{ rotate: diaAberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                                  <ChevronRight className="h-3 w-3 text-gray-400" />
+                                                </motion.div>
+                                                <span className="text-[10.5px] font-mono tabular-nums text-gray-600">{formatDataBR(dia.diaKey)}</span>
+                                                <span className="text-[10px] text-gray-400">{dia.lancamentos.length} lanc.</span>
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-1 text-right font-mono text-[10.5px] text-emerald-600 tabular-nums">+{formatCurrency(dia.entradas)}</td>
+                                            <td className="px-4 py-1 text-right font-mono text-[10.5px] text-red-600 tabular-nums">-{formatCurrency(dia.saidas)}</td>
+                                            <td className={`px-4 py-1 text-right font-mono text-[10.5px] tabular-nums ${dia.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                                              {dia.variacao >= 0 ? '+' : ''}{formatCurrency(dia.variacao)}
+                                            </td>
+                                          </tr>
+                                          {diaAberto && dia.lancamentos.map(m => (
+                                            <tr key={m.id} onClick={() => setDetalheMov(m)}
+                                              className="hover:bg-blue-50/40 cursor-pointer transition-colors">
+                                              <td className="px-4 py-1.5 text-[11px] text-gray-800 max-w-[360px] truncate" style={{ paddingLeft: 136 }} colSpan={2}>{m.descricao}</td>
+                                              <td className="px-4 py-1.5 text-[11px] text-gray-500 font-mono">{m.documento || '—'}</td>
+                                              <td className="px-4 py-1.5 text-right font-mono text-[12px] tabular-nums">
+                                                {m.tipo === 'credito' ? (
+                                                  <span className="text-emerald-600">{formatCurrency(m.valor)}</span>
+                                                ) : (<span className="text-gray-300">—</span>)}
+                                              </td>
+                                              <td className="px-4 py-1.5 text-right font-mono text-[12px] tabular-nums">
+                                                {m.tipo === 'debito' ? (
+                                                  <span className="text-red-600">{formatCurrency(m.valor)}</span>
+                                                ) : (<span className="text-gray-300">—</span>)}
+                                              </td>
+                                              <td className="px-4 py-1.5 text-right font-mono text-[12px] text-gray-800 tabular-nums">{formatCurrency(m.saldoAtual)}</td>
+                                            </tr>
+                                          ))}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
+                      </React.Fragment>
                     );
-                  })()}
-                </tfoot>
+                  })}
+                </tbody>
               </table>
             </div>
           </div>
@@ -616,6 +912,7 @@ function ModalDetalheMovimento({ mov, onClose }) {
         </div>
 
         <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+          <DetalheLinha label="Empresa" valor={mov.empresaNome || '—'} hint={mov.empresaCnpj || null} />
           <DetalheLinha label="Caixa" valor={mov.contaNome}
             hint={mov.contaCodigo != null ? `#${mov.contaCodigo}` : null} />
           <DetalheLinha label="Descricao" valor={mov.descricao} />

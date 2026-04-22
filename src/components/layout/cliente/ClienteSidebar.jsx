@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, BarChart3, TrendingUp,
-  Receipt, HelpCircle, Coins, UserCog, ListTodo, ClipboardCheck,
+  Receipt, HelpCircle, Coins, UserCog, ListTodo, ClipboardCheck, Store, Award,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
@@ -26,8 +26,15 @@ const navigationAll = [
   {
     section: 'Operacional',
     items: [
-      { name: 'Sangrias', href: '/cliente/sangrias', icon: Coins, permissao: 'sangrias' },
-      { name: 'Servicos BPO', href: '/cliente/bpo', icon: ClipboardCheck, permissao: 'bpo' },
+      {
+        name: 'Comercial',
+        icon: Store,
+        children: [
+          { name: 'Vendas', href: '/cliente/comercial/vendas' },
+          { name: 'Operacao', href: '/cliente/comercial/operacao' },
+          { name: 'Produtividade', href: '/cliente/comercial/produtividade' },
+        ],
+      },
       {
         name: 'Financeiro',
         icon: Receipt,
@@ -38,6 +45,19 @@ const navigationAll = [
           { name: 'Agenda Financeira', href: '/cliente/financeiro/agenda', permissao: 'financeiro' },
         ],
       },
+    ],
+  },
+  {
+    section: 'BPO',
+    items: [
+      { name: 'Sangrias', href: '/cliente/sangrias', icon: Coins, permissao: 'sangrias' },
+      { name: 'Servicos BPO', href: '/cliente/bpo', icon: ClipboardCheck, permissao: 'bpo' },
+    ],
+  },
+  {
+    section: 'Ferramentas',
+    items: [
+      { name: 'Comissionamento', href: '/cliente/comercial/comissionamento', icon: Award },
       { name: 'Gestor de Tarefas', href: '/cliente/tarefas', icon: ListTodo, permissao: 'tarefas' },
     ],
   },

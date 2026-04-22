@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
-  Landmark, Coins, WalletCards,
+  Landmark, Coins, WalletCards, FileSearch,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { logoutAdmin } from '../../lib/auth';
@@ -62,6 +62,7 @@ const navigationAll = [
       { name: 'Conciliacao Bancaria', href: '/admin/bpo/conciliacao-bancaria', icon: Landmark, permissao: 'conciliacao_bancaria' },
       { name: 'Conciliacao de Caixas', href: '/admin/bpo/conciliacao-caixas', icon: Coins, permissao: 'conciliacao_caixas' },
       { name: 'Caixa Administrativo', href: '/admin/bpo/caixa-administrativo', icon: WalletCards, permissao: 'caixa_administrativo' },
+      { name: 'Validacao OFX', href: '/admin/bpo/validacao-ofx', icon: FileSearch, permissao: 'conciliacao_bancaria' },
     ],
   },
 ];

@@ -23,6 +23,8 @@ import RelatorioDRE from './pages/RelatorioDRE';
 import RelatorioAnaliseLancamentos from './pages/RelatorioAnaliseLancamentos';
 import RelatorioFluxoCaixa from './pages/RelatorioFluxoCaixa';
 import RelatorioEvolucaoMensal from './pages/RelatorioEvolucaoMensal';
+import RelatorioDRERede from './pages/RelatorioDRERede';
+import RelatorioFluxoCaixaRede from './pages/RelatorioFluxoCaixaRede';
 import CciPlanoContas from './pages/CciPlanoContas';
 import CciFornecedores from './pages/CciFornecedores';
 import CciContasPagar from './pages/CciContasPagar';
@@ -31,6 +33,7 @@ import CciUsuarios from './pages/CciUsuarios';
 import BpoConciliacaoBancaria from './pages/BpoConciliacaoBancaria';
 import BpoConciliacaoCaixas from './pages/BpoConciliacaoCaixas';
 import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
+import BpoValidacaoOfx from './pages/BpoValidacaoOfx';
 
 // Cliente
 import ClienteLayout from './components/layout/cliente/ClienteLayout';
@@ -47,6 +50,10 @@ import ClienteSuporte from './pages/cliente/ClienteSuporte';
 import ClienteSangrias from './pages/cliente/ClienteSangrias';
 import ClienteUsuarios from './pages/cliente/ClienteUsuarios';
 import ClienteTarefas from './pages/cliente/ClienteTarefas';
+import ClienteComercialVendas from './pages/cliente/ClienteComercialVendas';
+import ClienteComercialOperacao from './pages/cliente/ClienteComercialOperacao';
+import ClienteComercialProdutividade from './pages/cliente/ClienteComercialProdutividade';
+import ClienteComercialComissionamento from './pages/cliente/ClienteComercialComissionamento';
 
 // Auth
 import { RequireAdmin, RequireCliente } from './components/auth/RequireAuth';
@@ -103,12 +110,15 @@ export default function App() {
           <Route path="/admin/relatorios-cliente/:clienteId/dre" element={<RelatorioDRE />} />
           <Route path="/admin/relatorios-cliente/:clienteId/analise-lancamentos" element={<RelatorioAnaliseLancamentos />} />
           <Route path="/admin/relatorios-cliente/:clienteId/fluxo-caixa" element={<RelatorioFluxoCaixa />} />
+          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/dre" element={<RelatorioDRERede />} />
+          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/fluxo-caixa" element={<RelatorioFluxoCaixaRede />} />
           <Route path="/admin/relatorios-cliente/:clienteId/evolucao" element={<RelatorioEvolucaoMensal />} />
 
           {/* BPO */}
           <Route path="/admin/bpo/conciliacao-bancaria" element={<BpoConciliacaoBancaria />} />
           <Route path="/admin/bpo/conciliacao-caixas" element={<BpoConciliacaoCaixas />} />
           <Route path="/admin/bpo/caixa-administrativo" element={<BpoCaixaAdministrativo />} />
+          <Route path="/admin/bpo/validacao-ofx" element={<BpoValidacaoOfx />} />
 
           {/* Relatorios (kept for compatibility) */}
           <Route path="/admin/relatorios" element={<Relatorios />} />
@@ -130,6 +140,11 @@ export default function App() {
           <Route path="/cliente/suporte" element={<ClienteSuporte />} />
           <Route path="/cliente/usuarios" element={<ClienteUsuarios />} />
           <Route path="/cliente/tarefas" element={<ClienteTarefas />} />
+          <Route path="/cliente/comercial" element={<Navigate to="/cliente/comercial/vendas" replace />} />
+          <Route path="/cliente/comercial/vendas" element={<ClienteComercialVendas />} />
+          <Route path="/cliente/comercial/operacao" element={<ClienteComercialOperacao />} />
+          <Route path="/cliente/comercial/produtividade" element={<ClienteComercialProdutividade />} />
+          <Route path="/cliente/comercial/comissionamento" element={<ClienteComercialComissionamento />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

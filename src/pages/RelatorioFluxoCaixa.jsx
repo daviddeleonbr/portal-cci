@@ -28,11 +28,25 @@ function rangeMes(ano, mes) {
   };
 }
 
-export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}) {
+// Formata uma duracao em ms em algo curto e legivel (ex: "850 ms", "12,3s", "1m 23s")
+function formatDuracao(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1).replace('.', ',')}s`;
+  const m = Math.floor(s / 60);
+  const rest = Math.round(s - m * 60);
+  return `${m}m ${rest}s`;
+}
+
+// redeContexto (opcional): { nomeRede, chaveApiId, empresaCodigos, empresas }.
+// Quando passado, o Fluxo de Caixa agrega todas as empresas da rede.
+export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeContexto } = {}) {
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
   const navigate = useNavigate();
-  const backTarget = backHref || `/admin/relatorios-cliente/${clienteId}`;
+  const modoRede = !!redeContexto;
+  const backTarget = backHref || (modoRede ? '/admin/relatorios-cliente' : `/admin/relatorios-cliente/${clienteId}`);
 
   const [cliente, setCliente] = useState(null);
   const [mascaras, setMascaras] = useState([]);
@@ -55,6 +69,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
   const [error, setError] = useState(null);
 
   const [ocultarZeradas, setOcultarZeradas] = useState(true);
+  const [tempoGeracao, setTempoGeracao] = useState(null); // ms
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
   // Modal de inspecao de movimentos de um tipoDocumentoOrigem especifico
@@ -91,32 +106,60 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
   }, [mesFinal, qtdMeses]);
 
   // ─── Init: cliente + mascaras ────────────────────────────
+  // Em modo rede monta cliente virtual com chave_api_id e lista de empresas.
   useEffect(() => {
     (async () => {
       try {
-        const [c, masks] = await Promise.all([
-          clientesService.buscarCliente(clienteId),
-          fluxoService.listarMascaras(),
-        ]);
-        setCliente(c);
-        setMascaras(masks || []);
-        if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
-        // Carrega classificacao das contas + catalogo CONTA da rede
-        if (c?.chave_api_id) {
+        if (modoRede) {
+          const virtualCliente = {
+            id: `__rede__${redeContexto.chaveApiId}`,
+            nome: redeContexto.nomeRede,
+            chave_api_id: redeContexto.chaveApiId,
+            usa_webposto: true,
+            empresa_codigo: redeContexto.empresaCodigos?.[0] ?? null,
+            _empresaCodigos: redeContexto.empresaCodigos || [],
+            _empresas: redeContexto.empresas || [],
+            _nomeRede: redeContexto.nomeRede,
+          };
+          const masks = await fluxoService.listarMascaras();
+          setCliente(virtualCliente);
+          setMascaras(masks || []);
+          if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
           try {
             const chavesApi = await mapService.listarChavesApi();
-            const chave = chavesApi.find(ch => ch.id === c.chave_api_id);
-            const tasks = [contasBancariasService.listarPorRede(c.chave_api_id)];
+            const chave = chavesApi.find(ch => ch.id === redeContexto.chaveApiId);
+            const tasks = [contasBancariasService.listarPorRede(redeContexto.chaveApiId)];
             if (chave?.chave) tasks.push(qualityApi.buscarContas(chave.chave));
             const [classif, ctas] = await Promise.all(tasks);
             setContasClassificadas(classif || []);
             setContasMeta(ctas || []);
           } catch (_) { setContasClassificadas([]); setContasMeta([]); }
+        } else {
+          const [c, masks] = await Promise.all([
+            clientesService.buscarCliente(clienteId),
+            fluxoService.listarMascaras(),
+          ]);
+          setCliente(c);
+          setMascaras(masks || []);
+          if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
+          // Carrega classificacao das contas + catalogo CONTA da rede
+          if (c?.chave_api_id) {
+            try {
+              const chavesApi = await mapService.listarChavesApi();
+              const chave = chavesApi.find(ch => ch.id === c.chave_api_id);
+              const tasks = [contasBancariasService.listarPorRede(c.chave_api_id)];
+              if (chave?.chave) tasks.push(qualityApi.buscarContas(chave.chave));
+              const [classif, ctas] = await Promise.all(tasks);
+              setContasClassificadas(classif || []);
+              setContasMeta(ctas || []);
+            } catch (_) { setContasClassificadas([]); setContasMeta([]); }
+          }
         }
       } catch (err) { setError(err.message); }
       finally { setLoading(false); }
     })();
-  }, [clienteId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteId, modoRede, redeContexto?.chaveApiId]);
 
   // ─── Carregar grupos + mapeamentos ─────────────────────────
   useEffect(() => {
@@ -189,10 +232,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
       setError('Fluxo de Caixa disponivel apenas para clientes Webposto (integracao Quality API).');
       return;
     }
+    const _t0 = performance.now();
     try {
       setLoadingDados(true);
       setDadosCarregados(false);
       setError(null);
+      setTempoGeracao(null);
 
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
@@ -202,13 +247,24 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
       let concluidas = 0;
       setLoadingProgress({ atual: 0, total, mensagem: `Buscando movimentos de ${meses.length} mes(es)...` });
 
+      // Em modo rede iteramos todos os empresaCodigos e anotamos empresaCodigo
+      // em cada movimento (a API geralmente retorna, mas garantimos consistencia).
+      const empresaCodigos = modoRede
+        ? (cliente?._empresaCodigos || [])
+        : [cliente.empresa_codigo];
+
       const results = await Promise.all(meses.map(async m => {
         const r = rangeMes(m.ano, m.mes);
-        const filtros = { dataInicial: r.dataInicial, dataFinal: r.dataFinal, empresaCodigo: cliente.empresa_codigo };
-        const movs = await qualityApi.buscarMovimentoConta(chave.chave, filtros);
+        const todos = [];
+        for (const ec of empresaCodigos) {
+          const filtros = { dataInicial: r.dataInicial, dataFinal: r.dataFinal, empresaCodigo: ec };
+          const movs = await qualityApi.buscarMovimentoConta(chave.chave, filtros);
+          const annotated = (movs || []).map(mv => modoRede ? ({ ...mv, empresaCodigo: ec }) : mv);
+          todos.push(...annotated);
+        }
         concluidas++;
-        setLoadingProgress({ atual: concluidas, total, mensagem: `${m.label}: ${movs?.length || 0} movimentos` });
-        return { key: m.key, movimentos: movs || [] };
+        setLoadingProgress({ atual: concluidas, total, mensagem: `${m.label}: ${todos.length} movimentos${modoRede ? ` (${empresaCodigos.length} empresas)` : ''}` });
+        return { key: m.key, movimentos: todos };
       }));
 
       const mapa = {};
@@ -224,11 +280,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
         const rInicio = rangeMes(primeiroMes.ano - 1, primeiroMes.mes);
         const rFim = rangeMes(ultimoMes.ano, ultimoMes.mes);
         setLoadingProgress({ atual: total, total, mensagem: 'Buscando titulos a pagar para resolver pagamentos...' });
-        const titulos = await qualityApi.buscarTitulosPagar(chave.chave, {
-          dataInicial: rInicio.dataInicial,
-          dataFinal: rFim.dataFinal,
-          empresaCodigo: cliente.empresa_codigo,
-        });
+        // Em modo rede concatena titulos de todas as empresas da rede.
+        const allTitulos = [];
+        for (const ec of empresaCodigos) {
+          const t = await qualityApi.buscarTitulosPagar(chave.chave, {
+            dataInicial: rInicio.dataInicial,
+            dataFinal: rFim.dataFinal,
+            empresaCodigo: ec,
+          });
+          allTitulos.push(...(t || []));
+        }
+        const titulos = allTitulos;
         const mapaTitulos = new Map();
         // Indice reverso: titulo.pagamento[].codigoDocumento -> lista de titulos.
         // codigoDocumento casa com MOVIMENTO_CONTA.movimentoContaCodigo (onde
@@ -258,6 +320,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
       }
 
       setDadosCarregados(true);
+      setTempoGeracao(performance.now() - _t0);
     } catch (err) {
       setError('Erro ao buscar movimentos: ' + err.message);
     } finally {
@@ -311,8 +374,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
   }, [contasMeta]);
 
   // Lista de contas que aparecem nos movimentos da empresa selecionada.
-  // O dropdown so lista contas EXPLICITAMENTE classificadas como bancaria ou caixa
-  // em Cadastros > Clientes. Contas sem classificacao, aplicacao ou outras nao entram.
+  // Respeita o toggle de tipos (tiposContaAtivos) - conta de tipo nao selecionado
+  // nao entra nem no dropdown nem nos calculos.
   const contasDisponiveis = useMemo(() => {
     const set = new Map();
     Object.values(dadosPorMes).forEach(dados => {
@@ -321,6 +384,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
         const cod = Number(m.contaCodigo);
         const tipoConta = tipoPorConta.get(cod);
         if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
+        if (!tiposContaAtivos.has(tipoConta)) return;
         if (!set.has(cod)) {
           set.set(cod, descricaoPorConta.get(cod) || `Conta #${cod}`);
         }
@@ -329,7 +393,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
     return Array.from(set.entries())
       .map(([codigo, nome]) => ({ codigo, nome }))
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-  }, [dadosPorMes, tipoPorConta, descricaoPorConta]);
+  }, [dadosPorMes, tipoPorConta, descricaoPorConta, tiposContaAtivos]);
 
   // ─── Indexar movimentos por conta + mes ───────────────────
   // Crédito = +valor (entrou caixa). Débito = -valor (saiu caixa).
@@ -625,27 +689,53 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
     ?? fluxoTree.reduce((s, n) => s + n.totalPeriodo, 0)
   , [fluxoComCalculos, fluxoTree]);
 
-  // Auto-expande o grupo "Sem classificacao" e todas as suas contas (pra que os
-  // lancamentos individuais apareçam abertos por padrao - util pra auditar casos
-  // como TRANSFERENCIA_SANGRIA / TITULO_PAGAR_PAGAMENTO sem plano mapeado).
-  useEffect(() => {
-    if (semClassificacaoNode) {
-      setExpandedGrupos(prev => {
-        if (prev.has('__sem_classificacao__')) return prev;
-        const next = new Set(prev);
-        next.add('__sem_classificacao__');
-        return next;
+  // ─── Resultado por empresa (apenas em modo rede) ─────────
+  // Soma a variacao de caixa (entradas − saidas) por empresa, respeitando os
+  // mesmos filtros aplicados na arvore (tipoConta bancaria/caixa explicito,
+  // toggles e multi-select). Mostra quanto cada unidade contribuiu pro fluxo total.
+  const resultadoPorEmpresa = useMemo(() => {
+    if (!modoRede || !cliente?._empresas || cliente._empresas.length === 0) return null;
+
+    const porEmpresa = {};
+    cliente._empresas.forEach(emp => {
+      const ec = Number(emp.empresa_codigo);
+      if (!Number.isFinite(ec)) return;
+      porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, entradas: 0, saidas: 0, variacao: 0 };
+    });
+
+    Object.values(dadosPorMes).forEach(d => {
+      (d.movimentos || []).forEach(m => {
+        const ec = Number(m.empresaCodigo);
+        if (!porEmpresa[ec]) return;
+        if (m.contaCodigo == null) return;
+        const contaCod = Number(m.contaCodigo);
+        const tipoConta = tipoPorConta.get(contaCod);
+        if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
+        if (!tiposContaAtivos.has(tipoConta)) return;
+        if (filtroContas.size > 0 && !filtroContas.has(contaCod)) return;
+        const valor = Math.abs(Number(m.valor || 0));
+        if (m.tipo === 'Crédito') porEmpresa[ec].entradas += valor;
+        else porEmpresa[ec].saidas += valor;
       });
-      setExpandedContas(prev => {
-        const next = new Set(prev);
-        let changed = false;
-        (semClassificacaoNode.contas || []).forEach(c => {
-          if (!next.has(c.id)) { next.add(c.id); changed = true; }
-        });
-        return changed ? next : prev;
-      });
-    }
-  }, [semClassificacaoNode]);
+    });
+
+    const arr = Object.values(porEmpresa).map(p => ({
+      ...p,
+      variacao: p.entradas - p.saidas,
+    })).sort((a, b) => b.variacao - a.variacao);
+    const somaAbs = arr.reduce((s, p) => s + Math.abs(p.variacao), 0);
+    const totalConsolidado = arr.reduce((s, p) => s + p.variacao, 0);
+    return {
+      empresas: arr.map(p => ({
+        ...p,
+        participacao: somaAbs > 0 ? (Math.abs(p.variacao) / somaAbs) * 100 : 0,
+      })),
+      totalConsolidado,
+    };
+  }, [modoRede, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas]);
+
+  // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
+  // quando quiser auditar itens fora da mascara.
 
   const toggleGrupo = (id) => {
     setExpandedGrupos(prev => {
@@ -698,13 +788,29 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
     <div>
       <style>{`
         @media print {
-          html, body { background: white !important; }
+          html, body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           html *, body * { background: transparent !important; background-color: transparent !important; box-shadow: none !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
           aside, header { display: none !important; }
           main { padding: 0 !important; margin: 0 !important; }
-          @page { size: A4 portrait; margin: 1.2cm; }
+          /* Tamanhos reduzidos pra impressao A4 retrato (~194mm utiles).
+             IMPORTANTE: nao usar "padding" curto com !important porque isso
+             sobrescreve paddingLeft inline usado pra indentacao hierarquica. */
+          html, body { font-size: 9pt; }
+          table { font-size: 8pt !important; border-collapse: collapse; width: 100% !important; min-width: 0 !important; table-layout: auto !important; }
+          table colgroup col { width: auto !important; }
+          table th, table td { padding-top: 1.5px !important; padding-bottom: 1.5px !important; padding-right: 3px !important; line-height: 1.15 !important; white-space: normal !important; }
+          table th { font-size: 6.5pt !important; }
+          table td { font-size: 8pt !important; }
+          h1, h2, h3 { font-size: 10pt !important; margin: 3px 0 !important; }
+          .rounded-2xl, .rounded-xl, .rounded-lg { border-radius: 3px !important; }
+          .border { border-width: 0.4pt !important; }
+          .font-mono, .tabular-nums { font-size: 8.5pt !important; letter-spacing: -0.15px; }
+          .overflow-x-auto { overflow: visible !important; }
+          /* Impede quebra de pagina dentro de cards */
+          .print-no-break { page-break-inside: avoid; break-inside: avoid; }
+          @page { size: A4 portrait; margin: 8mm; }
         }
         .print-only { display: none; }
       `}</style>
@@ -721,10 +827,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
             <Wallet className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 truncate">Fluxo de Caixa</h2>
+            <h2 className="text-lg font-semibold text-gray-900 truncate">
+              {modoRede ? 'Fluxo de Caixa · Rede consolidada' : 'Fluxo de Caixa'}
+            </h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Building2 className="h-3 w-3" />
               <span className="truncate">{cliente.nome}</span>
+              {modoRede && cliente._empresaCodigos && (
+                <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
+                  · {cliente._empresaCodigos.length} empresas
+                </span>
+              )}
               {cliente.usa_webposto && (
                 <span className="inline-flex items-center gap-1 text-amber-600 ml-1">
                   <Zap className="h-2.5 w-2.5" /> Webposto
@@ -748,9 +861,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
 
       {/* Print header */}
       <div className="print-only" style={{ display: 'none', marginBottom: 16, borderBottom: '2px solid #000', paddingBottom: 10 }}>
-        <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>Fluxo de Caixa</h1>
-        <p style={{ fontSize: '10pt', margin: '4px 0' }}>{cliente.nome}{cliente.cnpj ? ` - CNPJ ${cliente.cnpj}` : ''}</p>
-        <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Periodo: {periodoLabel} &middot; Mascara: {mascaraSelecionada?.nome}</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>Fluxo de Caixa</h1>
+            <p style={{ fontSize: '10pt', margin: '4px 0' }}>{cliente.nome}{cliente.cnpj ? ` - CNPJ ${cliente.cnpj}` : ''}</p>
+            <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Periodo: {periodoLabel} &middot; Mascara: {mascaraSelecionada?.nome}</p>
+          </div>
+          <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#444', lineHeight: 1.25, flexShrink: 0 }}>
+            <p style={{ margin: 0, fontSize: '9pt', fontWeight: 600, color: '#000' }}>CCI ASSESSORIA E CONSULTORIA INTELIGENTE LTDA</p>
+            <p style={{ margin: '2px 0 0 0', fontFamily: 'monospace' }}>CNPJ 57.268.175/0001-00</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: '7.5pt', color: '#888' }}>
+              Impresso em {new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
@@ -905,7 +1029,64 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
         ) : (
           <motion.div key="report" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
             className="space-y-5">
-            {composicaoSaldo.length > 0 && (
+            {modoRede && resultadoPorEmpresa && resultadoPorEmpresa.empresas.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-emerald-600" />
+                  <h3 className="text-sm font-semibold text-gray-800">Variacao de caixa por empresa</h3>
+                  <span className="text-[11px] text-gray-400">· contribuicao de cada unidade no fluxo consolidado</span>
+                  <span className={`ml-auto text-[13px] font-bold ${resultadoPorEmpresa.totalConsolidado >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                    Total: {formatCurrency(resultadoPorEmpresa.totalConsolidado)}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50/80 border-b border-gray-100">
+                      <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-2.5">#</th>
+                        <th className="px-4 py-2.5">Empresa</th>
+                        <th className="px-4 py-2.5 text-right">Entradas</th>
+                        <th className="px-4 py-2.5 text-right">Saidas</th>
+                        <th className="px-4 py-2.5 text-right">Variacao</th>
+                        <th className="px-4 py-2.5 text-right">Participacao</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {resultadoPorEmpresa.empresas.map((p, i) => (
+                        <tr key={p.empresaCodigo} className="hover:bg-gray-50/60">
+                          <td className="px-4 py-2 text-[11px] text-gray-400 font-mono">{i + 1}</td>
+                          <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa?.nome || `#${p.empresaCodigo}`}</td>
+                          <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-emerald-600">+{formatCurrency(p.entradas)}</td>
+                          <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-red-600">-{formatCurrency(p.saidas)}</td>
+                          <td className={`px-4 py-2 text-right font-mono text-[12.5px] font-semibold tabular-nums ${p.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {p.variacao > 0 ? '+' : ''}{formatCurrency(p.variacao)}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-gray-800 font-semibold">
+                            {p.participacao.toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50/60 border-t border-gray-200">
+                      <tr className="text-[12px] font-semibold">
+                        <td className="px-4 py-3 text-gray-700" colSpan={2}>Consolidado ({resultadoPorEmpresa.empresas.length} empresas)</td>
+                        <td className="px-4 py-3 text-right font-mono tabular-nums text-emerald-700">
+                          +{formatCurrency(resultadoPorEmpresa.empresas.reduce((s, p) => s + p.entradas, 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono tabular-nums text-red-700">
+                          -{formatCurrency(resultadoPorEmpresa.empresas.reduce((s, p) => s + p.saidas, 0))}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-mono tabular-nums ${resultadoPorEmpresa.totalConsolidado >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {resultadoPorEmpresa.totalConsolidado > 0 ? '+' : ''}{formatCurrency(resultadoPorEmpresa.totalConsolidado)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-700">100.0%</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+            {!modoRede && composicaoSaldo.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                   <Wallet className="h-4 w-4 text-blue-500" />
@@ -989,7 +1170,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-gray-800">{mascaraSelecionada?.nome}</h3>
-                  <p className="text-[11px] text-gray-400">{periodoLabel}</p>
+                  <p className="text-[11px] text-gray-400">
+                    {periodoLabel}
+                    {tempoGeracao != null && (
+                      <span className="text-gray-300" title="Tempo total de geracao do relatorio">
+                        {' · '}gerado em {formatDuracao(tempoGeracao)}
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
@@ -1033,39 +1221,135 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref } = {}
                       titulosPorPagamento={titulosPorPagamento}
                     />
                   ))}
-                  {semClassificacaoNode && (ocultarZeradas
-                    ? (semClassificacaoNode.contas || []).some(c => Math.abs(c.totalPeriodo) > 0.01)
-                    : (semClassificacaoNode.contas || []).length > 0
-                  ) && (
-                    <>
-                      <tr>
-                        <td colSpan={meses.length + 2} className="pt-6 pb-2">
-                          <div className="flex items-center gap-2 text-[10px] font-semibold text-amber-700 uppercase tracking-wider">
-                            <AlertCircle className="h-3 w-3" />
-                            Movimentos sem classificacao (nao entram na variacao de caixa)
-                          </div>
-                        </td>
-                      </tr>
-                      <FluxoNodeRows
-                        node={semClassificacaoNode}
-                        depth={0}
-                        meses={meses}
-                        expandedGrupos={expandedGrupos}
-                        expandedContas={expandedContas}
-                        onToggleGrupo={toggleGrupo}
-                        onToggleConta={toggleConta}
-                        ocultarZeradas={ocultarZeradas}
-                        expandedLancamentos={expandedLancamentos}
-                        onToggleLancamento={toggleLancamento}
-                        tituloPagarMap={tituloPagarMap}
-                        titulosPorPagamento={titulosPorPagamento}
-                      />
-                    </>
-                  )}
                 </tbody>
               </table>
             </div>
             </div>
+
+            {/* Contas, chaves e lancamentos nao mapeados (diagnostico — apenas admin, fora de impressao) */}
+            {!clienteIdOverride && semClassificacaoNode && semClassificacaoNode.contas.length > 0 && (
+              <div className="bg-white rounded-2xl border border-amber-200/60 shadow-sm overflow-hidden mt-4 no-print">
+                <div className="px-5 py-3 border-b border-amber-100 bg-amber-50/40 flex items-center gap-2 flex-wrap">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <h3 className="text-sm font-semibold text-amber-800">Contas, chaves e lancamentos nao mapeados</h3>
+                  <span className="text-[11px] text-amber-600">
+                    · {semClassificacaoNode.contas.length} ite{semClassificacaoNode.contas.length === 1 ? 'm' : 'ns'} · nao entra(m) na variacao de caixa acima
+                  </span>
+                  <span className={`ml-auto text-[13px] font-bold ${semClassificacaoNode.totalPeriodo >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                    Impacto: {formatCurrency(semClassificacaoNode.totalPeriodo)}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[12px]" style={{ tableLayout: 'fixed', minWidth: 490 + meses.length * 120 + 140 }}>
+                    <colgroup>
+                      <col style={{ width: 490 }} />
+                      {meses.map(m => <col key={`${m.key}-scv`} style={{ width: 120 }} />)}
+                      <col style={{ width: 140 }} />
+                    </colgroup>
+                    <thead className="bg-amber-50/50 border-b border-amber-100">
+                      <tr className="text-amber-800">
+                        <th className="text-left px-4 py-2 font-medium uppercase text-[10px] tracking-wider">Plano / tipo de documento</th>
+                        {meses.map(m => (
+                          <th key={`${m.key}-sch`} className="text-right px-3 py-2 font-medium uppercase text-[10px] tracking-wider">{m.label} (R$)</th>
+                        ))}
+                        <th className="text-right px-3 py-2 font-medium uppercase text-[10px] tracking-wider bg-amber-100/40">Total (R$)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {semClassificacaoNode.contas.map(conta => {
+                        const temLancs = conta.lancamentos && conta.lancamentos.length > 0;
+                        const isAberta = expandedContas.has(conta.id);
+                        return (
+                          <React.Fragment key={conta.id}>
+                            <tr className="border-b border-amber-50 hover:bg-amber-50/30">
+                              <td className="px-4 py-1.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {temLancs ? (
+                                    <button onClick={() => toggleConta(conta.id)}
+                                      className="text-amber-500 hover:text-amber-700 transition-colors flex-shrink-0">
+                                      <motion.div animate={{ rotate: isAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                        <ChevronRight className="h-3 w-3" />
+                                      </motion.div>
+                                    </button>
+                                  ) : (
+                                    <div className="h-1 w-1 rounded-full bg-amber-300 flex-shrink-0" />
+                                  )}
+                                  <span className="text-[11.5px] text-gray-800 truncate flex-1">{conta.descricao}</span>
+                                  {temLancs && (
+                                    <span className="text-[9px] text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                                      {conta.lancamentos.length}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              {meses.map(m => {
+                                const v = conta.valoresPorMes[m.key] || 0;
+                                return (
+                                  <td key={`${m.key}-scv2`} className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11px] ${v >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                    {formatCurrencyCompact(v)}
+                                  </td>
+                                );
+                              })}
+                              <td className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11.5px] font-semibold bg-amber-50/40 ${conta.totalPeriodo >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                {formatCurrencyCompact(conta.totalPeriodo)}
+                              </td>
+                            </tr>
+                            {isAberta && temLancs && conta.lancamentos.slice(0, 200).map(l => (
+                              <tr key={l.id} className="border-b border-gray-50 bg-amber-50/10 hover:bg-amber-50/30">
+                                <td className="px-4 py-1" style={{ paddingLeft: 48 }}>
+                                  <div className="flex items-center gap-2 text-[10.5px] text-gray-600">
+                                    <span className="font-mono tabular-nums flex-shrink-0 text-gray-500">{l.data || '—'}</span>
+                                    <span className="truncate" title={l.descricao}>{l.descricao}</span>
+                                    {l.tipoDoc && <span className="text-[9px] text-gray-400 uppercase tracking-wider flex-shrink-0">{l.tipoDoc}</span>}
+                                  </div>
+                                </td>
+                                {meses.map(m => {
+                                  const v = l.mesKey === m.key ? l.valor * l.sinal : 0;
+                                  return (
+                                    <td key={`${m.key}-scl`} className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] ${v === 0 ? 'text-gray-300' : v >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                      {v === 0 ? '—' : formatCurrencyCompact(v)}
+                                    </td>
+                                  );
+                                })}
+                                <td className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                  {formatCurrencyCompact(l.valor * l.sinal)}
+                                </td>
+                              </tr>
+                            ))}
+                            {isAberta && temLancs && conta.lancamentos.length > 200 && (
+                              <tr className="border-b border-gray-50 bg-amber-50/10">
+                                <td colSpan={meses.length + 2} className="px-4 py-1 text-[10px] text-gray-500 italic" style={{ paddingLeft: 48 }}>
+                                  ... e mais {conta.lancamentos.length - 200} lancamento(s) — use o filtro de conta para reduzir
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-amber-50/50 border-t border-amber-200">
+                      <tr className="text-[12px] font-semibold text-amber-900">
+                        <td className="px-4 py-2">Total nao mapeado</td>
+                        {meses.map(m => {
+                          const v = semClassificacaoNode.valoresPorMes[m.key] || 0;
+                          return (
+                            <td key={`${m.key}-sctot`} className={`text-right px-3 py-2 font-mono tabular-nums ${v >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                              {formatCurrencyCompact(v)}
+                            </td>
+                          );
+                        })}
+                        <td className={`text-right px-3 py-2 font-mono tabular-nums bg-amber-100/40 ${semClassificacaoNode.totalPeriodo >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                          {formatCurrencyCompact(semClassificacaoNode.totalPeriodo)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <div className="px-5 py-2 bg-amber-50/30 border-t border-amber-100 text-[10.5px] text-amber-900">
+                  Estes lancamentos existem nas contas (bancarias/caixa) mas nao estao no mapeamento da mascara — por isso a soma do fluxo acima pode nao bater com a <strong>Composicao do saldo</strong>. Adicione os codigos em <strong>Parametros &gt; Mapeamento Fluxo de Caixa</strong> para que passem a compor a variacao.
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

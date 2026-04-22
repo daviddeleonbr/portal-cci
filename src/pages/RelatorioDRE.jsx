@@ -29,11 +29,26 @@ function rangeMes(ano, mes) {
   return { dataInicial: ymd(inicio), dataFinal: ymd(fim) };
 }
 
-export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
+// Formata uma duracao em ms em algo curto e legivel (ex: "850 ms", "12,3s", "1m 23s")
+function formatDuracao(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1).replace('.', ',')}s`;
+  const m = Math.floor(s / 60);
+  const rest = Math.round(s - m * 60);
+  return `${m}m ${rest}s`;
+}
+
+// redeContexto (opcional): { nomeRede, chaveApiId, empresaCodigos: number[] }
+// Quando passado, a DRE agrega as empresas da rede usando o mesmo mapeamento
+// (mapeamento_empresa_contas e sempre por chave_api_id).
+export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto } = {}) {
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
   const navigate = useNavigate();
-  const backTarget = backHref || `/admin/relatorios-cliente/${clienteId}`;
+  const modoRede = !!redeContexto;
+  const backTarget = backHref || (modoRede ? '/admin/relatorios-cliente' : `/admin/relatorios-cliente/${clienteId}`);
 
   const [cliente, setCliente] = useState(null);
   const [mascaras, setMascaras] = useState([]);
@@ -68,6 +83,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
   const [showAH, setShowAH] = useState(true);
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
+  const [tempoGeracao, setTempoGeracao] = useState(null); // ms
 
   // ─── Compute meses array: N meses (1 ou 3) terminando em mesFinal ─
   const meses = useMemo(() => {
@@ -82,20 +98,42 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
   }, [mesFinal, qtdMeses]);
 
   // ─── Init: load cliente + mascaras ──────────────────────
+  // Em modo rede, pula o fetch de cliente e cria um objeto "virtual" com
+  // os campos que o resto do componente espera (nome, chave_api_id, empresa_codigo).
   useEffect(() => {
     (async () => {
       try {
-        const [c, masks] = await Promise.all([
-          clientesService.buscarCliente(clienteId),
-          dreService.listarMascaras(),
-        ]);
-        setCliente(c);
-        setMascaras(masks || []);
-        if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
+        if (modoRede) {
+          const virtualCliente = {
+            id: `__rede__${redeContexto.chaveApiId}`,
+            nome: redeContexto.nomeRede,
+            chave_api_id: redeContexto.chaveApiId,
+            usa_webposto: true,
+            // Usa o primeiro empresaCodigo como "representativo" (legacy);
+            // o fetch real usa a lista completa via modoRede.
+            empresa_codigo: redeContexto.empresaCodigos?.[0] ?? null,
+            _empresaCodigos: redeContexto.empresaCodigos || [],
+            _empresas: redeContexto.empresas || [],
+            _nomeRede: redeContexto.nomeRede,
+          };
+          const masks = await dreService.listarMascaras();
+          setCliente(virtualCliente);
+          setMascaras(masks || []);
+          if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
+        } else {
+          const [c, masks] = await Promise.all([
+            clientesService.buscarCliente(clienteId),
+            dreService.listarMascaras(),
+          ]);
+          setCliente(c);
+          setMascaras(masks || []);
+          if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
+        }
       } catch (err) { setError(err.message); }
       finally { setLoading(false); }
     })();
-  }, [clienteId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteId, modoRede, redeContexto?.chaveApiId]);
 
   // ─── Load grupos ────────────────────────────────────────
   useEffect(() => {
@@ -153,10 +191,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
       return;
     }
 
+    const _t0 = performance.now();
     try {
       setLoadingDados(true);
       setDadosCarregados(false);
       setError(null);
+      setTempoGeracao(null);
 
       setLoadingProgress({ atual: 0, total: 1, mensagem: 'Conectando com o sistema Webposto...' });
       const chaves = await mapService.listarChavesApi();
@@ -194,21 +234,35 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
 
       const results = await Promise.all(
         promises.map(async (p) => {
-          const filtros = { dataInicial: p.dataInicial, dataFinal: p.dataFinal, empresaCodigo: cliente.empresa_codigo };
-          const [pagar, receber, vendaItens, vendas] = await Promise.all([
-            qualityApi.buscarTitulosPagar(chave.chave, filtros),
-            qualityApi.buscarTitulosReceber(chave.chave, filtros),
-            qualityApi.buscarVendaItens(chave.chave, filtros).catch(() => []),
-            qualityApi.buscarVendas(chave.chave, filtros).catch(() => []),
-          ]);
+          // Em modo rede iteramos os empresaCodigos da rede e concatenamos os resultados.
+          const empresaCodigos = modoRede
+            ? (cliente?._empresaCodigos || [])
+            : [cliente.empresa_codigo];
+          const allPagar = [], allReceber = [], allVendaItens = [], allVendas = [];
+          for (const ec of empresaCodigos) {
+            const filtros = { dataInicial: p.dataInicial, dataFinal: p.dataFinal, empresaCodigo: ec };
+            const [pagar, receber, vendaItens, vendas] = await Promise.all([
+              qualityApi.buscarTitulosPagar(chave.chave, filtros),
+              qualityApi.buscarTitulosReceber(chave.chave, filtros),
+              qualityApi.buscarVendaItens(chave.chave, filtros).catch(() => []),
+              qualityApi.buscarVendas(chave.chave, filtros).catch(() => []),
+            ]);
+            // Em modo rede, anota cada item com o empresaCodigo da iteracao
+            // (a API retorna isso no payload, mas garantimos consistencia).
+            const annot = modoRede ? (arr) => (arr || []).map(x => ({ ...x, empresaCodigo: ec })) : (arr) => (arr || []);
+            allPagar.push(...annot(pagar));
+            allReceber.push(...annot(receber));
+            allVendaItens.push(...annot(vendaItens));
+            allVendas.push(...annot(vendas));
+          }
           concluidas++;
           const periodoLabel = p.isPrev ? `${p.label} (ano anterior)` : p.label;
           setLoadingProgress({
             atual: concluidas,
             total,
-            mensagem: `${periodoLabel} \u00b7 ${(pagar?.length || 0) + (receber?.length || 0)} lancs \u00b7 ${vendaItens?.length || 0} itens \u00b7 ${vendas?.length || 0} vendas`,
+            mensagem: `${periodoLabel} \u00b7 ${allPagar.length + allReceber.length} lancs \u00b7 ${allVendaItens.length} itens \u00b7 ${allVendas.length} vendas${modoRede ? ` · ${empresaCodigos.length} empresas` : ''}`,
           });
-          return { ...p, pagar, receber, vendaItens, vendas };
+          return { ...p, pagar: allPagar, receber: allReceber, vendaItens: allVendaItens, vendas: allVendas };
         })
       );
 
@@ -224,6 +278,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
       setDadosPorMes(atual);
       setDadosPorMesAnterior(anterior);
       setDadosCarregados(true);
+      setTempoGeracao(performance.now() - _t0);
     } catch (err) {
       setError('Erro ao buscar lancamentos: ' + err.message);
     } finally {
@@ -521,6 +576,83 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
     ?? dreTree.reduce((s, n) => s + n.totalPeriodo, 0)
   , [dreComCalculos, dreTree]);
 
+  // ─── Resultado por empresa (apenas em modo rede) ─────────
+  // Calcula o resultado (receita liquida − custos, conforme mapeamento) por
+  // empresa da rede e computa a participacao de cada uma no total.
+  const resultadoPorEmpresa = useMemo(() => {
+    if (!modoRede || !cliente?._empresas || cliente._empresas.length === 0) return null;
+
+    const codigosMapeados = new Set(mapeamentos.map(m => String(m.plano_conta_codigo)));
+    const tiposVendaMap = new Map();
+    mapeamentoVendas.forEach(m => {
+      if (m.grupo_dre_id) tiposVendaMap.set(m.tipo, m);
+    });
+
+    const porEmpresa = {};
+    cliente._empresas.forEach(emp => {
+      const ec = Number(emp.empresa_codigo);
+      if (!Number.isFinite(ec)) return;
+      porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, total: 0 };
+    });
+
+    Object.values(dadosPorMes).forEach(d => {
+      // Titulos (receita e saida)
+      (d.titulosReceber || []).forEach(t => {
+        const ec = Number(t.empresaCodigo);
+        if (!porEmpresa[ec]) return;
+        const cod = String(t.planoContaGerencialCodigo || '');
+        if (!codigosMapeados.has(cod)) return;
+        porEmpresa[ec].total += Number(t.valorPago || t.valor || 0);
+      });
+      (d.titulosPagar || []).forEach(t => {
+        const ec = Number(t.empresaCodigo);
+        if (!porEmpresa[ec]) return;
+        const cod = String(t.planoContaGerencialCodigo || '');
+        if (!codigosMapeados.has(cod)) return;
+        porEmpresa[ec].total -= Number(t.valorPago || t.valor || 0);
+      });
+
+      // Vendas: agrega por empresa usando vendaItens + vendas
+      if (tiposVendaMap.size > 0) {
+        const itensPorEmp = new Map();
+        (d.vendaItens || []).forEach(item => {
+          const ec = Number(item.empresaCodigo);
+          if (!porEmpresa[ec]) return;
+          if (!itensPorEmp.has(ec)) itensPorEmp.set(ec, []);
+          itensPorEmp.get(ec).push(item);
+        });
+        const vendasPorEmp = new Map();
+        (d.vendas || []).forEach(v => {
+          const ec = Number(v.empresaCodigo);
+          if (!porEmpresa[ec]) return;
+          if (!vendasPorEmp.has(ec)) vendasPorEmp.set(ec, new Map());
+          vendasPorEmp.get(ec).set(v.vendaCodigo || v.codigo, v);
+        });
+        itensPorEmp.forEach((itens, ec) => {
+          const vMap = vendasPorEmp.get(ec) || new Map();
+          const totais = vendasMapService.agregarVendasItens(itens, vMap, produtosMap, gruposCatMap);
+          Object.entries(totais).forEach(([tipo, valor]) => {
+            if (!tiposVendaMap.has(tipo)) return;
+            const tipoCfg = TIPOS_VENDA.find(t => t.id === tipo);
+            if (!tipoCfg) return;
+            porEmpresa[ec].total += (valor || 0) * tipoCfg.sinal;
+          });
+        });
+      }
+    });
+
+    const arr = Object.values(porEmpresa).sort((a, b) => b.total - a.total);
+    const somaAbsoluta = arr.reduce((s, p) => s + Math.abs(p.total), 0);
+    const totalConsolidado = arr.reduce((s, p) => s + p.total, 0);
+    return {
+      empresas: arr.map(p => ({
+        ...p,
+        participacao: somaAbsoluta > 0 ? (Math.abs(p.total) / somaAbsoluta) * 100 : 0,
+      })),
+      totalConsolidado,
+    };
+  }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap]);
+
   const toggleGrupo = (id) => {
     setExpandedGrupos(prev => {
       const next = new Set(prev);
@@ -562,20 +694,56 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
     ? meses[0].label
     : `${meses[0].label} - ${meses[meses.length - 1].label}`;
 
+  // 1 mes: retrato (mais altura para linhas da mascara). 2+ meses: paisagem
+  // para acomodar as colunas extras (Valor/% por mes) sem apertar demais.
+  const orientacaoA4 = meses.length === 1 ? 'portrait' : 'landscape';
+
   return (
     <div>
-      {/* Print-only styles */}
+      {/* Print-only styles — orientacao e fontes mudam conforme meses.length */}
       <style>{`
         @media print {
-          body { background: white !important; }
+          html, body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body, main, #root, .app-bg, .min-h-screen { background: white !important; background-image: none !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          .print-page { padding: 1.5cm; }
+          .print-page { padding: 0; background: white !important; }
           .print-no-break { page-break-inside: avoid; }
           aside, header { display: none !important; }
           main { padding: 0 !important; margin: 0 !important; }
           .conta-row, .lanc-row { display: none !important; }
-          @page { size: A4 portrait; margin: 1cm; }
+          /* Remove blurs decorativos do AppLayout que pintam o fundo */
+          [aria-hidden="true"] { display: none !important; }
+          /* IMPORTANTE: nao usar "padding" curto com !important — sobrescreve
+             paddingLeft inline usado pra indentacao hierarquica da mascara. */
+          table { border-collapse: collapse; width: 100% !important; min-width: 0 !important; table-layout: auto !important; }
+          table colgroup col { width: auto !important; }
+          table th, table td { padding-top: 3.5px !important; padding-bottom: 3.5px !important; padding-right: 4px !important; line-height: 1.25 !important; white-space: normal !important; }
+          h1, h2, h3 { margin: 3px 0 !important; }
+          .rounded-2xl, .rounded-xl, .rounded-lg { border-radius: 3px !important; }
+          .border { border-width: 0.4pt !important; }
+          .shadow-sm, .shadow-lg { box-shadow: none !important; }
+          .overflow-x-auto { overflow: visible !important; }
+
+          ${orientacaoA4 === 'portrait' ? `
+            /* A4 Retrato (~194mm) — 1 mes, layout mais compacto */
+            html, body { font-size: 9pt; }
+            table { font-size: 8pt !important; }
+            table th { font-size: 6.5pt !important; }
+            table td { font-size: 8pt !important; }
+            h1, h2, h3 { font-size: 10pt !important; }
+            .font-mono, .tabular-nums { font-size: 8.5pt !important; letter-spacing: -0.15px; }
+            @page { size: A4 portrait; margin: 8mm; }
+          ` : `
+            /* A4 Paisagem (~281mm) — 3 meses, mais folga para as colunas */
+            html, body { font-size: 10pt; }
+            table { font-size: 9pt !important; }
+            table th { font-size: 7.5pt !important; }
+            table td { font-size: 9pt !important; }
+            h1, h2, h3 { font-size: 11pt !important; }
+            .font-mono, .tabular-nums { font-size: 9.5pt !important; letter-spacing: -0.1px; }
+            @page { size: A4 landscape; margin: 8mm 10mm; }
+          `}
         }
         .print-only { display: none; }
       `}</style>
@@ -592,10 +760,17 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
             <FileBarChart className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 truncate">DRE Gerencial</h2>
+            <h2 className="text-lg font-semibold text-gray-900 truncate">
+              {modoRede ? 'DRE Gerencial · Rede consolidada' : 'DRE Gerencial'}
+            </h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Building2 className="h-3 w-3" />
               <span className="truncate">{cliente.nome}</span>
+              {modoRede && cliente._empresaCodigos && (
+                <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
+                  · {cliente._empresaCodigos.length} empresas
+                </span>
+              )}
               {cliente.usa_webposto && (
                 <span className="inline-flex items-center gap-1 text-amber-600 ml-1">
                   <Zap className="h-2.5 w-2.5" /> Webposto
@@ -709,10 +884,19 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
 
       {/* Print header (only print) */}
       <div className="print-only" style={{ display: 'none' }}>
-        <div style={{ marginBottom: '20px', borderBottom: '2px solid #000', paddingBottom: '10px' }}>
-          <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>DRE Gerencial</h1>
-          <p style={{ fontSize: '10pt', margin: '4px 0' }}>{cliente.nome}{cliente.cnpj ? ` - CNPJ ${cliente.cnpj}` : ''}</p>
-          <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Periodo: {periodoLabel} &middot; Mascara: {mascaraSelecionada?.nome}</p>
+        <div style={{ marginBottom: '20px', borderBottom: '2px solid #000', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>DRE Gerencial</h1>
+            <p style={{ fontSize: '10pt', margin: '4px 0' }}>{cliente.nome}{cliente.cnpj ? ` - CNPJ ${cliente.cnpj}` : ''}</p>
+            <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Periodo: {periodoLabel} &middot; Mascara: {mascaraSelecionada?.nome}</p>
+          </div>
+          <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#444', lineHeight: 1.25, flexShrink: 0 }}>
+            <p style={{ margin: 0, fontSize: '9pt', fontWeight: 600, color: '#000' }}>CCI ASSESSORIA E CONSULTORIA INTELIGENTE LTDA</p>
+            <p style={{ margin: '2px 0 0 0', fontFamily: 'monospace' }}>CNPJ 57.268.175/0001-00</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: '7.5pt', color: '#888' }}>
+              Impresso em {new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -774,7 +958,65 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
           </motion.div>
         ) : (
           <motion.div key="report" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-            className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden print-no-break">
+            className="space-y-5">
+          {modoRede && resultadoPorEmpresa && resultadoPorEmpresa.empresas.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-blue-600" />
+                <h3 className="text-sm font-semibold text-gray-800">Resultado por empresa</h3>
+                <span className="text-[11px] text-gray-400">· participacao de cada unidade no total consolidado</span>
+                <span className={`ml-auto text-[13px] font-bold ${resultadoPorEmpresa.totalConsolidado >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  Total: {formatCurrency(resultadoPorEmpresa.totalConsolidado)}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50/80 border-b border-gray-100">
+                    <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-2.5">#</th>
+                      <th className="px-4 py-2.5">Empresa</th>
+                      <th className="px-4 py-2.5">CNPJ</th>
+                      <th className="px-4 py-2.5 text-right">Resultado</th>
+                      <th className="px-4 py-2.5 text-right">Participacao</th>
+                      <th className="px-4 py-2.5 w-[180px]">Peso relativo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {resultadoPorEmpresa.empresas.map((p, i) => (
+                      <tr key={p.empresaCodigo} className="hover:bg-gray-50/60">
+                        <td className="px-4 py-2 text-[11px] text-gray-400 font-mono">{i + 1}</td>
+                        <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa?.nome || `#${p.empresaCodigo}`}</td>
+                        <td className="px-4 py-2 text-[11px] text-gray-500 font-mono">{p.empresa?.cnpj || '—'}</td>
+                        <td className={`px-4 py-2 text-right font-mono text-[12.5px] font-semibold tabular-nums ${p.total >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {formatCurrency(p.total)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-gray-800 font-semibold">
+                          {p.participacao.toFixed(1)}%
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className={`h-full transition-all ${p.total >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
+                              style={{ width: `${Math.min(100, p.participacao)}%` }} />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50/60 border-t border-gray-200">
+                    <tr className="text-[12px] font-semibold">
+                      <td className="px-4 py-3 text-gray-700" colSpan={3}>Consolidado ({resultadoPorEmpresa.empresas.length} empresas)</td>
+                      <td className={`px-4 py-3 text-right font-mono tabular-nums ${resultadoPorEmpresa.totalConsolidado >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {formatCurrency(resultadoPorEmpresa.totalConsolidado)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-700">100.0%</td>
+                      <td className="px-4 py-3" />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+          <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             {/* Header (no-print) */}
             <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between no-print">
               <div className="flex items-center gap-2.5">
@@ -783,7 +1025,14 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-gray-800">{mascaraSelecionada?.nome}</h3>
-                  <p className="text-[11px] text-gray-400">{periodoLabel}</p>
+                  <p className="text-[11px] text-gray-400">
+                    {periodoLabel}
+                    {tempoGeracao != null && (
+                      <span className="text-gray-300" title="Tempo total de geracao do relatorio">
+                        {' · '}gerado em {formatDuracao(tempoGeracao)}
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
@@ -838,6 +1087,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref } = {}) {
                 </tbody>
               </table>
             </div>
+          </div>
           </motion.div>
         )}
       </AnimatePresence>
