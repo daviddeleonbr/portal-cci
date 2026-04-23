@@ -20,6 +20,7 @@ dist-ssr
 # Dumps de API (dev)
 v*.json
 vfp*.json
+!vercel.json
 
 # Editor directories and files
 .vscode/*
