@@ -79,7 +79,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const [loadingMapeamentos, setLoadingMapeamentos] = useState(false);
   const [reportReady, setReportReady] = useState(false);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('dre'); // 'dre' | 'insights'
+  const [activeTab, setActiveTab] = useState('dre'); // 'dre' | 'empresa' | 'insights'
+  // Mes selecionado da aba "Por Empresa" (so modoRede). Default: ultimo mes do periodo.
+  const [mesEmpresaKey, setMesEmpresaKey] = useState(null);
 
   const [ocultarZeradas, setOcultarZeradas] = useState(true);
   const [showAH, setShowAH] = useState(true);
@@ -294,6 +296,17 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     setDadosCarregados(false);
     setReportReady(false);
   }, [mesFinal, qtdMeses, mascaraSelecionada]);
+
+  // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado:
+  // sempre que o array de meses mudar, se o valor atual nao pertence mais
+  // a ele, reseta pro ultimo mes (mais recente).
+  useEffect(() => {
+    if (meses.length === 0) { setMesEmpresaKey(null); return; }
+    setMesEmpresaKey(prev => {
+      if (prev && meses.some(m => m.key === prev)) return prev;
+      return meses[meses.length - 1].key;
+    });
+  }, [meses]);
 
   const handleMontarDRE = useCallback(() => {
     setDreSolicitado(true);
@@ -655,6 +668,263 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     };
   }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap]);
 
+  // ═══════════════════════════════════════════════════════════
+  // ABA "POR EMPRESA": mesmo relatorio da mascara DRE, mas com
+  // empresas da rede como COLUNAS (em vez de meses). Mes unico,
+  // selecionado pelo usuario via mesEmpresaKey.
+  // ═══════════════════════════════════════════════════════════
+
+  // "Colunas" virtuais = uma por empresa da rede. Mesmo shape que meses
+  // ({key, label}) para que o renderer DreNodeRows funcione sem mudancas.
+  const colunasEmpresa = useMemo(() => {
+    if (!modoRede) return [];
+    return (cliente?._empresas || [])
+      .filter(emp => Number.isFinite(Number(emp.empresa_codigo)))
+      .map(emp => {
+        const ec = Number(emp.empresa_codigo);
+        const nome = emp.fantasia || emp.razao_social || emp.nome || `#${ec}`;
+        return {
+          key: String(ec),
+          label: nome.length > 18 ? nome.substring(0, 18) + '…' : nome,
+          _empresaCodigo: ec,
+          _empresa: emp,
+        };
+      });
+  }, [modoRede, cliente]);
+
+  // Mes de referencia da aba Por Empresa (objeto completo)
+  const mesEmpresa = useMemo(
+    () => meses.find(m => m.key === mesEmpresaKey) || null,
+    [meses, mesEmpresaKey]
+  );
+
+  // Indexacao de titulos do mes selecionado por (plano, empresa)
+  // Retorna mesma shape de idxAtualFull mas usando empresaCodigo como "mesKey".
+  const idxEmpresaFull = useMemo(() => {
+    const totais = {};
+    const lancamentos = {};
+    if (!mesEmpresa) return { totais, lancamentos };
+    const dados = dadosPorMes[mesEmpresa.key];
+    if (!dados) return { totais, lancamentos };
+    const todos = [
+      ...(dados.titulosReceber || []).map(t => ({ ...t, _sinal: 1, _tipo: 'receber' })),
+      ...(dados.titulosPagar || []).map(t => ({ ...t, _sinal: -1, _tipo: 'pagar' })),
+    ];
+    todos.forEach(t => {
+      const codigo = String(t.planoContaGerencialCodigo || '');
+      if (!codigo) return;
+      const empKey = String(t.empresaCodigo ?? '');
+      if (!empKey) return;
+      const valor = Number(t.valorPago || t.valor || 0) * t._sinal;
+      if (!totais[codigo]) totais[codigo] = {};
+      totais[codigo][empKey] = (totais[codigo][empKey] || 0) + valor;
+
+      const partes = [];
+      const descBase = (t.descricao || '').trim();
+      if (descBase) partes.push(descBase);
+      const numTitulo = (t.numeroTitulo || '').trim();
+      if (numTitulo) partes.push(`Nº ${numTitulo}`);
+      const contraparte = (t.nomeFornecedor || t.nomeCliente || '').trim();
+      if (contraparte) partes.push(contraparte);
+      const descricaoComposta = partes.join(' · ');
+
+      if (!lancamentos[codigo]) lancamentos[codigo] = [];
+      lancamentos[codigo].push({
+        id: t.codigo || `${t._tipo}-${t.tituloPagarCodigo || t.tituloReceberCodigo}`,
+        mesKey: empKey, // DreNodeRows usa l.mesKey pra decidir coluna; aqui empresa
+        data: t.dataMovimento || t.dataPagamento || t.vencimento || '',
+        descricao: descricaoComposta || '—',
+        valor: Math.abs(Number(t.valorPago || t.valor || 0)),
+        sinal: t._sinal,
+        situacao: t.situacao,
+        tipo: t._tipo,
+      });
+    });
+    return { totais, lancamentos };
+  }, [mesEmpresa, dadosPorMes]);
+
+  // Vendas do mes selecionado agregadas por (grupo, empresa, tipo)
+  const vendasEmpresaPorGrupo = useMemo(() => {
+    const porGrupo = {};
+    if (!mesEmpresa) return porGrupo;
+    const dados = dadosPorMes[mesEmpresa.key];
+    if (!dados) return porGrupo;
+
+    const cfgPorTipo = new Map();
+    mapeamentoVendas.forEach(m => { if (m.grupo_dre_id) cfgPorTipo.set(m.tipo, m); });
+    if (cfgPorTipo.size === 0) return porGrupo;
+
+    // Agrupa itens e vendas por empresa pra agregar cada empresa separadamente
+    const itensPorEmp = new Map();
+    (dados.vendaItens || []).forEach(item => {
+      const ec = String(item.empresaCodigo ?? '');
+      if (!ec) return;
+      if (!itensPorEmp.has(ec)) itensPorEmp.set(ec, []);
+      itensPorEmp.get(ec).push(item);
+    });
+    const vendasPorEmp = new Map();
+    (dados.vendas || []).forEach(v => {
+      const ec = String(v.empresaCodigo ?? '');
+      if (!ec) return;
+      if (!vendasPorEmp.has(ec)) vendasPorEmp.set(ec, new Map());
+      vendasPorEmp.get(ec).set(v.vendaCodigo || v.codigo, v);
+    });
+
+    itensPorEmp.forEach((itens, empKey) => {
+      const vMap = vendasPorEmp.get(empKey) || new Map();
+      const totaisMes = vendasMapService.agregarVendasItens(itens, vMap, produtosMap, gruposCatMap);
+      Object.entries(totaisMes).forEach(([tipo, valor]) => {
+        const cfg = cfgPorTipo.get(tipo);
+        if (!cfg) return;
+        const tipoCfg = TIPOS_VENDA.find(t => t.id === tipo);
+        if (!tipoCfg) return;
+        const valorComSinal = (valor || 0) * tipoCfg.sinal;
+        if (!porGrupo[cfg.grupo_dre_id]) porGrupo[cfg.grupo_dre_id] = {};
+        if (!porGrupo[cfg.grupo_dre_id][tipo]) {
+          porGrupo[cfg.grupo_dre_id][tipo] = { valoresPorMes: {}, tipoCfg };
+        }
+        porGrupo[cfg.grupo_dre_id][tipo].valoresPorMes[empKey] =
+          (porGrupo[cfg.grupo_dre_id][tipo].valoresPorMes[empKey] || 0) + valorComSinal;
+      });
+    });
+    return porGrupo;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mesEmpresa, dadosPorMes, mapeamentoVendas, produtosMap, gruposCatMap]);
+
+  // Arvore DRE com empresas como colunas (espelha dreTree com colunasEmpresa)
+  const dreTreeEmpresa = useMemo(() => {
+    if (!modoRede || !grupos.length || colunasEmpresa.length === 0) return [];
+    const idxE = idxEmpresaFull.totais;
+    const lancsE = idxEmpresaFull.lancamentos;
+
+    function buildNode(grupo) {
+      const contasMapeadas = mapeamentos.filter(m => m.grupo_dre_id === grupo.id);
+      const contas = contasMapeadas.map(m => {
+        const codKey = String(m.plano_conta_codigo);
+        const valoresPorMes = {};
+        const valoresAnt = {};
+        let totalPeriodo = 0;
+        colunasEmpresa.forEach(col => {
+          const v = idxE[codKey]?.[col.key] || 0;
+          valoresPorMes[col.key] = v;
+          valoresAnt[col.key] = 0;
+          totalPeriodo += v;
+        });
+        const lancs = (lancsE[codKey] || [])
+          .slice()
+          .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+        return {
+          id: m.id,
+          codigo: m.plano_conta_codigo,
+          descricao: m.plano_conta_descricao,
+          natureza: m.plano_conta_natureza,
+          isManual: m.isManual,
+          valoresPorMes,
+          valoresAnt,
+          totalPeriodo,
+          totalAnt: 0,
+          lancamentos: lancs,
+        };
+      });
+
+      const vendasGrupo = vendasEmpresaPorGrupo[grupo.id];
+      if (vendasGrupo) {
+        Object.entries(vendasGrupo).forEach(([tipo, dados]) => {
+          const valoresPorMes = {};
+          const valoresAnt = {};
+          let totalPeriodo = 0;
+          colunasEmpresa.forEach(col => {
+            const v = dados.valoresPorMes[col.key] || 0;
+            valoresPorMes[col.key] = v;
+            valoresAnt[col.key] = 0;
+            totalPeriodo += v;
+          });
+          contas.push({
+            id: `venda-${grupo.id}-${tipo}`,
+            codigo: '',
+            descricao: `${dados.tipoCfg.label} (vendas)`,
+            isVendas: true,
+            tipoVenda: tipo,
+            valoresPorMes,
+            valoresAnt,
+            totalPeriodo,
+            totalAnt: 0,
+            lancamentos: [],
+          });
+        });
+      }
+
+      const children = grupos
+        .filter(g => g.parent_id === grupo.id)
+        .sort((a, b) => a.ordem - b.ordem)
+        .map(buildNode);
+
+      const valoresPorMes = {};
+      const valoresAnt = {};
+      let totalPeriodo = 0;
+      colunasEmpresa.forEach(col => {
+        const fromContas = contas.reduce((s, c) => s + (c.valoresPorMes[col.key] || 0), 0);
+        const fromChildren = children.reduce((s, c) => s + (c.valoresPorMes[col.key] || 0), 0);
+        valoresPorMes[col.key] = fromContas + fromChildren;
+        valoresAnt[col.key] = 0;
+        totalPeriodo += valoresPorMes[col.key];
+      });
+
+      return {
+        ...grupo,
+        contas,
+        children,
+        valoresPorMes,
+        valoresAnt,
+        totalPeriodo,
+        totalAnt: 0,
+      };
+    }
+
+    return grupos
+      .filter(g => !g.parent_id)
+      .sort((a, b) => a.ordem - b.ordem)
+      .map(buildNode);
+  }, [modoRede, grupos, mapeamentos, colunasEmpresa, idxEmpresaFull, vendasEmpresaPorGrupo]);
+
+  // Acumulado (subtotais / resultado) espelhando dreComCalculos mas com colunasEmpresa
+  const dreComCalculosEmpresa = useMemo(() => {
+    const acum = {};
+    let acumTotal = 0;
+    colunasEmpresa.forEach(c => { acum[c.key] = 0; });
+    return dreTreeEmpresa.map(node => {
+      if (node.tipo === 'subtotal' || node.tipo === 'resultado') {
+        return {
+          ...node,
+          isCalc: true,
+          valoresPorMes: { ...acum },
+          valoresAnt: colunasEmpresa.reduce((a, c) => { a[c.key] = 0; return a; }, {}),
+          totalPeriodo: acumTotal,
+          totalAnt: 0,
+        };
+      }
+      colunasEmpresa.forEach(c => { acum[c.key] += (node.valoresPorMes[c.key] || 0); });
+      acumTotal += node.totalPeriodo;
+      return node;
+    });
+  }, [dreTreeEmpresa, colunasEmpresa]);
+
+  // Base AV (receita bruta) por empresa
+  const baseAVEmpresa = useMemo(() => {
+    const base = {};
+    const primeiraReceita = dreTreeEmpresa.find(n => !['subtotal', 'resultado'].includes(n.tipo));
+    colunasEmpresa.forEach(c => {
+      base[c.key] = primeiraReceita ? Math.abs(primeiraReceita.valoresPorMes[c.key] || 0) : 0;
+    });
+    base.total = Math.abs(primeiraReceita?.totalPeriodo || 0);
+    return base;
+  }, [dreTreeEmpresa, colunasEmpresa]);
+
+  const totalGeralEmpresa = useMemo(() =>
+    dreComCalculosEmpresa.find(n => n.tipo === 'resultado')?.totalPeriodo
+    ?? dreTreeEmpresa.reduce((s, n) => s + n.totalPeriodo, 0)
+  , [dreComCalculosEmpresa, dreTreeEmpresa]);
+
   const toggleGrupo = (id) => {
     setExpandedGrupos(prev => {
       const next = new Set(prev);
@@ -902,7 +1172,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         </div>
       </div>
 
-      {/* Tabs DRE | Insights (oculto na impressao) */}
+      {/* Tabs DRE | Por Empresa | Insights (oculto na impressao) */}
       {reportReady && (
         <div className="flex items-center gap-0.5 mb-4 bg-gray-100/80 rounded-lg p-0.5 w-fit no-print">
           <button onClick={() => setActiveTab('dre')}
@@ -911,6 +1181,14 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             }`}>
             <Table className="h-3.5 w-3.5" /> DRE
           </button>
+          {modoRede && colunasEmpresa.length > 0 && (
+            <button onClick={() => setActiveTab('empresa')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+                activeTab === 'empresa' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              <Building2 className="h-3.5 w-3.5" /> Por Empresa
+            </button>
+          )}
           <button onClick={() => setActiveTab('insights')}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
               activeTab === 'insights' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -957,6 +1235,85 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               periodoLabel={periodoLabel}
               cliente={cliente}
             />
+          </motion.div>
+        ) : activeTab === 'empresa' && modoRede ? (
+          <motion.div key="empresa" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+            className="space-y-5">
+            <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap no-print">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                    <Building2 className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-800">{mascaraSelecionada?.nome}</h3>
+                    <p className="text-[11px] text-gray-400">
+                      Por empresa · {mesEmpresa?.label || '—'} · {colunasEmpresa.length} empresas
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mes:</label>
+                  <select value={mesEmpresaKey || ''}
+                    onChange={(e) => setMesEmpresaKey(e.target.value)}
+                    className="h-9 rounded-lg border border-gray-200 px-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                    {meses.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                  </select>
+                  <div className="text-right ml-2">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Resultado</p>
+                    <p className={`text-base font-bold ${totalGeralEmpresa >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {formatCurrency(totalGeralEmpresa)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-[12px]" style={{ tableLayout: 'fixed', minWidth: 420 + colunasEmpresa.length * 130 + 140 }}>
+                  <colgroup>
+                    <col style={{ width: 420 }} />
+                    {colunasEmpresa.map(c => (
+                      <>
+                        <col key={`${c.key}-cv`} style={{ width: 90 }} />
+                        <col key={`${c.key}-cav`} style={{ width: 45 }} />
+                      </>
+                    ))}
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 45 }} />
+                  </colgroup>
+                  <thead className="bg-gray-50/80">
+                    <tr className="text-gray-500">
+                      <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">Conta</th>
+                      {colunasEmpresa.map(c => (
+                        <>
+                          <th key={`${c.key}-h`} title={c._empresa ? labelEmpresa(c._empresa) : c.label}
+                            className="text-right px-2 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap truncate max-w-[90px]">
+                            {c.label}
+                          </th>
+                          <th key={`${c.key}-hav`} className="text-right px-1 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 whitespace-nowrap">AV%</th>
+                        </>
+                      ))}
+                      <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
+                      <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-100/60 whitespace-nowrap">AV%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dreComCalculosEmpresa.map((node) => (
+                      <DreNodeRows key={node.id} node={node} depth={0}
+                        meses={colunasEmpresa}
+                        baseAV={baseAVEmpresa}
+                        expandedGrupos={expandedGrupos}
+                        expandedContas={expandedContas}
+                        onToggleGrupo={toggleGrupo}
+                        onToggleConta={toggleConta}
+                        ocultarZeradas={ocultarZeradas}
+                        showAH={false}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </motion.div>
         ) : (
           <motion.div key="report" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}

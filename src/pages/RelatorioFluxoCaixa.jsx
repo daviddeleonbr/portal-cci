@@ -74,6 +74,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [tempoGeracao, setTempoGeracao] = useState(null); // ms
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
+  const [activeTab, setActiveTab] = useState('fluxo'); // 'fluxo' | 'empresa'
+  // Mes selecionado da aba "Por Empresa" (so modoRede). Default: ultimo mes do periodo.
+  const [mesEmpresaKey, setMesEmpresaKey] = useState(null);
   // Modal de inspecao de movimentos de um tipoDocumentoOrigem especifico
 
   // Filtro por tipo de conta no fluxo de caixa:
@@ -215,6 +218,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     setReportReady(false);
     setDadosPorMes({});
   }, [mesFinal, qtdMeses, mascaraSelecionada]);
+
+  // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado.
+  useEffect(() => {
+    if (meses.length === 0) { setMesEmpresaKey(null); return; }
+    setMesEmpresaKey(prev => {
+      if (prev && meses.some(m => m.key === prev)) return prev;
+      return meses[meses.length - 1].key;
+    });
+  }, [meses]);
 
   // Map codigo do titulo a pagar -> objeto completo do titulo.
   // Usado para: (1) resolver o plano de movimentos TITULO_PAGAR_PAGAMENTO;
@@ -739,6 +751,199 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
   // quando quiser auditar itens fora da mascara.
 
+  // ═══════════════════════════════════════════════════════════
+  // ABA "POR EMPRESA": mesma mascara do fluxo, mas com empresas
+  // da rede como COLUNAS (em vez de meses). Mes unico selecionavel.
+  // ═══════════════════════════════════════════════════════════
+
+  const colunasEmpresa = useMemo(() => {
+    if (!modoRede) return [];
+    return (cliente?._empresas || [])
+      .filter(emp => Number.isFinite(Number(emp.empresa_codigo)))
+      .map(emp => {
+        const ec = Number(emp.empresa_codigo);
+        const nome = emp.fantasia || emp.razao_social || emp.nome || `#${ec}`;
+        return {
+          key: String(ec),
+          label: nome.length > 18 ? nome.substring(0, 18) + '…' : nome,
+          _empresaCodigo: ec,
+          _empresa: emp,
+        };
+      });
+  }, [modoRede, cliente]);
+
+  const mesEmpresa = useMemo(
+    () => meses.find(m => m.key === mesEmpresaKey) || null,
+    [meses, mesEmpresaKey]
+  );
+
+  // Indexa MOVIMENTO_CONTA do mes selecionado por (plano, empresa).
+  // Espelha o memo principal (totaisPorConta/lancamentosPorConta) mas com
+  // empresaCodigo como "mesKey". Respeita os mesmos filtros.
+  const { totaisPorContaEmpresa, lancamentosPorContaEmpresa } = useMemo(() => {
+    const totais = {};
+    const lancs = {};
+    if (!mesEmpresa) return { totaisPorContaEmpresa: totais, lancamentosPorContaEmpresa: lancs };
+    const dados = dadosPorMes[mesEmpresa.key];
+    if (!dados) return { totaisPorContaEmpresa: totais, lancamentosPorContaEmpresa: lancs };
+
+    (dados.movimentos || []).forEach(m => {
+      if (m.contaCodigo == null) return;
+      const cod = Number(m.contaCodigo);
+      const tipoConta = tipoPorConta.get(cod);
+      if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
+      if (!tiposContaAtivos.has(tipoConta)) return;
+      if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
+      const empKey = String(m.empresaCodigo ?? '');
+      if (!empKey) return;
+
+      let planoBruto = m.planoContaGerencialCodigo;
+      const temPlano = planoBruto != null && planoBruto !== 0 && planoBruto !== '';
+      const sinal = m.tipo === 'Crédito' ? 1 : -1;
+      const valorAbs = Math.abs(Number(m.valor || 0));
+      const valor = valorAbs * sinal;
+      const idBase = m.codigo || `${m.movimentoContaCodigo}`;
+
+      // Distribuicao TITULO_PAGAR_PAGAMENTO em lote (mesmo tratamento do memo principal).
+      if (m.tipoDocumentoOrigem === 'TITULO_PAGAR_PAGAMENTO' && m.movimentoContaCodigo != null) {
+        const chave = Number(m.movimentoContaCodigo);
+        const lote = titulosPorPagamento.get(chave);
+        if (Array.isArray(lote) && lote.length > 0) {
+          const entradas = lote.map(t => {
+            const entry = Array.isArray(t.pagamento)
+              ? t.pagamento.find(p => Number(p?.codigoDocumento) === chave)
+              : null;
+            const valorDoTitulo = Math.max(0, Number(
+              entry?.valorPago ?? t.valorPago ?? t.valor ?? t.valorTitulo ?? 0
+            ));
+            return { titulo: t, valorTitulo: valorDoTitulo, planoCod: t.planoContaGerencialCodigo };
+          }).filter(x => x.valorTitulo > 0);
+          const entradasComPlano = entradas.filter(x => x.planoCod != null && x.planoCod !== 0);
+          const totalTitulos = entradasComPlano.reduce((s, x) => s + x.valorTitulo, 0);
+          if (entradasComPlano.length > 0 && totalTitulos > 0) {
+            entradasComPlano.forEach((x, idx) => {
+              const parcela = x.valorTitulo * sinal;
+              const planoKey = String(x.planoCod);
+              if (!totais[planoKey]) totais[planoKey] = {};
+              totais[planoKey][empKey] = (totais[planoKey][empKey] || 0) + parcela;
+              if (!lancs[planoKey]) lancs[planoKey] = [];
+              const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
+              const partLabel = entradasComPlano.length > 1
+                ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · titulo #${tituloCod ?? '—'}`
+                : ` · titulo #${tituloCod ?? '—'}`;
+              lancs[planoKey].push({
+                id: entradasComPlano.length > 1 ? `${idBase}-p${idx}-e${empKey}` : `${idBase}-e${empKey}`,
+                mesKey: empKey, // FluxoNodeRows usa l.mesKey pra coluna
+                data: m.dataMovimento,
+                descricao: `${(m.descricao || '').trim() || '—'}${partLabel}`,
+                tipoDoc: m.tipoDocumentoOrigem,
+                movimentoContaCodigo: m.movimentoContaCodigo ?? null,
+                tituloPagarCodigo: tituloCod,
+                valor: x.valorTitulo,
+                sinal,
+              });
+            });
+            return;
+          }
+        }
+      }
+
+      const codigo = temPlano
+        ? String(planoBruto)
+        : `${SEM_PLANO_PREFIX}${m.tipoDocumentoOrigem || 'OUTROS'}`;
+
+      if (!totais[codigo]) totais[codigo] = {};
+      totais[codigo][empKey] = (totais[codigo][empKey] || 0) + valor;
+      if (!lancs[codigo]) lancs[codigo] = [];
+      lancs[codigo].push({
+        id: `${idBase}-e${empKey}`,
+        mesKey: empKey,
+        data: m.dataMovimento,
+        descricao: (m.descricao || '').trim() || '—',
+        tipoDoc: m.tipoDocumentoOrigem,
+        movimentoContaCodigo: m.movimentoContaCodigo ?? null,
+        valor: valorAbs,
+        sinal,
+      });
+    });
+    return { totaisPorContaEmpresa: totais, lancamentosPorContaEmpresa: lancs };
+  }, [mesEmpresa, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento]);
+
+  // Arvore Fluxo com empresas como colunas (espelha fluxoTree com colunasEmpresa)
+  const fluxoTreeEmpresa = useMemo(() => {
+    if (!modoRede || !grupos.length || colunasEmpresa.length === 0) return [];
+
+    function buildNode(grupo) {
+      const contasMapeadas = mapeamentos.filter(m => m.grupo_fluxo_id === grupo.id);
+      const contas = contasMapeadas.map(m => {
+        const codKey = String(m.plano_conta_codigo);
+        const valoresPorMes = {};
+        let totalPeriodo = 0;
+        colunasEmpresa.forEach(col => {
+          const v = totaisPorContaEmpresa[codKey]?.[col.key] || 0;
+          valoresPorMes[col.key] = v;
+          totalPeriodo += v;
+        });
+        const lancs = (lancamentosPorContaEmpresa[codKey] || [])
+          .slice()
+          .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+        return {
+          id: m.id,
+          codigo: m.plano_conta_codigo,
+          descricao: m.plano_conta_descricao,
+          isManual: m.isManual,
+          valoresPorMes,
+          totalPeriodo,
+          lancamentos: lancs,
+        };
+      });
+
+      const children = grupos
+        .filter(g => g.parent_id === grupo.id)
+        .sort((a, b) => a.ordem - b.ordem)
+        .map(buildNode);
+
+      const valoresPorMes = {};
+      let totalPeriodo = 0;
+      colunasEmpresa.forEach(col => {
+        const fromContas = contas.reduce((s, c) => s + (c.valoresPorMes[col.key] || 0), 0);
+        const fromChildren = children.reduce((s, c) => s + (c.valoresPorMes[col.key] || 0), 0);
+        valoresPorMes[col.key] = fromContas + fromChildren;
+        totalPeriodo += valoresPorMes[col.key];
+      });
+      return { ...grupo, contas, children, valoresPorMes, totalPeriodo };
+    }
+
+    return grupos
+      .filter(g => !g.parent_id)
+      .sort((a, b) => a.ordem - b.ordem)
+      .map(buildNode);
+  }, [modoRede, grupos, mapeamentos, colunasEmpresa, totaisPorContaEmpresa, lancamentosPorContaEmpresa]);
+
+  const fluxoComCalculosEmpresa = useMemo(() => {
+    const acum = {};
+    let acumTotal = 0;
+    colunasEmpresa.forEach(c => { acum[c.key] = 0; });
+    return fluxoTreeEmpresa.map(node => {
+      if (node.tipo === 'subtotal' || node.tipo === 'resultado') {
+        return {
+          ...node,
+          isCalc: true,
+          valoresPorMes: { ...acum },
+          totalPeriodo: acumTotal,
+        };
+      }
+      colunasEmpresa.forEach(c => { acum[c.key] += (node.valoresPorMes[c.key] || 0); });
+      acumTotal += node.totalPeriodo;
+      return node;
+    });
+  }, [fluxoTreeEmpresa, colunasEmpresa]);
+
+  const totalGeralEmpresa = useMemo(() =>
+    fluxoComCalculosEmpresa.find(n => n.tipo === 'resultado')?.totalPeriodo
+    ?? fluxoTreeEmpresa.reduce((s, n) => s + n.totalPeriodo, 0)
+  , [fluxoComCalculosEmpresa, fluxoTreeEmpresa]);
+
   const toggleGrupo = (id) => {
     setExpandedGrupos(prev => {
       const next = new Set(prev);
@@ -1002,6 +1207,24 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       )}
 
 
+      {/* Tabs Fluxo | Por Empresa (so em modoRede, apos relatorio pronto) */}
+      {reportReady && modoRede && colunasEmpresa.length > 0 && (
+        <div className="flex items-center gap-0.5 mb-4 bg-gray-100/80 rounded-lg p-0.5 w-fit no-print">
+          <button onClick={() => setActiveTab('fluxo')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+              activeTab === 'fluxo' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <Wallet className="h-3.5 w-3.5" /> Fluxo
+          </button>
+          <button onClick={() => setActiveTab('empresa')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+              activeTab === 'empresa' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <Building2 className="h-3.5 w-3.5" /> Por Empresa
+          </button>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         {!reportSolicitado ? (
           <motion.div key="aguardando" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -1027,6 +1250,76 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             <Layers className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm font-medium text-gray-800 mb-1">Mascara vazia</p>
             <p className="text-xs text-gray-400">Configure a estrutura em Parametros &gt; Mascaras Fluxo de Caixa</p>
+          </motion.div>
+        ) : activeTab === 'empresa' && modoRede ? (
+          <motion.div key="empresa" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+            className="space-y-5">
+            <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap no-print">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
+                    <Building2 className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-800">{mascaraSelecionada?.nome}</h3>
+                    <p className="text-[11px] text-gray-400">
+                      Por empresa · {mesEmpresa?.label || '—'} · {colunasEmpresa.length} empresas
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mes:</label>
+                  <select value={mesEmpresaKey || ''}
+                    onChange={(e) => setMesEmpresaKey(e.target.value)}
+                    className="h-9 rounded-lg border border-gray-200 px-2 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                    {meses.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                  </select>
+                  <div className="text-right ml-2">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Variacao de caixa</p>
+                    <p className={`text-base font-bold ${totalGeralEmpresa >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {formatCurrency(totalGeralEmpresa)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[12px]" style={{ tableLayout: 'fixed', minWidth: 420 + colunasEmpresa.length * 110 + 130 }}>
+                  <colgroup>
+                    <col style={{ width: 420 }} />
+                    {colunasEmpresa.map(c => <col key={`${c.key}-cg`} style={{ width: 110 }} />)}
+                    <col style={{ width: 130 }} />
+                  </colgroup>
+                  <thead className="bg-gray-50/80">
+                    <tr className="text-gray-500">
+                      <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">Linha</th>
+                      {colunasEmpresa.map(c => (
+                        <th key={`${c.key}-h`} title={c._empresa ? labelEmpresa(c._empresa) : c.label}
+                          className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap truncate max-w-[110px]">
+                          {c.label}
+                        </th>
+                      ))}
+                      <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fluxoComCalculosEmpresa.map(node => (
+                      <FluxoNodeRows key={node.id} node={node} depth={0}
+                        meses={colunasEmpresa}
+                        expandedGrupos={expandedGrupos}
+                        expandedContas={expandedContas}
+                        onToggleGrupo={toggleGrupo}
+                        onToggleConta={toggleConta}
+                        ocultarZeradas={ocultarZeradas}
+                        expandedLancamentos={expandedLancamentos}
+                        onToggleLancamento={toggleLancamento}
+                        tituloPagarMap={tituloPagarMap}
+                        titulosPorPagamento={titulosPorPagamento}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </motion.div>
         ) : (
           <motion.div key="report" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
