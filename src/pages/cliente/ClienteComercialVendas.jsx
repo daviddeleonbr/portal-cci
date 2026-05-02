@@ -186,6 +186,19 @@ function agregarPorProduto(vendaItens, vendasMap, produtosMap, gruposMap) {
   return porProduto;
 }
 
+// ─── Cache em memoria (sobrevive a desmontagens da pagina) ──────
+// TTL = 5 min. Chave: empresa.id + mesKey + apenasDiasFechados.
+const CACHE_TTL_MS_VENDAS = 5 * 60 * 1000;
+const _cacheVendas = new Map(); // key -> { data, timestamp }
+function chaveCacheVendas(empresaId, mesKey, apenasFechados) {
+  return `${empresaId}|${mesKey}|${apenasFechados ? '1' : '0'}`;
+}
+function lerCacheVendas(key) {
+  const e = _cacheVendas.get(key);
+  if (e && (Date.now() - e.timestamp) < CACHE_TTL_MS_VENDAS) return e.data;
+  return null;
+}
+
 export default function ClienteComercialVendas() {
   const session = useClienteSession();
   const cliente = session?.cliente;
@@ -223,8 +236,23 @@ export default function ClienteComercialVendas() {
   );
   const mesMax = mesKeyHoje();
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async ({ force = false } = {}) => {
     if (!empresaSel?.empresa_codigo) return;
+
+    // Cache em memoria — evita refetch ao voltar pra pagina dentro de 5min
+    const cacheKey = chaveCacheVendas(empresaSel.id, mesSelecionado, apenasDiasFechados);
+    if (!force) {
+      const cached = lerCacheVendas(cacheKey);
+      if (cached) {
+        setDados(cached.dados);
+        setProdutosMap(cached.produtosMap);
+        setGruposCatMap(cached.gruposCatMap);
+        setGeradoEm(cached.geradoEm);
+        setLoadingDados(false);
+        return;
+      }
+    }
+
     setLoadingDados(true);
     setErro(null);
     try {
@@ -236,12 +264,54 @@ export default function ClienteComercialVendas() {
         apiKey = chave.chave;
       }
 
-      let pMap = produtosMap, gMap = gruposCatMap;
-      if (pMap.size === 0) {
-        const [prods, grps] = await Promise.all([
-          qualityApi.buscarProdutos(apiKey).catch(() => []),
-          qualityApi.buscarGrupos(apiKey).catch(() => []),
+      // Calcula periodo de buffer (7 dias antes do inicio do mes atual)
+      const [byA, bmA, bdA] = periodos.atual.dataInicial.split('-').map(Number);
+      const bufFim = new Date(byA, bmA - 1, bdA); bufFim.setDate(bufFim.getDate() - 1);
+      const bufIni = new Date(bufFim); bufIni.setDate(bufIni.getDate() - 6);
+      const periodoBuffer = {
+        dataInicial: ymd(bufIni),
+        dataFinal: ymd(bufFim),
+        empresaCodigo: empresaSel.empresa_codigo,
+      };
+
+      // Helper que so dispara o fetch (nao agrega) — para rodar tudo em paralelo
+      const fetchPeriodoRaw = (periodo) => {
+        const filtros = {
+          dataInicial: periodo.dataInicial,
+          dataFinal: periodo.dataFinal,
+          empresaCodigo: empresaSel.empresa_codigo,
+        };
+        return Promise.all([
+          qualityApi.buscarVendaItens(apiKey, filtros).catch(() => []),
+          qualityApi.buscarVendas(apiKey, filtros).catch(() => []),
         ]);
+      };
+
+      const inicio = performance.now();
+
+      // FETCH PARALELO TOTAL: catalogos (produtos/grupos) + vendas/itens dos
+      // 4 periodos (atual + buffer + mes anterior + ano anterior) disparam
+      // todos juntos. Catalogos so sao buscados se ainda nao estao em cache.
+      const precisaCatalogos = produtosMap.size === 0 || gruposCatMap.size === 0;
+      const [
+        prods,
+        grps,
+        rawAtual,
+        rawBuffer,
+        rawMesAnt,
+        rawAnoAnt,
+      ] = await Promise.all([
+        precisaCatalogos ? qualityApi.buscarProdutos(apiKey).catch(() => []) : Promise.resolve(null),
+        precisaCatalogos ? qualityApi.buscarGrupos(apiKey).catch(() => [])   : Promise.resolve(null),
+        fetchPeriodoRaw(periodos.atual),
+        fetchPeriodoRaw(periodoBuffer),
+        fetchPeriodoRaw(periodos.mesAnterior),
+        fetchPeriodoRaw(periodos.anoAnterior),
+      ]);
+
+      // Monta mapas de catalogo (ou reusa os ja em estado)
+      let pMap = produtosMap, gMap = gruposCatMap;
+      if (precisaCatalogos) {
         pMap = new Map();
         (prods || []).forEach(p => pMap.set(p.produtoCodigo || p.codigo, p));
         gMap = new Map();
@@ -250,16 +320,8 @@ export default function ClienteComercialVendas() {
         setGruposCatMap(gMap);
       }
 
-      const buscarPeriodo = async (periodo) => {
-        const filtros = {
-          dataInicial: periodo.dataInicial,
-          dataFinal: periodo.dataFinal,
-          empresaCodigo: empresaSel.empresa_codigo,
-        };
-        const [vendaItens, vendas] = await Promise.all([
-          qualityApi.buscarVendaItens(apiKey, filtros).catch(() => []),
-          qualityApi.buscarVendas(apiKey, filtros).catch(() => []),
-        ]);
+      // Agrega cada periodo agora que catalogos e dados estao prontos
+      const agregar = (periodo, [vendaItens, vendas]) => {
         const vendasMap = new Map();
         (vendas || []).forEach(v => vendasMap.set(v.vendaCodigo || v.codigo, v));
         const t = agregarVendasItens(vendaItens, vendasMap, pMap, gMap);
@@ -272,8 +334,7 @@ export default function ClienteComercialVendas() {
         const ticketMedio = qtdVendas > 0 ? receita / qtdVendas : 0;
         return {
           ...periodo,
-          receita,
-          cmv,
+          receita, cmv,
           lucroBruto: receita - cmv,
           margem: receita > 0 ? ((receita - cmv) / receita) * 100 : 0,
           receitaCombustivel: t.receita_combustivel,
@@ -286,57 +347,43 @@ export default function ClienteComercialVendas() {
           acrescimos: t.acrescimos,
           impostos: t.impostos,
           vendasCanceladas: t.vendas_canceladas,
-          qtdVendas,
-          ticketMedio,
-          porProduto,
-          porDia,
+          qtdVendas, ticketMedio,
+          porProduto, porDia,
         };
       };
 
-      // Fetch auxiliar dos 7 dias antes do inicio do periodo selecionado — serve
-      // apenas para comparar os dias 1-7 do mes atual com a "semana anterior".
-      // Nao afeta KPIs/totais.
-      const buscarBufferSemana = async () => {
-        const [y, m, d] = periodos.atual.dataInicial.split('-').map(Number);
-        const dtFim = new Date(y, m - 1, d);
-        dtFim.setDate(dtFim.getDate() - 1);
-        const dtIni = new Date(dtFim);
-        dtIni.setDate(dtIni.getDate() - 6); // 7 dias no total (D-7 ao D-1)
-        const filtros = {
-          dataInicial: ymd(dtIni),
-          dataFinal: ymd(dtFim),
-          empresaCodigo: empresaSel.empresa_codigo,
-        };
-        const [vendaItens, vendas] = await Promise.all([
-          qualityApi.buscarVendaItens(apiKey, filtros).catch(() => []),
-          qualityApi.buscarVendas(apiKey, filtros).catch(() => []),
-        ]);
-        const vendasMap = new Map();
-        (vendas || []).forEach(v => vendasMap.set(v.vendaCodigo || v.codigo, v));
-        return agregarPorDia(vendaItens, vendasMap, pMap, gMap);
-      };
+      const atual = agregar(periodos.atual, rawAtual);
+      const mesAnt = agregar(periodos.mesAnterior, rawMesAnt);
+      const anoAnt = agregar(periodos.anoAnterior, rawAnoAnt);
 
-      const inicio = performance.now();
-      const [atual, bufferPorDia, mesAnt, anoAnt] = await Promise.all([
-        buscarPeriodo(periodos.atual),
-        buscarBufferSemana(),
-        buscarPeriodo(periodos.mesAnterior),
-        buscarPeriodo(periodos.anoAnterior),
-      ]);
-      // Mescla o buffer de 7 dias no porDia do atual (sem alterar totais)
+      // Buffer: so precisa do porDia para comparacao D vs D-7
+      const [bufVendaItens, bufVendas] = rawBuffer;
+      const bufVendasMap = new Map();
+      (bufVendas || []).forEach(v => bufVendasMap.set(v.vendaCodigo || v.codigo, v));
+      const bufferPorDia = agregarPorDia(bufVendaItens, bufVendasMap, pMap, gMap);
+
       const porDiaCompleto = new Map(atual.porDia);
       bufferPorDia.forEach((produtos, data) => {
         if (!porDiaCompleto.has(data)) porDiaCompleto.set(data, produtos);
       });
       const atualComBuffer = { ...atual, porDia: porDiaCompleto };
-      setDados({ atual: atualComBuffer, mesAnterior: mesAnt, anoAnterior: anoAnt });
-      setGeradoEm(performance.now() - inicio);
+      const dadosFinais = { atual: atualComBuffer, mesAnterior: mesAnt, anoAnterior: anoAnt };
+      const tempo = performance.now() - inicio;
+
+      setDados(dadosFinais);
+      setGeradoEm(tempo);
+
+      // Persiste no cache
+      _cacheVendas.set(cacheKey, {
+        timestamp: Date.now(),
+        data: { dados: dadosFinais, produtosMap: pMap, gruposCatMap: gMap, geradoEm: tempo },
+      });
     } catch (err) {
       setErro('Erro ao buscar vendas: ' + err.message);
     } finally {
       setLoadingDados(false);
     }
-  }, [empresaSel, chaveApiSessao, periodos, produtosMap, gruposCatMap]);
+  }, [empresaSel, chaveApiSessao, periodos, produtosMap, gruposCatMap, mesSelecionado, apenasDiasFechados]);
 
   useEffect(() => {
     if (empresaSel?.empresa_codigo) carregar();
@@ -387,7 +434,8 @@ export default function ClienteComercialVendas() {
             className="h-3.5 w-3.5 accent-blue-600" />
           Apenas dias fechados
         </label>
-        <button onClick={carregar} disabled={loadingDados}
+        <button onClick={() => carregar({ force: true })} disabled={loadingDados}
+          title="Força recarga ignorando o cache"
           className="flex items-center gap-2 h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
           {loadingDados ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           Atualizar

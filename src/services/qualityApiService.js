@@ -167,14 +167,17 @@ function dividirIntervalo(dataInicial, dataFinal, diasPorChunk = DIAS_POR_CHUNK)
 }
 
 // ─── Pagina paralelamente: divide periodo + cache + dedupe ────
+// `chunkDays` opcional em baseParams: quando informado, sobrescreve o tamanho
+// padrao (5 dias). Util para endpoints de dados esparsos como TITULO_RECEBER
+// com apenasPendente=true, onde 5d gera muitos requests vazios.
 async function fetchPagParalelo(urlBase, endpoint, apiKey, baseParams, ttl = CACHE_TTL_MS) {
-  const { dataInicial, dataFinal, ...resto } = baseParams;
+  const { dataInicial, dataFinal, chunkDays, ...resto } = baseParams;
 
   if (!dataInicial || !dataFinal) {
     return fetchPagSequencial(urlBase, endpoint, apiKey, baseParams);
   }
 
-  const chunks = dividirIntervalo(dataInicial, dataFinal);
+  const chunks = dividirIntervalo(dataInicial, dataFinal, chunkDays || DIAS_POR_CHUNK);
 
   const arrays = await Promise.all(
     chunks.map(async (c) => {
@@ -285,9 +288,16 @@ export async function buscarAdministradoras(apiKey, urlBase = DEFAULT_URL_BASE) 
 }
 
 // Endpoints com filtro de data - paralelos + cached em memoria (5 min)
+// Pagar/receber sao tipicamente filtrados por apenasPendente=true (dados
+// esparsos), entao usam chunks de 90 dias em vez dos 5 dias padrao —
+// reduz drasticamente o numero de requests sem ultrapassar o limite de
+// 1500 linhas por pagina (cursor pagination cobre o overflow).
+const CHUNK_PENDENTES = 90;
+
 export async function buscarTitulosPagar(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'TITULO_PAGAR', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+    chunkDays: CHUNK_PENDENTES,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
   });
 }
@@ -295,6 +305,7 @@ export async function buscarTitulosPagar(apiKey, { dataInicial, dataFinal, empre
 export async function buscarTitulosReceber(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'TITULO_RECEBER', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+    chunkDays: CHUNK_PENDENTES,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
   });
 }
@@ -303,6 +314,7 @@ export async function buscarTitulosReceber(apiKey, { dataInicial, dataFinal, emp
 export async function buscarDuplicatas(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'DUPLICATA', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+    chunkDays: CHUNK_PENDENTES,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
   });
 }
@@ -311,6 +323,7 @@ export async function buscarDuplicatas(apiKey, { dataInicial, dataFinal, empresa
 export async function buscarCartoes(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'CARTAO', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+    chunkDays: CHUNK_PENDENTES,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
   });
 }
@@ -319,6 +332,7 @@ export async function buscarCartoes(apiKey, { dataInicial, dataFinal, empresaCod
 export async function buscarCheques(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'CHEQUE', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+    chunkDays: CHUNK_PENDENTES,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
   });
 }
