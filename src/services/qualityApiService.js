@@ -360,3 +360,10 @@ export async function buscarVendaFormaPagamento(apiKey, { dataInicial, dataFinal
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
   });
 }
+
+// Aferições de bicos/tanques (calibração de bombas) por turno/caixa
+export async function buscarAfericoes(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
+  return fetchPagParalelo(urlBase, 'AFERICAO', apiKey, {
+    limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+  });
+}
