@@ -354,16 +354,35 @@ export async function buscarCaixas(apiKey, { dataInicial, dataFinal, empresaCodi
   });
 }
 
-// Formas de pagamento por venda (dinheiro, cartao, cheque, prazo, etc.)
+// Formas de pagamento por venda (dinheiro, cartao, cheque, prazo, etc.).
+// Liga ao turno via VENDA.caixaCodigo (vendaCodigo da forma -> caixaCodigo da venda).
 export async function buscarVendaFormaPagamento(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'VENDA_FORMA_PAGAMENTO', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
   });
 }
 
-// Aferições de bicos/tanques (calibração de bombas) por turno/caixa
-export async function buscarAfericoes(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
-  return fetchPagParalelo(urlBase, 'AFERICAO', apiKey, {
+// Catálogo de formas de pagamento (codigo -> descricao). Usado para resolver
+// o nome em VENDA_FORMA_PAGAMENTO, que normalmente traz só o codigo.
+export async function buscarFormasPagamento(apiKey, urlBase = DEFAULT_URL_BASE) {
+  return fetchPagParalelo(urlBase, 'FORMA_PAGAMENTO', apiKey, {
+    limite: LIMITE_PADRAO,
+  }, CACHE_TTL_CATALOGO_MS);
+}
+
+// Catálogo de bicos (codigoBico -> bicoNumero, codigoProduto, etc.). Usado
+// para resolver o numero do bico e produto associado nos abastecimentos.
+export async function buscarBicos(apiKey, urlBase = DEFAULT_URL_BASE) {
+  return fetchPagParalelo(urlBase, 'BICO', apiKey, {
+    limite: LIMITE_PADRAO,
+  }, CACHE_TTL_CATALOGO_MS);
+}
+
+// Abastecimentos por bico/turno. Aferições estão neste mesmo endpoint —
+// são linhas com a flag `afericao = true` (ou 'S'). Para listar somente
+// aferições, filtre o resultado por `afericao` truthy.
+export async function buscarAbastecimentos(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
+  return fetchPagParalelo(urlBase, 'ABASTECIMENTO', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
   });
 }

@@ -92,21 +92,24 @@ export default function ClienteComercialOperacao() {
       const buscarUmaEmpresa = async (emp) => {
         const chave = chaves.find(c => c.id === emp.chave_api_id);
         if (!chave) {
-          return { empresa: emp, caixas: [], vendas: [], vendaItens: [], formasPagto: [], afericoes: [],
-            funcionariosMap: new Map(), produtosMap: new Map(), gruposMap: new Map(),
+          return { empresa: emp, caixas: [], vendas: [], vendaItens: [], formasPagto: [], abastecimentos: [],
+            funcionariosMap: new Map(), produtosMap: new Map(), gruposMap: new Map(), formasPagtoMap: new Map(),
+            bicosMap: new Map(),
             erro: 'Chave API não encontrada' };
         }
         const apiKey = chave.chave;
         const filtrosEmp = { ...filtros, empresaCodigo: emp.empresa_codigo };
-        const [caixas, vendas, vendaItens, formasPagto, afericoes, funcionarios, produtos, grupos] = await Promise.all([
+        const [caixas, vendas, vendaItens, formasPagto, abastecimentos, funcionarios, produtos, grupos, formasPagtoCatalogo, bicos] = await Promise.all([
           qualityApi.buscarCaixas(apiKey, filtrosEmp).catch(() => []),
           qualityApi.buscarVendas(apiKey, filtrosEmp).catch(() => []),
           qualityApi.buscarVendaItens(apiKey, filtrosEmp).catch(() => []),
           qualityApi.buscarVendaFormaPagamento(apiKey, filtrosEmp).catch(() => []),
-          qualityApi.buscarAfericoes(apiKey, filtrosEmp).catch(() => []),
+          qualityApi.buscarAbastecimentos(apiKey, filtrosEmp).catch(() => []),
           qualityApi.buscarFuncionarios(apiKey).catch(() => []),
           qualityApi.buscarProdutos(apiKey).catch(() => []),
           qualityApi.buscarGrupos(apiKey).catch(() => []),
+          qualityApi.buscarFormasPagamento(apiKey).catch(() => []),
+          qualityApi.buscarBicos(apiKey).catch(() => []),
         ]);
         const funcionariosMap = new Map();
         (funcionarios || []).forEach(f => {
@@ -126,11 +129,26 @@ export default function ClienteComercialOperacao() {
           const cod = g.grupoCodigo ?? g.codigo;
           if (cod != null) gruposMap.set(Number(cod), g);
         });
+        const formasPagtoMap = new Map();
+        (formasPagtoCatalogo || []).forEach(fp => {
+          const cod = fp.formaPagamentoCodigo ?? fp.codigo;
+          const nome = fp.descricao || fp.nome || fp.formaPagamento;
+          if (cod != null && nome) formasPagtoMap.set(Number(cod), String(nome).trim());
+        });
+        const bicosMap = new Map();
+        (bicos || []).forEach(b => {
+          const cod = b.codigoBico ?? b.bicoCodigo ?? b.codigo;
+          if (cod == null) return;
+          bicosMap.set(Number(cod), {
+            bicoNumero: b.bicoNumero ?? b.numero ?? null,
+            codigoProduto: b.codigoProduto ?? b.produtoCodigo ?? null,
+          });
+        });
         return {
           empresa: emp,
           caixas: caixas || [], vendas: vendas || [], vendaItens: vendaItens || [],
-          formasPagto: formasPagto || [], afericoes: afericoes || [],
-          funcionariosMap, produtosMap, gruposMap,
+          formasPagto: formasPagto || [], abastecimentos: abastecimentos || [],
+          funcionariosMap, produtosMap, gruposMap, formasPagtoMap, bicosMap,
         };
       };
 
@@ -162,7 +180,18 @@ export default function ClienteComercialOperacao() {
       const dados = dadosPorEmpresa.get(emp.id);
       if (!dados) return { empresa: emp, turnos: [], totais: vazioTotais() };
 
-      const { caixas, vendas, vendaItens, formasPagto, afericoes, funcionariosMap, produtosMap, gruposMap } = dados;
+      // Destructure defensivo: cobre cenarios onde o cache em estado pode
+      // estar de uma versao anterior do shape (ex: durante hot-reload).
+      const caixas         = dados.caixas         || [];
+      const vendas         = dados.vendas         || [];
+      const vendaItens     = dados.vendaItens     || [];
+      const formasPagto    = dados.formasPagto    || [];
+      const abastecimentos = dados.abastecimentos || [];
+      const funcionariosMap = dados.funcionariosMap || new Map();
+      const produtosMap     = dados.produtosMap     || new Map();
+      const gruposMap       = dados.gruposMap       || new Map();
+      const formasPagtoMap  = dados.formasPagtoMap  || new Map();
+      const bicosMap        = dados.bicosMap        || new Map();
 
       // Indexa vendas por caixaCodigo (so nao canceladas) e cria mapa
       // vendaCodigo -> caixaCodigo para ligar itens/pagamentos ao turno.
@@ -198,10 +227,44 @@ export default function ClienteComercialOperacao() {
         formasPorCaixa.get(cx).push(fp);
       });
 
-      // Indexa aferições por caixa
+      // Aferições estão dentro de ABASTECIMENTO — linhas com `afericao = true`.
+      const ehAfericao = (a) => a && a.afericao === true;
+
+      // Helper: extrai data ISO (yyyy-mm-dd) ignorando timezone do dataHora
+      const extrairData = (s) => s ? String(s).slice(0, 10) : null;
+      // Helper: normaliza datetime para comparacao (yyyy-mm-dd HH:MM:SS)
+      const normalizarDt = (s) => {
+        if (!s) return null;
+        // Remove timezone do final ('-03:00', '+00:00', 'Z') e troca T por espaco
+        return String(s).replace(/[+-]\d{2}:?\d{2}$/, '').replace('Z', '').replace('T', ' ').slice(0, 19);
+      };
+
+      // Janelas de cada turno (caixa) — matching por datetime quando ABASTECIMENTO
+      // nao tem caixaCodigo direto (o que e o caso normal nesse endpoint).
+      const janelasCaixa = (caixas || []).map(c => ({
+        caixaCodigo: c.caixaCodigo,
+        ini: normalizarDt(c.abertura),
+        fim: normalizarDt(c.fechamento || c.dataFechamento) || '9999-12-31 23:59:59',
+        dataAbertura: extrairData(c.abertura),
+      }));
+      const acharCaixaPorData = (dataHora) => {
+        if (!dataHora) return null;
+        const dt = normalizarDt(dataHora);
+        if (!dt) return null;
+        // 1) Tenta janela exata
+        const exato = janelasCaixa.find(j => j.ini && dt >= j.ini && dt <= j.fim);
+        if (exato) return exato.caixaCodigo;
+        // 2) Fallback: mesma data de abertura do caixa
+        const dataDt = extrairData(dataHora);
+        const mesmaData = janelasCaixa.find(j => j.dataAbertura === dataDt);
+        return mesmaData ? mesmaData.caixaCodigo : null;
+      };
+
       const afericoesPorCaixa = new Map();
-      (afericoes || []).forEach(a => {
-        const cx = a.caixaCodigo;
+      (abastecimentos || []).forEach(a => {
+        if (!ehAfericao(a)) return;
+        const dataHora = a.dataHoraAbastecimento || a.dataHora || a.data || a.horario;
+        const cx = a.caixaCodigo ?? a.codigoCaixa ?? acharCaixaPorData(dataHora);
         if (cx == null) return;
         if (!afericoesPorCaixa.has(cx)) afericoesPorCaixa.set(cx, []);
         afericoesPorCaixa.get(cx).push(a);
@@ -216,7 +279,18 @@ export default function ClienteComercialOperacao() {
         const qtdVendas = vendasTurno.length;
         const ticketMedio = qtdVendas > 0 ? totalVendas / qtdVendas : 0;
         const funcResp = funcionariosMap.get(Number(c.funcionarioCodigo));
-        const fechado = String(c.fechado || '').toUpperCase() === 'S';
+        // Detecta fechamento de forma resiliente: aceita boolean, 'S'/'s',
+        // 'true', 1, ou — fallback — a presenca de uma data de fechamento.
+        // Tambem aceita variacoes do campo (dataFechamento/horaFechamento).
+        const dataFech = c.fechamento || c.dataFechamento || c.horaFechamento || c.data_fechamento || null;
+        const flagF = c.fechado;
+        const fechado = (
+          flagF === true ||
+          flagF === 'S' || flagF === 's' ||
+          flagF === 1 ||
+          String(flagF).toLowerCase() === 'true' ||
+          (dataFech != null && String(dataFech).trim() !== '')
+        );
         const diferenca = toN(c.diferenca);
 
         // Categorias (combustivel/automotivos/conveniencia/outros) via classificarItem
@@ -243,12 +317,17 @@ export default function ClienteComercialOperacao() {
           totalAcrescimos += toN(it.totalAcrescimo);
         });
 
-        // Formas de pagamento agregadas por descricao/codigo
+        // Formas de pagamento agregadas por nome — resolve via catalogo de
+        // FORMA_PAGAMENTO (formaPagamentoCodigo -> descricao). Em ultimo
+        // caso usa o que vier inline ou um placeholder com codigo.
         const formasMap = new Map();
         (formasPorCaixa.get(c.caixaCodigo) || []).forEach(fp => {
           const v = vendasMapPorCodigo.get(fp.vendaCodigo);
           if (v && (v.cancelada || 'N') === 'S') return;
-          const nome = (fp.formaPagamento || fp.descricao || fp.nome || `Forma #${fp.formaPagamentoCodigo ?? fp.codigo ?? '?'}`).trim();
+          const cod = fp.formaPagamentoCodigo ?? fp.codigoFormaPagamento ?? fp.codigo;
+          const nomeCatalogo = cod != null ? formasPagtoMap.get(Number(cod)) : null;
+          const nome = (nomeCatalogo || fp.formaPagamento || fp.descricao || fp.nome ||
+            (cod != null ? `Forma #${cod}` : 'Não identificada')).toString().trim();
           const valor = toN(fp.valor || fp.valorPagamento || fp.totalPagamento);
           if (!formasMap.has(nome)) formasMap.set(nome, { nome, qtd: 0, valor: 0 });
           const ag = formasMap.get(nome);
@@ -258,23 +337,41 @@ export default function ClienteComercialOperacao() {
         const formas = Array.from(formasMap.values()).sort((a, b) => b.valor - a.valor);
         const totalFormas = formas.reduce((s, f) => s + f.valor, 0);
 
-        // Aferições do turno
-        const afericoesTurno = (afericoesPorCaixa.get(c.caixaCodigo) || []).map(a => ({
-          afericaoCodigo: a.afericaoCodigo || a.codigo,
-          bicoCodigo: a.bicoCodigo,
-          bicoNome: a.bicoNome || a.bico || (a.bicoCodigo != null ? `Bico ${a.bicoCodigo}` : '—'),
-          produtoNome: a.produtoNome || a.produto || (a.produtoCodigo != null ? produtosMap.get(Number(a.produtoCodigo))?.nome || `Produto #${a.produtoCodigo}` : ''),
-          quantidade: toN(a.quantidade || a.litros),
-          dataHora: a.dataHora || a.data || a.horario || null,
-          funcionarioNome: funcionariosMap.get(Number(a.funcionarioCodigo))?.nome || (a.funcionarioCodigo != null ? `Funcionário #${a.funcionarioCodigo}` : ''),
-        }));
+        // Aferições do turno (abastecimentos com afericao=true)
+        // Bico/produto resolvidos via catalogo BICO (codigoBico -> bicoNumero,
+        // codigoProduto). ABASTECIMENTO normalmente vem com codigoProduto null.
+        const afericoesTurno = (afericoesPorCaixa.get(c.caixaCodigo) || []).map(a => {
+          const codBico = a.codigoBico ?? a.bicoCodigo;
+          const bicoInfo = codBico != null ? bicosMap.get(Number(codBico)) : null;
+          const bicoNumero = bicoInfo?.bicoNumero;
+          // Produto: usa codigoProduto do abastecimento se houver, senao puxa
+          // do catalogo BICO via codigoBico.
+          const codProduto = a.codigoProduto ?? a.produtoCodigo ?? bicoInfo?.codigoProduto;
+          const produto = codProduto != null ? produtosMap.get(Number(codProduto)) : null;
+          const codFrentista = a.codigoFrentista ?? a.funcionarioCodigo;
+          return {
+            afericaoCodigo: a.abastecimentoCodigo ?? a.afericaoCodigo ?? a.codigo,
+            bicoCodigo: codBico,
+            bicoNome: bicoNumero != null
+              ? `Bico ${bicoNumero}`
+              : (a.bicoNome || a.bico || (codBico != null ? `Bico #${codBico}` : '—')),
+            produtoNome: produto?.nome || produto?.descricao
+              || a.produtoNome || a.produto
+              || (codProduto != null ? `Produto #${codProduto}` : '—'),
+            quantidade: toN(a.quantidade ?? a.litros),
+            valor: toN(a.valorTotal ?? a.valor),
+            dataHora: a.dataHoraAbastecimento || a.dataHora || a.data || a.horario || null,
+            funcionarioNome: funcionariosMap.get(Number(codFrentista))?.nome ||
+              (codFrentista != null ? `Funcionário #${codFrentista}` : '—'),
+          };
+        });
 
         return {
           caixaCodigo: c.caixaCodigo,
           turno: c.turno,
           turnoCodigo: c.turnoCodigo,
           abertura: c.abertura,
-          fechamento: c.fechamento,
+          fechamento: dataFech,
           fechado,
           funcionarioNome: funcResp?.nome || `Funcionário #${c.funcionarioCodigo}`,
           apurado: toN(c.apurado),
@@ -422,7 +519,7 @@ export default function ClienteComercialOperacao() {
                     {/* Header da empresa (clicavel quando multi) */}
                     <div
                       onClick={() => multiEmpresa && toggleEmpresa(empresa.id)}
-                      className={`px-5 py-3 border-b border-gray-100 flex items-center gap-3 ${multiEmpresa ? 'cursor-pointer hover:bg-gray-50/60' : ''}`}>
+                      className={`px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-3 ${multiEmpresa ? 'cursor-pointer hover:bg-gray-50/60 dark:hover:bg-white/5' : ''}`}>
                       {multiEmpresa && (
                         <motion.div animate={{ rotate: empAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
                           <ChevronRight className="h-4 w-4 text-gray-400" />
@@ -489,7 +586,7 @@ function TabelaTurnos({ turnos, empresaId, turnosExpandidos, onToggleTurno }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50/80 border-b border-gray-100">
+        <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
           <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
             <th className="px-4 py-2.5">Status</th>
             <th className="px-3 py-2.5">Data</th>
@@ -499,19 +596,19 @@ function TabelaTurnos({ turnos, empresaId, turnosExpandidos, onToggleTurno }) {
             <th className="px-3 py-2.5">Fechamento</th>
             <th className="px-3 py-2.5 text-right">Vendas</th>
             <th className="px-3 py-2.5 text-right">Faturamento</th>
-            <th className="px-3 py-2.5 text-right">Ticket médio</th>
+            <th className="px-3 py-2.5 text-right">Aferições</th>
             <th className="px-3 py-2.5 text-right">Apurado</th>
             <th className="px-3 py-2.5 text-right">Diferença</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-gray-100 dark:divide-white/10">
           {turnos.map(t => {
             const key = `${empresaId}|${t.caixaCodigo}`;
             const aberto = turnosExpandidos.has(key);
             return (
               <React.Fragment key={key}>
                 <tr onClick={() => onToggleTurno(key)}
-                  className={`cursor-pointer transition-colors ${aberto ? 'bg-blue-50/30' : 'hover:bg-gray-50/60'}`}>
+                  className={`cursor-pointer transition-colors ${aberto ? 'bg-blue-50/30 dark:bg-blue-500/10' : 'hover:bg-gray-50/60 dark:hover:bg-white/5'}`}>
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
                       <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
@@ -532,7 +629,15 @@ function TabelaTurnos({ turnos, empresaId, turnosExpandidos, onToggleTurno }) {
                   <td className="px-3 py-2 text-[11.5px] text-gray-600 font-mono tabular-nums">{t.fechado ? formatHora(t.fechamento) : '—'}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-[12px] text-gray-800">{t.qtdVendas}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(t.totalVendas)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-700">{formatCurrency(t.ticketMedio)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {t.afericoes.length > 0 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30 px-2 py-0.5 text-[11px] font-medium">
+                        <Gauge className="h-3 w-3" /> {t.afericoes.length}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-gray-400">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-700">{t.fechado ? formatCurrency(t.apurado) : '—'}</td>
                   <td className={`px-3 py-2 text-right font-mono tabular-nums text-[11.5px] font-semibold ${t.diferenca === 0 ? 'text-gray-500' : t.diferenca > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                     {t.fechado ? formatCurrency(t.diferenca) : '—'}
@@ -540,7 +645,7 @@ function TabelaTurnos({ turnos, empresaId, turnosExpandidos, onToggleTurno }) {
                 </tr>
                 {aberto && (
                   <tr>
-                    <td colSpan={11} className="bg-gray-50/40 px-5 py-4">
+                    <td colSpan={11} className="bg-gray-50/40 dark:bg-white/[0.02] px-5 py-4">
                       <DetalheTurno turno={t} />
                     </td>
                   </tr>
@@ -556,6 +661,7 @@ function TabelaTurnos({ turnos, empresaId, turnosExpandidos, onToggleTurno }) {
 
 // ─── Detalhe expandido do turno ──────────────────────────────
 function DetalheTurno({ turno }) {
+  const [afericoesAberto, setAfericoesAberto] = useState(false);
   const totalCategorias =
     turno.categorias.combustivel.receita +
     turno.categorias.automotivos.receita +
@@ -610,28 +716,38 @@ function DetalheTurno({ turno }) {
           })}
         </div>
 
-        {(turno.totalDescontos > 0 || turno.totalAcrescimos > 0) && (
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {turno.totalDescontos > 0 && (
-              <div className="rounded-lg border border-rose-100 bg-rose-50/40 px-3 py-2 flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-rose-600 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] uppercase tracking-wider text-rose-700 font-semibold">Descontos</p>
-                  <p className="text-[13px] font-bold tabular-nums text-rose-900">{formatCurrency(turno.totalDescontos)}</p>
-                </div>
-              </div>
-            )}
-            {turno.totalAcrescimos > 0 && (
-              <div className="rounded-lg border border-violet-100 bg-violet-50/40 px-3 py-2 flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-violet-600 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] uppercase tracking-wider text-violet-700 font-semibold">Acréscimos</p>
-                  <p className="text-[13px] font-bold tabular-nums text-violet-900">{formatCurrency(turno.totalAcrescimos)}</p>
-                </div>
-              </div>
-            )}
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          <div className={`rounded-lg border px-3 py-2 flex items-center gap-2 ${
+            turno.totalDescontos > 0
+              ? 'border-rose-100 bg-rose-50/40'
+              : 'border-gray-100 bg-gray-50/40'
+          }`}>
+            <TrendingDown className={`h-4 w-4 flex-shrink-0 ${turno.totalDescontos > 0 ? 'text-rose-600' : 'text-gray-400'}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-[10px] uppercase tracking-wider font-semibold ${turno.totalDescontos > 0 ? 'text-rose-700' : 'text-gray-500'}`}>
+                Descontos
+              </p>
+              <p className={`text-[13px] font-bold tabular-nums ${turno.totalDescontos > 0 ? 'text-rose-900' : 'text-gray-500'}`}>
+                {formatCurrency(turno.totalDescontos)}
+              </p>
+            </div>
           </div>
-        )}
+          <div className={`rounded-lg border px-3 py-2 flex items-center gap-2 ${
+            turno.totalAcrescimos > 0
+              ? 'border-emerald-100 bg-emerald-50/40'
+              : 'border-gray-100 bg-gray-50/40'
+          }`}>
+            <TrendingUp className={`h-4 w-4 flex-shrink-0 ${turno.totalAcrescimos > 0 ? 'text-emerald-600' : 'text-gray-400'}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-[10px] uppercase tracking-wider font-semibold ${turno.totalAcrescimos > 0 ? 'text-emerald-700' : 'text-gray-500'}`}>
+                Acréscimos
+              </p>
+              <p className={`text-[13px] font-bold tabular-nums ${turno.totalAcrescimos > 0 ? 'text-emerald-900' : 'text-gray-500'}`}>
+                {formatCurrency(turno.totalAcrescimos)}
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Formas de pagamento */}
@@ -646,7 +762,7 @@ function DetalheTurno({ turno }) {
         ) : (
           <div className="rounded-lg border border-gray-100 bg-white overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 border-b border-gray-100">
+              <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="px-3 py-2">Forma</th>
                   <th className="px-3 py-2 text-right">Qtd</th>
@@ -654,11 +770,11 @@ function DetalheTurno({ turno }) {
                   <th className="px-3 py-2 text-right">% do total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/10">
                 {turno.formas.map(f => {
                   const pct = turno.totalFormas > 0 ? (f.valor / turno.totalFormas) * 100 : 0;
                   return (
-                    <tr key={f.nome} className="hover:bg-gray-50/40">
+                    <tr key={f.nome} className="hover:bg-gray-50/40 dark:hover:bg-white/5">
                       <td className="px-3 py-1.5 text-[12px] text-gray-800">{f.nome}</td>
                       <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11.5px] text-gray-700">{f.qtd}</td>
                       <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[12px] font-semibold text-gray-900">{formatCurrency(f.valor)}</td>
@@ -674,7 +790,7 @@ function DetalheTurno({ turno }) {
                   );
                 })}
               </tbody>
-              <tfoot className="bg-gray-50/60 border-t border-gray-100">
+              <tfoot className="bg-gray-50/60 dark:bg-white/[0.03] border-t border-gray-100 dark:border-white/10">
                 <tr className="text-[12px] font-semibold">
                   <td className="px-3 py-2 text-gray-700">Total</td>
                   <td />
@@ -687,42 +803,87 @@ function DetalheTurno({ turno }) {
         )}
       </section>
 
-      {/* Aferições */}
+      {/* Aferições — card clicavel que expande a tabela */}
       <section>
-        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-          <Gauge className="h-3 w-3" /> Aferições realizadas
-          <span className="normal-case text-gray-400">· {turno.afericoes.length}</span>
-        </p>
-        {turno.afericoes.length === 0 ? (
-          <div className="rounded-lg border border-gray-100 bg-white px-3 py-4 text-center text-[12px] text-gray-500">
-            Nenhuma aferição registrada neste turno.
+        <button
+          type="button"
+          onClick={() => turno.afericoes.length > 0 && setAfericoesAberto(o => !o)}
+          disabled={turno.afericoes.length === 0}
+          className={`w-full rounded-lg border px-4 py-3 flex items-center gap-3 transition-colors ${
+            turno.afericoes.length === 0
+              ? 'border-gray-100 bg-white cursor-default'
+              : afericoesAberto
+              ? 'border-violet-200 bg-violet-50/40 dark:border-violet-500/30 dark:bg-violet-500/10 cursor-pointer'
+              : 'border-gray-100 bg-white hover:bg-gray-50/60 dark:hover:bg-white/5 cursor-pointer'
+          }`}
+        >
+          {turno.afericoes.length > 0 && (
+            <motion.div animate={{ rotate: afericoesAberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+              <ChevronRight className="h-4 w-4 text-gray-400" />
+            </motion.div>
+          )}
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+            turno.afericoes.length > 0
+              ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300'
+              : 'bg-gray-100 text-gray-400 dark:bg-white/5 dark:text-gray-500'
+          }`}>
+            <Gauge className="h-4 w-4" />
           </div>
-        ) : (
-          <div className="rounded-lg border border-gray-100 bg-white overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 border-b border-gray-100">
-                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-3 py-2">Hora</th>
-                  <th className="px-3 py-2">Bico</th>
-                  <th className="px-3 py-2">Produto</th>
-                  <th className="px-3 py-2">Funcionário</th>
-                  <th className="px-3 py-2 text-right">Quantidade</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {turno.afericoes.map((a, i) => (
-                  <tr key={a.afericaoCodigo || i} className="hover:bg-gray-50/40">
-                    <td className="px-3 py-1.5 text-[11.5px] text-gray-700 font-mono tabular-nums">{formatHora(a.dataHora)}</td>
-                    <td className="px-3 py-1.5 text-[11.5px] text-gray-700">{a.bicoNome}</td>
-                    <td className="px-3 py-1.5 text-[11.5px] text-gray-700">{a.produtoNome || '—'}</td>
-                    <td className="px-3 py-1.5 text-[11.5px] text-gray-600 truncate max-w-[180px]">{a.funcionarioNome || '—'}</td>
-                    <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[12px] text-gray-900">{a.quantidade.toFixed(2)} L</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex-1 min-w-0 text-left">
+            <p className={`text-[10px] font-semibold uppercase tracking-wider ${
+              turno.afericoes.length > 0 ? 'text-violet-700 dark:text-violet-300' : 'text-gray-500 dark:text-gray-400'
+            }`}>
+              Aferições realizadas
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {turno.afericoes.length === 0
+                ? 'Nenhuma aferição registrada neste turno'
+                : `${turno.afericoes.length} aferi${turno.afericoes.length === 1 ? 'ção' : 'ções'} · clique para ${afericoesAberto ? 'recolher' : 'ver detalhes'}`}
+            </p>
           </div>
-        )}
+          {turno.afericoes.length > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[2rem] h-7 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-200 text-[12px] font-bold tabular-nums px-2.5">
+              {turno.afericoes.length}
+            </span>
+          )}
+        </button>
+
+        <AnimatePresence initial={false}>
+          {afericoesAberto && turno.afericoes.length > 0 && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="mt-2 rounded-lg border border-gray-100 bg-white overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
+                    <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="px-3 py-2">Hora</th>
+                      <th className="px-3 py-2">Bico</th>
+                      <th className="px-3 py-2">Produto</th>
+                      <th className="px-3 py-2">Funcionário</th>
+                      <th className="px-3 py-2 text-right">Quantidade</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/10">
+                    {turno.afericoes.map((a, i) => (
+                      <tr key={a.afericaoCodigo || i} className="hover:bg-gray-50/40 dark:hover:bg-white/5">
+                        <td className="px-3 py-1.5 text-[11.5px] text-gray-700 font-mono tabular-nums">{formatHora(a.dataHora)}</td>
+                        <td className="px-3 py-1.5 text-[11.5px] text-gray-700">{a.bicoNome}</td>
+                        <td className="px-3 py-1.5 text-[11.5px] text-gray-700">{a.produtoNome || '—'}</td>
+                        <td className="px-3 py-1.5 text-[11.5px] text-gray-600 truncate max-w-[180px]">{a.funcionarioNome || '—'}</td>
+                        <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[12px] text-gray-900">{a.quantidade.toFixed(2)} L</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
     </div>
   );
@@ -731,25 +892,25 @@ function DetalheTurno({ turno }) {
 function StatusFechamento({ turno }) {
   if (!turno.fechado) {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 px-4 py-3 flex items-center gap-3">
         <span className="relative flex h-2.5 w-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
         </span>
         <div className="flex-1">
-          <p className="text-[13px] font-semibold text-amber-900">Caixa em aberto</p>
-          <p className="text-[11px] text-amber-700">Aberto em {formatDataHoraBR(turno.abertura)} · ainda não foi fechado.</p>
+          <p className="text-[13px] font-semibold text-amber-900 dark:text-amber-200">Caixa em aberto</p>
+          <p className="text-[11px] text-amber-700 dark:text-amber-300/80">Aberto em {formatDataHoraBR(turno.abertura)} · ainda não foi fechado.</p>
         </div>
       </div>
     );
   }
   if (turno.fechouSemDiferenca) {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3">
-        <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10 px-4 py-3 flex items-center gap-3">
+        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-300 flex-shrink-0" />
         <div className="flex-1">
-          <p className="text-[13px] font-semibold text-emerald-900">Caixa fechado sem diferença</p>
-          <p className="text-[11px] text-emerald-700">
+          <p className="text-[13px] font-semibold text-emerald-900 dark:text-emerald-200">Caixa fechado sem diferença</p>
+          <p className="text-[11px] text-emerald-700 dark:text-emerald-300/80">
             Fechado em {formatDataHoraBR(turno.fechamento)} · apurado {formatCurrency(turno.apurado)}.
           </p>
         </div>
@@ -759,15 +920,15 @@ function StatusFechamento({ turno }) {
   // Fechado com diferenca
   const positiva = turno.diferenca > 0;
   return (
-    <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 flex items-center gap-3">
-      <AlertCircle className="h-5 w-5 text-rose-600 flex-shrink-0" />
+    <div className="rounded-lg border border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10 px-4 py-3 flex items-center gap-3">
+      <AlertCircle className="h-5 w-5 text-rose-600 dark:text-rose-300 flex-shrink-0" />
       <div className="flex-1">
-        <p className="text-[13px] font-semibold text-rose-900">
+        <p className="text-[13px] font-semibold text-rose-900 dark:text-rose-200">
           Caixa fechado com diferença {positiva ? '(sobra)' : '(falta)'}
         </p>
-        <p className="text-[11px] text-rose-700">
+        <p className="text-[11px] text-rose-700 dark:text-rose-300/80">
           Fechado em {formatDataHoraBR(turno.fechamento)} · apurado {formatCurrency(turno.apurado)} ·
-          diferença <strong className={positiva ? 'text-emerald-700' : 'text-rose-700'}>{formatCurrency(turno.diferenca)}</strong>
+          diferença <strong className={positiva ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}>{formatCurrency(turno.diferenca)}</strong>
         </p>
       </div>
     </div>
@@ -861,7 +1022,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
             transition={{ duration: 0.12 }}
             className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
             <button type="button" onClick={onToggleTodas}
-              className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
+              className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left">
               <input type="checkbox" checked={todasMarcadas}
                 onChange={() => {}} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span className="text-[12.5px] font-medium text-gray-700">
@@ -873,7 +1034,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
                 const marcada = selecionadas.has(emp.id);
                 return (
                   <label key={emp.id}
-                    className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
+                    className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer">
                     <input type="checkbox" checked={marcada}
                       onChange={() => onToggle(emp.id)}
                       className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
