@@ -31,7 +31,6 @@ export const PERMISSOES_CLIENTE = [
   { key: 'bpo', label: 'Serviços BPO', grupo: 'Operacional' },
   { key: 'documentos', label: 'Documentos', grupo: 'Operacional' },
   { key: 'financeiro', label: 'Financeiro', grupo: 'Operacional' },
-  { key: 'tarefas', label: 'Gestor de Tarefas', grupo: 'Operacional' },
   { key: 'suporte', label: 'Suporte', grupo: 'Atendimento' },
   { key: 'trocar_empresa', label: 'Alternar entre empresas da rede', grupo: 'Administração da Rede' },
   { key: 'gerenciar_usuarios', label: 'Gerenciar usuários da rede', grupo: 'Administração da Rede' },

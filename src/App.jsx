@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 // Landing
+import LandingPage from './pages/LandingPage';
 import LandingPortal from './pages/LandingPortal';
 
 // Admin
@@ -51,11 +52,9 @@ import ClienteAgendaFinanceira from './pages/cliente/ClienteAgendaFinanceira';
 import ClienteSuporte from './pages/cliente/ClienteSuporte';
 import ClienteSangrias from './pages/cliente/ClienteSangrias';
 import ClienteUsuarios from './pages/cliente/ClienteUsuarios';
-import ClienteTarefas from './pages/cliente/ClienteTarefas';
 import ClienteComercialVendas from './pages/cliente/ClienteComercialVendas';
 import ClienteComercialOperacao from './pages/cliente/ClienteComercialOperacao';
 import ClienteComercialProdutividade from './pages/cliente/ClienteComercialProdutividade';
-import ClienteComercialComissionamento from './pages/cliente/ClienteComercialComissionamento';
 
 // Auth
 import { RequireAdmin, RequireCliente } from './components/auth/RequireAuth';
@@ -64,8 +63,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing - escolha do portal */}
-        <Route path="/" element={<LandingPortal />} />
+        {/* Landing comercial pública */}
+        <Route path="/" element={<LandingPage />} />
+        {/* Seletor de portais (admin / cliente) */}
+        <Route path="/portais" element={<LandingPortal />} />
 
         {/* Admin Portal */}
         <Route path="/admin" element={<Login />} />
@@ -144,12 +145,10 @@ export default function App() {
           <Route path="/cliente/sangrias" element={<ClienteSangrias />} />
           <Route path="/cliente/suporte" element={<ClienteSuporte />} />
           <Route path="/cliente/usuarios" element={<ClienteUsuarios />} />
-          <Route path="/cliente/tarefas" element={<ClienteTarefas />} />
           <Route path="/cliente/comercial" element={<Navigate to="/cliente/comercial/vendas" replace />} />
           <Route path="/cliente/comercial/vendas" element={<ClienteComercialVendas />} />
           <Route path="/cliente/comercial/operacao" element={<ClienteComercialOperacao />} />
           <Route path="/cliente/comercial/produtividade" element={<ClienteComercialProdutividade />} />
-          <Route path="/cliente/comercial/comissionamento" element={<ClienteComercialComissionamento />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

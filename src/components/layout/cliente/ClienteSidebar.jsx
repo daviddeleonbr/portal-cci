@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, BarChart3, TrendingUp,
-  Receipt, HelpCircle, Coins, UserCog, ListTodo, ClipboardCheck, Store, Award,
+  Receipt, HelpCircle, Coins, UserCog, ClipboardCheck, Store,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
@@ -52,13 +52,6 @@ const navigationAll = [
     items: [
       { name: 'Sangrias', href: '/cliente/sangrias', icon: Coins, permissao: 'sangrias' },
       { name: 'Serviços BPO', href: '/cliente/bpo', icon: ClipboardCheck, permissao: 'bpo' },
-    ],
-  },
-  {
-    section: 'Ferramentas',
-    items: [
-      { name: 'Comissionamento', href: '/cliente/comercial/comissionamento', icon: Award },
-      { name: 'Gestor de Tarefas', href: '/cliente/tarefas', icon: ListTodo, permissao: 'tarefas' },
     ],
   },
   {
