@@ -119,7 +119,7 @@ export default function RelatorioAnaliseLancamentosRede() {
           clientesService.listarClientes(),
         ]);
         const chave = chaves.find(c => c.id === chaveApiId);
-        if (!chave) throw new Error('Rede nao encontrada');
+        if (!chave) throw new Error('Rede não encontrada');
         setRede(chave);
         setEmpresas((clientes || []).filter(c => c.chave_api_id === chaveApiId
           && c.usa_webposto && c.empresa_codigo && c.status !== 'inativo'));
@@ -194,7 +194,7 @@ export default function RelatorioAnaliseLancamentosRede() {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }
   if (!rede) {
-    return <div className="text-center py-20 text-gray-500">Rede nao encontrada</div>;
+    return <div className="text-center py-20 text-gray-500">Rede não encontrada</div>;
   }
 
   const periodoLabel = meses.length === 1
@@ -233,7 +233,7 @@ export default function RelatorioAnaliseLancamentosRede() {
             <FlaskConical className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 truncate">Analise de Lancamentos · Rede consolidada</h2>
+            <h2 className="text-lg font-semibold text-gray-900 truncate">Análise de Lançamentos · Rede consolidada</h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Network className="h-3 w-3" />
               <span className="truncate">{labelRede(rede.nome, rede.id)}</span>
@@ -253,9 +253,9 @@ export default function RelatorioAnaliseLancamentosRede() {
       <div className="print-only" style={{ marginBottom: 12, borderBottom: '2px solid #000', paddingBottom: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div>
-            <h1 style={{ fontSize: '14pt', fontWeight: 'bold', margin: 0 }}>Analise de Lancamentos — Rede Consolidada</h1>
+            <h1 style={{ fontSize: '14pt', fontWeight: 'bold', margin: 0 }}>Análise de Lançamentos — Rede Consolidada</h1>
             <p style={{ fontSize: '10pt', margin: '3px 0' }}>{labelRede(rede.nome, rede.id)} · {empresas.length} empresas</p>
-            <p style={{ fontSize: '9pt', margin: '3px 0', color: '#666' }}>Periodo: {periodoLabel} · {qtdFlags} contas analisadas</p>
+            <p style={{ fontSize: '9pt', margin: '3px 0', color: '#666' }}>Período: {periodoLabel} · {qtdFlags} contas analisadas</p>
           </div>
           <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#444', lineHeight: 1.25, flexShrink: 0 }}>
             <p style={{ margin: 0, fontSize: '9pt', fontWeight: 600, color: '#000' }}>CCI ASSESSORIA E CONSULTORIA INTELIGENTE LTDA</p>
@@ -270,7 +270,7 @@ export default function RelatorioAnaliseLancamentosRede() {
         className="bg-white rounded-xl border border-gray-200/60 p-4 mb-5 shadow-sm no-print">
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mes (referencia)</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
             <div className="flex items-center gap-1 h-10 rounded-lg border border-gray-200 bg-white px-1">
               <button onClick={() => navMes(-1)} className="rounded-md p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
                 <ChevronLeft className="h-3.5 w-3.5" />
@@ -289,14 +289,14 @@ export default function RelatorioAnaliseLancamentosRede() {
             </div>
           </div>
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Analise</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
             <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 h-10">
               {[1, 3, 6].map(q => (
                 <button key={q} onClick={() => setQtdMeses(q)}
                   className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
                     qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
-                  {q === 1 ? '1 mes' : `${q} meses`}
+                  {q === 1 ? '1 mês' : `${q} meses`}
                 </button>
               ))}
             </div>
@@ -305,7 +305,7 @@ export default function RelatorioAnaliseLancamentosRede() {
             <button onClick={rodarAnalise} disabled={loadingDados || qtdFlags === 0 || empresas.length === 0}
               className="flex items-center gap-2 h-10 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
-              Rodar analise
+              Rodar análise
             </button>
           </div>
           <div className="ml-auto">
@@ -331,23 +331,23 @@ export default function RelatorioAnaliseLancamentosRede() {
           </div>
           {qtdFlags === 0 ? (
             <>
-              <p className="text-sm font-semibold text-gray-900 mb-1">Nenhuma conta marcada para analise</p>
+              <p className="text-sm font-semibold text-gray-900 mb-1">Nenhuma conta marcada para análise</p>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
-                Em <strong>Parametros &gt; Analise de Lancamentos</strong>, marque as contas da rede cujos lancamentos devem ser verificados.
+                Em <strong>Parâmetros &gt; Análise de Lançamentos</strong>, marque as contas da rede cujos lançamentos devem ser verificados.
               </p>
             </>
           ) : empresas.length === 0 ? (
             <>
               <p className="text-sm font-semibold text-gray-900 mb-1">Nenhuma empresa Webposto ativa na rede</p>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
-                Verifique em <strong>Cadastros &gt; Clientes</strong> se ha empresas ativas com integracao Webposto vinculadas a esta rede.
+                Verifique em <strong>Cadastros &gt; Clientes</strong> se ha empresas ativas com integração Webposto vinculadas a esta rede.
               </p>
             </>
           ) : (
             <>
-              <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o periodo e clique em "Rodar analise"</p>
+              <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o período e clique em "Rodar análise"</p>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
-                Serao consultados os lancamentos de <strong>{meses.map(m => m.label).join(', ')}</strong> nas {qtdFlags} contas marcadas para todas as {empresas.length} empresas da rede.
+                Serao consultados os lançamentos de <strong>{meses.map(m => m.label).join(', ')}</strong> nas {qtdFlags} contas marcadas para todas as {empresas.length} empresas da rede.
               </p>
             </>
           )}
@@ -355,7 +355,7 @@ export default function RelatorioAnaliseLancamentosRede() {
       ) : loadingDados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center no-print">
           <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-800 mb-1">{progress.mensagem || 'Buscando lancamentos...'}</p>
+          <p className="text-sm font-medium text-gray-800 mb-1">{progress.mensagem || 'Buscando lançamentos...'}</p>
           <p className="text-xs text-gray-400">{progress.atual} de {progress.total} requisicoes</p>
         </div>
       ) : porEmpresa ? (
@@ -363,7 +363,7 @@ export default function RelatorioAnaliseLancamentosRede() {
           className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
           {porEmpresa.length === 0 ? (
             <div className="px-6 py-14 text-center text-sm text-gray-500">
-              Nenhuma empresa teve lancamentos nas contas marcadas dentro do periodo.
+              Nenhuma empresa teve lançamentos nas contas marcadas dentro do período.
             </div>
           ) : (
             <AnaliseLancamentosTreeRede

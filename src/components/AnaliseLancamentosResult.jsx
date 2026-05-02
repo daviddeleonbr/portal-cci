@@ -44,7 +44,7 @@ function ResumoMini({ resultado }) {
           <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-emerald-900">Nenhuma inconsistencia detectada</p>
-            <p className="text-xs text-emerald-700 mt-0.5">Lancamentos das {resumo.totalContas} contas marcadas parecem consistentes no periodo.</p>
+            <p className="text-xs text-emerald-700 mt-0.5">Lançamentos das {resumo.totalContas} contas marcadas parecem consistentes no período.</p>
           </div>
         </div>
       )}
@@ -63,7 +63,7 @@ function ResumoMini({ resultado }) {
                     {d.quantidade}x
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800 truncate">{d.descricao || '(sem descricao)'}</p>
+                    <p className="text-sm text-gray-800 truncate">{d.descricao || '(sem descrição)'}</p>
                     <p className="text-[11px] text-gray-500">
                       {d.descricaoConta} · {formatDataBR(d.data)}
                     </p>
@@ -253,7 +253,7 @@ function LancamentosTree({ resultado, lancamentosPorConta, meses }) {
   if ((resultado.contasAnalisadas || []).length === 0) {
     return (
       <div className="bg-gray-50 border border-gray-100 rounded-xl px-6 py-12 text-center">
-        <p className="text-sm text-gray-500">Nenhuma conta marcada para analise.</p>
+        <p className="text-sm text-gray-500">Nenhuma conta marcada para análise.</p>
       </div>
     );
   }
@@ -298,13 +298,13 @@ function LancamentosTree({ resultado, lancamentosPorConta, meses }) {
       {/* Toolbar filtros */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 flex flex-wrap items-center gap-2 no-print">
         <div className="flex items-center gap-1.5 text-[11px] text-gray-500 font-semibold uppercase tracking-wider">
-          <Filter className="h-3 w-3" /> Ocorrencias:
+          <Filter className="h-3 w-3" /> Ocorrências:
         </div>
         <FilterChip ativo={filtros.dup} onClick={() => toggleFiltro('dup')} tipo="dup">Duplicatas</FilterChip>
         <FilterChip ativo={filtros.pico} onClick={() => toggleFiltro('pico')} tipo="pico">Picos</FilterChip>
         <FilterChip ativo={filtros.queda} onClick={() => toggleFiltro('queda')} tipo="queda">Quedas</FilterChip>
-        <FilterChip ativo={filtros.ausencia} onClick={() => toggleFiltro('ausencia')} tipo="ausencia">Sem lancamento (mensal)</FilterChip>
-        <FilterChip ativo={filtros.normal} onClick={() => toggleFiltro('normal')} tipo="normal">Sem ocorrencia</FilterChip>
+        <FilterChip ativo={filtros.ausencia} onClick={() => toggleFiltro('ausencia')} tipo="ausencia">Sem lançamento (mensal)</FilterChip>
+        <FilterChip ativo={filtros.normal} onClick={() => toggleFiltro('normal')} tipo="normal">Sem ocorrência</FilterChip>
 
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => setOcultarSemMov(!ocultarSemMov)}
@@ -321,7 +321,7 @@ function LancamentosTree({ resultado, lancamentosPorConta, meses }) {
       <div className="flex items-center justify-between no-print">
         <p className="text-[11px] text-gray-500">
           Exibindo <strong>{contasVisiveis.length}</strong> {contasVisiveis.length === 1 ? 'conta' : 'contas'} ·{' '}
-          <strong>{totalLancsFiltrados}</strong> lancamentos (apos filtros)
+          <strong>{totalLancsFiltrados}</strong> lançamentos (após filtros)
         </p>
         <div className="flex items-center gap-1">
           <button onClick={expandirTodas} className="text-[11px] text-blue-600 hover:text-blue-800 px-2 py-1">
@@ -364,7 +364,7 @@ function LancamentosTree({ resultado, lancamentosPorConta, meses }) {
                   <span className="text-sm font-medium text-gray-800 truncate flex-1">{conta.descricao}</span>
                   {conta.isRecorrente && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 text-[9px] font-semibold flex-shrink-0"
-                      title="Conta marcada como recorrencia mensal obrigatoria">
+                      title="Conta marcada como recorrência mensal obrigatoria">
                       <Repeat className="h-2.5 w-2.5" /> Mensal
                     </span>
                   )}
@@ -415,7 +415,7 @@ function LancamentosTree({ resultado, lancamentosPorConta, meses }) {
                             {isPicoMes && <Badge tipo="pico" small>Pico</Badge>}
                             {isQuedaMes && <Badge tipo="queda" small>Queda</Badge>}
                             {ausenciaPorContaMes.has(`${conta.codigo}|${m.key}`) && (
-                              <Badge tipo="ausencia" small>Sem lancamento</Badge>
+                              <Badge tipo="ausencia" small>Sem lançamento</Badge>
                             )}
                             <span className="flex-1" />
                             <span className={`text-[11px] font-mono font-semibold whitespace-nowrap ${
@@ -446,8 +446,8 @@ function LancamentosTree({ resultado, lancamentosPorConta, meses }) {
                                       <p className="text-[12px] text-gray-700 truncate">{l.descricao}</p>
                                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                         {dupInfo && <Badge tipo="dup" small>Duplicata ({dupInfo.idxNoGrupo}/{dupInfo.total})</Badge>}
-                                        {isPico && <Badge tipo="pico" small>Pico do mes</Badge>}
-                                        {isQueda && <Badge tipo="queda" small>Queda do mes</Badge>}
+                                        {isPico && <Badge tipo="pico" small>Pico do mês</Badge>}
+                                        {isQueda && <Badge tipo="queda" small>Queda do mês</Badge>}
                                         {l.situacao && (
                                           <span className={`text-[9px] rounded px-1.5 py-0.5 ${
                                             l.situacao === 'Pago' ? 'bg-emerald-50 text-emerald-600' :

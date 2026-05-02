@@ -243,7 +243,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const carregarDados = useCallback(async () => {
     if (!cliente) return;
     if (!cliente.usa_webposto || !cliente.chave_api_id) {
-      setError('Fluxo de Caixa disponivel apenas para clientes Webposto (integracao Quality API).');
+      setError('Fluxo de Caixa disponível apenas para clientes Webposto (integração Quality API).');
       return;
     }
     const _t0 = performance.now();
@@ -255,11 +255,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada para este cliente');
+      if (!chave) throw new Error('Chave API não encontrada para este cliente');
 
       const total = meses.length;
       let concluidas = 0;
-      setLoadingProgress({ atual: 0, total, mensagem: `Buscando movimentos de ${meses.length} mes(es)...` });
+      setLoadingProgress({ atual: 0, total, mensagem: `Buscando movimentos de ${meses.length} mês(es)...` });
 
       // Em modo rede iteramos todos os empresaCodigos e anotamos empresaCodigo
       // em cada movimento (a API geralmente retorna, mas garantimos consistencia).
@@ -293,7 +293,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const ultimoMes = meses[meses.length - 1];
         const rInicio = rangeMes(primeiroMes.ano - 1, primeiroMes.mes);
         const rFim = rangeMes(ultimoMes.ano, ultimoMes.mes);
-        setLoadingProgress({ atual: total, total, mensagem: 'Buscando titulos a pagar para resolver pagamentos...' });
+        setLoadingProgress({ atual: total, total, mensagem: 'Buscando títulos a pagar para resolver pagamentos...' });
         // Em modo rede concatena titulos de todas as empresas da rede.
         const allTitulos = [];
         for (const ec of empresaCodigos) {
@@ -474,8 +474,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 if (!lancs[planoKey]) lancs[planoKey] = [];
                 const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
                 const partLabel = entradasComPlano.length > 1
-                  ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · titulo #${tituloCod ?? '—'}`
-                  : ` · titulo #${tituloCod ?? '—'}`;
+                  ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · título #${tituloCod ?? '—'}`
+                  : ` · título #${tituloCod ?? '—'}`;
                 lancs[planoKey].push({
                   id: entradasComPlano.length > 1 ? `${idBase}-p${idx}` : idBase,
                   mesKey,
@@ -667,7 +667,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
     return {
       id: '__sem_classificacao__',
-      nome: 'Sem classificacao',
+      nome: 'Sem classificação',
       tipo: 'grupo',
       contas,
       children: [],
@@ -829,8 +829,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               if (!lancs[planoKey]) lancs[planoKey] = [];
               const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
               const partLabel = entradasComPlano.length > 1
-                ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · titulo #${tituloCod ?? '—'}`
-                : ` · titulo #${tituloCod ?? '—'}`;
+                ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · título #${tituloCod ?? '—'}`
+                : ` · título #${tituloCod ?? '—'}`;
               lancs[planoKey].push({
                 id: entradasComPlano.length > 1 ? `${idBase}-p${idx}-e${empKey}` : `${idBase}-e${empKey}`,
                 mesKey: empKey, // FluxoNodeRows usa l.mesKey pra coluna
@@ -984,7 +984,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }
   if (!cliente) {
-    return <div className="text-center py-20 text-gray-500">Cliente nao encontrado</div>;
+    return <div className="text-center py-20 text-gray-500">Cliente não encontrado</div>;
   }
 
   const periodoLabel = meses.length === 1
@@ -1072,7 +1072,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>Fluxo de Caixa</h1>
             <p style={{ fontSize: '10pt', margin: '4px 0' }}>{labelEmpresa(cliente)}{cliente.cnpj ? ` - CNPJ ${labelCnpj(cliente.cnpj)}` : ''}</p>
-            <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Periodo: {periodoLabel} &middot; Mascara: {mascaraSelecionada?.nome}</p>
+            <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Período: {periodoLabel} &middot; Máscara: {mascaraSelecionada?.nome}</p>
           </div>
           <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#444', lineHeight: 1.25, flexShrink: 0 }}>
             <p style={{ margin: 0, fontSize: '9pt', fontWeight: 600, color: '#000' }}>CCI ASSESSORIA E CONSULTORIA INTELIGENTE LTDA</p>
@@ -1089,17 +1089,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         className="bg-white rounded-xl border border-gray-200/60 p-4 mb-5 shadow-sm no-print">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[220px]">
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mascara Fluxo de Caixa</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Máscara Fluxo de Caixa</label>
             <select value={mascaraSelecionada?.id || ''}
               onChange={(e) => setMascaraSelecionada(mascaras.find(m => m.id === e.target.value))}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
-              {mascaras.length === 0 && <option value="">Nenhuma mascara cadastrada</option>}
+              {mascaras.length === 0 && <option value="">Nenhuma máscara cadastrada</option>}
               {mascaras.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
           </div>
 
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mes (referencia)</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
             <div className="flex items-center gap-1 h-10 rounded-lg border border-gray-200 bg-white px-1">
               <button onClick={() => navMes(-1)} className="rounded-md p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
                 <ChevLeft className="h-3.5 w-3.5" />
@@ -1121,14 +1121,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           </div>
 
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Analise</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
             <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 h-10">
               {[1, 3].map(q => (
                 <button key={q} onClick={() => setQtdMeses(q)}
                   className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
                     qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
-                  {q === 1 ? '1 mes' : '3 meses'}
+                  {q === 1 ? '1 mês' : '3 meses'}
                 </button>
               ))}
             </div>
@@ -1147,7 +1147,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
               <span className="px-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Tipo:</span>
               {[
-                { key: 'bancaria', label: 'Bancaria' },
+                { key: 'bancaria', label: 'Bancária' },
                 { key: 'caixa', label: 'Caixa' },
               ].map(opt => {
                 const ativo = tiposContaAtivos.has(opt.key);
@@ -1196,11 +1196,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 flex items-start gap-2 no-print">
           <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="text-xs text-amber-800">
-            <p className="font-semibold mb-0.5">Nenhuma conta classificada como bancaria ou caixa</p>
+            <p className="font-semibold mb-0.5">Nenhuma conta classificada como bancária ou caixa</p>
             <p className="text-amber-700">
-              O fluxo de caixa consome apenas contas marcadas como <strong>Conta bancaria</strong> ou <strong>Conta caixa</strong> em
-              Cadastros &rarr; Clientes &rarr; Classificar contas da rede. Enquanto nao houver ao menos uma
-              conta classificada, o relatorio retorna vazio.
+              O fluxo de caixa consome apenas contas marcadas como <strong>Conta bancária</strong> ou <strong>Conta caixa</strong> em
+              Cadastros &rarr; Clientes &rarr; Classificar contas da rede. Enquanto não houver ao menos uma
+              conta classificada, o relatório retorna vazio.
             </p>
           </div>
         </div>
@@ -1232,9 +1232,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20">
               <Wallet className="h-7 w-7 text-white" />
             </div>
-            <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o periodo e clique em "Montar Fluxo"</p>
+            <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o período e clique em "Montar Fluxo"</p>
             <p className="text-xs text-gray-500 max-w-md mx-auto">
-              O relatorio sera gerado a partir das movimentacoes de caixa em <strong>{meses.map(m => m.label).join(', ')}</strong>.
+              O relatório sera gerado a partir das movimentações de caixa em <strong>{meses.map(m => m.label).join(', ')}</strong>.
             </p>
           </motion.div>
         ) : loadingDados ? (
@@ -1248,8 +1248,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           <motion.div key="empty-mascara" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center no-print">
             <Layers className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm font-medium text-gray-800 mb-1">Mascara vazia</p>
-            <p className="text-xs text-gray-400">Configure a estrutura em Parametros &gt; Mascaras Fluxo de Caixa</p>
+            <p className="text-sm font-medium text-gray-800 mb-1">Máscara vazia</p>
+            <p className="text-xs text-gray-400">Configure a estrutura em Parâmetros &gt; Máscaras Fluxo de Caixa</p>
           </motion.div>
         ) : activeTab === 'empresa' && modoRede ? (
           <motion.div key="empresa" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
@@ -1268,14 +1268,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mes:</label>
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mês:</label>
                   <select value={mesEmpresaKey || ''}
                     onChange={(e) => setMesEmpresaKey(e.target.value)}
                     className="h-9 rounded-lg border border-gray-200 px-2 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
                     {meses.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
                   </select>
                   <div className="text-right ml-2">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Variacao de caixa</p>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Variação de caixa</p>
                     <p className={`text-base font-bold ${totalGeralEmpresa >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                       {formatCurrency(totalGeralEmpresa)}
                     </p>
@@ -1328,7 +1328,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-emerald-600" />
-                  <h3 className="text-sm font-semibold text-gray-800">Variacao de caixa por empresa</h3>
+                  <h3 className="text-sm font-semibold text-gray-800">Variação de caixa por empresa</h3>
                   <span className="text-[11px] text-gray-400">· contribuicao de cada unidade no fluxo consolidado</span>
                   <span className={`ml-auto text-[13px] font-bold ${resultadoPorEmpresa.totalConsolidado >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                     Total: {formatCurrency(resultadoPorEmpresa.totalConsolidado)}
@@ -1341,9 +1341,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         <th className="px-4 py-2.5">#</th>
                         <th className="px-4 py-2.5">Empresa</th>
                         <th className="px-4 py-2.5 text-right">Entradas</th>
-                        <th className="px-4 py-2.5 text-right">Saidas</th>
-                        <th className="px-4 py-2.5 text-right">Variacao</th>
-                        <th className="px-4 py-2.5 text-right">Participacao</th>
+                        <th className="px-4 py-2.5 text-right">Saídas</th>
+                        <th className="px-4 py-2.5 text-right">Variação</th>
+                        <th className="px-4 py-2.5 text-right">Participação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1385,20 +1385,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                   <Wallet className="h-4 w-4 text-blue-500" />
-                  <h3 className="text-sm font-semibold text-gray-800">Composicao do saldo</h3>
+                  <h3 className="text-sm font-semibold text-gray-800">Composição do saldo</h3>
                   <span className="text-[11px] text-gray-400">
-                    · Saldo inicial (dia anterior ao periodo) + movimentos = Saldo atual (fim do periodo)
+                    · Saldo inicial (dia anterior ao período) + movimentos = Saldo atual (fim do período)
                   </span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50/80 border-b border-gray-100">
                       <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                        <th className="px-4 py-2.5">Conta bancaria</th>
+                        <th className="px-4 py-2.5">Conta bancária</th>
                         <th className="px-4 py-2.5 text-right">Saldo inicial</th>
                         <th className="px-4 py-2.5 text-right">Entradas</th>
-                        <th className="px-4 py-2.5 text-right">Saidas</th>
-                        <th className="px-4 py-2.5 text-right">Variacao</th>
+                        <th className="px-4 py-2.5 text-right">Saídas</th>
+                        <th className="px-4 py-2.5 text-right">Variação</th>
                         <th className="px-4 py-2.5 text-right">Saldo atual</th>
                       </tr>
                     </thead>
@@ -1468,7 +1468,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   <p className="text-[11px] text-gray-400">
                     {periodoLabel}
                     {tempoGeracao != null && (
-                      <span className="text-gray-300" title="Tempo total de geracao do relatorio">
+                      <span className="text-gray-300" title="Tempo total de geração do relatório">
                         {' · '}gerado em {formatDuracao(tempoGeracao)}
                       </span>
                     )}
@@ -1476,7 +1476,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide">Variacao de caixa</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide">Variação de caixa</p>
                 <p className={`text-base font-bold ${totalGeral >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {formatCurrency(totalGeral)}
                 </p>
@@ -1526,9 +1526,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               <div className="bg-white rounded-2xl border border-amber-200/60 shadow-sm overflow-hidden mt-4 no-print">
                 <div className="px-5 py-3 border-b border-amber-100 bg-amber-50/40 flex items-center gap-2 flex-wrap">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <h3 className="text-sm font-semibold text-amber-800">Contas, chaves e lancamentos nao mapeados</h3>
+                  <h3 className="text-sm font-semibold text-amber-800">Contas, chaves e lançamentos não mapeados</h3>
                   <span className="text-[11px] text-amber-600">
-                    · {semClassificacaoNode.contas.length} ite{semClassificacaoNode.contas.length === 1 ? 'm' : 'ns'} · nao entra(m) na variacao de caixa acima
+                    · {semClassificacaoNode.contas.length} ite{semClassificacaoNode.contas.length === 1 ? 'm' : 'ns'} · não entra(m) na variação de caixa acima
                   </span>
                   <span className={`ml-auto text-[13px] font-bold ${semClassificacaoNode.totalPeriodo >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                     Impacto: {formatCurrency(semClassificacaoNode.totalPeriodo)}
@@ -1614,7 +1614,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                             {isAberta && temLancs && conta.lancamentos.length > 200 && (
                               <tr className="border-b border-gray-50 bg-amber-50/10">
                                 <td colSpan={meses.length + 2} className="px-4 py-1 text-[10px] text-gray-500 italic" style={{ paddingLeft: 48 }}>
-                                  ... e mais {conta.lancamentos.length - 200} lancamento(s) — use o filtro de conta para reduzir
+                                  ... e mais {conta.lancamentos.length - 200} lançamento(s) — use o filtro de conta para reduzir
                                 </td>
                               </tr>
                             )}
@@ -1624,7 +1624,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     </tbody>
                     <tfoot className="bg-amber-50/50 border-t border-amber-200">
                       <tr className="text-[12px] font-semibold text-amber-900">
-                        <td className="px-4 py-2">Total nao mapeado</td>
+                        <td className="px-4 py-2">Total não mapeado</td>
                         {meses.map(m => {
                           const v = semClassificacaoNode.valoresPorMes[m.key] || 0;
                           return (
@@ -1641,7 +1641,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   </table>
                 </div>
                 <div className="px-5 py-2 bg-amber-50/30 border-t border-amber-100 text-[10.5px] text-amber-900">
-                  Estes lancamentos existem nas contas (bancarias/caixa) mas nao estao no mapeamento da mascara — por isso a soma do fluxo acima pode nao bater com a <strong>Composicao do saldo</strong>. Adicione os codigos em <strong>Parametros &gt; Mapeamento Fluxo de Caixa</strong> para que passem a compor a variacao.
+                  Estes lançamentos existem nas contas (bancárias/caixa) mas não estao no mapeamento da máscara — por isso a soma do fluxo acima pode não bater com a <strong>Composição do saldo</strong>. Adicione os códigos em <strong>Parâmetros &gt; Mapeamento Fluxo de Caixa</strong> para que passem a compor a variação.
                 </div>
               </div>
             )}
@@ -1906,10 +1906,10 @@ function TitulosLote({ titulos, movimentoContaCodigo, valorTotalPago }) {
     <div className="space-y-2">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">
-          Pagamento em lote · {titulos.length} titulos em {grupos.length} {grupos.length === 1 ? 'conta gerencial' : 'contas gerenciais'}
+          Pagamento em lote · {titulos.length} títulos em {grupos.length} {grupos.length === 1 ? 'conta gerencial' : 'contas gerenciais'}
         </p>
         <p className="text-[10px] text-gray-500">
-          Soma dos titulos: <strong className="text-gray-700">{formatCurrencyCompact(totalCalculado)}</strong>
+          Soma dos títulos: <strong className="text-gray-700">{formatCurrencyCompact(totalCalculado)}</strong>
           {' · '}
           Valor do movimento: <strong className="text-gray-700">{formatCurrencyCompact(Math.abs(valorTotalPago))}</strong>
         </p>
@@ -1931,7 +1931,7 @@ function TitulosLote({ titulos, movimentoContaCodigo, valorTotalPago }) {
             <table className="w-full text-[10px]">
               <thead className="text-gray-400">
                 <tr>
-                  <th className="text-left px-2.5 py-1 font-medium">Titulo #</th>
+                  <th className="text-left px-2.5 py-1 font-medium">Título #</th>
                   <th className="text-left px-2.5 py-1 font-medium">Documento</th>
                   <th className="text-left px-2.5 py-1 font-medium">Vencimento</th>
                   <th className="text-left px-2.5 py-1 font-medium">Fornecedor</th>
@@ -1972,31 +1972,31 @@ function TituloDetalhe({ titulo, valorPago }) {
     : (titulo.centroCustoCodigo != null && titulo.centroCustoCodigo !== 0 ? `#${titulo.centroCustoCodigo}` : null);
 
   const campos = [
-    { label: 'Titulo #',        valor: titulo.tituloPagarCodigo ?? titulo.codigo },
-    { label: 'Numero Doc',      valor: titulo.numeroDocumento || titulo.documento },
+    { label: 'Título #',        valor: titulo.tituloPagarCodigo ?? titulo.codigo },
+    { label: 'Número Doc',      valor: titulo.numeroDocumento || titulo.documento },
     { label: 'Parcela',         valor: titulo.parcela ?? titulo.numeroParcela },
-    { label: 'Emissao',         valor: titulo.dataEmissao ? formatDataBR(titulo.dataEmissao) : null },
+    { label: 'Emissão',         valor: titulo.dataEmissao ? formatDataBR(titulo.dataEmissao) : null },
     { label: 'Vencimento',      valor: (titulo.dataVencimento || titulo.vencimento) ? formatDataBR(titulo.dataVencimento || titulo.vencimento) : null },
     { label: 'Data pagamento',  valor: titulo.dataPagamento ? formatDataBR(titulo.dataPagamento) : null },
-    { label: 'Valor titulo',    valor: titulo.valor != null || titulo.valorTitulo != null ? formatCurrencyCompact(Number(titulo.valor ?? titulo.valorTitulo ?? 0)) : null },
+    { label: 'Valor título',    valor: titulo.valor != null || titulo.valorTitulo != null ? formatCurrencyCompact(Number(titulo.valor ?? titulo.valorTitulo ?? 0)) : null },
     { label: 'Valor pago',      valor: formatCurrencyCompact(Math.abs(valorPago)) },
     { label: 'Valor saldo',     valor: titulo.valorSaldo != null ? formatCurrencyCompact(Number(titulo.valorSaldo)) : null },
     { label: 'Juros',           valor: Number(titulo.valorJuros) > 0 ? formatCurrencyCompact(Number(titulo.valorJuros)) : null },
     { label: 'Multa',           valor: Number(titulo.valorMulta) > 0 ? formatCurrencyCompact(Number(titulo.valorMulta)) : null },
     { label: 'Desconto',        valor: Number(titulo.valorDesconto) > 0 ? formatCurrencyCompact(Number(titulo.valorDesconto)) : null },
-    { label: 'Acrescimo',       valor: Number(titulo.valorAcrescimo) > 0 ? formatCurrencyCompact(Number(titulo.valorAcrescimo)) : null },
+    { label: 'Acréscimo',       valor: Number(titulo.valorAcrescimo) > 0 ? formatCurrencyCompact(Number(titulo.valorAcrescimo)) : null },
     { label: 'Fornecedor',      valor: fornecedor },
     { label: 'Plano gerencial', valor: plano },
     { label: 'Centro custo',    valor: centroCusto },
     { label: 'Portador',        valor: titulo.portadorDescricao || (titulo.portadorCodigo != null && titulo.portadorCodigo !== 0 ? `#${titulo.portadorCodigo}` : null) },
-    { label: 'Situacao',        valor: titulo.situacao },
+    { label: 'Situação',        valor: titulo.situacao },
     { label: 'Natureza',        valor: titulo.natureza },
-    { label: 'Historico',       valor: titulo.historico || titulo.observacao || titulo.descricao },
+    { label: 'Histórico',       valor: titulo.historico || titulo.observacao || titulo.descricao },
   ].filter(c => c.valor != null && c.valor !== '');
 
   return (
     <div className="space-y-1">
-      <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Titulo a pagar · TITULO_PAGAR</p>
+      <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Título a pagar · TITULO_PAGAR</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1 text-[10.5px]">
         {campos.map((c, i) => (
           <div key={i} className="min-w-0">
@@ -2072,7 +2072,7 @@ function MultiSelectContas({ contas, selecionadas, onChange, open, setOpen }) {
           </div>
           <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
             {contas.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-gray-500">Nenhuma conta com movimento no periodo.</p>
+              <p className="px-3 py-3 text-xs text-gray-500">Nenhuma conta com movimento no período.</p>
             ) : contas.map(c => {
               const marcada = selecionadas.has(c.codigo);
               return (

@@ -13,7 +13,7 @@ export async function buscarStatus(clienteId, data) {
 }
 
 export async function marcarConcluida(clienteId, data, { por, observacoes } = {}) {
-  if (!clienteId || !data) throw new Error('cliente e data sao obrigatorios');
+  if (!clienteId || !data) throw new Error('cliente e data são obrigatorios');
   const payload = {
     cliente_id: clienteId,
     data,
@@ -50,7 +50,7 @@ export async function listarConcluidas(clienteId, { dataInicial, dataFinal } = {
 }
 
 export async function reabrir(clienteId, data) {
-  if (!clienteId || !data) throw new Error('cliente e data sao obrigatorios');
+  if (!clienteId || !data) throw new Error('cliente e data são obrigatorios');
   const { data: row, error } = await supabase
     .from('bpo_conciliacoes_caixas')
     .upsert({

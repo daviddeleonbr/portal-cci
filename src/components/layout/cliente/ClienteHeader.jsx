@@ -149,7 +149,7 @@ export default function ClienteHeader({ onMenuClick }) {
                 className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl border border-gray-100 shadow-xl overflow-hidden z-50"
               >
                 <div className="px-4 py-3 border-b border-gray-50">
-                  <p className="text-sm font-semibold text-gray-900">Notificacoes</p>
+                  <p className="text-sm font-semibold text-gray-900">Notificações</p>
                 </div>
                 <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
                   {clienteNotificacoes.map(n => (

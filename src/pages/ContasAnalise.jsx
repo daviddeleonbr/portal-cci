@@ -169,7 +169,7 @@ export default function ContasAnalise() {
     return (
       <div>
         <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-        <PageHeader title="Analise de Lancamentos" description="Marque as contas do plano gerencial cujos lancamentos devem ser analisados" />
+        <PageHeader title="Análise de Lançamentos" description="Marque as contas do plano gerencial cujos lançamentos devem ser analisados" />
 
         {loadingChaves ? (
           <div className="flex items-center justify-center py-16">
@@ -179,7 +179,7 @@ export default function ContasAnalise() {
           <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center">
             <AlertCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
             <p className="text-sm text-gray-500">Nenhuma chave API cadastrada.</p>
-            <p className="text-xs text-gray-400 mt-1">Cadastre em Parametros &gt; Mapeamento.</p>
+            <p className="text-xs text-gray-400 mt-1">Cadastre em Parâmetros &gt; Mapeamento.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -229,7 +229,7 @@ export default function ContasAnalise() {
             <FlaskConical className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 truncate">Contas para analise</h2>
+            <h2 className="text-lg font-semibold text-gray-900 truncate">Contas para análise</h2>
             <p className="text-[11px] text-gray-400 truncate">
               Plano gerencial da rede <strong>{chaveSelecionada.nome}</strong>
             </p>
@@ -246,7 +246,7 @@ export default function ContasAnalise() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input value={busca} onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por descricao ou hierarquia..."
+            placeholder="Buscar por descrição ou hierarquia..."
             className="w-full h-9 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
       </div>
@@ -377,7 +377,7 @@ function TreeNode({ node, depth, flags, expandidos, onToggleExpand, onToggleCont
         {/* Botao recorrencia (so em folhas marcadas) */}
         {isLeaf && marcada && (
           <button onClick={handleRecorrencia}
-            title={recorrente ? 'Recorrencia mensal obrigatoria (clique para desmarcar)' : 'Marcar como recorrencia mensal obrigatoria'}
+            title={recorrente ? 'Recorrência mensal obrigatoria (clique para desmarcar)' : 'Marcar como recorrência mensal obrigatoria'}
             className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-all flex-shrink-0 ${
               recorrente
                 ? 'bg-purple-100 text-purple-700 border-purple-300 hover:bg-purple-200'

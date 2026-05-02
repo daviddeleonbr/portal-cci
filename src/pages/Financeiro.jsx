@@ -34,13 +34,13 @@ export default function Financeiro() {
   const handleSave = (e) => {
     e.preventDefault();
     setModalOpen(false);
-    showToast('success', 'Lancamento criado com sucesso!');
+    showToast('success', 'Lançamento criado com sucesso!');
   };
 
   if (loading) {
     return (
       <div>
-        <PageHeader title="Financeiro" description="Gestao de receitas e despesas" />
+        <PageHeader title="Financeiro" description="Gestão de receitas e despesas" />
         <TableSkeleton rows={8} cols={6} />
       </div>
     );
@@ -49,13 +49,13 @@ export default function Financeiro() {
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-      <PageHeader title="Financeiro" description="Gestao de receitas e despesas">
+      <PageHeader title="Financeiro" description="Gestão de receitas e despesas">
         <button
           onClick={() => setModalOpen(true)}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm"
         >
           <Plus className="h-4 w-4" />
-          Novo Lancamento
+          Novo Lançamento
         </button>
       </PageHeader>
 
@@ -100,7 +100,7 @@ export default function Financeiro() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar lancamento..."
+                placeholder="Buscar lançamento..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="h-9 w-64 rounded-lg border border-gray-200 bg-gray-50/50 pl-9 pr-4 text-sm text-gray-600 placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
@@ -132,7 +132,7 @@ export default function Financeiro() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-50">
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descricao</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
@@ -186,12 +186,12 @@ export default function Financeiro() {
         </div>
 
         <div className="px-6 py-3 border-t border-gray-50 text-sm text-gray-500">
-          {filtered.length} lancamento(s) encontrado(s)
+          {filtered.length} lançamento(s) encontrado(s)
         </div>
       </div>
 
       {/* Create Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Novo Lancamento" size="md">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Novo Lançamento" size="md">
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Tipo</label>
@@ -201,8 +201,8 @@ export default function Financeiro() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descricao</label>
-            <input type="text" className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" placeholder="Descricao do lancamento" />
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>
+            <input type="text" className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" placeholder="Descrição do lançamento" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -217,7 +217,7 @@ export default function Financeiro() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoria</label>
             <select className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-              <option>Servicos Contabeis</option>
+              <option>Serviços Contábeis</option>
               <option>Consultoria</option>
               <option>Pessoal</option>
               <option>Aluguel</option>
@@ -231,8 +231,8 @@ export default function Financeiro() {
             <select className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
               <option value="">Nenhum</option>
               <option>Tech Solutions Ltda</option>
-              <option>Inovacao SA</option>
-              <option>Comercio Global</option>
+              <option>Inovação SA</option>
+              <option>Comércio Global</option>
             </select>
           </div>
           <div className="flex justify-end gap-3 pt-4">
@@ -240,7 +240,7 @@ export default function Financeiro() {
               Cancelar
             </button>
             <button type="submit" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
-              Salvar Lancamento
+              Salvar Lançamento
             </button>
           </div>
         </form>

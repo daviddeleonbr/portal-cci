@@ -75,33 +75,33 @@ export function dreParaPrompt(dreTree, mascara, periodoLabel, cliente, kpis) {
 }
 
 // ─── Chamada API Anthropic ──────────────────────────────────
-const SYSTEM_PROMPT = `Voce e um especialista em analise financeira e gestao de postos de combustiveis, com foco em geracao de insights praticos para tomada de decisao.
+const SYSTEM_PROMPT = `Você e um especialista em análise financeira e gestão de postos de combustíveis, com foco em geração de insights práticos para tomada de decisão.
 
-Considere as particularidades do setor de combustiveis:
-- Margens normalmente apertadas em combustiveis (1-4%)
-- Importancia das receitas de conveniencia (loja, servicos)
-- Impacto de taxas de cartao e meios de pagamento
-- Custos operacionais relevantes (funcionarios, energia, manutencao)
-- Alta concorrencia e sensibilidade a preco
+Considere as particularidades do setor de combustíveis:
+- Margens normalmente apertadas em combustíveis (1-4%)
+- Importância das receitas de conveniência (loja, serviços)
+- Impacto de taxas de cartão e meios de pagamento
+- Custos operacionais relevantes (funcionários, energia, manutenção)
+- Alta concorrência e sensibilidade a preco
 
 Sua resposta deve ser um JSON valido com EXATAMENTE esta estrutura:
 {
   "resumo_executivo": {
-    "situacao": "saudavel" | "alerta" | "critico",
-    "resumo": "2-3 frases sobre situacao geral",
+    "situação": "saudavel" | "alerta" | "crítico",
+    "resumo": "2-3 frases sobre situação geral",
     "pontos_positivos": ["...", "..."],
     "pontos_negativos": ["...", "..."]
   },
   "margens": {
-    "interpretacao": "analise das margens com numeros",
+    "interpretacao": "análise das margens com números",
     "causas": ["..."]
   },
   "custos_despesas": {
-    "maiores_itens": [{"nome": "...", "valor": 0, "pct_receita": 0, "comentario": "..."}],
-    "avaliacao": "alto" | "controlado" | "preocupante",
+    "maiores_itens": [{"nome": "...", "valor": 0, "pct_receita": 0, "comentário": "..."}],
+    "avaliação": "alto" | "controlado" | "preocupante",
     "excessos": ["..."]
   },
-  "atencao": {
+  "atenção": {
     "gargalos": ["..."],
     "riscos": ["..."],
     "dependencias": ["..."]
@@ -116,7 +116,7 @@ Sua resposta deve ser um JSON valido com EXATAMENTE esta estrutura:
 }
 
 REGRAS:
-- Use os numeros da DRE para justificar tudo. Nao seja generico.
+- Use os números da DRE para justificar tudo. Não seja genérico.
 - Sempre cite valores e percentuais.
 - Linguagem simples e direta.
 - Tom consultivo - como alguem ajudando o dono a ganhar mais dinheiro.
@@ -137,7 +137,7 @@ export async function gerarInsightsIA(dreData, apiKey) {
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',
-        content: `Analise esta DRE de um posto de combustiveis:\n\n${JSON.stringify(dreData, null, 2)}`,
+        content: `Análise esta DRE de um posto de combustíveis:\n\n${JSON.stringify(dreData, null, 2)}`,
       }],
     }),
   });
@@ -154,7 +154,7 @@ export async function gerarInsightsIA(dreData, apiKey) {
       throw e;
     }
     if (res.status === 401 || res.status === 403) {
-      const e = new Error('Chave de API invalida ou sem permissao. Verifique em console.anthropic.com > API Keys.');
+      const e = new Error('Chave de API invalida ou sem permissão. Verifique em console.anthropic.com > API Keys.');
       e.code = 'INVALID_KEY';
       throw e;
     }
@@ -172,7 +172,7 @@ export async function gerarInsightsIA(dreData, apiKey) {
     const cleaned = text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
     return JSON.parse(cleaned);
   } catch (err) {
-    throw new Error('Resposta da IA nao esta em formato JSON valido');
+    throw new Error('Resposta da IA não esta em formato JSON valido');
   }
 }
 
@@ -199,11 +199,11 @@ export function gerarInsightsLocal(dreTree, kpis) {
 
   if (ml < 0) {
     insights.resumo_executivo.situacao = 'critico';
-    insights.resumo_executivo.resumo = `O posto esta operando com PREJUIZO de ${fmt(Math.abs(kpis.lucroLiquido))} no periodo. Margem liquida de ${pct(ml)} indica que despesas e custos superam a receita.`;
+    insights.resumo_executivo.resumo = `O posto esta operando com PREJUIZO de ${fmt(Math.abs(kpis.lucroLiquido))} no período. Margem liquida de ${pct(ml)} indica que despesas e custos superam a receita.`;
     insights.resumo_executivo.pontos_negativos.push(`Resultado liquido negativo: ${fmt(kpis.lucroLiquido)}`);
   } else if (ml < 1) {
     insights.resumo_executivo.situacao = 'critico';
-    insights.resumo_executivo.resumo = `Margem liquida de ${pct(ml)} esta abaixo do minimo saudavel para o setor (1-4%). Lucro de ${fmt(kpis.lucroLiquido)} sobre ${fmt(kpis.receitaBruta)} de receita.`;
+    insights.resumo_executivo.resumo = `Margem liquida de ${pct(ml)} esta abaixo do mínimo saudavel para o setor (1-4%). Lucro de ${fmt(kpis.lucroLiquido)} sobre ${fmt(kpis.receitaBruta)} de receita.`;
     insights.resumo_executivo.pontos_negativos.push(`Margem liquida muito baixa (${pct(ml)})`);
   } else if (ml < 2) {
     insights.resumo_executivo.situacao = 'alerta';
@@ -215,8 +215,8 @@ export function gerarInsightsLocal(dreTree, kpis) {
     insights.resumo_executivo.pontos_positivos.push(`Margem liquida acima da media do setor (${pct(ml)})`);
   } else {
     insights.resumo_executivo.situacao = 'saudavel';
-    insights.resumo_executivo.resumo = `Margem liquida de ${pct(ml)} esta dentro do esperado para postos de combustivel (1-4%). Lucro de ${fmt(kpis.lucroLiquido)}.`;
-    insights.resumo_executivo.pontos_positivos.push('Margens dentro do padrao do setor');
+    insights.resumo_executivo.resumo = `Margem liquida de ${pct(ml)} esta dentro do esperado para postos de combustível (1-4%). Lucro de ${fmt(kpis.lucroLiquido)}.`;
+    insights.resumo_executivo.pontos_positivos.push('Margens dentro do padrão do setor');
   }
 
   if (mb > 8) {
@@ -229,15 +229,15 @@ export function gerarInsightsLocal(dreTree, kpis) {
   insights.margens.interpretacao =
     `Margem bruta de ${pct(mb)} (lucro bruto de ${fmt(kpis.lucroBruto)} sobre receita bruta de ${fmt(kpis.receitaBruta)}). ` +
     `Margem liquida de ${pct(ml)} (lucro liquido de ${fmt(kpis.lucroLiquido)}). ` +
-    `O ideal para postos de combustiveis e margem bruta entre 4-12% e liquida entre 1-4%.`;
+    `O ideal para postos de combustíveis e margem bruta entre 4-12% e liquida entre 1-4%.`;
 
   if (mb < 4) {
-    insights.margens.causas.push('Possivel guerra de precos com concorrentes locais');
-    insights.margens.causas.push('Mix de produtos focado em combustiveis (margens menores)');
-    insights.margens.causas.push('Custo de aquisicao alto - renegociar com distribuidoras');
+    insights.margens.causas.push('Possível guerra de precos com concorrentes locais');
+    insights.margens.causas.push('Mix de produtos focado em combustíveis (margens menores)');
+    insights.margens.causas.push('Custo de aquisição alto - renegociar com distribuidoras');
   }
   if (kpis.deducoes > kpis.receitaBruta * 0.1) {
-    insights.margens.causas.push(`Deducoes elevadas (${fmt(kpis.deducoes)} = ${pct(kpis.deducoes/kpis.receitaBruta*100)}) - revisar tributacao`);
+    insights.margens.causas.push(`Deducoes elevadas (${fmt(kpis.deducoes)} = ${pct(kpis.deducoes/kpis.receitaBruta*100)}) - revisar tributação`);
   }
   if (ml < mb / 3) {
     insights.margens.causas.push('Despesas operacionais consomem grande parte do lucro bruto');
@@ -263,7 +263,7 @@ export function gerarInsightsLocal(dreTree, kpis) {
     valor: c.valor,
     pct_receita: kpis.receitaBruta > 0 ? Number((c.valor / kpis.receitaBruta * 100).toFixed(2)) : 0,
     comentario: c.valor > kpis.receitaBruta * 0.1
-      ? `Representa mais de 10% da receita - merece atencao`
+      ? `Representa mais de 10% da receita - merece atenção`
       : `Dentro do esperado para o porte`,
   }));
 
@@ -284,56 +284,56 @@ export function gerarInsightsLocal(dreTree, kpis) {
 
   // ─── Atencao ────────────────────────────────────────────
   if (ml < 1) {
-    insights.atencao.gargalos.push('Margem liquida muito baixa - qualquer queda de receita gera prejuizo');
+    insights.atencao.gargalos.push('Margem liquida muito baixa - qualquer queda de receita gera prejuízo');
   }
   if (kpis.cmv > kpis.receitaBruta * 0.85) {
-    insights.atencao.gargalos.push(`CMV em ${pct(kpis.cmv/kpis.receitaBruta*100)} da receita - revisar negociacao com distribuidoras`);
+    insights.atencao.gargalos.push(`CMV em ${pct(kpis.cmv/kpis.receitaBruta*100)} da receita - revisar negociação com distribuidoras`);
   }
-  insights.atencao.riscos.push('Volatilidade do preco do combustivel pode comprimir ainda mais as margens');
-  insights.atencao.riscos.push('Concorrencia local pode forcar reducao de preco');
+  insights.atencao.riscos.push('Volatilidade do preco do combustível pode comprimir ainda mais as margens');
+  insights.atencao.riscos.push('Concorrência local pode forcar redução de preco');
   if (kpis.despesasOperacionais > kpis.receitaLiquida * 0.1) {
     insights.atencao.riscos.push('Estrutura de despesas alta - risco em meses de menor movimento');
   }
-  insights.atencao.dependencias.push('Receita altamente concentrada em combustiveis - dependencia de poucos produtos');
+  insights.atencao.dependencias.push('Receita altamente concentrada em combustíveis - dependencia de poucos produtos');
   if (kpis.lucroBruto > 0 && kpis.despesasOperacionais / kpis.lucroBruto > 0.5) {
-    insights.atencao.dependencias.push('Lucro bruto sustenta operacao - qualquer queda compromete o resultado');
+    insights.atencao.dependencias.push('Lucro bruto sustenta operação - qualquer queda compromete o resultado');
   }
 
   // ─── Oportunidades ──────────────────────────────────────
-  insights.oportunidades.aumentar_margem.push('Investir em loja de conveniencia (margens 25-40%, vs 1-4% combustivel)');
-  insights.oportunidades.aumentar_margem.push('Adicionar servicos de troca de oleo, lavagem e calibragem');
+  insights.oportunidades.aumentar_margem.push('Investir em loja de conveniência (margens 25-40%, vs 1-4% combustível)');
+  insights.oportunidades.aumentar_margem.push('Adicionar serviços de troca de oleo, lavagem e calibragem');
   if (mb < 6) {
-    insights.oportunidades.aumentar_margem.push('Revisar pricing - alinhar com concorrencia local sem perder margem');
+    insights.oportunidades.aumentar_margem.push('Revisar pricing - alinhar com concorrência local sem perder margem');
   }
   insights.oportunidades.aumentar_margem.push('Programa de fidelidade para aumentar ticket medio');
 
-  insights.oportunidades.reduzir_custos.push('Renegociar taxas de cartao - chegam a 2-3% da receita em postos');
-  insights.oportunidades.reduzir_custos.push('Analisar consumo energetico (bombas, iluminacao) - potencial 15-30% economia com LED + automacao');
-  insights.oportunidades.reduzir_custos.push('Otimizar escala de funcionarios baseada em movimento por horario');
+  insights.oportunidades.reduzir_custos.push('Renegociar taxas de cartão - chegam a 2-3% da receita em postos');
+  insights.oportunidades.reduzir_custos.push('Analisar consumo energético (bombas, iluminacao) - potencial 15-30% economia com LED + automacao');
+  insights.oportunidades.reduzir_custos.push('Otimizar escala de funcionários baseada em movimento por horario');
 
   insights.oportunidades.sugestoes_praticas.push('Cadastro de clientes corporativos (frota) - vendas a prazo com margem maior');
   insights.oportunidades.sugestoes_praticas.push('Acordos de exclusividade com distribuidora para descontos por volume');
-  insights.oportunidades.sugestoes_praticas.push('Revisar mix de combustiveis (gasolina aditivada, diesel S10) - margens maiores');
+  insights.oportunidades.sugestoes_praticas.push('Revisar mix de combustíveis (gasolina aditivada, diesel S10) - margens maiores');
 
   // ─── Estrategicos ───────────────────────────────────────
   if (ml < 2) {
-    insights.estrategicos.push(`Diagnostico urgente de custos: revisar TODOS os contratos (energia, internet, seguros, manutencao) e cortar 5-10% das despesas operacionais`);
+    insights.estrategicos.push(`Diagnóstico urgente de custos: revisar TODOS os contratos (energia, internet, seguros, manutenção) e cortar 5-10% das despesas operacionais`);
   }
-  insights.estrategicos.push(`Aumentar receita de loja de conveniencia para no minimo 15% do faturamento total - margens entre 25-40% transformam o resultado liquido`);
-  insights.estrategicos.push('Implementar dashboard diario de margem por produto - acompanhar a margem de cada combustivel separadamente para identificar oportunidades');
+  insights.estrategicos.push(`Aumentar receita de loja de conveniência para no mínimo 15% do faturamento total - margens entre 25-40% transformam o resultado liquido`);
+  insights.estrategicos.push('Implementar dashboard diário de margem por produto - acompanhar a margem de cada combustível separadamente para identificar oportunidades');
   if (kpis.receitaBruta > 0) {
-    insights.estrategicos.push(`Estabelecer meta mensal: aumentar margem liquida para ${pct(Math.max(2, ml + 0.5))} no proximo trimestre`);
+    insights.estrategicos.push(`Estabelecer meta mensal: aumentar margem liquida para ${pct(Math.max(2, ml + 0.5))} no próximo trimestre`);
   }
-  insights.estrategicos.push('Avaliar adicao de servicos: troca de oleo express, calibragem digital, lavagem - geram margens 20-50% e fidelizacao');
+  insights.estrategicos.push('Avaliar adição de serviços: troca de oleo express, calibragem digital, lavagem - geram margens 20-50% e fidelizacao');
 
   // ─── Perguntas ──────────────────────────────────────────
-  insights.perguntas.push('Qual a margem real de cada tipo de combustivel (gasolina, diesel, etanol)?');
-  insights.perguntas.push('Quanto a loja de conveniencia representa do faturamento e qual sua margem?');
+  insights.perguntas.push('Qual a margem real de cada tipo de combustível (gasolina, diesel, etanol)?');
+  insights.perguntas.push('Quanto a loja de conveniência representa do faturamento e qual sua margem?');
   insights.perguntas.push('Qual o ticket medio por cliente e qual a meta?');
-  insights.perguntas.push('As taxas de cartao estao otimizadas? Quando foram renegociadas pela ultima vez?');
-  insights.perguntas.push('Existe controle de produtividade por funcionario (vendas/hora)?');
+  insights.perguntas.push('As taxas de cartão estao otimizadas? Quando foram renegociadas pela última vez?');
+  insights.perguntas.push('Existe controle de produtividade por funcionário (vendas/hora)?');
   if (kpis.lucroBruto > 0) {
-    insights.perguntas.push(`Qual a estrategia para aumentar ${pct(mb)} de margem bruta nos proximos 6 meses?`);
+    insights.perguntas.push(`Qual a estratégia para aumentar ${pct(mb)} de margem bruta nos próximos 6 meses?`);
   }
   insights.perguntas.push('Qual o investimento em marketing/programas de fidelidade?');
 

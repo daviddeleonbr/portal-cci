@@ -5,17 +5,17 @@
 import { formatCurrency } from '../../utils/format';
 
 const TITULO_POR_ABA = {
-  vendas: 'Relatorio de Analise Tecnica Comercial',
-  dre: 'Relatorio de Analise Tecnica da DRE Gerencial',
-  fluxo: 'Relatorio de Analise Tecnica do Fluxo de Caixa',
-  geral: 'Relatorio de Analise Tecnica · Diagnostico Estrategico Integrado',
+  vendas: 'Relatório de Análise Técnica Comercial',
+  dre: 'Relatório de Análise Técnica da DRE Gerencial',
+  fluxo: 'Relatório de Análise Técnica do Fluxo de Caixa',
+  geral: 'Relatório de Análise Técnica · Diagnóstico Estrategico Integrado',
 };
 
 export default function RelatorioDissertativo({ aba, insights, empresa, periodo, modoRede = false }) {
   if (!insights) return null;
 
   const dataAgora = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-  const titulo = TITULO_POR_ABA[aba] || 'Analise Empresarial';
+  const titulo = TITULO_POR_ABA[aba] || 'Análise Empresarial';
 
   return (
     <div className="relatorio-dissertativo">
@@ -137,7 +137,7 @@ export default function RelatorioDissertativo({ aba, insights, empresa, periodo,
       <div className="rd-header">
         <h1>{titulo}</h1>
         <p className="subtitulo">{empresa?.nome}{empresa?.cnpj ? ` — CNPJ ${empresa.cnpj}` : ''}</p>
-        <p className="meta">Periodo de referencia: {periodo}{modoRede ? ' (rede consolidada)' : ''}</p>
+        <p className="meta">Período de referência: {periodo}{modoRede ? ' (rede consolidada)' : ''}</p>
       </div>
 
       <SecaoResumoExecutivo insights={insights} />
@@ -162,8 +162,8 @@ export default function RelatorioDissertativo({ aba, insights, empresa, periodo,
           </div>
         </div>
         <p className="nota">
-          Relatorio gerado por Claude (IA) com supervisao da CCI. Os dados sao provenientes da integracao Webposto e das mascaras configuradas pela CCI.
-          O documento deve ser lido em conjunto com os relatorios quantitativos correspondentes.
+          Relatório gerado por Claude (IA) com supervisao da CCI. Os dados são provenientes da integração Webposto e das máscaras configuradas pela CCI.
+          O documento deve ser lido em conjunto com os relatórios quantitativos correspondentes.
         </p>
       </div>
     </div>
@@ -186,7 +186,7 @@ function SecaoResumoExecutivo({ insights }) {
       <h2>1. Resumo Executivo</h2>
       {situacao && (
         <p>
-          <span className={`rd-tag ${tagClass}`}>Situacao: {String(situacao).toUpperCase()}</span>
+          <span className={`rd-tag ${tagClass}`}>Situação: {String(situacao).toUpperCase()}</span>
         </p>
       )}
       {texto && <p>{texto}</p>}
@@ -198,7 +198,7 @@ function SecaoResumoExecutivo({ insights }) {
       )}
       {negativos.length > 0 && (
         <>
-          <h3>Pontos de atencao</h3>
+          <h3>Pontos de atenção</h3>
           <ul>{negativos.map((p, i) => <li key={i}>{p}</li>)}</ul>
         </>
       )}
@@ -215,7 +215,7 @@ function SecoesVendas({ insights, modoRede }) {
           {insights.mix_produto.interpretacao && <p>{insights.mix_produto.interpretacao}</p>}
           {insights.mix_produto.concentracao?.length > 0 && (
             <table className="rd-tabela">
-              <thead><tr><th>Categoria</th><th className="num">% Receita</th><th className="num">% Margem</th><th>Comentario</th></tr></thead>
+              <thead><tr><th>Categoria</th><th className="num">% Receita</th><th className="num">% Margem</th><th>Comentário</th></tr></thead>
               <tbody>
                 {insights.mix_produto.concentracao.map((c, i) => (
                   <tr key={i}>
@@ -243,14 +243,14 @@ function SecoesVendas({ insights, modoRede }) {
 
       {insights.diagnostico_grupos && (
         <section className="rd-secao">
-          <h2>3. Diagnostico por Grupo</h2>
+          <h2>3. Diagnóstico por Grupo</h2>
           {insights.diagnostico_grupos.interpretacao && <p>{insights.diagnostico_grupos.interpretacao}</p>}
           {insights.diagnostico_grupos.grupos_problema?.length > 0 && (
             <>
               <h3>Grupos em problema</h3>
               <ul>
                 {insights.diagnostico_grupos.grupos_problema.map((g, i) => (
-                  <li key={i}><span className="destaque">{g.grupo}</span> — {g.motivo}{g.acao_sugerida ? ` Acao sugerida: ${g.acao_sugerida}` : ''}</li>
+                  <li key={i}><span className="destaque">{g.grupo}</span> — {g.motivo}{g.acao_sugerida ? ` Ação sugerida: ${g.acao_sugerida}` : ''}</li>
                 ))}
               </ul>
             </>
@@ -270,7 +270,7 @@ function SecoesVendas({ insights, modoRede }) {
 
       {insights.combustiveis && (
         <section className="rd-secao">
-          <h2>4. Analise de Combustiveis</h2>
+          <h2>4. Análise de Combustíveis</h2>
           {insights.combustiveis.analise_por_tipo && (
             <><h3>Por tipo (Gasolina, Diesel, Etanol, GNV)</h3><p>{insights.combustiveis.analise_por_tipo}</p></>
           )}
@@ -313,7 +313,7 @@ function SecoesVendas({ insights, modoRede }) {
 
       {insights.automotivos_analise && (
         <section className="rd-secao">
-          <h2>5. Analise de Automotivos</h2>
+          <h2>5. Análise de Automotivos</h2>
           {insights.automotivos_analise.interpretacao && <p>{insights.automotivos_analise.interpretacao}</p>}
           {insights.automotivos_analise.grupos_destaque?.length > 0 && (
             <>
@@ -352,7 +352,7 @@ function SecoesVendas({ insights, modoRede }) {
 
       {insights.conveniencia_analise && (
         <section className="rd-secao">
-          <h2>6. Analise de Conveniencia</h2>
+          <h2>6. Análise de Conveniência</h2>
           {insights.conveniencia_analise.interpretacao && <p>{insights.conveniencia_analise.interpretacao}</p>}
           {insights.conveniencia_analise.grupos_destaque?.length > 0 && (
             <>
@@ -413,7 +413,7 @@ function SecoesVendas({ insights, modoRede }) {
                   <li key={i}>
                     <span className="destaque">{p.produto}</span>
                     {p.tipo === 'sumiu' ? ' — DESAPARECEU' : p.queda_pct != null ? ` — queda de ${Math.abs(Number(p.queda_pct)).toFixed(1)}% (${p.tipo})` : ''}
-                    {p.acao ? `. Acao: ${p.acao}` : ''}
+                    {p.acao ? `. Ação: ${p.acao}` : ''}
                   </li>
                 ))}
               </ul>
@@ -467,7 +467,7 @@ function SecoesVendas({ insights, modoRede }) {
             </table>
           )}
           {insights.formas_pagamento.concentracao_risco && (
-            <p><span className="destaque">Concentracao:</span> {insights.formas_pagamento.concentracao_risco}</p>
+            <p><span className="destaque">Concentração:</span> {insights.formas_pagamento.concentracao_risco}</p>
           )}
           {insights.formas_pagamento.custo_maquineta_estimado && (
             <p><span className="destaque">Custo estimado de maquineta/taxa:</span> {insights.formas_pagamento.custo_maquineta_estimado}</p>
@@ -485,7 +485,7 @@ function SecoesVendas({ insights, modoRede }) {
         <section className="rd-secao">
           <h2>10. Integridade dos Dados</h2>
           <p>
-            Receita em "Outros" (produtos sem classificacao): <span className="destaque">{Number(insights.integridade_dados.pct_outros || 0).toFixed(1)}%</span>.
+            Receita em "Outros" (produtos sem classificação): <span className="destaque">{Number(insights.integridade_dados.pct_outros || 0).toFixed(1)}%</span>.
             {' '}Cancelamentos: <span className="destaque">{Number(insights.integridade_dados.pct_canceladas || 0).toFixed(1)}%</span>.
           </p>
           {insights.integridade_dados.alertas?.length > 0 && (
@@ -498,7 +498,7 @@ function SecoesVendas({ insights, modoRede }) {
         <section className="rd-secao">
           <h2>11. Ranking de Empresas da Rede</h2>
           <table className="rd-tabela longa">
-            <thead><tr><th>#</th><th>Empresa</th><th className="num">Receita</th><th className="num">Margem %</th><th className="num">% da Rede</th><th>Avaliacao</th></tr></thead>
+            <thead><tr><th>#</th><th>Empresa</th><th className="num">Receita</th><th className="num">Margem %</th><th className="num">% da Rede</th><th>Avaliação</th></tr></thead>
             <tbody>
               {insights.ranking_empresas.map((r, i) => (
                 <tr key={i}>
@@ -517,12 +517,12 @@ function SecoesVendas({ insights, modoRede }) {
 
       {modoRede && insights.dispersao && (
         <section className="rd-secao">
-          <h2>12. Analise de Dispersao da Rede</h2>
-          {insights.dispersao.concentracao && <><h3>Concentracao</h3><p>{insights.dispersao.concentracao}</p></>}
+          <h2>12. Análise de Dispersao da Rede</h2>
+          {insights.dispersao.concentracao && <><h3>Concentração</h3><p>{insights.dispersao.concentracao}</p></>}
           {insights.dispersao.outliers?.length > 0 && (
             <><h3>Outliers</h3><ul>{insights.dispersao.outliers.map((o, i) => <li key={i}>{o}</li>)}</ul></>
           )}
-          {insights.dispersao.padrao_rede && <><h3>Padrao da rede</h3><p>{insights.dispersao.padrao_rede}</p></>}
+          {insights.dispersao.padrao_rede && <><h3>Padrão da rede</h3><p>{insights.dispersao.padrao_rede}</p></>}
         </section>
       )}
     </>
@@ -534,7 +534,7 @@ function SecoesDRE({ insights }) {
     <>
       {insights.margens && (
         <section className="rd-secao">
-          <h2>2. Analise de Margens</h2>
+          <h2>2. Análise de Margens</h2>
           {insights.margens.interpretacao_yoy && (<><h3>vs. Ano Anterior</h3><p>{insights.margens.interpretacao_yoy}</p></>)}
           {insights.margens.interpretacao_trimestre && (<><h3>Trimestre vs. Trimestre</h3><p>{insights.margens.interpretacao_trimestre}</p></>)}
           {insights.margens.interpretacao && <p>{insights.margens.interpretacao}</p>}
@@ -546,7 +546,7 @@ function SecoesDRE({ insights }) {
 
       {insights.linhas_criticas?.length > 0 && (
         <section className="rd-secao">
-          <h2>3. Linhas Criticas da DRE</h2>
+          <h2>3. Linhas Críticas da DRE</h2>
           <table className="rd-tabela longa">
             <thead><tr><th>Linha</th><th className="num">Atual</th><th className="num">YoY</th><th className="num">Var %</th><th>Impacto</th></tr></thead>
             <tbody>
@@ -578,13 +578,13 @@ function SecoesDRE({ insights }) {
         <section className="rd-secao">
           <h2>4. Custos e Despesas</h2>
           {insights.custos_despesas.avaliacao && (
-            <p>Avaliacao geral dos custos: <span className="destaque">{insights.custos_despesas.avaliacao}</span>.</p>
+            <p>Avaliação geral dos custos: <span className="destaque">{insights.custos_despesas.avaliacao}</span>.</p>
           )}
           {insights.custos_despesas.maiores_itens?.length > 0 && (
             <>
               <h3>Maiores itens de custo/despesa</h3>
               <table className="rd-tabela">
-                <thead><tr><th>Item</th><th className="num">Valor</th><th className="num">% Receita</th><th>Comentario</th></tr></thead>
+                <thead><tr><th>Item</th><th className="num">Valor</th><th className="num">% Receita</th><th>Comentário</th></tr></thead>
                 <tbody>
                   {insights.custos_despesas.maiores_itens.map((i, idx) => (
                     <tr key={idx}>
@@ -606,8 +606,8 @@ function SecoesDRE({ insights }) {
 
       {insights.tendencia && (
         <section className="rd-secao">
-          <h2>5. Tendencia</h2>
-          {insights.tendencia.direcao && <p>Direcao da tendencia: <span className="destaque">{insights.tendencia.direcao}</span></p>}
+          <h2>5. Tendência</h2>
+          {insights.tendencia.direcao && <p>Direção da tendência: <span className="destaque">{insights.tendencia.direcao}</span></p>}
           {insights.tendencia.resumo_6m && <p>{insights.tendencia.resumo_6m}</p>}
           {insights.tendencia.pontos_inflexao?.length > 0 && (
             <><h3>Pontos de inflexao</h3><ul>{insights.tendencia.pontos_inflexao.map((p, i) => <li key={i}>{p}</li>)}</ul></>
@@ -623,7 +623,7 @@ function SecoesFluxo({ insights }) {
     <>
       {insights.variacao_caixa && (
         <section className="rd-secao">
-          <h2>2. Variacao de Caixa</h2>
+          <h2>2. Variação de Caixa</h2>
           {insights.variacao_caixa.interpretacao && <p>{insights.variacao_caixa.interpretacao}</p>}
           {insights.variacao_caixa.causas_principais?.length > 0 && (
             <><h3>Causas principais</h3><ul>{insights.variacao_caixa.causas_principais.map((c, i) => <li key={i}>{c}</li>)}</ul></>
@@ -633,7 +633,7 @@ function SecoesFluxo({ insights }) {
 
       {insights.padrao_grupos && (
         <section className="rd-secao">
-          <h2>3. Padrao por Grupo</h2>
+          <h2>3. Padrão por Grupo</h2>
           {insights.padrao_grupos.entradas_principais?.length > 0 && (
             <>
               <h3>Entradas principais</h3>
@@ -646,7 +646,7 @@ function SecoesFluxo({ insights }) {
           )}
           {insights.padrao_grupos.saidas_crescentes?.length > 0 && (
             <>
-              <h3>Saidas crescentes vs. Ano Anterior</h3>
+              <h3>Saídas crescentes vs. Ano Anterior</h3>
               <ul>
                 {insights.padrao_grupos.saidas_crescentes.map((s, i) => (
                   <li key={i}>
@@ -671,7 +671,7 @@ function SecoesFluxo({ insights }) {
             {insights.concentracoes.map((c, i) => (
               <li key={i}>
                 <span className="destaque">{c.conta_gerencial || c.conta}</span>
-                {c.pct_do_total != null ? ` — ${Number(c.pct_do_total).toFixed(1)}% das saidas` : ''}.
+                {c.pct_do_total != null ? ` — ${Number(c.pct_do_total).toFixed(1)}% das saídas` : ''}.
                 {c.risco ? ` ${c.risco}` : ''}
                 {c.sugestao ? ` Sugestao: ${c.sugestao}` : ''}
               </li>
@@ -682,13 +682,13 @@ function SecoesFluxo({ insights }) {
 
       {insights.tendencia && (
         <section className="rd-secao">
-          <h2>5. Tendencia e Risco de Liquidez</h2>
+          <h2>5. Tendência e Risco de Liquidez</h2>
           {(insights.tendencia.direcao || insights.tendencia.saldo_trajetoria) && (
             <p>Trajetoria do saldo: <span className="destaque">{insights.tendencia.direcao || insights.tendencia.saldo_trajetoria}</span></p>
           )}
           {insights.tendencia.resumo_6m && <p>{insights.tendencia.resumo_6m}</p>}
           {insights.tendencia.risco_liquidez_proximos_meses && (
-            <p>Risco de liquidez nos proximos meses: <span className="destaque">{insights.tendencia.risco_liquidez_proximos_meses}</span>.</p>
+            <p>Risco de liquidez nos próximos meses: <span className="destaque">{insights.tendencia.risco_liquidez_proximos_meses}</span>.</p>
           )}
         </section>
       )}
@@ -701,14 +701,14 @@ function SecoesGeral({ insights }) {
     <>
       {insights.diagnostico_integrado && (
         <section className="rd-secao">
-          <h2>2. Diagnostico Integrado</h2>
+          <h2>2. Diagnóstico Integrado</h2>
           <p>{insights.diagnostico_integrado}</p>
         </section>
       )}
 
       {insights.gargalos_criticos?.length > 0 && (
         <section className="rd-secao">
-          <h2>3. Gargalos Criticos</h2>
+          <h2>3. Gargalos Críticos</h2>
           <ul>
             {insights.gargalos_criticos.map((g, i) => (
               <li key={i}>
@@ -752,7 +752,7 @@ function SecoesGeral({ insights }) {
         <section className="rd-secao">
           <h2>6. Plano de 90 Dias</h2>
           <table className="rd-tabela longa">
-            <thead><tr><th>Periodo</th><th>Acao</th><th>Responsavel</th><th>KPI Alvo</th></tr></thead>
+            <thead><tr><th>Período</th><th>Ação</th><th>Responsavel</th><th>KPI Alvo</th></tr></thead>
             <tbody>
               {insights.plano_90_dias.map((p, i) => (
                 <tr key={i}>
@@ -779,7 +779,7 @@ function SecaoComparativos({ insights }) {
       {insights.comparativo?.vs_trimestre && (<><h3>Versus Trimestre Anterior</h3><p>{insights.comparativo.vs_trimestre}</p></>)}
       {insights.comparativo_yoy?.o_que_mudou && (<><h3>Caixa vs. Ano Anterior</h3><p>{insights.comparativo_yoy.o_que_mudou}</p></>)}
       {insights.comparativo?.tendencia_direcao && (
-        <p>Direcao da tendencia: <span className="destaque">{insights.comparativo.tendencia_direcao}</span>.</p>
+        <p>Direção da tendência: <span className="destaque">{insights.comparativo.tendencia_direcao}</span>.</p>
       )}
       {insights.comparativo?.causas_provaveis?.length > 0 && (
         <><h3>Causas provaveis</h3><ul>{insights.comparativo.causas_provaveis.map((c, i) => <li key={i}>{c}</li>)}</ul></>
@@ -826,7 +826,7 @@ function SecaoOportunidades({ insights }) {
   const blocos = [
     ['Aumentar ticket/receita', o.aumentar_ticket || o.aumentar_receita || o.aumentar_entradas],
     ['Melhorar mix', o.melhorar_mix],
-    ['Crescer conveniencia', o.crescer_conveniencia],
+    ['Crescer conveniência', o.crescer_conveniencia],
     ['Reduzir custos/ineficiencias', o.reduzir_custos || o.reduzir_ineficiencias || o.reduzir_saidas],
     ['Otimizar margens/prazo', o.otimizar_margens || o.otimizar_prazo],
   ].filter(([, lista]) => Array.isArray(lista) && lista.length > 0);
@@ -870,7 +870,7 @@ function SecaoPerguntas({ insights }) {
   if (!perguntas?.length) return null;
   return (
     <section className="rd-secao">
-      <h2>Perguntas para Reflexao do Gestor</h2>
+      <h2>Perguntas para Reflexão do Gestor</h2>
       <ol style={{ marginLeft: 20 }}>
         {perguntas.map((p, i) => (
           <li key={i} style={{ fontSize: '10.5pt', lineHeight: 1.45, marginBottom: 6 }}>{p}</li>

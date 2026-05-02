@@ -55,9 +55,9 @@ export async function loginAdmin(email, senha) {
 
 export async function loginCliente(email, senha) {
   const { usuario, chaveApi, clientesRede } = await autenticar(email, senha, 'cliente');
-  if (!chaveApi) throw new Error('Este usuario nao esta vinculado a nenhuma rede.');
+  if (!chaveApi) throw new Error('Este usuário não esta vinculado a nenhuma rede.');
   if (!clientesRede || clientesRede.length === 0) {
-    throw new Error(`A rede "${chaveApi.nome}" ainda nao tem empresas cadastradas. Contate o administrador.`);
+    throw new Error(`A rede "${chaveApi.nome}" ainda não tem empresas cadastradas. Contate o administrador.`);
   }
   // Cliente ativo = primeira empresa da rede. O usuario podera trocar no portal.
   const cliente = clientesRede[0];
@@ -84,7 +84,7 @@ async function autenticar(email, senha, tipoEsperado) {
   if (error) throw new Error('Falha ao validar credenciais: ' + error.message);
   if (!usuario) throw new Error('E-mail ou senha invalidos.');
 
-  if (usuario.status !== 'ativo') throw new Error('Usuario inativo. Contate o administrador.');
+  if (usuario.status !== 'ativo') throw new Error('Usuário inativo. Contate o administrador.');
   if (usuario.tipo !== tipoEsperado) {
     throw new Error(
       tipoEsperado === 'admin'

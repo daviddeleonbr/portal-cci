@@ -14,7 +14,7 @@ const MODEL = 'claude-opus-4-7';
 // max_tokens com adaptive thinking inclui tokens de pensamento — por isso folgado.
 // Com schema expandido (combustiveis detalhado + automotivos + conveniencia), 20k e o minimo seguro.
 export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 20000 }) {
-  if (!apiKey) throw new Error('Chave de API nao configurada');
+  if (!apiKey) throw new Error('Chave de API não configurada');
 
   const blocks = Array.isArray(system) ? system : [{ type: 'text', text: String(system) }];
   // cache_control no ULTIMO bloco de system cacheia tudo antes dele (tools + system)
@@ -50,7 +50,7 @@ export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 20000 
       e.code = 'NO_CREDITS'; throw e;
     }
     if (res.status === 401 || res.status === 403) {
-      const e = new Error('Chave de API invalida ou sem permissao.');
+      const e = new Error('Chave de API invalida ou sem permissão.');
       e.code = 'INVALID_KEY'; throw e;
     }
     if (res.status === 429) {
@@ -62,7 +62,7 @@ export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 20000 
 
   const data = await res.json();
   const textBlock = (data.content || []).find(b => b.type === 'text');
-  if (!textBlock) throw new Error('IA nao retornou conteudo de texto');
+  if (!textBlock) throw new Error('IA não retornou conteudo de texto');
   const stopReason = data.stop_reason || null;
   try {
     const insights = extrairJsonDeTexto(textBlock.text);
@@ -72,7 +72,7 @@ export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 20000 
     const amostra = String(textBlock.text || '').slice(-400);
     const motivo = stopReason === 'max_tokens'
       ? 'Resposta foi truncada (max_tokens). Tente novamente ou simplifique o payload.'
-      : 'Resposta da IA nao esta em JSON valido';
+      : 'Resposta da IA não esta em JSON valido';
     const e = new Error(motivo);
     e.code = stopReason === 'max_tokens' ? 'MAX_TOKENS' : 'INVALID_JSON';
     e.amostra = amostra;
@@ -98,13 +98,13 @@ export function extrairJsonDeTexto(raw) {
     const candidato = semFence.slice(primeiroBrace, ultimoBrace + 1);
     try { return JSON.parse(candidato); } catch (_) { /* fallthrough */ }
   }
-  throw new Error('Resposta da IA nao esta em JSON valido');
+  throw new Error('Resposta da IA não esta em JSON valido');
 }
 
 // ─── Classificacao de tipo de combustivel ─────────────────────
 // Heuristica simples pelo nome do produto. Fallback = "Outro combustivel"
 export function classificarTipoCombustivel(nomeProduto) {
-  if (!nomeProduto) return 'Outro combustivel';
+  if (!nomeProduto) return 'Outro combustível';
   const n = String(nomeProduto).toLowerCase();
   if (/gnv|gas\s*natural/.test(n)) return 'GNV';
   if (/etanol|alcool|\be\s*100\b|\bhidratado\b/.test(n)) return 'Etanol';
@@ -116,7 +116,7 @@ export function classificarTipoCombustivel(nomeProduto) {
     return 'Gasolina comum';
   }
   if (/arla/.test(n)) return 'Arla 32';
-  return 'Outro combustivel';
+  return 'Outro combustível';
 }
 
 // ─── Calculo de periodos para comparacoes temporais ────────────

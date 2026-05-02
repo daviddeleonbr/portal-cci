@@ -10,7 +10,7 @@ export default function ClienteComercialProdutividade() {
         <EmptyState
           icon={Gauge}
           title="Em breve"
-          description="Ranking de produtividade por frentista, ticket medio, volume por hora e eficiencia de turno."
+          description="Ranking de produtividade por frentista, ticket medio, volume por hora e eficiência de turno."
         />
       </div>
     </div>

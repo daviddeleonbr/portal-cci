@@ -369,7 +369,7 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
       try {
         const data = await adapter.listarMascaras();
         setMascaras(data || []);
-      } catch (err) { showToast('error', 'Erro ao carregar mascaras'); }
+      } catch (err) { showToast('error', 'Erro ao carregar máscaras'); }
       finally { setLoadingMascaras(false); }
     })();
   }, [showToast, adapter]);
@@ -520,7 +520,7 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
 
   const vincularConta = async (conta) => {
     if (!grupoAtivo) {
-      showToast('warning', 'Selecione um grupo na mascara primeiro');
+      showToast('warning', 'Selecione um grupo na máscara primeiro');
       return;
     }
     try {
@@ -594,11 +594,11 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
       {!mascaraSelecionada ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-          <h3 className="text-sm font-semibold text-gray-800 mb-4">Selecione a mascara DRE para mapear</h3>
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">Selecione a máscara DRE para mapear</h3>
           {loadingMascaras ? (
             <div className="flex items-center gap-2 py-4"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /><span className="text-sm text-gray-400">Carregando...</span></div>
           ) : mascaras.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhuma mascara criada. Crie uma em Parametrizacoes &gt; Mascaras.</p>
+            <p className="text-sm text-gray-400">Nenhuma máscara criada. Crie uma em Parametrizações &gt; Máscaras.</p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {mascaras.map(m => (
@@ -670,7 +670,7 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
               </div>
               {!grupoAtivo && planoContas.length > 0 && (
                 <div className="px-4 py-2 bg-amber-50/50 border-b border-amber-100/50 flex-shrink-0">
-                  <p className="text-[11px] text-amber-700">Selecione um grupo na mascara (painel direito) para comecar a vincular.</p>
+                  <p className="text-[11px] text-amber-700">Selecione um grupo na máscara (painel direito) para comecar a vincular.</p>
                 </div>
               )}
               <div className="flex-1 overflow-y-auto">
@@ -682,7 +682,7 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
                 ) : planoContas.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16">
                     <Key className="h-8 w-8 text-gray-300 mb-2" />
-                    <p className="text-xs text-gray-400 text-center px-4 mb-3">Nao foi possivel carregar o plano de contas</p>
+                    <p className="text-xs text-gray-400 text-center px-4 mb-3">Não foi possível carregar o plano de contas</p>
                     <button onClick={buscarDadosApi}
                       className="flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 transition-colors">
                       <RefreshCw className="h-3 w-3" /> Tentar novamente
@@ -853,7 +853,7 @@ function ModalChave({ open, data, onClose, onSave }) {
     <Modal open={open} onClose={onClose} title={data ? 'Editar Chave API' : 'Nova Chave API'} size="sm">
       <form onSubmit={async (e) => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome (identificacao)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome (identificação)</label>
           <input type="text" required value={form.nome} onChange={(e) => setForm(f => ({ ...f, nome: e.target.value }))}
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
             placeholder="Ex: Rede Trivela" />
@@ -902,7 +902,7 @@ function ClientesManualList({ clientes, loading, onSelect }) {
         </div>
         <h3 className="text-base font-semibold text-gray-900 mb-1">Nenhum cliente manual</h3>
         <p className="text-sm text-gray-500 mb-3 text-center max-w-sm">
-          Cadastre clientes na pagina <strong>Clientes</strong> sem integracao Webposto para fazer mapeamento manual.
+          Cadastre clientes na página <strong>Clientes</strong> sem integração Webposto para fazer mapeamento manual.
         </p>
       </motion.div>
     );
@@ -961,7 +961,7 @@ function MapeamentoManualWorkspace({ cliente, onBack, showToast, adapter }) {
       try {
         const data = await adapter.listarMascaras();
         setMascaras(data || []);
-      } catch (err) { showToast('error', 'Erro ao carregar mascaras'); }
+      } catch (err) { showToast('error', 'Erro ao carregar máscaras'); }
       finally { setLoadingMascaras(false); }
     })();
   }, [showToast, adapter]);
@@ -1039,11 +1039,11 @@ function MapeamentoManualWorkspace({ cliente, onBack, showToast, adapter }) {
       {!mascaraSelecionada ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-          <h3 className="text-sm font-semibold text-gray-800 mb-4">Selecione a mascara DRE para mapear</h3>
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">Selecione a máscara DRE para mapear</h3>
           {loadingMascaras ? (
             <div className="flex items-center gap-2 py-4"><Loader2 className="h-4 w-4 animate-spin text-gray-400" /><span className="text-sm text-gray-400">Carregando...</span></div>
           ) : mascaras.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhuma mascara criada. Crie uma em Cadastros &gt; Parametros &gt; Mascaras DRE.</p>
+            <p className="text-sm text-gray-400">Nenhuma máscara criada. Crie uma em Cadastros &gt; Parâmetros &gt; Máscaras DRE.</p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {mascaras.map(m => (
@@ -1073,7 +1073,7 @@ function MapeamentoManualWorkspace({ cliente, onBack, showToast, adapter }) {
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => setMascaraSelecionada(null)}
-                className="text-xs text-gray-500 hover:text-gray-800 transition-colors">Trocar mascara</button>
+                className="text-xs text-gray-500 hover:text-gray-800 transition-colors">Trocar máscara</button>
               <button onClick={() => setModalConta({ open: true, data: null })}
                 className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
                 <Plus className="h-3.5 w-3.5" /> Nova conta
@@ -1255,16 +1255,16 @@ function ModalContaManual({ open, data, grupos, grupoIdField = 'grupo_dre_id', o
     <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Conta' : 'Nova Conta Manual'} size="sm">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Descricao *</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Descrição *</label>
           <input type="text" required autoFocus value={form.conta_descricao}
             onChange={e => setForm(f => ({ ...f, conta_descricao: e.target.value }))}
-            placeholder="Ex: Aluguel do escritorio"
+            placeholder="Ex: Aluguel do escritório"
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Codigo</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Código</label>
             <input type="text" value={form.conta_codigo || ''}
               onChange={e => setForm(f => ({ ...f, conta_codigo: e.target.value }))}
               placeholder="Ex: 01.01"
@@ -1616,7 +1616,7 @@ function MapeamentoVendasSection({ grupos, mapeamentoVendas, onSave }) {
                             <select value={grupoId}
                               onChange={(e) => onSave(tipo.id, e.target.value)}
                               className="h-9 min-w-[260px] rounded-lg border border-gray-200 bg-white px-3 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-                              <option value="">— nao mapeado —</option>
+                              <option value="">— não mapeado —</option>
                               {gruposDisponiveis.map(g => (
                                 <option key={g.id} value={g.id}>
                                   {`${'\u00a0\u00a0'.repeat(g._depth)}${g._depth > 0 ? '\u2514 ' : ''}${g.nome}`}
@@ -1631,8 +1631,8 @@ function MapeamentoVendasSection({ grupos, mapeamentoVendas, onSave }) {
                 );
               })}
               <p className="text-[11px] text-gray-400 pt-2 border-t border-gray-100">
-                Os valores das vendas (VENDA_ITEM) sao classificados em <strong>Combustivel</strong> (tipoProduto=C),
-                {' '}<strong>Automotivos</strong> (tipoGrupo=Pista nao-combustivel) e <strong>Conveniencia</strong> (tipoGrupo=Conveniencia),
+                Os valores das vendas (VENDA_ITEM) são classificados em <strong>Combustível</strong> (tipoProduto=C),
+                {' '}<strong>Automotivos</strong> (tipoGrupo=Pista não-combustível) e <strong>Conveniência</strong> (tipoGrupo=Conveniência),
                 {' '}usando os catalogos PRODUTO + GRUPO da API.
               </p>
             </div>

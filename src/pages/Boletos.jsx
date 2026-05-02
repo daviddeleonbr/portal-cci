@@ -41,7 +41,7 @@ export default function Boletos() {
 
   if (loading) return (
     <div>
-      <PageHeader title="Boletos" description="Gestao de boletos - Banco Inter" />
+      <PageHeader title="Boletos" description="Gestão de boletos - Banco Inter" />
       <TableSkeleton rows={6} cols={6} />
     </div>
   );
@@ -49,7 +49,7 @@ export default function Boletos() {
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-      <PageHeader title="Boletos" description="Gestao de boletos bancarios - Banco Inter">
+      <PageHeader title="Boletos" description="Gestão de boletos bancários - Banco Inter">
         <div className="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-1.5">
           <Building2 className="h-4 w-4 text-orange-600" />
           <span className="text-xs font-medium text-orange-700">Banco Inter</span>
@@ -114,7 +114,7 @@ export default function Boletos() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-50">
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numero</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vencimento</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pagamento</th>
@@ -173,11 +173,11 @@ export default function Boletos() {
         {detailModal && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div><p className="text-xs text-gray-500">Numero</p><p className="text-sm font-mono font-medium">{detailModal.numero}</p></div>
+              <div><p className="text-xs text-gray-500">Número</p><p className="text-sm font-mono font-medium">{detailModal.numero}</p></div>
               <div><p className="text-xs text-gray-500">Status</p><div className="mt-0.5"><StatusBadge status={detailModal.status} /></div></div>
               <div><p className="text-xs text-gray-500">Cliente</p><p className="text-sm font-medium">{detailModal.cliente}</p></div>
               <div><p className="text-xs text-gray-500">Valor</p><p className="text-sm font-semibold">{formatCurrency(detailModal.valor)}</p></div>
-              <div><p className="text-xs text-gray-500">Emissao</p><p className="text-sm">{formatDate(detailModal.dataEmissao)}</p></div>
+              <div><p className="text-xs text-gray-500">Emissão</p><p className="text-sm">{formatDate(detailModal.dataEmissao)}</p></div>
               <div><p className="text-xs text-gray-500">Vencimento</p><p className="text-sm">{formatDate(detailModal.dataVencimento)}</p></div>
             </div>
             <div className="p-3 bg-gray-50 rounded-lg">
@@ -193,15 +193,15 @@ export default function Boletos() {
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="p-3 bg-orange-50 rounded-lg border border-orange-100 flex items-center gap-2 mb-2">
             <Building2 className="h-4 w-4 text-orange-600" />
-            <span className="text-xs text-orange-700">Emissao via API Banco Inter (simulado)</span>
+            <span className="text-xs text-orange-700">Emissão via API Banco Inter (simulado)</span>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Cliente</label>
             <select className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
               <option>Tech Solutions Ltda</option>
-              <option>Inovacao SA</option>
-              <option>Comercio Global</option>
-              <option>Construcoes Lima</option>
+              <option>Inovação SA</option>
+              <option>Comércio Global</option>
+              <option>Construções Lima</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -215,7 +215,7 @@ export default function Boletos() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descricao</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>
             <input type="text" className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" placeholder="Referente a..." />
           </div>
           <div className="flex justify-end gap-3 pt-4">

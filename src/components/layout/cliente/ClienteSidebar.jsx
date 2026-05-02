@@ -13,11 +13,11 @@ const navigationAll = [
   {
     section: 'Principal',
     items: [
-      { name: 'Visao Geral', href: '/cliente/dashboard', icon: LayoutDashboard, permissao: 'dashboard' },
+      { name: 'Visão Geral', href: '/cliente/dashboard', icon: LayoutDashboard, permissao: 'dashboard' },
     ],
   },
   {
-    section: 'Relatorios',
+    section: 'Relatórios',
     items: [
       { name: 'DRE', href: '/cliente/dre', icon: BarChart3, permissao: 'dre', requerFlag: 'exibir_dre' },
       { name: 'Fluxo de Caixa', href: '/cliente/fluxo-caixa', icon: TrendingUp, permissao: 'fluxo_caixa', requerFlag: 'exibir_fluxo_caixa' },
@@ -31,7 +31,7 @@ const navigationAll = [
         icon: Store,
         children: [
           { name: 'Vendas', href: '/cliente/comercial/vendas' },
-          { name: 'Operacao', href: '/cliente/comercial/operacao' },
+          { name: 'Operação', href: '/cliente/comercial/operacao' },
           { name: 'Produtividade', href: '/cliente/comercial/produtividade' },
         ],
       },
@@ -51,7 +51,7 @@ const navigationAll = [
     section: 'BPO',
     items: [
       { name: 'Sangrias', href: '/cliente/sangrias', icon: Coins, permissao: 'sangrias' },
-      { name: 'Servicos BPO', href: '/cliente/bpo', icon: ClipboardCheck, permissao: 'bpo' },
+      { name: 'Serviços BPO', href: '/cliente/bpo', icon: ClipboardCheck, permissao: 'bpo' },
     ],
   },
   {
@@ -68,9 +68,9 @@ const navigationAll = [
     ],
   },
   {
-    section: 'Administracao da Rede',
+    section: 'Administração da Rede',
     items: [
-      { name: 'Usuarios da Rede', href: '/cliente/usuarios', icon: UserCog, permissao: 'gerenciar_usuarios' },
+      { name: 'Usuários da Rede', href: '/cliente/usuarios', icon: UserCog, permissao: 'gerenciar_usuarios' },
     ],
   },
 ];

@@ -97,7 +97,7 @@ export default function CciPlanoContas() {
         <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input value={busca} onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por codigo ou nome..."
+            placeholder="Buscar por código ou nome..."
             className="w-full h-9 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
         <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 flex-wrap">
@@ -105,7 +105,7 @@ export default function CciPlanoContas() {
             { v: 'todos',      l: 'Todas' },
             { v: 'ativo',      l: 'Ativo' },
             { v: 'passivo',    l: 'Passivo' },
-            { v: 'patrimonio', l: 'Patrimonio' },
+            { v: 'patrimonio', l: 'Patrimônio' },
             { v: 'receita',    l: 'Receita' },
             { v: 'custo',      l: 'Custo' },
             { v: 'despesa',    l: 'Despesa' },
@@ -168,7 +168,7 @@ export default function CciPlanoContas() {
 const GRUPO_CFG = {
   ativo:      { label: 'Ativo',      color: 'bg-blue-50 text-blue-700' },
   passivo:    { label: 'Passivo',    color: 'bg-orange-50 text-orange-600' },
-  patrimonio: { label: 'Patrimonio', color: 'bg-violet-50 text-violet-700' },
+  patrimonio: { label: 'Patrimônio', color: 'bg-violet-50 text-violet-700' },
   receita:    { label: 'Receita',    color: 'bg-emerald-50 text-emerald-700' },
   custo:      { label: 'Custo',      color: 'bg-amber-50 text-amber-700' },
   despesa:    { label: 'Despesa',    color: 'bg-red-50 text-red-600' },
@@ -245,7 +245,7 @@ function ContaRow({ conta, depth, isLast, expanded, getFilhos, onToggle, onAddCh
             </span>
             <span className={`text-[9px] rounded px-1.5 py-0.5 flex-shrink-0 ${
               isSintetica ? 'bg-slate-100 text-slate-700' : 'bg-gray-100 text-gray-600'
-            }`} title={isSintetica ? 'Sintetica' : 'Analitica'}>
+            }`} title={isSintetica ? 'Sintética' : 'Analítica'}>
               {isSintetica ? 'S' : 'A'}
             </span>
           </>
@@ -362,44 +362,44 @@ function ModalConta({ open, data, contas, onClose, onSave }) {
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-[11rem_1fr] gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Codigo</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Código</label>
             <input type="text" readOnly value={codigoPreview || ''}
               placeholder="—"
-              title="Codigo gerado automaticamente a partir do grupo e da conta pai"
+              title="Código gerado automaticamente a partir do grupo e da conta pai"
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono bg-gray-50 text-gray-800 cursor-not-allowed" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Nome *</label>
             <input type="text" required value={form.nome || ''}
               onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-              placeholder="Ex: Ativo Nao Circulante"
+              placeholder="Ex: Ativo Não Circulante"
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Classificacao</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Classificação</label>
           <div className="grid grid-cols-2 gap-1">
             <button type="button" onClick={() => setForm(f => ({ ...f, classificacao: 'S' }))}
               className={`h-10 rounded-lg text-xs font-medium ${form.classificacao === 'S' ? 'bg-slate-100 border-2 border-slate-400 text-slate-800' : 'bg-gray-50 border-2 border-transparent text-gray-500'}`}>
-              Sintetica (agrupa)
+              Sintética (agrupa)
             </button>
             <button type="button" onClick={() => setForm(f => ({ ...f, classificacao: 'A' }))}
               className={`h-10 rounded-lg text-xs font-medium ${form.classificacao === 'A' ? 'bg-blue-100 border-2 border-blue-400 text-blue-800' : 'bg-gray-50 border-2 border-transparent text-gray-500'}`}>
-              Analitica (recebe lancto)
+              Analítica (recebe lancto)
             </button>
           </div>
         </div>
 
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">
-            Grupo Contabil {form.parent_id && <span className="text-gray-400 font-normal">(herdado do pai)</span>}
+            Grupo Contábil {form.parent_id && <span className="text-gray-400 font-normal">(herdado do pai)</span>}
           </label>
           <div className="grid grid-cols-3 gap-1">
             {[
               { v: 'ativo',      l: '1 Ativo',       c: 'blue' },
               { v: 'passivo',    l: '2 Passivo',     c: 'orange' },
-              { v: 'patrimonio', l: '3 Patrimonio',  c: 'violet' },
+              { v: 'patrimonio', l: '3 Patrimônio',  c: 'violet' },
               { v: 'custo',      l: '4 Custo',       c: 'amber' },
               { v: 'despesa',    l: '5 Despesa',     c: 'red' },
               { v: 'receita',    l: '6 Receita',     c: 'emerald' },
@@ -444,13 +444,13 @@ function ModalConta({ open, data, contas, onClose, onSave }) {
           <select value={form.parent_id || ''}
             onChange={e => setForm(f => ({ ...f, parent_id: e.target.value || null }))}
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-            <option value="">Raiz (conta de 1º nivel)</option>
+            <option value="">Raiz (conta de 1º nível)</option>
             {possiveisPais.map(c => (
               <option key={c.id} value={c.id}>{c.codigo} - {c.nome}</option>
             ))}
           </select>
           <p className="text-[10px] text-gray-400 mt-1">
-            O codigo e gerado automaticamente: <strong>1.01.01.001.0001</strong> conforme a hierarquia.
+            O código e gerado automaticamente: <strong>1.01.01.001.0001</strong> conforme a hierarquia.
           </p>
         </div>
 

@@ -5,12 +5,12 @@ import EmptyState from '../../components/ui/EmptyState';
 export default function ClienteComercialOperacao() {
   return (
     <div>
-      <PageHeader title="Operacao" description="Indicadores operacionais da rede em tempo real" />
+      <PageHeader title="Operação" description="Indicadores operacionais da rede em tempo real" />
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm">
         <EmptyState
           icon={Activity}
           title="Em breve"
-          description="Visao operacional com turnos, bicos, volumes abastecidos e desvios de operacao."
+          description="Visão operacional com turnos, bicos, volumes abastecidos e desvios de operação."
         />
       </div>
     </div>

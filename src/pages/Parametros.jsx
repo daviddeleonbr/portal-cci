@@ -3,10 +3,10 @@ import { motion } from 'framer-motion';
 import { Layers, Link2, FlaskConical, Wallet } from 'lucide-react';
 
 const tabs = [
-  { name: 'Mascaras DRE', href: '/admin/parametros/mascaras', icon: Layers },
-  { name: 'Mascaras Fluxo de Caixa', href: '/admin/parametros/fluxo-caixa', icon: Wallet },
+  { name: 'Máscaras DRE', href: '/admin/parametros/mascaras', icon: Layers },
+  { name: 'Máscaras Fluxo de Caixa', href: '/admin/parametros/fluxo-caixa', icon: Wallet },
   { name: 'Mapeamento', href: '/admin/parametros/mapeamento', icon: Link2 },
-  { name: 'Analise de Lancamentos', href: '/admin/parametros/analise-lancamentos', icon: FlaskConical },
+  { name: 'Análise de Lançamentos', href: '/admin/parametros/analise-lancamentos', icon: FlaskConical },
 ];
 
 export default function Parametros() {

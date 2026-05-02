@@ -67,7 +67,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
             clientesService.listarClientes(),
           ]);
           const chave = chaves.find(c => c.id === chaveApiId);
-          if (!chave) throw new Error('Rede nao encontrada');
+          if (!chave) throw new Error('Rede não encontrada');
           const empresas = (clientes || []).filter(c => c.chave_api_id === chaveApiId
             && c.usa_webposto && c.empresa_codigo && c.status !== 'inativo');
           setContexto({
@@ -86,7 +86,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
           if (!cli?.chave_api_id) throw new Error('Cliente sem chave API');
           const chaves = await mapService.listarChavesApi();
           const chave = chaves.find(c => c.id === cli.chave_api_id);
-          if (!chave) throw new Error('Chave API nao encontrada');
+          if (!chave) throw new Error('Chave API não encontrada');
           setContexto({ tipo: 'empresa', cliente: cli, chaveApi: chave.chave, rede: chave });
         }
         // Mascaras
@@ -144,7 +144,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
 
   const gerarDRE = useCallback(async () => {
     if (!contexto || !garantirApiKey()) return;
-    if (!mascaraDreId) { setErr('Selecione uma mascara DRE'); return; }
+    if (!mascaraDreId) { setErr('Selecione uma máscara DRE'); return; }
     setLoadingAba('dre'); setErr(null);
     try {
       const chaveApiIdForMap = modoRede ? chaveApiId : contexto.cliente.chave_api_id;
@@ -166,7 +166,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
 
   const gerarFluxo = useCallback(async () => {
     if (!contexto || !garantirApiKey()) return;
-    if (!mascaraFluxoId) { setErr('Selecione uma mascara de Fluxo'); return; }
+    if (!mascaraFluxoId) { setErr('Selecione uma máscara de Fluxo'); return; }
     setLoadingAba('fluxo'); setErr(null);
     try {
       const chaveApiIdForContas = modoRede ? chaveApiId : contexto.cliente.chave_api_id;
@@ -189,9 +189,9 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
   const gerarGeral = useCallback(async () => {
     if (!contexto || !garantirApiKey()) return;
     const { vendas, dre, fluxo } = resultados;
-    if (!vendas || !dre || !fluxo) { setErr('Gere primeiro as 3 analises (Vendas, DRE, Fluxo) para este mes.'); return; }
+    if (!vendas || !dre || !fluxo) { setErr('Gere primeiro as 3 análises (Vendas, DRE, Fluxo) para este mês.'); return; }
     if (vendas.mesKey !== mesKey || dre.mesKey !== mesKey || fluxo.mesKey !== mesKey) {
-      setErr('As 3 analises precisam ser do mesmo mes de referencia.'); return;
+      setErr('As 3 análises precisam ser do mesmo mês de referência.'); return;
     }
     setLoadingAba('geral'); setErr(null);
     try {
@@ -201,7 +201,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         periodoLabel,
         vendas, dre, fluxo,
       });
-      setProgress('Sintetizando as 3 analises...');
+      setProgress('Sintetizando as 3 análises...');
       const r = await geralIA.gerarDiagnosticoGeralIA(dados, apiKey);
       setResultados(prev => ({ ...prev, geral: { insights: r.insights, usage: r.usage, dados, mesKey } }));
     } catch (e) { setErr(e.message || String(e)); }
@@ -221,14 +221,14 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         <div className="mx-auto h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center mb-3">
           <Lock className="h-5 w-5 text-amber-700" />
         </div>
-        <h2 className="text-base font-semibold text-gray-900 mb-1">Analise com IA bloqueada</h2>
+        <h2 className="text-base font-semibold text-gray-900 mb-1">Análise com IA bloqueada</h2>
         <p className="text-[13px] text-gray-600 leading-relaxed mb-4">
-          Seu usuario nao tem permissao para acessar as analises com IA. Solicite ao administrador
-          a permissao <strong>Analise com IA (Claude)</strong> em Cadastros &gt; Usuarios do Sistema.
+          Seu usuário não tem permissão para acessar as análises com IA. Solicite ao administrador
+          a permissão <strong>Análise com IA (Claude)</strong> em Cadastros &gt; Usuários do Sistema.
         </p>
         <button onClick={() => navigate('/admin/relatorios-cliente')}
           className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 text-[12px] font-semibold transition-colors">
-          <ArrowLeft className="h-3.5 w-3.5" /> Voltar aos relatorios
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar aos relatórios
         </button>
       </div>
     );
@@ -239,13 +239,13 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
   if (err && !contexto) {
     return <div className="text-center py-20 text-gray-500">Erro ao carregar: {err}</div>;
   }
-  if (!contexto) return <div className="text-center py-20 text-gray-500">Contexto nao encontrado</div>;
+  if (!contexto) return <div className="text-center py-20 text-gray-500">Contexto não encontrado</div>;
 
   const ABAS = [
     { id: 'vendas', label: 'Vendas', icon: ShoppingCart, color: 'amber' },
     { id: 'dre', label: 'DRE', icon: FileBarChart, color: 'blue' },
     { id: 'fluxo', label: 'Fluxo de Caixa', icon: Wallet, color: 'emerald' },
-    { id: 'geral', label: 'Diagnostico Geral', icon: GitBranch, color: 'violet' },
+    { id: 'geral', label: 'Diagnóstico Geral', icon: GitBranch, color: 'violet' },
   ];
 
   const podeGerarGeral = resultados.vendas?.mesKey === mesKey
@@ -267,7 +267,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
           </div>
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 truncate">
-              Analise com IA{modoRede ? ' · Rede consolidada' : ''}
+              Análise com IA{modoRede ? ' · Rede consolidada' : ''}
             </h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               {modoRede ? <Network className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
@@ -295,7 +295,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm no-print">
         <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr_auto] gap-3 items-end">
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mes de referencia</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês de referência</label>
             <div className="flex items-center gap-1 bg-gray-50 rounded-lg p-1">
               <button onClick={() => navegarMes(-1)} className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:bg-white hover:text-gray-800">←</button>
               <span className="px-3 text-[13px] font-semibold text-gray-800 tabular-nums whitespace-nowrap">{MESES[mesRef.mes - 1]} / {mesRef.ano}</span>
@@ -303,29 +303,29 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
             </div>
           </div>
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mascara DRE</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Máscara DRE</label>
             <select value={mascaraDreId} onChange={e => setMascaraDreId(e.target.value)}
               className="w-full h-10 rounded-lg border border-gray-200 bg-white px-2.5 text-xs">
               {mascarasDre.length === 0 ? (
-                <option value="">Nenhuma mascara configurada</option>
+                <option value="">Nenhuma máscara configurada</option>
               ) : (
                 mascarasDre.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)
               )}
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mascara Fluxo de Caixa</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Máscara Fluxo de Caixa</label>
             <select value={mascaraFluxoId} onChange={e => setMascaraFluxoId(e.target.value)}
               className="w-full h-10 rounded-lg border border-gray-200 bg-white px-2.5 text-xs">
               {mascarasFluxo.length === 0 ? (
-                <option value="">Nenhuma mascara configurada</option>
+                <option value="">Nenhuma máscara configurada</option>
               ) : (
                 mascarasFluxo.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)
               )}
             </select>
           </div>
           <p className="text-[10.5px] text-gray-400 sm:text-right leading-tight self-center">
-            Comparacoes:<br />YoY + trimestre + tendencia 6m
+            Comparações:<br />YoY + trimestre + tendência 6m
           </p>
         </div>
       </div>
@@ -348,7 +348,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
                 {a.label}
                 {bloqueada && <Lock className="h-3 w-3 text-gray-400" />}
                 {temResultado && !bloqueada && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Analise gerada neste mes" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Análise gerada neste mês" />
                 )}
               </button>
             );
@@ -375,8 +375,8 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         const paneProps = { tab, modoRede, empresa: empresaInfo, periodoLabel };
         if (tab === 'vendas') return (
           <PaneAnalise {...paneProps}
-            titulo="Analise de Vendas"
-            descricao="Diagnostico comercial: mix por categoria e grupo, combustiveis por tipo, produtos em queda/alta, YoY + tendencia 6m."
+            titulo="Análise de Vendas"
+            descricao="Diagnóstico comercial: mix por categoria e grupo, combustíveis por tipo, produtos em queda/alta, YoY + tendência 6m."
             carregando={loadingAba === 'vendas'}
             progresso={progress}
             resultado={resultados.vendas}
@@ -385,29 +385,29 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         );
         if (tab === 'dre') return (
           <PaneAnalise {...paneProps}
-            titulo="Analise da DRE Gerencial"
-            descricao="Margens bruta e liquida, linhas criticas, custos e despesas, comparativo YoY + trimestre + tendencia 6m."
+            titulo="Análise da DRE Gerencial"
+            descricao="Margens bruta e liquida, linhas críticas, custos e despesas, comparativo YoY + trimestre + tendência 6m."
             carregando={loadingAba === 'dre'}
             progresso={progress}
             resultado={resultados.dre}
             onGerar={gerarDRE}
-            aviso={!mascaraDreId ? 'Selecione uma mascara DRE para continuar' : null}
+            aviso={!mascaraDreId ? 'Selecione uma máscara DRE para continuar' : null}
           />
         );
         if (tab === 'fluxo') return (
           <PaneAnalise {...paneProps}
-            titulo="Analise do Fluxo de Caixa"
-            descricao="Variacao de caixa, padrao por grupo, concentracoes de risco, comparativo YoY + trimestre + tendencia 6m."
+            titulo="Análise do Fluxo de Caixa"
+            descricao="Variação de caixa, padrão por grupo, concentracoes de risco, comparativo YoY + trimestre + tendência 6m."
             carregando={loadingAba === 'fluxo'}
             progresso={progress}
             resultado={resultados.fluxo}
             onGerar={gerarFluxo}
-            aviso={!mascaraFluxoId ? 'Selecione uma mascara de Fluxo para continuar' : null}
+            aviso={!mascaraFluxoId ? 'Selecione uma máscara de Fluxo para continuar' : null}
           />
         );
         if (tab === 'geral') return (
           <PaneAnalise {...paneProps}
-            titulo="Diagnostico Geral — sintese das 3 dimensoes"
+            titulo="Diagnóstico Geral — síntese das 3 dimensões"
             descricao="Conecta Vendas + DRE + Caixa em uma leitura integrada: gargalos, alavancas prioritarias, contradicoes e plano de 90 dias."
             carregando={loadingAba === 'geral'}
             progresso={progress}
@@ -498,7 +498,7 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
       {!carregando && !resultado && (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-12 text-center shadow-sm no-print">
           <Sparkles className="h-7 w-7 text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-600">Clique em <strong>Gerar com IA</strong> para produzir a analise.</p>
+          <p className="text-sm text-gray-600">Clique em <strong>Gerar com IA</strong> para produzir a análise.</p>
           <div className="mt-4 rounded-lg bg-gray-50 border border-gray-100 px-4 py-2.5 text-[11px] text-gray-500 inline-flex items-start gap-2 max-w-md text-left">
             <Info className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
             <span>Apenas dados agregados trafegam. Sem vendas/lançamentos individuais nem dados pessoais.</span>

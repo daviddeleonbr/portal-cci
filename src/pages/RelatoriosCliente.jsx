@@ -16,14 +16,14 @@ const RELATORIOS = [
   {
     id: 'dre',
     nome: 'DRE Gerencial',
-    descricao: 'Demonstrativo de Resultado por mascara configurada',
+    descricao: 'Demonstrativo de Resultado por máscara configurada',
     icon: FileBarChart,
     color: 'blue',
     disponivel: true,
   },
   {
     id: 'analise-lancamentos',
-    nome: 'Analise de Lancamentos',
+    nome: 'Análise de Lançamentos',
     descricao: 'Duplicatas, picos e quedas nas contas marcadas',
     icon: FlaskConical,
     color: 'blue',
@@ -32,7 +32,7 @@ const RELATORIOS = [
   {
     id: 'fluxo-caixa',
     nome: 'Fluxo de Caixa',
-    descricao: 'Entradas, saidas e saldo por periodo',
+    descricao: 'Entradas, saídas e saldo por período',
     icon: Wallet,
     color: 'emerald',
     disponivel: true,
@@ -47,8 +47,8 @@ const RELATORIOS = [
   },
   {
     id: 'composicao',
-    nome: 'Composicao de Receitas',
-    descricao: 'Analise por tipo de receita',
+    nome: 'Composição de Receitas',
+    descricao: 'Análise por tipo de receita',
     icon: PieChart,
     color: 'violet',
     disponivel: false,
@@ -56,15 +56,15 @@ const RELATORIOS = [
   {
     id: 'evolucao',
     nome: 'Evolucao Mensal',
-    descricao: 'Vendas, margens e insights estrategicos mes a mes',
+    descricao: 'Vendas, margens e insights estrategicos mês a mês',
     icon: BarChart3,
     color: 'cyan',
     disponivel: true,
   },
   {
     id: 'analise-ia',
-    nome: 'Analise de Vendas (IA)',
-    descricao: 'Diagnostico comercial com Claude: mix, margens, oportunidades',
+    nome: 'Análise de Vendas (IA)',
+    descricao: 'Diagnóstico comercial com Claude: mix, margens, oportunidades',
     icon: Sparkles,
     color: 'violet',
     disponivel: true,
@@ -147,7 +147,7 @@ export default function RelatoriosCliente() {
 
   return (
     <div>
-      <PageHeader title="Relatorios do Cliente" description="Escolha a rede e a empresa para abrir as analises gerenciais" />
+      <PageHeader title="Relatórios do Cliente" description="Escolha a rede e a empresa para abrir as análises gerenciais" />
 
       {/* Busca */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-5">
@@ -231,7 +231,7 @@ export default function RelatoriosCliente() {
                       <Link
                         to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/analise-lancamentos`}
                         onClick={(e) => e.stopPropagation()}
-                        title="Analise de lancamentos consolidada de todas as empresas da rede"
+                        title="Análise de lançamentos consolidada de todas as empresas da rede"
                         className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-colors shadow-sm"
                       >
                         <FlaskConical className="h-3 w-3" />
@@ -241,11 +241,11 @@ export default function RelatoriosCliente() {
                         <Link
                           to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/analise-ia`}
                           onClick={(e) => e.stopPropagation()}
-                          title="Analise de vendas da rede com IA"
+                          title="Análise de vendas da rede com IA"
                           className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all shadow-sm"
                         >
                           <Sparkles className="h-3 w-3" />
-                          Analise IA da Rede
+                          Análise IA da Rede
                         </Link>
                       )}
                     </>
@@ -316,7 +316,7 @@ export function ClienteRelatoriosHub() {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }
   if (!cliente) {
-    return <div className="text-center py-20 text-gray-500">Cliente nao encontrado</div>;
+    return <div className="text-center py-20 text-gray-500">Cliente não encontrado</div>;
   }
 
   return (
@@ -352,7 +352,7 @@ export function ClienteRelatoriosHub() {
       {/* Section title */}
       <div className="flex items-center gap-2 mb-4">
         <Sparkles className="h-4 w-4 text-blue-500" />
-        <h3 className="text-sm font-semibold text-gray-900">Analises disponiveis</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Análises disponíveis</h3>
       </div>
 
       {/* Reports grid */}
@@ -383,7 +383,7 @@ export function ClienteRelatoriosHub() {
               </div>
               {r.disponivel ? (
                 <div className="flex items-center gap-1.5 text-[11px] font-medium text-blue-600">
-                  <span>Abrir relatorio</span>
+                  <span>Abrir relatório</span>
                   <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               ) : (

@@ -60,7 +60,7 @@ export const lancamentos = [
 
 export const clientes = [
   { id: 1, nome: 'Tech Solutions Ltda', cnpj: '12.345.678/0001-90', regime: 'Lucro Presumido', segmento: 'Tecnologia', status: 'ativo', mensalidade: 4500.00, contato: 'Carlos Silva', email: 'carlos@techsolutions.com', telefone: '(11) 99999-1234' },
-  { id: 2, nome: 'Inovação SA', cnpj: '23.456.789/0001-01', regime: 'Lucro Real', segmento: 'Serviços', status: 'ativo', mensalidade: 8200.00, contato: 'Ana Souza', email: 'ana@inovacao.com', telefone: '(11) 98888-5678' },
+  { id: 2, nome: 'Inovação SA', cnpj: '23.456.789/0001-01', regime: 'Lucro Real', segmento: 'Serviços', status: 'ativo', mensalidade: 8200.00, contato: 'Ana Souza', email: 'ana@inovação.com', telefone: '(11) 98888-5678' },
   { id: 3, nome: 'Comércio Global', cnpj: '34.567.890/0001-12', regime: 'Simples Nacional', segmento: 'Comércio', status: 'ativo', mensalidade: 3200.00, contato: 'Roberto Santos', email: 'roberto@comercioglobal.com', telefone: '(21) 97777-9012' },
   { id: 4, nome: 'Construções Lima', cnpj: '45.678.901/0001-23', regime: 'Lucro Presumido', segmento: 'Construção', status: 'ativo', mensalidade: 5600.00, contato: 'Paulo Lima', email: 'paulo@construcoeslima.com', telefone: '(11) 96666-3456' },
   { id: 5, nome: 'StartUp X', cnpj: '56.789.012/0001-34', regime: 'Simples Nacional', segmento: 'Tecnologia', status: 'ativo', mensalidade: 2500.00, contato: 'Juliana Tech', email: 'juliana@startupx.com', telefone: '(11) 95555-7890' },

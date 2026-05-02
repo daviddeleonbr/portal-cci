@@ -3,19 +3,19 @@ import { supabase } from '../lib/supabase';
 // 10 tipos de mapeamento (agrupados visualmente em secoes)
 export const TIPOS_VENDA = [
   // Receitas separadas por categoria de produto
-  { id: 'receita_combustivel', label: 'Receita - Combustiveis',     desc: 'Itens com tipoProduto = C',                       sinal: 1, secao: 'Receitas' },
-  { id: 'receita_automotivos',  label: 'Receita - Automotivos',      desc: 'Pista, exceto combustiveis (lubrificantes etc)',  sinal: 1, secao: 'Receitas' },
-  { id: 'receita_conveniencia', label: 'Receita - Conveniencia',     desc: 'Grupos com tipoGrupo = Conveniencia',             sinal: 1, secao: 'Receitas' },
+  { id: 'receita_combustivel', label: 'Receita - Combustíveis',     desc: 'Itens com tipoProduto = C',                       sinal: 1, secao: 'Receitas' },
+  { id: 'receita_automotivos',  label: 'Receita - Automotivos',      desc: 'Pista, exceto combustíveis (lubrificantes etc)',  sinal: 1, secao: 'Receitas' },
+  { id: 'receita_conveniencia', label: 'Receita - Conveniência',     desc: 'Grupos com tipoGrupo = Conveniência',             sinal: 1, secao: 'Receitas' },
 
   // CMV separado por categoria
-  { id: 'cmv_combustivel', label: 'CMV - Combustiveis',  desc: 'Custo dos itens de combustivel',         sinal: -1, secao: 'CMV' },
-  { id: 'cmv_automotivos',  label: 'CMV - Automotivos',   desc: 'Custo dos itens de pista nao-combustivel', sinal: -1, secao: 'CMV' },
-  { id: 'cmv_conveniencia', label: 'CMV - Conveniencia',  desc: 'Custo dos itens de conveniencia',         sinal: -1, secao: 'CMV' },
+  { id: 'cmv_combustivel', label: 'CMV - Combustíveis',  desc: 'Custo dos itens de combustível',         sinal: -1, secao: 'CMV' },
+  { id: 'cmv_automotivos',  label: 'CMV - Automotivos',   desc: 'Custo dos itens de pista não-combustível', sinal: -1, secao: 'CMV' },
+  { id: 'cmv_conveniencia', label: 'CMV - Conveniência',  desc: 'Custo dos itens de conveniência',         sinal: -1, secao: 'CMV' },
 
   // Outros aplicaveis a todas as vendas
   { id: 'impostos',          label: 'Impostos sobre Vendas',     desc: 'ICMS + PIS + COFINS + CBS + IBS',     sinal: -1, secao: 'Outros' },
   { id: 'descontos',         label: 'Descontos sobre Vendas',    desc: 'Soma de totalDesconto dos itens',     sinal: -1, secao: 'Outros' },
-  { id: 'acrescimos',        label: 'Acrescimos sobre Vendas',   desc: 'Soma de totalAcrescimo dos itens',    sinal: 1,  secao: 'Outros' },
+  { id: 'acrescimos',        label: 'Acréscimos sobre Vendas',   desc: 'Soma de totalAcrescimo dos itens',    sinal: 1,  secao: 'Outros' },
   { id: 'vendas_canceladas', label: 'Vendas Canceladas',         desc: 'Total de vendas com cancelada = S',   sinal: -1, secao: 'Outros' },
 ];
 
@@ -58,7 +58,7 @@ export function classificarItem(item, produtosMap, gruposMap) {
   const grupo = gruposMap.get(produto.grupoCodigo);
   const tipoGrupo = grupo?.tipoGrupo;
 
-  if (tipoGrupo === 'Conveniência' || tipoGrupo === 'Conveniencia') return 'conveniencia';
+  if (tipoGrupo === 'Conveniência' || tipoGrupo === 'Conveniência') return 'conveniencia';
   if (tipoGrupo === 'Pista') return 'automotivos';
 
   return 'outros';

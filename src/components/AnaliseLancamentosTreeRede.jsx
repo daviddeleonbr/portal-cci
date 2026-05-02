@@ -296,7 +296,7 @@ export default function AnaliseLancamentosTreeRede({ porEmpresa, meses, contasFl
               ? `Top: ${formatCurrency(resumo.maioresBaixas[0].delta)}`
               : null} />
           <CardResumo icon={Copy} cor="amber" label="Duplicatas" valor={resumo.duplicatas} />
-          <CardResumo icon={AlertCircle} cor="gray" label="Sem ocorrencia" valor={resumo.semOcorrencia} />
+          <CardResumo icon={AlertCircle} cor="gray" label="Sem ocorrência" valor={resumo.semOcorrencia} />
           <CardResumo icon={Filter} cor="violet" label="Total tipos" valor={resumo.totalTipos} />
         </div>
       )}
@@ -355,7 +355,7 @@ export default function AnaliseLancamentosTreeRede({ porEmpresa, meses, contasFl
         <ChipFiltro label="Altas" icon={TrendingUp} cor="red" count={resumo?.altas} ativo={filtro === 'alta'} onClick={() => setFiltro('alta')} />
         <ChipFiltro label="Baixas" icon={TrendingDown} cor="blue" count={resumo?.baixas} ativo={filtro === 'baixa'} onClick={() => setFiltro('baixa')} />
         <ChipFiltro label="Duplicatas" icon={Copy} cor="amber" count={resumo?.duplicatas} ativo={filtro === 'duplicata'} onClick={() => setFiltro('duplicata')} />
-        <ChipFiltro label="Sem ocorrencia" icon={AlertCircle} cor="gray" count={resumo?.semOcorrencia} ativo={filtro === 'sem-ocorrencia'} onClick={() => setFiltro('sem-ocorrencia')} />
+        <ChipFiltro label="Sem ocorrência" icon={AlertCircle} cor="gray" count={resumo?.semOcorrencia} ativo={filtro === 'sem-ocorrencia'} onClick={() => setFiltro('sem-ocorrencia')} />
       </div>
 
       {/* Tree */}
@@ -368,7 +368,7 @@ export default function AnaliseLancamentosTreeRede({ porEmpresa, meses, contasFl
           </colgroup>
           <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0 z-10">
             <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              <th className="px-3 py-2.5">Empresa / Conta / Lancamento</th>
+              <th className="px-3 py-2.5">Empresa / Conta / Lançamento</th>
               {meses.map(m => (
                 <th key={m.key} className="px-2 py-2.5 text-right whitespace-nowrap">{m.label}</th>
               ))}
@@ -439,12 +439,12 @@ export default function AnaliseLancamentosTreeRede({ porEmpresa, meses, contasFl
                               <Wallet className="h-3 w-3 text-gray-500 flex-shrink-0" />
                               <span className="text-[11.5px] font-medium text-gray-800 truncate">{c.descricao}</span>
                               {!c.temOcorrencia && (
-                                <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-gray-100 text-gray-600 border border-gray-200 flex-shrink-0" title="Sem lancamento no periodo">
-                                  <AlertCircle className="h-2.5 w-2.5" /> sem ocorrencia
+                                <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-gray-100 text-gray-600 border border-gray-200 flex-shrink-0" title="Sem lançamento no período">
+                                  <AlertCircle className="h-2.5 w-2.5" /> sem ocorrência
                                 </span>
                               )}
                               {c.temMensal && (
-                                <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0" title="Tem 1+ lancamento mensal">
+                                <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0" title="Tem 1+ lançamento mensal">
                                   <Repeat className="h-2.5 w-2.5" /> mensal
                                 </span>
                               )}
@@ -505,7 +505,7 @@ export default function AnaliseLancamentosTreeRede({ porEmpresa, meses, contasFl
                                   </span>
                                 )}
                                 {t.esporadico && (
-                                  <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0" title="So em 1 mes">
+                                  <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0" title="So em 1 mês">
                                     <AlertCircle className="h-2.5 w-2.5" /> esporadico
                                   </span>
                                 )}
@@ -515,12 +515,12 @@ export default function AnaliseLancamentosTreeRede({ porEmpresa, meses, contasFl
                                   </span>
                                 )}
                                 {t.classificacao === 'baixa' && (
-                                  <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-blue-50 text-blue-700 border border-blue-200 flex-shrink-0" title={`Reducao de ${formatCurrency(Math.abs(t.delta))}`}>
+                                  <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-blue-50 text-blue-700 border border-blue-200 flex-shrink-0" title={`Redução de ${formatCurrency(Math.abs(t.delta))}`}>
                                     <TrendingDown className="h-2.5 w-2.5" /> baixa
                                   </span>
                                 )}
                                 {t.duplicata && (
-                                  <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0" title="Valores duplicados no mesmo mes">
+                                  <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0" title="Valores duplicados no mesmo mês">
                                     <Copy className="h-2.5 w-2.5" /> duplicata
                                   </span>
                                 )}
@@ -533,7 +533,7 @@ export default function AnaliseLancamentosTreeRede({ porEmpresa, meses, contasFl
                                 <td key={m.key} className={`px-2 py-1 text-right font-mono tabular-nums text-[10.5px] ${
                                   !dado || Math.abs(v) < 0.01 ? 'text-gray-300'
                                     : v > 0 ? 'text-emerald-700' : 'text-red-700'
-                                }`} title={dado ? `${dado.count} lancamento(s)` : 'Sem lancamento neste mes'}>
+                                }`} title={dado ? `${dado.count} lançamento(s)` : 'Sem lançamento neste mês'}>
                                   {!dado || Math.abs(v) < 0.01 ? '—' : formatCurrency(v)}
                                 </td>
                               );

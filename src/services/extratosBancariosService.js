@@ -26,9 +26,9 @@ export async function upload({
   file, cliente_id, chave_api_id, conta_codigo = null, saldo_final = null,
   data_inicial, data_final, enviado_por = null, observacoes = null,
 }) {
-  if (!file) throw new Error('Arquivo nao informado.');
-  if (!cliente_id || !chave_api_id) throw new Error('Cliente e rede sao obrigatorios.');
-  if (!data_inicial || !data_final) throw new Error('Informe o periodo do extrato.');
+  if (!file) throw new Error('Arquivo não informado.');
+  if (!cliente_id || !chave_api_id) throw new Error('Cliente e rede são obrigatorios.');
+  if (!data_inicial || !data_final) throw new Error('Informe o período do extrato.');
 
   const ts = Date.now();
   const safeNome = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');

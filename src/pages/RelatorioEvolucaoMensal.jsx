@@ -92,7 +92,7 @@ export default function RelatorioEvolucaoMensal() {
   const carregarDados = useCallback(async () => {
     if (!cliente) return;
     if (!cliente.usa_webposto || !cliente.chave_api_id) {
-      setError('Evolucao Mensal disponivel apenas para clientes Webposto (integracao Quality API).');
+      setError('Evolucao Mensal disponível apenas para clientes Webposto (integração Quality API).');
       return;
     }
     try {
@@ -102,7 +102,7 @@ export default function RelatorioEvolucaoMensal() {
 
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada para este cliente');
+      if (!chave) throw new Error('Chave API não encontrada para este cliente');
 
       // Catalogos
       setLoadingProgress({ atual: 0, total: 1, mensagem: 'Carregando catalogos de produtos e grupos...' });
@@ -121,7 +121,7 @@ export default function RelatorioEvolucaoMensal() {
 
       const total = meses.length;
       let concluidas = 0;
-      setLoadingProgress({ atual: 0, total, mensagem: `Buscando vendas e caixa de ${meses.length} mes(es)...` });
+      setLoadingProgress({ atual: 0, total, mensagem: `Buscando vendas e caixa de ${meses.length} mês(es)...` });
 
       const results = await Promise.all(meses.map(async m => {
         const r = rangeMes(m.ano, m.mes);
@@ -244,9 +244,9 @@ export default function RelatorioEvolucaoMensal() {
 
   const chartDataReceitaMix = mesesDados.map(m => ({
     label: m.label,
-    Combustiveis: Math.round(m.receitaCombustivel),
+    'Combustíveis': Math.round(m.receitaCombustivel),
     Automotivos: Math.round(m.receitaAutomotivos),
-    Conveniencia: Math.round(m.receitaConveniencia),
+    'Conveniência': Math.round(m.receitaConveniencia),
   }));
 
   const chartDataMargem = mesesDados.map(m => ({
@@ -257,8 +257,8 @@ export default function RelatorioEvolucaoMensal() {
   const chartDataCaixa = mesesDados.map(m => ({
     label: m.label,
     Entradas: Math.round(m.entradasCaixa),
-    Saidas: Math.round(m.saidasCaixa),
-    Variacao: Math.round(m.variacaoCaixa),
+    'Saídas': Math.round(m.saidasCaixa),
+    'Variação': Math.round(m.variacaoCaixa),
   }));
 
   const navMes = (delta) => {
@@ -277,7 +277,7 @@ export default function RelatorioEvolucaoMensal() {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-cyan-500" /></div>;
   }
   if (!cliente) {
-    return <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">Cliente nao encontrado</div>;
+    return <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">Cliente não encontrado</div>;
   }
 
   return (
@@ -320,7 +320,7 @@ export default function RelatorioEvolucaoMensal() {
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-5 shadow-sm no-print">
         <div className="grid grid-cols-1 sm:grid-cols-[220px_auto_auto_auto] gap-3 items-end">
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mes final</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês final</label>
             <div className="flex items-center gap-1 h-10 rounded-lg border border-gray-200 bg-white px-1">
               <button onClick={() => navMes(-1)} className="rounded-md p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
                 <ChevLeft className="h-3.5 w-3.5" />
@@ -341,7 +341,7 @@ export default function RelatorioEvolucaoMensal() {
             </div>
           </div>
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Periodo</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Período</label>
             <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 h-10">
               {[3, 6, 12].map(q => (
                 <button key={q} onClick={() => setQtdMeses(q)}
@@ -354,10 +354,10 @@ export default function RelatorioEvolucaoMensal() {
           <button onClick={handleGerar} disabled={loadingDados}
             className="flex items-center gap-2 h-10 rounded-lg bg-cyan-600 hover:bg-cyan-700 px-5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Gerar analise
+            Gerar análise
           </button>
           <div className="text-right">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider">Periodo</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-wider">Período</p>
             <p className="text-[11px] text-gray-700 font-mono">{periodoLabel}</p>
           </div>
         </div>
@@ -375,9 +375,9 @@ export default function RelatorioEvolucaoMensal() {
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-cyan-500/20">
             <BarChart3 className="h-7 w-7 text-white" />
           </div>
-          <p className="text-sm font-semibold text-gray-900 mb-1">Escolha o periodo e clique em "Gerar analise"</p>
+          <p className="text-sm font-semibold text-gray-900 mb-1">Escolha o período e clique em "Gerar análise"</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            Cruzamos <strong>VENDA_ITEM</strong> + <strong>MOVIMENTO_CONTA</strong> pra gerar uma leitura consultiva do desempenho mes a mes: receita, margem, mix e caixa.
+            Cruzamos <strong>VENDA_ITEM</strong> + <strong>MOVIMENTO_CONTA</strong> pra gerar uma leitura consultiva do desempenho mês a mês: receita, margem, mix e caixa.
           </p>
         </div>
       ) : loadingDados ? (
@@ -402,7 +402,7 @@ export default function RelatorioEvolucaoMensal() {
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100">
                 <h3 className="text-sm font-semibold text-gray-800">Receita por categoria (R$)</h3>
-                <p className="text-[11px] text-gray-400">Combustiveis · Automotivos · Conveniencia</p>
+                <p className="text-[11px] text-gray-400">Combustíveis · Automotivos · Conveniência</p>
               </div>
               <div className="p-4" style={{ height: 300 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -414,9 +414,9 @@ export default function RelatorioEvolucaoMensal() {
                     <Tooltip formatter={(v) => formatCurrency(v)} labelStyle={{ fontSize: 12, fontWeight: 600 }}
                       contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="Combustiveis" stackId="a" fill="#f59e0b" />
+                    <Bar dataKey="Combustíveis" stackId="a" fill="#f59e0b" />
                     <Bar dataKey="Automotivos" stackId="a" fill="#64748b" />
-                    <Bar dataKey="Conveniencia" stackId="a" fill="#10b981" />
+                    <Bar dataKey="Conveniência" stackId="a" fill="#10b981" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -447,7 +447,7 @@ export default function RelatorioEvolucaoMensal() {
           {/* Grafico de Caixa */}
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800">Entradas vs saidas de caixa (MOVIMENTO_CONTA)</h3>
+              <h3 className="text-sm font-semibold text-gray-800">Entradas vs saídas de caixa (MOVIMENTO_CONTA)</h3>
               <p className="text-[11px] text-gray-400">comparar com receita bruta revela a velocidade de recebimento</p>
             </div>
             <div className="p-4" style={{ height: 260 }}>
@@ -461,8 +461,8 @@ export default function RelatorioEvolucaoMensal() {
                     contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="Entradas" fill="#10b981" />
-                  <Bar dataKey="Saidas" fill="#ef4444" />
-                  <Bar dataKey="Variacao" fill="#3b82f6" />
+                  <Bar dataKey="Saídas" fill="#ef4444" />
+                  <Bar dataKey="Variação" fill="#3b82f6" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -478,7 +478,7 @@ export default function RelatorioEvolucaoMensal() {
               <table className="w-full text-[12px]">
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className="px-4 py-2.5">Mes</th>
+                    <th className="px-4 py-2.5">Mês</th>
                     <th className="px-4 py-2.5 text-right">Receita</th>
                     <th className="px-4 py-2.5 text-right">CMV</th>
                     <th className="px-4 py-2.5 text-right">Lucro bruto</th>
@@ -486,8 +486,8 @@ export default function RelatorioEvolucaoMensal() {
                     <th className="px-4 py-2.5 text-right">Qtd vendas</th>
                     <th className="px-4 py-2.5 text-right">Ticket medio</th>
                     <th className="px-4 py-2.5 text-right">Entradas cx</th>
-                    <th className="px-4 py-2.5 text-right">Saidas cx</th>
-                    <th className="px-4 py-2.5 text-right">Variacao cx</th>
+                    <th className="px-4 py-2.5 text-right">Saídas cx</th>
+                    <th className="px-4 py-2.5 text-right">Variação cx</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -577,7 +577,7 @@ function gerarInsights(mesesDados, totais) {
     shareCombustivel: 0, shareConveniencia: 0, shareAutomotivos: 0,
     shareDescontos: 0, gapCaixaReceita: 0,
     melhorReceita: null, piorReceita: null, melhorMargem: null, piorMargem: null,
-    resumoExecutivo: { texto: 'Selecione ao menos 3 meses com dados para gerar a analise consultiva.', saude: 'neutra' },
+    resumoExecutivo: { texto: 'Selecione ao menos 3 meses com dados para gerar a análise consultiva.', saude: 'neutra' },
     problemas: [], oportunidades: [],
     analiseDetalhada: { vendas: [], dre: [], caixa: [] },
     recomendacoes: [],
@@ -657,15 +657,15 @@ function gerarInsights(mesesDados, totais) {
   const resumoExecutivo = {
     saude,
     texto: [
-      `O posto gerou ${formatCurrency(totais.receita)} de receita bruta em ${validos.length} mes(es), com margem bruta media de ${mediaMargem.toFixed(2)}%. `,
+      `O posto gerou ${formatCurrency(totais.receita)} de receita bruta em ${validos.length} mês(es), com margem bruta media de ${mediaMargem.toFixed(2)}%. `,
       `${slopeMargem >= 0 ? 'A margem esta em trajetoria estavel ou de melhora' : 'A margem bruta esta em queda'}; `,
-      `${crescimentoReceita >= 0 ? 'a receita cresceu' : 'a receita caiu'} ${formatPct(crescimentoReceita)} comparando o inicio e o fim do periodo. `,
-      `Mix atual: combustivel ${shareCombustivel.toFixed(0)}%, conveniencia ${shareConveniencia.toFixed(0)}%, automotivos ${shareAutomotivos.toFixed(0)}%. `,
-      `Variacao de caixa consolidada de ${formatCurrency(totais.variacaoCaixa)}${mesesCaixaNegativo > 0 ? ` (${mesesCaixaNegativo} mes(es) com caixa negativo)` : ''}. `,
+      `${crescimentoReceita >= 0 ? 'a receita cresceu' : 'a receita caiu'} ${formatPct(crescimentoReceita)} comparando o início e o fim do período. `,
+      `Mix atual: combustível ${shareCombustivel.toFixed(0)}%, conveniência ${shareConveniencia.toFixed(0)}%, automotivos ${shareAutomotivos.toFixed(0)}%. `,
+      `Variação de caixa consolidada de ${formatCurrency(totais.variacaoCaixa)}${mesesCaixaNegativo > 0 ? ` (${mesesCaixaNegativo} mês(es) com caixa negativo)` : ''}. `,
       saude === 'critica'
-        ? 'Leitura geral: situacao critica — exige acao imediata no trinomio preco, custo e capital de giro.'
+        ? 'Leitura geral: situação crítica — exige ação imediata no trinomio preco, custo e capital de giro.'
         : saude === 'alerta'
-        ? 'Leitura geral: operacao funcional, mas com sinais de alerta que merecem atencao nas proximas semanas.'
+        ? 'Leitura geral: operação funcional, mas com sinais de alerta que merecem atenção nas próximas semanas.'
         : 'Leitura geral: indicadores saudaveis; agora e o momento de otimizar e expandir onde o retorno e maior.',
     ].join(''),
   };
@@ -675,47 +675,47 @@ function gerarInsights(mesesDados, totais) {
   if (mesesPrejuizo > 0) {
     problemasCandidatos.push({
       severidade: 10,
-      titulo: `Prejuizo bruto em ${mesesPrejuizo} mes(es)`,
+      titulo: `Prejuízo bruto em ${mesesPrejuizo} mês(es)`,
       diagnostico: `${mesesPrejuizo} de ${validos.length} meses fecharam com lucro bruto negativo. Isto significa que o posto esta vendendo por um preco inferior ao custo — sem ainda descontar despesas operacionais.`,
-      causaRaiz: 'Preco de venda abaixo do custo, estoque girado em periodo de queda de preco da refinaria, ou descontos fora de controle.',
+      causaRaiz: 'Preco de venda abaixo do custo, estoque girado em período de queda de preco da refinaria, ou descontos fora de controle.',
     });
   }
   if (mediaMargem < 8) {
     problemasCandidatos.push({
       severidade: 9,
-      titulo: `Margem bruta media critica: ${mediaMargem.toFixed(2)}%`,
-      diagnostico: `A margem media do periodo esta ${mediaMargem < 5 ? 'muito abaixo' : 'abaixo'} do minimo saudavel para o setor (10-15%). Todo o esforco operacional pode estar sendo drenado por precificacao ineficiente.`,
-      causaRaiz: 'Combustivel respondendo por quase todo o mix e sem compensacao em produtos de maior margem (conveniencia, lubrificantes, servicos).',
+      titulo: `Margem bruta media crítica: ${mediaMargem.toFixed(2)}%`,
+      diagnostico: `A margem media do período esta ${mediaMargem < 5 ? 'muito abaixo' : 'abaixo'} do mínimo saudavel para o setor (10-15%). Todo o esforco operacional pode estar sendo drenado por precificacao ineficiente.`,
+      causaRaiz: 'Combustível respondendo por quase todo o mix e sem compensação em produtos de maior margem (conveniência, lubrificantes, serviços).',
     });
   } else if (slopeMargem < -0.5) {
     problemasCandidatos.push({
       severidade: 7,
-      titulo: `Margem bruta em queda acelerada: ${slopeMargem.toFixed(2)} p.p./mes`,
-      diagnostico: `Perda de ${Math.abs(slopeMargem).toFixed(1)} pontos percentuais por mes. Se a trajetoria continuar, em poucos meses a margem ficara inviavel.`,
-      causaRaiz: 'Repasse de alta de custo nao acompanhado no preco final OU politica de desconto mais agressiva que o necessario.',
+      titulo: `Margem bruta em queda acelerada: ${slopeMargem.toFixed(2)} p.p./mês`,
+      diagnostico: `Perda de ${Math.abs(slopeMargem).toFixed(1)} pontos percentuais por mês. Se a trajetoria continuar, em poucos meses a margem ficara inviavel.`,
+      causaRaiz: 'Repasse de alta de custo não acompanhado no preco final OU política de desconto mais agressiva que o necessário.',
     });
   }
   if (shareCombustivel > 92 && shareConveniencia < 3) {
     problemasCandidatos.push({
       severidade: 8,
-      titulo: `Dependencia extrema do combustivel (${shareCombustivel.toFixed(1)}%)`,
-      diagnostico: `Conveniencia e servicos representam menos de ${(100 - shareCombustivel).toFixed(0)}% da receita. Qualquer oscilacao no preco do combustivel impacta diretamente o resultado.`,
-      causaRaiz: 'Loja de conveniencia subutilizada, falta de servicos complementares (lavagem, troca de oleo) ou precificacao nao competitiva nesses itens.',
+      titulo: `Dependencia extrema do combustível (${shareCombustivel.toFixed(1)}%)`,
+      diagnostico: `Conveniência e serviços representam menos de ${(100 - shareCombustivel).toFixed(0)}% da receita. Qualquer oscilacao no preco do combustível impacta diretamente o resultado.`,
+      causaRaiz: 'Loja de conveniência subutilizada, falta de serviços complementares (lavagem, troca de oleo) ou precificacao não competitiva nesses itens.',
     });
   }
   if (mesesCaixaNegativo >= Math.ceil(validos.length / 2)) {
     problemasCandidatos.push({
       severidade: 9,
       titulo: `Caixa negativo em ${mesesCaixaNegativo} de ${validos.length} meses`,
-      diagnostico: `O negocio esta consumindo mais caixa do que gera na maior parte do periodo. Isso tende a escalar para dependencia de credito.`,
-      causaRaiz: 'Descasamento entre prazo de recebimento (cartao D+30, frotistas D+15/30) e pagamento de fornecedores (a vista na distribuidora).',
+      diagnostico: `O negocio esta consumindo mais caixa do que gera na maior parte do período. Isso tende a escalar para dependencia de credito.`,
+      causaRaiz: 'Descasamento entre prazo de recebimento (cartão D+30, frotistas D+15/30) e pagamento de fornecedores (a vista na distribuidora).',
     });
   }
   if (gapCaixaReceita < -20 && totais.entradasCaixa > 0) {
     problemasCandidatos.push({
       severidade: 7,
-      titulo: `Receita nao esta virando caixa: gap de ${formatPct(gapCaixaReceita)}`,
-      diagnostico: `As entradas de caixa foram ${Math.abs(gapCaixaReceita).toFixed(0)}% inferiores a receita registrada. Indica contas a receber crescentes ou vendas via cartao/duplicata com DSO elevado.`,
+      titulo: `Receita não esta virando caixa: gap de ${formatPct(gapCaixaReceita)}`,
+      diagnostico: `As entradas de caixa foram ${Math.abs(gapCaixaReceita).toFixed(0)}% inferiores a receita registrada. Indica contas a receber crescentes ou vendas via cartão/duplicata com DSO elevado.`,
       causaRaiz: 'Aumento de venda a prazo, atraso de repasse de adquirente ou inadimplencia de frotistas.',
     });
   }
@@ -724,15 +724,15 @@ function gerarInsights(mesesDados, totais) {
       severidade: 6,
       titulo: `Descontos concedidos altos: ${formatCurrency(totais.descontos)} (${shareDescontos.toFixed(1)}% da receita)`,
       diagnostico: `O equivalente a ${formatPct(shareDescontos)} da receita esta sendo dado em desconto. Em margens apertadas, isso pode consumir todo o lucro.`,
-      causaRaiz: 'Politica de desconto descentralizada (gerente/frentista aprovando sem regra clara) OU concorrencia agressiva obrigando a competir em preco.',
+      causaRaiz: 'Política de desconto descentralizada (gerente/frentista aprovando sem regra clara) OU concorrência agressiva obrigando a competir em preco.',
     });
   }
   if (shareCanceladas >= 1.5) {
     problemasCandidatos.push({
       severidade: 5,
       titulo: `Vendas canceladas relevantes: ${formatCurrency(totais.vendasCanceladas)} (${shareCanceladas.toFixed(1)}% da receita)`,
-      diagnostico: 'Cancelamentos acima de 1% sinalizam problema operacional: erro de emissao, abastecimento errado, cliente desistindo.',
-      causaRaiz: 'Treinamento de frentistas, pressao de fila na pista ou problema tecnico nas bombas.',
+      diagnostico: 'Cancelamentos acima de 1% sinalizam problema operacional: erro de emissão, abastecimento errado, cliente desistindo.',
+      causaRaiz: 'Treinamento de frentistas, pressao de fila na pista ou problema técnico nas bombas.',
     });
   }
   if (slopeCMV > 0 && slopeReceita <= 0) {
@@ -746,9 +746,9 @@ function gerarInsights(mesesDados, totais) {
   if (crescimentoCMV > crescimentoReceita + 5) {
     problemasCandidatos.push({
       severidade: 6,
-      titulo: `Custos crescendo mais rapido que a receita (${formatPct(crescimentoCMV - crescimentoReceita)} de diferenca)`,
-      diagnostico: `CMV cresceu ${formatPct(crescimentoCMV)} enquanto a receita variou ${formatPct(crescimentoReceita)}. O resultado e perda de eficiencia.`,
-      causaRaiz: 'Gestao de compras reativa (sem negociacao) ou mix piorando (vendendo mais produto de baixa margem).',
+      titulo: `Custos crescendo mais rapido que a receita (${formatPct(crescimentoCMV - crescimentoReceita)} de diferença)`,
+      diagnostico: `CMV cresceu ${formatPct(crescimentoCMV)} enquanto a receita variou ${formatPct(crescimentoReceita)}. O resultado e perda de eficiência.`,
+      causaRaiz: 'Gestão de compras reativa (sem negociação) ou mix piorando (vendendo mais produto de baixa margem).',
     });
   }
 
@@ -759,16 +759,16 @@ function gerarInsights(mesesDados, totais) {
   if (shareConveniencia < 8) {
     oportunidadesCandidatas.push({
       impacto: 9,
-      titulo: 'Expandir loja de conveniencia',
-      potencial: `Cada ${(5 - shareConveniencia).toFixed(0)} p.p. adicionais em conveniencia (margem tipica 25-40%) podem elevar a margem bruta consolidada em 1-3 p.p.`,
+      titulo: 'Expandir loja de conveniência',
+      potencial: `Cada ${(5 - shareConveniencia).toFixed(0)} p.p. adicionais em conveniência (margem tipica 25-40%) podem elevar a margem bruta consolidada em 1-3 p.p.`,
       acao: 'Reformular sortimento, ativar pontos quentes (caixa, bomba), parcerias com marcas para promocionar giro de alto-margem.',
     });
   }
   if (shareAutomotivos < 3) {
     oportunidadesCandidatas.push({
       impacto: 7,
-      titulo: 'Explorar produtos automotivos e servicos',
-      potencial: `Aditivo, lubrificante, arla e servicos (troca de oleo, lavagem) tem margem 40-60%. Cada R$ 10 mil/mes em automotivos adiciona ~R$ 4-6 mil de lucro bruto.`,
+      titulo: 'Explorar produtos automotivos e serviços',
+      potencial: `Aditivo, lubrificante, arla e serviços (troca de oleo, lavagem) tem margem 40-60%. Cada R$ 10 mil/mês em automotivos adiciona ~R$ 4-6 mil de lucro bruto.`,
       acao: 'Treinar frentista para oferecimento consultivo de aditivo/oleo na bomba; parceria com oficina local.',
     });
   }
@@ -776,15 +776,15 @@ function gerarInsights(mesesDados, totais) {
     oportunidadesCandidatas.push({
       impacto: 6,
       titulo: 'Capital de giro com folga — hora de aplicar',
-      potencial: `O caixa esta gerando ${formatCurrency(slopeCaixa)} a mais por mes em media. Em 12 meses isso seria ${formatCurrency(slopeCaixa * 12)}.`,
+      potencial: `O caixa esta gerando ${formatCurrency(slopeCaixa)} a mais por mês em media. Em 12 meses isso seria ${formatCurrency(slopeCaixa * 12)}.`,
       acao: 'Aplicar o excedente em CDB/Tesouro de curto prazo ou antecipar recebiveis apenas quando a taxa for menor que o custo do dinheiro.',
     });
   }
   if (slopeTicket > 0) {
     oportunidadesCandidatas.push({
       impacto: 6,
-      titulo: `Ticket medio subindo (${formatPct(crescimentoTicket)} no periodo)`,
-      potencial: 'O cliente esta gastando mais por visita. Sinal verde para intensificar venda cruzada (combustivel + conveniencia + automotivos).',
+      titulo: `Ticket medio subindo (${formatPct(crescimentoTicket)} no período)`,
+      potencial: 'O cliente esta gastando mais por visita. Sinal verde para intensificar venda cruzada (combustível + conveniência + automotivos).',
       acao: 'Treinar frentistas em roteiro de abordagem e criar combo de produtos no caixa.',
     });
   }
@@ -792,8 +792,8 @@ function gerarInsights(mesesDados, totais) {
     oportunidadesCandidatas.push({
       impacto: 7,
       titulo: 'Estruturar venda B2B para frotas',
-      potencial: 'Com caixa estavel e alta dependencia de combustivel, uma carteira B2B de frotas pode trazer volume previsivel e recorrente.',
-      acao: 'Criar politica comercial para frotas (preco por volume, prazo de pagamento, relatorio mensal), prospectar construtoras/locadoras locais.',
+      potencial: 'Com caixa estavel e alta dependencia de combustível, uma carteira B2B de frotas pode trazer volume previsivel e recorrente.',
+      acao: 'Criar política comercial para frotas (preco por volume, prazo de pagamento, relatório mensal), prospectar construtoras/locadoras locais.',
     });
   }
   if (volatilidade >= 20 && volatilidade < 40) {
@@ -801,7 +801,7 @@ function gerarInsights(mesesDados, totais) {
       impacto: 5,
       titulo: `Exploracao de sazonalidade (CV ${volatilidade.toFixed(1)}%)`,
       potencial: `Receita varia entre ${formatCurrency(piorReceita?.receita || 0)} e ${formatCurrency(melhorReceita?.receita || 0)}. Com previsibilidade melhor, da pra comprar mais barato nos meses de queda.`,
-      acao: 'Montar calendario comercial: promocoes, estoque planejado e escala de funcionarios ajustada a sazonalidade detectada.',
+      acao: 'Montar calendário comercial: promoções, estoque planejado e escala de funcionários ajustada a sazonalidade detectada.',
     });
   }
   if (mediaMargem >= 12) {
@@ -825,18 +825,18 @@ function gerarInsights(mesesDados, totais) {
   // Vendas
   analiseDetalhada.vendas.push({
     titulo: 'Mix de receita',
-    texto: `Combustiveis ${formatCurrency(totais.receitaCombustivel)} (${shareCombustivel.toFixed(1)}%), Conveniencia ${formatCurrency(totais.receitaConveniencia)} (${shareConveniencia.toFixed(1)}%), Automotivos ${formatCurrency(totais.receitaAutomotivos)} (${shareAutomotivos.toFixed(1)}%).`,
+    texto: `Combustíveis ${formatCurrency(totais.receitaCombustivel)} (${shareCombustivel.toFixed(1)}%), Conveniência ${formatCurrency(totais.receitaConveniencia)} (${shareConveniencia.toFixed(1)}%), Automotivos ${formatCurrency(totais.receitaAutomotivos)} (${shareAutomotivos.toFixed(1)}%).`,
   });
   if (melhorReceita && piorReceita && melhorReceita.key !== piorReceita.key) {
     analiseDetalhada.vendas.push({
       titulo: 'Picos e vales',
-      texto: `Melhor mes: ${melhorReceita.label} (${formatCurrency(melhorReceita.receita)}). Pior: ${piorReceita.label} (${formatCurrency(piorReceita.receita)}). Diferenca de ${formatCurrency(melhorReceita.receita - piorReceita.receita)} (${((melhorReceita.receita - piorReceita.receita) / (piorReceita.receita || 1) * 100).toFixed(1)}%).`,
+      texto: `Melhor mês: ${melhorReceita.label} (${formatCurrency(melhorReceita.receita)}). Pior: ${piorReceita.label} (${formatCurrency(piorReceita.receita)}). Diferença de ${formatCurrency(melhorReceita.receita - piorReceita.receita)} (${((melhorReceita.receita - piorReceita.receita) / (piorReceita.receita || 1) * 100).toFixed(1)}%).`,
     });
   }
   if (tickets.some(t => t > 0)) {
     analiseDetalhada.vendas.push({
       titulo: 'Ticket medio',
-      texto: `Media do periodo: ${formatCurrency(totais.ticketMedio)} em ${totais.qtdVendas.toLocaleString('pt-BR')} vendas. Tendencia: ${slopeTicket > 0 ? 'crescente' : slopeTicket < 0 ? 'decrescente' : 'estavel'} (${crescimentoTicket >= 0 ? '+' : ''}${crescimentoTicket.toFixed(1)}% no periodo).`,
+      texto: `Media do período: ${formatCurrency(totais.ticketMedio)} em ${totais.qtdVendas.toLocaleString('pt-BR')} vendas. Tendência: ${slopeTicket > 0 ? 'crescente' : slopeTicket < 0 ? 'decrescente' : 'estavel'} (${crescimentoTicket >= 0 ? '+' : ''}${crescimentoTicket.toFixed(1)}% no período).`,
     });
   }
   if (shareCanceladas >= 0.5) {
@@ -849,7 +849,7 @@ function gerarInsights(mesesDados, totais) {
   // DRE
   analiseDetalhada.dre.push({
     titulo: 'Lucro bruto e margem',
-    texto: `Receita ${formatCurrency(totais.receita)} − CMV ${formatCurrency(totais.cmv)} = Lucro bruto ${formatCurrency(totais.lucroBruto)}. Margem media ${mediaMargem.toFixed(2)}% (${slopeMargem >= 0 ? 'melhorando' : 'piorando'} ${Math.abs(slopeMargem).toFixed(2)} p.p./mes).`,
+    texto: `Receita ${formatCurrency(totais.receita)} − CMV ${formatCurrency(totais.cmv)} = Lucro bruto ${formatCurrency(totais.lucroBruto)}. Margem media ${mediaMargem.toFixed(2)}% (${slopeMargem >= 0 ? 'melhorando' : 'piorando'} ${Math.abs(slopeMargem).toFixed(2)} p.p./mês).`,
   });
   analiseDetalhada.dre.push({
     titulo: 'Comportamento do CMV',
@@ -861,35 +861,35 @@ function gerarInsights(mesesDados, totais) {
   });
   if (totais.descontos > 0 || totais.acrescimos > 0) {
     analiseDetalhada.dre.push({
-      titulo: 'Descontos e acrescimos',
-      texto: `${formatCurrency(totais.descontos)} em descontos (${shareDescontos.toFixed(2)}% da receita) vs ${formatCurrency(totais.acrescimos)} em acrescimos. Saldo liquido: ${formatCurrency(totais.acrescimos - totais.descontos)}.`,
+      titulo: 'Descontos e acréscimos',
+      texto: `${formatCurrency(totais.descontos)} em descontos (${shareDescontos.toFixed(2)}% da receita) vs ${formatCurrency(totais.acrescimos)} em acréscimos. Saldo liquido: ${formatCurrency(totais.acrescimos - totais.descontos)}.`,
     });
   }
 
   // Fluxo de Caixa
   analiseDetalhada.caixa.push({
-    titulo: 'Geracao de caixa',
-    texto: `Entradas ${formatCurrency(totais.entradasCaixa)} − Saidas ${formatCurrency(totais.saidasCaixa)} = Variacao ${formatCurrency(totais.variacaoCaixa)}. ${
+    titulo: 'Geração de caixa',
+    texto: `Entradas ${formatCurrency(totais.entradasCaixa)} − Saídas ${formatCurrency(totais.saidasCaixa)} = Variação ${formatCurrency(totais.variacaoCaixa)}. ${
       totais.variacaoCaixa >= 0
         ? 'Negocio gerando caixa no consolidado.'
-        : 'Negocio consumindo caixa no consolidado — ponto critico.'
+        : 'Negocio consumindo caixa no consolidado — ponto crítico.'
     }`,
   });
   analiseDetalhada.caixa.push({
     titulo: 'Lucro x Caixa',
-    texto: `Lucro bruto ${formatCurrency(totais.lucroBruto)} vs variacao de caixa ${formatCurrency(totais.variacaoCaixa)}. Gap de receita/entradas: ${formatPct(gapCaixaReceita)}. ${
+    texto: `Lucro bruto ${formatCurrency(totais.lucroBruto)} vs variação de caixa ${formatCurrency(totais.variacaoCaixa)}. Gap de receita/entradas: ${formatPct(gapCaixaReceita)}. ${
       gapCaixaReceita < -10
         ? 'Caixa significativamente abaixo da receita — evidencia de aumento de contas a receber.'
         : gapCaixaReceita > 10
         ? 'Entradas acima da receita — recebimento de vendas anteriores, bom sinal para giro.'
-        : 'Caixa alinhado com a receita — conversao saudavel.'
+        : 'Caixa alinhado com a receita — conversão saudavel.'
     }`,
   });
   if (mesesCaixaNegativo > 0) {
     const mesesNegativosLabels = validos.filter(m => m.variacaoCaixa < 0).map(m => m.label).join(', ');
     analiseDetalhada.caixa.push({
-      titulo: 'Periodos criticos',
-      texto: `${mesesCaixaNegativo} mes(es) com caixa negativo: ${mesesNegativosLabels}. Avaliar se foi evento pontual ou tendencia.`,
+      titulo: 'Períodos críticos',
+      texto: `${mesesCaixaNegativo} mês(es) com caixa negativo: ${mesesNegativosLabels}. Avaliar se foi evento pontual ou tendência.`,
     });
   }
 
@@ -897,50 +897,50 @@ function gerarInsights(mesesDados, totais) {
   const recomendacoes = [];
   if (mesesPrejuizo > 0 || mediaMargem < 8) {
     recomendacoes.push({
-      acao: 'Revisar precos de combustivel com base em custo real de reposicao (metodo UEPS) e nao em custo medio.',
-      justificativa: 'Em momentos de alta de preco na refinaria, usar custo medio subestima o custo de reposicao e corroi a margem.',
+      acao: 'Revisar precos de combustível com base em custo real de reposição (metodo UEPS) e não em custo medio.',
+      justificativa: 'Em momentos de alta de preco na refinaria, usar custo medio subestima o custo de reposição e corroi a margem.',
     });
   }
   if (shareCombustivel >= 85) {
     recomendacoes.push({
-      acao: 'Definir meta de 10% da receita em conveniencia em 6-12 meses.',
-      justificativa: 'A cada p.p. que conveniencia ganha (margem 25-40%) vs combustivel (margem 4-8%), a margem consolidada sobe ~0,3 p.p.',
+      acao: 'Definir meta de 10% da receita em conveniência em 6-12 meses.',
+      justificativa: 'A cada p.p. que conveniência ganha (margem 25-40%) vs combustível (margem 4-8%), a margem consolidada sobe ~0,3 p.p.',
     });
   }
   if (slopeMargem < 0) {
     recomendacoes.push({
-      acao: 'Reprecificar o sortimento de conveniencia e automotivos semanalmente com base em pesquisa de concorrencia local.',
-      justificativa: 'Nesses itens a elasticidade e menor e voce ganha margem. O combustivel ja esta quase commodity.',
+      acao: 'Reprecificar o sortimento de conveniência e automotivos semanalmente com base em pesquisa de concorrência local.',
+      justificativa: 'Nesses itens a elasticidade e menor e você ganha margem. O combustível já esta quase commodity.',
     });
   }
   if (shareDescontos >= 2.5) {
     recomendacoes.push({
-      acao: 'Centralizar aprovacao de desconto: regra escrita, teto por perfil de cliente (varejo, fidelidade, frota) e relatorio semanal.',
-      justificativa: 'Politica solta de desconto e o vazamento de margem mais silencioso e recorrente do setor.',
+      acao: 'Centralizar aprovação de desconto: regra escrita, teto por perfil de cliente (varejo, fidelidade, frota) e relatório semanal.',
+      justificativa: 'Política solta de desconto e o vazamento de margem mais silencioso e recorrente do setor.',
     });
   }
   if (gapCaixaReceita < -10) {
     recomendacoes.push({
-      acao: 'Mapear DSO por meio de pagamento: cartao, frota, duplicata. Negociar antecipacao onde o custo for menor que 1% a.m.',
+      acao: 'Mapear DSO por meio de pagamento: cartão, frota, duplicata. Negociar antecipação onde o custo for menor que 1% a.m.',
       justificativa: 'Receita sem caixa pressiona capital de giro e cria dependencia de conta-garantida/cheque especial, que tem custo bem maior.',
     });
   }
   if (mesesCaixaNegativo >= 2) {
     recomendacoes.push({
       acao: 'Construir reserva operacional equivalente a 30-45 dias de despesa fixa.',
-      justificativa: 'Postos operam com margem apertada; um mes ruim de preco da distribuidora pode travar a operacao se nao houver colchao.',
+      justificativa: 'Postos operam com margem apertada; um mês ruim de preco da distribuidora pode travar a operação se não houver colchao.',
     });
   }
   if (shareConveniencia >= 8 && mediaMargem >= 10) {
     recomendacoes.push({
       acao: 'Implantar programa de fidelidade (pontos ou cashback) com gatilho no app/POS.',
-      justificativa: 'Voce ja tem margem para absorver o custo do programa; em troca aumenta frequencia, que e o principal driver de ticket medio.',
+      justificativa: 'Você já tem margem para absorver o custo do programa; em troca aumenta frequência, que e o principal driver de ticket medio.',
     });
   }
   if (recomendacoes.length < 3) {
     recomendacoes.push({
-      acao: 'Implantar gestao por centro de custo (pista, conveniencia, lavagem) para isolar performance e decisoes de investimento.',
-      justificativa: 'Sem separar os centros, o resultado positivo de um oculta o prejuizo de outro.',
+      acao: 'Implantar gestão por centro de custo (pista, conveniência, lavagem) para isolar performance e decisoes de investimento.',
+      justificativa: 'Sem separar os centros, o resultado positivo de um oculta o prejuízo de outro.',
     });
   }
 
@@ -998,9 +998,9 @@ function InsightsConsultor({ insights, totais }) {
             <h3 className="text-sm font-semibold text-gray-800">Mix de receita</h3>
           </div>
           <div className="p-4 space-y-3">
-            <MixLinha icon={Droplet} label="Combustiveis" valor={totais.receitaCombustivel} total={totais.receita} color="amber" />
+            <MixLinha icon={Droplet} label="Combustíveis" valor={totais.receitaCombustivel} total={totais.receita} color="amber" />
             <MixLinha icon={Wrench} label="Automotivos" valor={totais.receitaAutomotivos} total={totais.receita} color="slate" />
-            <MixLinha icon={ShoppingBag} label="Conveniencia" valor={totais.receitaConveniencia} total={totais.receita} color="emerald" />
+            <MixLinha icon={ShoppingBag} label="Conveniência" valor={totais.receitaConveniencia} total={totais.receita} color="emerald" />
           </div>
         </div>
       </div>
@@ -1014,7 +1014,7 @@ function InsightsConsultor({ insights, totais }) {
         </div>
         <div className="p-4">
           {insights.problemas.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">Nenhum problema critico detectado neste periodo.</p>
+            <p className="text-sm text-gray-500 italic">Nenhum problema crítico detectado neste período.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {insights.problemas.map((p, i) => (
@@ -1026,7 +1026,7 @@ function InsightsConsultor({ insights, totais }) {
                     <p className="text-[13px] font-bold text-red-900 leading-tight">{p.titulo}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Diagnostico</p>
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Diagnóstico</p>
                     <p className="text-[11.5px] text-gray-700 leading-relaxed">{p.diagnostico}</p>
                   </div>
                   <div className="mt-auto pt-2 border-t border-red-100">
@@ -1049,7 +1049,7 @@ function InsightsConsultor({ insights, totais }) {
         </div>
         <div className="p-4">
           {insights.oportunidades.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">Sem oportunidades evidentes detectadas automaticamente neste periodo.</p>
+            <p className="text-sm text-gray-500 italic">Sem oportunidades evidentes detectadas automaticamente neste período.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {insights.oportunidades.map((o, i) => (
@@ -1079,7 +1079,7 @@ function InsightsConsultor({ insights, totais }) {
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-blue-600" />
-          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">4. Analise detalhada</h3>
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">4. Análise detalhada</h3>
           <span className="text-[11px] text-gray-500">· leitura cruzada por bloco</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100">
@@ -1094,7 +1094,7 @@ function InsightsConsultor({ insights, totais }) {
         <div className="px-5 py-3 border-b border-violet-100 bg-violet-50/40 flex items-center gap-2">
           <Lightbulb className="h-4 w-4 text-violet-600" />
           <h3 className="text-sm font-bold text-violet-900 uppercase tracking-wider">5. Recomendacoes estrategicas</h3>
-          <span className="text-[11px] text-violet-600/70">· acoes priorizadas para os proximos 30-90 dias</span>
+          <span className="text-[11px] text-violet-600/70">· ações priorizadas para os próximos 30-90 dias</span>
         </div>
         <div className="p-4 space-y-2.5">
           {insights.recomendacoes.map((r, i) => (
@@ -1112,7 +1112,7 @@ function InsightsConsultor({ insights, totais }) {
             </div>
           ))}
           {insights.recomendacoes.length === 0 && (
-            <p className="text-sm text-gray-500 italic">Sem recomendacoes nesta analise.</p>
+            <p className="text-sm text-gray-500 italic">Sem recomendacoes nesta análise.</p>
           )}
         </div>
       </div>
@@ -1128,7 +1128,7 @@ function BlocoDetalhe({ icon: Icon, titulo, cor, itens }) {
         <p className={`text-[12px] font-bold ${cor} uppercase tracking-wider`}>{titulo}</p>
       </div>
       {itens.length === 0 ? (
-        <p className="text-[11px] text-gray-400 italic">Sem dados no periodo.</p>
+        <p className="text-[11px] text-gray-400 italic">Sem dados no período.</p>
       ) : (
         <ul className="space-y-2.5">
           {itens.map((it, i) => (

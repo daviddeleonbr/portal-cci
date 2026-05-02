@@ -46,16 +46,16 @@ export default function ClienteUsuarios() {
       const payload = { ...form, tipo: 'cliente', chave_api_id: chaveApi.id };
       if (form.id) {
         await usuariosService.atualizarUsuario(form.id, payload);
-        showToast('success', 'Usuario atualizado');
+        showToast('success', 'Usuário atualizado');
       } else {
         await usuariosService.criarUsuario(payload);
-        showToast('success', 'Usuario criado');
+        showToast('success', 'Usuário criado');
       }
       setModal({ open: false, data: null });
       await carregar();
     } catch (err) {
       const msg = err.message?.includes('duplicate') || err.message?.includes('unique')
-        ? 'Ja existe um usuario com esse e-mail.'
+        ? 'Já existe um usuário com esse e-mail.'
         : err.message;
       showToast('error', msg);
     }
@@ -64,7 +64,7 @@ export default function ClienteUsuarios() {
   const excluir = async (id) => {
     try {
       await usuariosService.excluirUsuario(id);
-      showToast('success', 'Usuario excluido');
+      showToast('success', 'Usuário excluido');
       setConfirm({ open: false });
       await carregar();
     } catch (err) { showToast('error', err.message); }
@@ -81,12 +81,12 @@ export default function ClienteUsuarios() {
   if (!podeGerenciar) {
     return (
       <div>
-        <PageHeader title="Usuarios da Rede" description="Gerenciamento de acessos dos usuarios da sua rede" />
+        <PageHeader title="Usuários da Rede" description="Gerenciamento de acessos dos usuários da sua rede" />
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
           <p className="text-sm font-semibold text-gray-900 mb-1">Acesso restrito</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            Voce nao tem permissao para gerenciar usuarios. Contate o administrador da rede.
+            Você não tem permissão para gerenciar usuários. Contate o administrador da rede.
           </p>
         </div>
       </div>
@@ -97,11 +97,11 @@ export default function ClienteUsuarios() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Usuarios da Rede"
-        description={`Gerencie os acessos dos usuarios da rede ${chaveApi?.nome || ''}`}>
+      <PageHeader title="Usuários da Rede"
+        description={`Gerencie os acessos dos usuários da rede ${chaveApi?.nome || ''}`}>
         <button onClick={() => setModal({ open: true, data: null })}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Novo Usuario
+          <Plus className="h-4 w-4" /> Novo Usuário
         </button>
       </PageHeader>
 
@@ -120,7 +120,7 @@ export default function ClienteUsuarios() {
         <div className="bg-white rounded-xl border border-gray-200/60 px-6 py-16 text-center">
           <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
           <p className="text-sm text-gray-600">
-            {usuarios.length === 0 ? 'Nenhum usuario cadastrado na sua rede ainda.' : 'Nenhum usuario corresponde a busca.'}
+            {usuarios.length === 0 ? 'Nenhum usuário cadastrado na sua rede ainda.' : 'Nenhum usuário corresponde a busca.'}
           </p>
         </div>
       ) : (
@@ -129,9 +129,9 @@ export default function ClienteUsuarios() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50/80 border-b border-gray-100">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-4 py-3">Usuario</th>
+                  <th className="px-4 py-3">Usuário</th>
                   <th className="px-4 py-3 text-center">Empresas</th>
-                  <th className="px-4 py-3 text-center">Permissoes</th>
+                  <th className="px-4 py-3 text-center">Permissões</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3"></th>
                 </tr>
@@ -207,9 +207,9 @@ export default function ClienteUsuarios() {
       <ModalUsuarioRede open={modal.open} data={modal.data} empresas={empresasDisponiveis}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
-      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuario" size="sm">
+      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuário" size="sm">
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">Excluir o usuario <strong>{confirm.nome}</strong>? O acesso sera removido imediatamente.</p>
+          <p className="text-sm text-gray-600">Excluir o usuário <strong>{confirm.nome}</strong>? O acesso sera removido imediatamente.</p>
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false })} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
             <button onClick={confirm.onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
@@ -276,7 +276,7 @@ function ModalUsuarioRede({ open, data, empresas, onClose, onSave }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Usuario' : 'Novo Usuario da Rede'} size="lg">
+    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Usuário' : 'Novo Usuário da Rede'} size="lg">
       <div className="space-y-4">
         {/* Dados */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -304,7 +304,7 @@ function ModalUsuarioRede({ open, data, empresas, onClose, onSave }) {
               <input type={mostrarSenha ? 'text' : 'password'}
                 value={form.senha || ''}
                 onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
-                placeholder={data?.id ? '••••••••' : 'Minimo 6 caracteres'}
+                placeholder={data?.id ? '••••••••' : 'Mínimo 6 caracteres'}
                 className="w-full h-10 rounded-lg border border-gray-200 pl-9 pr-10 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               <button type="button" onClick={() => setMostrarSenha(s => !s)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-gray-700">
@@ -351,7 +351,7 @@ function ModalUsuarioRede({ open, data, empresas, onClose, onSave }) {
         {/* Permissoes */}
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1.5">
-            Permissoes ({(form.permissoes || []).length}/{usuariosService.PERMISSOES_CLIENTE.length})
+            Permissões ({(form.permissoes || []).length}/{usuariosService.PERMISSOES_CLIENTE.length})
           </label>
           <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-3 space-y-3">
             {Object.entries(permsPorGrupo).map(([grupo, perms]) => (
@@ -382,7 +382,7 @@ function ModalUsuarioRede({ open, data, empresas, onClose, onSave }) {
             disabled={saving || !form.nome?.trim() || !form.email?.trim() || (!data?.id && !form.senha?.trim())}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {data?.id ? 'Salvar alteracoes' : 'Criar usuario'}
+            {data?.id ? 'Salvar alteracoes' : 'Criar usuário'}
           </button>
         </div>
       </div>

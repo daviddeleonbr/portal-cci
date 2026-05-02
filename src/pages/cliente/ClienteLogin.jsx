@@ -50,7 +50,7 @@ export default function ClienteLogin() {
             Portal do Cliente
           </h2>
           <p className="text-emerald-100 text-lg leading-relaxed">
-            Acompanhe seus relatorios, servicos de BPO, documentos e muito mais.
+            Acompanhe seus relatórios, serviços de BPO, documentos e muito mais.
           </p>
           <div className="mt-12 flex justify-center gap-2">
             <div className="h-2 w-2 rounded-full bg-white/20" />
@@ -85,7 +85,7 @@ export default function ClienteLogin() {
             Acesse sua conta
           </h1>
           <p className="text-gray-500 mb-8">
-            Visualize relatorios, acompanhe servicos e gerencie documentos.
+            Visualize relatórios, acompanhe serviços e gerencie documentos.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">

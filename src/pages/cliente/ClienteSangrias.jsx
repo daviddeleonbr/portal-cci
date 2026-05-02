@@ -102,11 +102,11 @@ export default function ClienteSangrias() {
 
       // 2. Sem fechamento, busca dados da API (se for Webposto)
       if (!cliente.usa_webposto || !cliente.chave_api_id || !cliente.empresa_codigo) {
-        throw new Error('Esta funcionalidade requer integracao Webposto configurada');
+        throw new Error('Esta funcionalidade requer integração Webposto configurada');
       }
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada');
+      if (!chave) throw new Error('Chave API não encontrada');
 
       const filtros = { dataInicial: data, dataFinal: data, empresaCodigo: cliente.empresa_codigo };
       const [vendas, formasPag, funcs] = await Promise.all([
@@ -140,7 +140,7 @@ export default function ClienteSangrias() {
       const lista = Array.from(porFunc.entries())
         .map(([fcod, apurado]) => ({
           funcionarioCodigo: fcod,
-          nome: mapaFunc.get(fcod) || `Funcionario #${fcod}`,
+          nome: mapaFunc.get(fcod) || `Funcionário #${fcod}`,
           dinheiroApurado: Number(apurado.toFixed(2)),
           dinheiroApresentado: '',
         }))
@@ -183,7 +183,7 @@ export default function ClienteSangrias() {
   const abrirConfirmacao = () => {
     if (!cliente || travado) return;
     if (data >= hojeStr()) {
-      showToast('error', 'Nao e permitido salvar sangrias do dia de hoje ou futuros.');
+      showToast('error', 'Não e permitido salvar sangrias do dia de hoje ou futuros.');
       return;
     }
     if (!responsavel.trim()) {
@@ -191,7 +191,7 @@ export default function ClienteSangrias() {
       return;
     }
     if (!cienciaConfirmada) {
-      showToast('error', 'Confirme a ciencia dos valores antes de salvar.');
+      showToast('error', 'Confirme a ciência dos valores antes de salvar.');
       return;
     }
     setModalConfirmacao(true);
@@ -234,12 +234,12 @@ export default function ClienteSangrias() {
     return (
       <div>
         <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-        <PageHeader title="Sangrias - Contagem de Caixa" description="Confira o dinheiro apurado e registre o apresentado por funcionario" />
+        <PageHeader title="Sangrias - Contagem de Caixa" description="Confira o dinheiro apurado e registre o apresentado por funcionário" />
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
-          <p className="text-sm font-semibold text-gray-900 mb-1">Sessao sem cliente vinculado</p>
+          <p className="text-sm font-semibold text-gray-900 mb-1">Sessão sem cliente vinculado</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            O usuario logado nao tem um cliente associado. Contate o administrador.
+            O usuário logado não tem um cliente associado. Contate o administrador.
           </p>
         </div>
       </div>
@@ -253,9 +253,9 @@ export default function ClienteSangrias() {
         <PageHeader title="Sangrias - Contagem de Caixa" description={cliente.nome} />
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
-          <p className="text-sm font-semibold text-gray-900 mb-1">Integracao Webposto nao configurada</p>
+          <p className="text-sm font-semibold text-gray-900 mb-1">Integração Webposto não configurada</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            Este cliente ainda nao tem <strong>Webposto ativo</strong>, chave API ou codigo da empresa cadastrados. Contate o administrador.
+            Este cliente ainda não tem <strong>Webposto ativo</strong>, chave API ou código da empresa cadastrados. Contate o administrador.
           </p>
         </div>
       </div>
@@ -266,10 +266,10 @@ export default function ClienteSangrias() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Sangrias - Contagem de Caixa" description="Confira o dinheiro apurado no sistema e registre o apresentado no fechamento de cada funcionario">
+      <PageHeader title="Sangrias - Contagem de Caixa" description="Confira o dinheiro apurado no sistema e registre o apresentado no fechamento de cada funcionário">
         <button onClick={() => setMostrarHistorico(!mostrarHistorico)}
           className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-          <History className="h-4 w-4" /> {mostrarHistorico ? 'Ocultar historico' : 'Ver historico'}
+          <History className="h-4 w-4" /> {mostrarHistorico ? 'Ocultar histórico' : 'Ver histórico'}
         </button>
       </PageHeader>
 
@@ -296,7 +296,7 @@ export default function ClienteSangrias() {
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr_auto] gap-3 items-end">
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data da conciliacao</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data da conciliação</label>
             <input type="date" value={data} onChange={(e) => setData(e.target.value)}
               max={ontemStr()}
               disabled={loadingDados}
@@ -306,7 +306,7 @@ export default function ClienteSangrias() {
                   : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'
               }`} />
             {dataInvalida && (
-              <p className="mt-1 text-[11px] text-red-600">Somente dias anteriores sao permitidos.</p>
+              <p className="mt-1 text-[11px] text-red-600">Somente dias anteriores são permitidos.</p>
             )}
           </div>
           <div>
@@ -332,7 +332,7 @@ export default function ClienteSangrias() {
             <p className="text-sm font-semibold text-emerald-900">Fechamento confirmado</p>
             <p className="text-xs text-emerald-700 mt-0.5">
               Este dia foi fechado em <strong>{new Date(fechamento.confirmado_em).toLocaleString('pt-BR')}</strong> por <strong>{fechamento.confirmado_por || '—'}</strong>.
-              Os valores nao podem mais ser alterados.
+              Os valores não podem mais ser alterados.
             </p>
           </div>
         </div>
@@ -348,7 +348,7 @@ export default function ClienteSangrias() {
       {loadingDados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-800">Buscando vendas e apuracao de {formatDataBR(data)}...</p>
+          <p className="text-sm font-medium text-gray-800">Buscando vendas e apuração de {formatDataBR(data)}...</p>
         </div>
       ) : registros.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
@@ -357,7 +357,7 @@ export default function ClienteSangrias() {
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Sem registros para {formatDataBR(data)}</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            {error || 'Nao foram encontradas vendas em dinheiro neste dia.'}
+            {error || 'Não foram encontradas vendas em dinheiro neste dia.'}
           </p>
         </div>
       ) : (
@@ -366,7 +366,7 @@ export default function ClienteSangrias() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             <Kpi label="Total apurado" valor={formatCurrency(totais.apurado)} icon={TrendingUp} color="emerald" />
             <Kpi label="Total apresentado" valor={formatCurrency(totais.apresentado)} icon={CheckCircle2} color="blue" />
-            <Kpi label="Diferenca"
+            <Kpi label="Diferença"
               valor={formatCurrency(totais.diferenca)}
               icon={Math.abs(totais.diferenca) < 0.01 ? CheckCircle2 : totais.diferenca > 0 ? TrendingUp : TrendingDown}
               color={Math.abs(totais.diferenca) < 0.01 ? 'emerald' : totais.diferenca > 0 ? 'amber' : 'red'} />
@@ -377,16 +377,16 @@ export default function ClienteSangrias() {
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
               <Calendar className="h-4 w-4 text-blue-500" />
               <h3 className="text-sm font-semibold text-gray-800">Fechamento de {formatDataBR(data)}</h3>
-              <span className="text-[11px] text-gray-400">· {registros.length} funcionarios</span>
+              <span className="text-[11px] text-gray-400">· {registros.length} funcionários</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className="px-4 py-3">Funcionario</th>
+                    <th className="px-4 py-3">Funcionário</th>
                     <th className="px-4 py-3 text-right">Dinheiro apurado</th>
                     <th className="px-4 py-3 text-right">Apresentado (contado)</th>
-                    <th className="px-4 py-3 text-right">Diferenca</th>
+                    <th className="px-4 py-3 text-right">Diferença</th>
                     <th className="px-4 py-3 text-center">Status</th>
                   </tr>
                 </thead>
@@ -488,8 +488,8 @@ export default function ClienteSangrias() {
                     Declaro que conferi pessoalmente os valores apresentados
                   </p>
                   <p className="text-[11px] text-gray-500 mt-0.5">
-                    Confirmo que o dinheiro apresentado por cada funcionario foi contado fisicamente
-                    e que todos os valores digitados estao corretos. Apos salvar, os dados ficam travados.
+                    Confirmo que o dinheiro apresentado por cada funcionário foi contado fisicamente
+                    e que todos os valores digitados estao corretos. Após salvar, os dados ficam travados.
                   </p>
                 </div>
               </label>
@@ -499,18 +499,18 @@ export default function ClienteSangrias() {
                 <div className="text-xs text-gray-500">
                   {todosPreenchidos ? (
                     <span className="inline-flex items-center gap-1.5 text-emerald-700">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Todos os funcionarios preenchidos
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Todos os funcionários preenchidos
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-amber-600">
-                      <AlertCircle className="h-3.5 w-3.5" /> Funcionarios em branco serao salvos como R$ 0,00
+                      <AlertCircle className="h-3.5 w-3.5" /> Funcionários em branco serao salvos como R$ 0,00
                     </span>
                   )}
                 </div>
                 <button onClick={abrirConfirmacao}
                   disabled={salvando || !responsavel.trim() || !cienciaConfirmada}
                   className="flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={!cienciaConfirmada ? 'Marque a declaracao de ciencia para habilitar' : undefined}>
+                  title={!cienciaConfirmada ? 'Marque a declaracao de ciência para habilitar' : undefined}>
                   {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Confirmar e salvar
                 </button>
@@ -532,7 +532,7 @@ export default function ClienteSangrias() {
         <div className="mt-6 bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
             <History className="h-4 w-4 text-blue-500" />
-            <h3 className="text-sm font-semibold text-gray-800">Historico de fechamentos</h3>
+            <h3 className="text-sm font-semibold text-gray-800">Histórico de fechamentos</h3>
             <span className="text-[11px] text-gray-400">· {historico.length} registros</span>
           </div>
           {historico.length === 0 ? (
@@ -558,7 +558,7 @@ export default function ClienteSangrias() {
                       <p className="text-sm font-mono text-gray-900 tabular-nums">{formatCurrency(h.total_apresentado)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">Diferenca</p>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">Diferença</p>
                       <p className={`text-sm font-mono font-semibold tabular-nums ${
                         conciliado ? 'text-emerald-600'
                           : Number(h.total_diferenca) > 0 ? 'text-amber-600'
@@ -579,7 +579,7 @@ export default function ClienteSangrias() {
         title="Confirmar fechamento de sangria" size="md">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Revise os dados antes de confirmar. Apos salvar, o fechamento fica travado e os valores nao podem mais ser alterados.
+            Revise os dados antes de confirmar. Após salvar, o fechamento fica travado e os valores não podem mais ser alterados.
           </p>
 
           <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-4 space-y-2.5">
@@ -596,7 +596,7 @@ export default function ClienteSangrias() {
               <span className="font-medium text-gray-900 text-right truncate max-w-[60%]">{responsavel || '—'}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Funcionarios</span>
+              <span className="text-gray-500">Funcionários</span>
               <span className="font-medium text-gray-900">{registros.length}</span>
             </div>
           </div>
@@ -615,7 +615,7 @@ export default function ClienteSangrias() {
                 : totais.diferenca > 0 ? 'border-amber-200 bg-amber-50/40'
                 : 'border-red-200 bg-red-50/40'
             }`}>
-              <p className="text-[10px] uppercase tracking-wider text-gray-500">Diferenca</p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-500">Diferença</p>
               <p className={`text-sm font-mono font-semibold tabular-nums mt-0.5 ${
                 Math.abs(totais.diferenca) < 0.01 ? 'text-emerald-700'
                   : totais.diferenca > 0 ? 'text-amber-700'
@@ -627,7 +627,7 @@ export default function ClienteSangrias() {
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
             <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-[11px] text-amber-800">
-              Declaracao de ciencia confirmada. Esta acao nao pode ser desfeita.
+              Declaracao de ciência confirmada. Esta ação não pode ser desfeita.
             </p>
           </div>
 

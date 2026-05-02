@@ -48,16 +48,16 @@ export default function CciUsuarios() {
     try {
       if (form.id) {
         await usuariosService.atualizarUsuario(form.id, form);
-        showToast('success', 'Usuario atualizado');
+        showToast('success', 'Usuário atualizado');
       } else {
         await usuariosService.criarUsuario(form);
-        showToast('success', 'Usuario criado');
+        showToast('success', 'Usuário criado');
       }
       setModal({ open: false, data: null });
       await carregar();
     } catch (err) {
       const msg = err.message?.includes('duplicate') || err.message?.includes('unique')
-        ? 'Ja existe um usuario com esse e-mail.'
+        ? 'Já existe um usuário com esse e-mail.'
         : err.message;
       showToast('error', msg);
     }
@@ -66,7 +66,7 @@ export default function CciUsuarios() {
   const excluir = async (id) => {
     try {
       await usuariosService.excluirUsuario(id);
-      showToast('success', 'Usuario excluido');
+      showToast('success', 'Usuário excluido');
       setConfirm({ open: false });
       await carregar();
     } catch (err) { showToast('error', err.message); }
@@ -104,10 +104,10 @@ export default function CciUsuarios() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Usuarios do Sistema" description="Gerenciamento de acessos aos portais admin e cliente">
+      <PageHeader title="Usuários do Sistema" description="Gerenciamento de acessos aos portais admin e cliente">
         <button onClick={() => setModal({ open: true, data: null })}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Novo Usuario
+          <Plus className="h-4 w-4" /> Novo Usuário
         </button>
       </PageHeader>
 
@@ -145,7 +145,7 @@ export default function CciUsuarios() {
         <div className="bg-white rounded-xl border border-gray-200/60 px-6 py-16 text-center">
           <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
           <p className="text-sm text-gray-600">
-            {usuarios.length === 0 ? 'Nenhum usuario cadastrado ainda.' : 'Nenhum usuario corresponde aos filtros.'}
+            {usuarios.length === 0 ? 'Nenhum usuário cadastrado ainda.' : 'Nenhum usuário corresponde aos filtros.'}
           </p>
         </div>
       ) : (
@@ -154,10 +154,10 @@ export default function CciUsuarios() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50/80 border-b border-gray-100">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-4 py-3">Usuario</th>
+                  <th className="px-4 py-3">Usuário</th>
                   <th className="px-4 py-3">Tipo</th>
                   <th className="px-4 py-3">Rede Vinculada</th>
-                  <th className="px-4 py-3 text-center">Permissoes</th>
+                  <th className="px-4 py-3 text-center">Permissões</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3"></th>
                 </tr>
@@ -247,9 +247,9 @@ export default function CciUsuarios() {
         chavesApi={chavesApi} empresasPorRede={empresasPorRede} clientes={clientes}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
-      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuario" size="sm">
+      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuário" size="sm">
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">Excluir o usuario <strong>{confirm.nome}</strong>? O acesso sera removido imediatamente.</p>
+          <p className="text-sm text-gray-600">Excluir o usuário <strong>{confirm.nome}</strong>? O acesso sera removido imediatamente.</p>
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false })} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
             <button onClick={confirm.onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
@@ -281,9 +281,9 @@ function StatCard({ label, valor, icon: Icon, color }) {
 }
 
 const STEPS = [
-  { id: 1, titulo: 'Tipo e identificacao', icon: IdCard },
+  { id: 1, titulo: 'Tipo e identificação', icon: IdCard },
   { id: 2, titulo: 'Credenciais de acesso', icon: LockIcon },
-  { id: 3, titulo: 'Permissoes', icon: ShieldCheck },
+  { id: 3, titulo: 'Permissões', icon: ShieldCheck },
 ];
 
 function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClose, onSave }) {
@@ -397,7 +397,7 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
   const temPermissao = (key) => (form.permissoes || []).includes(key);
 
   return (
-    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Usuario' : 'Novo Usuario'} size="lg">
+    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Usuário' : 'Novo Usuário'} size="lg">
       {/* Indicador de passos */}
       <div className="flex items-center justify-between mb-5">
         {STEPS.map((s, idx) => {
@@ -530,15 +530,15 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
                     </div>
                     <p className="mt-1 text-[11px] text-gray-500">
                       {acessoTotalEmpresas
-                        ? 'Acesso total: o usuario vera todas as empresas da rede (incluindo futuras).'
-                        : 'Acesso restrito: o usuario so vera as empresas marcadas.'}
+                        ? 'Acesso total: o usuário vera todas as empresas da rede (incluindo futuras).'
+                        : 'Acesso restrito: o usuário só vera as empresas marcadas.'}
                     </p>
                   </div>
                 )}
 
                 {form.chave_api_id && empresasDaRede.length === 0 && (
                   <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-700">
-                    Esta rede ainda nao possui empresas cadastradas. Cadastre clientes com esta chave API antes de criar usuarios.
+                    Esta rede ainda não possui empresas cadastradas. Cadastre clientes com esta chave API antes de criar usuários.
                   </div>
                 )}
               </>
@@ -558,7 +558,7 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
                   autoFocus
                   value={form.senha || ''}
                   onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
-                  placeholder={data?.id ? '••••••••' : 'Minimo 6 caracteres'}
+                  placeholder={data?.id ? '••••••••' : 'Mínimo 6 caracteres'}
                   minLength={data?.id ? 0 : 6}
                   className="w-full h-10 rounded-lg border border-gray-200 pl-9 pr-10 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                 <button type="button" onClick={() => setMostrarSenha(s => !s)}
@@ -567,7 +567,7 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
                 </button>
               </div>
               {!data?.id && (
-                <p className="mt-1 text-[11px] text-gray-500">O usuario podera alterar a senha apos o primeiro acesso.</p>
+                <p className="mt-1 text-[11px] text-gray-500">O usuário podera alterar a senha após o primeiro acesso.</p>
               )}
             </div>
 
@@ -585,7 +585,7 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
               <label className="block text-xs font-medium text-gray-700 mb-1">Observacoes</label>
               <textarea rows={3} value={form.observacoes || ''}
                 onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
-                placeholder="Notas internas sobre este usuario"
+                placeholder="Notas internas sobre este usuário"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
           </div>
@@ -595,7 +595,7 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold text-gray-700">
-                Selecione as permissoes ({(form.permissoes || []).length}/{permsDisponiveis.length})
+                Selecione as permissões ({(form.permissoes || []).length}/{permsDisponiveis.length})
               </label>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={marcarTodas}
@@ -654,7 +654,7 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
             <button type="button" onClick={submit} disabled={saving || !passoValido(1) || !passoValido(2)}
               className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {data?.id ? 'Salvar alteracoes' : 'Criar usuario'}
+              {data?.id ? 'Salvar alteracoes' : 'Criar usuário'}
             </button>
           )}
         </div>

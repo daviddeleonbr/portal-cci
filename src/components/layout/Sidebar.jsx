@@ -17,7 +17,7 @@ const navigationAll = [
     ],
   },
   {
-    section: 'Gestao interna',
+    section: 'Gestão interna',
     items: [
       {
         name: 'Cadastros',
@@ -25,10 +25,10 @@ const navigationAll = [
         children: [
           { name: 'Clientes', href: '/admin/clientes', permissao: 'clientes' },
           { name: 'Colaboradores', href: '/admin/colaboradores', permissao: 'colaboradores' },
-          { name: 'Usuarios do Sistema', href: '/admin/cadastros/usuarios', permissao: 'usuarios' },
+          { name: 'Usuários do Sistema', href: '/admin/cadastros/usuarios', permissao: 'usuarios' },
           { name: 'Fornecedores', href: '/admin/cadastros/fornecedores', permissao: 'fornecedores' },
           { name: 'Plano de Contas', href: '/admin/cadastros/plano-contas', permissao: 'plano_contas' },
-          { name: 'Motivos de Movimentacao', href: '/admin/cadastros/motivos', permissao: 'motivos' },
+          { name: 'Motivos de Movimentação', href: '/admin/cadastros/motivos', permissao: 'motivos' },
         ],
       },
       {
@@ -44,7 +44,7 @@ const navigationAll = [
         icon: FileText,
         children: [
           { name: 'Notas Fiscais', href: '/admin/fiscal/notas-fiscais', permissao: 'fiscal' },
-          { name: 'Agendamento de Emissao', href: '/admin/fiscal/agendamento', permissao: 'fiscal' },
+          { name: 'Agendamento de Emissão', href: '/admin/fiscal/agendamento', permissao: 'fiscal' },
         ],
       },
     ],
@@ -52,17 +52,17 @@ const navigationAll = [
   {
     section: 'Consultoria',
     items: [
-      { name: 'Parametros', href: '/admin/parametros', icon: Settings2, permissao: 'parametros' },
-      { name: 'Relatorios Cliente', href: '/admin/relatorios-cliente', icon: BarChart3, permissao: 'relatorios_cliente' },
+      { name: 'Parâmetros', href: '/admin/parametros', icon: Settings2, permissao: 'parametros' },
+      { name: 'Relatórios Cliente', href: '/admin/relatorios-cliente', icon: BarChart3, permissao: 'relatorios_cliente' },
     ],
   },
   {
     section: 'BPO',
     items: [
-      { name: 'Conciliacao Bancaria', href: '/admin/bpo/conciliacao-bancaria', icon: Landmark, permissao: 'conciliacao_bancaria' },
-      { name: 'Conciliacao de Caixas', href: '/admin/bpo/conciliacao-caixas', icon: Coins, permissao: 'conciliacao_caixas' },
+      { name: 'Conciliação Bancária', href: '/admin/bpo/conciliacao-bancaria', icon: Landmark, permissao: 'conciliacao_bancaria' },
+      { name: 'Conciliação de Caixas', href: '/admin/bpo/conciliacao-caixas', icon: Coins, permissao: 'conciliacao_caixas' },
       { name: 'Caixa Administrativo', href: '/admin/bpo/caixa-administrativo', icon: WalletCards, permissao: 'caixa_administrativo' },
-      { name: 'Validacao OFX', href: '/admin/bpo/validacao-ofx', icon: FileSearch, permissao: 'conciliacao_bancaria' },
+      { name: 'Validação OFX', href: '/admin/bpo/validacao-ofx', icon: FileSearch, permissao: 'conciliacao_bancaria' },
     ],
   },
 ];
@@ -158,7 +158,7 @@ export default function Sidebar({ collapsed, onToggle }) {
     navigate('/admin', { replace: true });
   };
 
-  const nomeUsuario = usuario?.nome || 'Usuario';
+  const nomeUsuario = usuario?.nome || 'Usuário';
   const emailUsuario = usuario?.email || '';
   const initials = nomeUsuario.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 

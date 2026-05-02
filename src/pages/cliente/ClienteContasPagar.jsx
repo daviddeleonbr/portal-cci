@@ -10,10 +10,12 @@ import {
   DollarSign, FileText, BarChart3,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
+import BarraProgressoFetch from '../../components/ui/BarraProgressoFetch';
 import { useClienteSession } from '../../hooks/useAuth';
 import * as mapService from '../../services/mapeamentoService';
 import * as qualityApi from '../../services/qualityApiService';
 import { formatCurrency } from '../../utils/format';
+import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil } from '../../utils/diasUteis';
 
 // ─── Helpers ─────────────────────────────────────────────────
 function formatDataBR(s) {
@@ -29,7 +31,7 @@ function formatDataCurta(s) {
   return m && d ? `${d}/${m}` : '—';
 }
 
-const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado'];
+const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 function diaSemana(iso) {
   if (!iso) return '';
   const [y, m, d] = String(iso).slice(0, 10).split('-');
@@ -108,25 +110,29 @@ export default function ClienteContasPagar() {
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('vencidos');
   const [expandedDates, setExpandedDates] = useState(new Set());
+  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
 
   const carregar = useCallback(async () => {
     if (!cliente?.chave_api_id || !cliente?.empresa_codigo) {
-      setError('Esta empresa nao tem integracao Webposto configurada.');
+      setError('Esta empresa não tem integração Webposto configurada.');
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
+    // 1 endpoint de titulos + 1 catalogo de fornecedores
+    setProgresso({ feitos: 0, total: 2 });
+    const tick = () => setProgresso(p => ({ ...p, feitos: p.feitos + 1 }));
     try {
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada');
+      if (!chave) throw new Error('Chave API não encontrada');
 
       const filtros = { empresaCodigo: cliente.empresa_codigo, apenasPendente: true };
 
       const [dados, forns] = await Promise.all([
-        qualityApi.buscarTitulosPagar(chave.chave, filtros),
-        qualityApi.buscarFornecedoresQuality(chave.chave).catch(() => []),
+        qualityApi.buscarTitulosPagar(chave.chave, filtros).finally(tick),
+        qualityApi.buscarFornecedoresQuality(chave.chave).catch(() => []).finally(tick),
       ]);
 
       const mapaForn = new Map();
@@ -170,9 +176,27 @@ export default function ClienteContasPagar() {
     });
   }, [titulos, fornecedoresMap]);
 
+  // "Hoje" considera o proximo dia util quando hoje nao e util — quando hoje
+  // for fim de semana/feriado, antecipa para o proximo util e inclui as datas
+  // nao uteis imediatamente anteriores.
+  const datasHoje = useMemo(() => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const diaAlvo = proximoDiaUtil(hoje);
+    const datas = new Set();
+    datas.add(isoDateUtil(diaAlvo));
+    const cur = new Date(diaAlvo);
+    cur.setDate(cur.getDate() - 1);
+    while (!ehDiaUtil(cur)) {
+      datas.add(isoDateUtil(cur));
+      cur.setDate(cur.getDate() - 1);
+    }
+    return datas;
+  }, []);
+
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return enriched.filter(t => {
+      if (filtroStatus === 'hoje' && !(t.vencimento && datasHoje.has(t.vencimento))) return false;
       if (filtroStatus === 'vencidos' && !t.vencido) return false;
       if (filtroStatus === 'proximos' && (t.vencido || !t.proximo)) return false;
       if (filtroStatus === 'futuros' && (t.vencido || t.proximo)) return false;
@@ -183,7 +207,7 @@ export default function ClienteContasPagar() {
         (t.historico || '').toLowerCase().includes(q)
       );
     });
-  }, [enriched, busca, filtroStatus]);
+  }, [enriched, busca, filtroStatus, datasHoje]);
 
   // Agrupa por data de vencimento
   const grupos = useMemo(() => {
@@ -261,10 +285,10 @@ export default function ClienteContasPagar() {
   if (!cliente?.chave_api_id || !cliente?.empresa_codigo) {
     return (
       <div>
-        <PageHeader title="Contas a Pagar" description="Titulos pendentes de pagamento" />
+        <PageHeader title="Contas a Pagar" description="Títulos pendentes de pagamento" />
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p>Esta empresa ainda nao tem <strong>integracao Webposto</strong> ativa. Contate o administrador.</p>
+          <p>Esta empresa ainda não tem <strong>integração Webposto</strong> ativa. Contate o administrador.</p>
         </div>
       </div>
     );
@@ -274,7 +298,7 @@ export default function ClienteContasPagar() {
     <div>
       <PageHeader
         title="Contas a Pagar"
-        description={`Titulos pendentes de pagamento${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
+        description={`Títulos pendentes de pagamento${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
       >
         <button
           onClick={carregar}
@@ -286,6 +310,13 @@ export default function ClienteContasPagar() {
         </button>
       </PageHeader>
 
+      {/* Barra de progresso da busca */}
+      <BarraProgressoFetch
+        loading={loading}
+        feitos={progresso.feitos}
+        total={progresso.total}
+      />
+
       {/* Resumo */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <ResumoCard icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600"
@@ -295,7 +326,7 @@ export default function ClienteContasPagar() {
           label="Vencidos" valor={formatCurrency(totais.vencidos)}
           sub={`${totais.qtdVencidos} ${totais.qtdVencidos === 1 ? 'titulo' : 'titulos'}`} />
         <ResumoCard icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600"
-          label="Proximos 7 dias" valor={formatCurrency(totais.proximos)}
+          label="Próximos 7 dias" valor={formatCurrency(totais.proximos)}
           sub={`${totais.qtdProximos} ${totais.qtdProximos === 1 ? 'titulo' : 'titulos'}`} />
         <ResumoCard icon={Calendar} iconBg="bg-emerald-50" iconColor="text-emerald-600"
           label="A vencer" valor={formatCurrency(totais.futuros)}
@@ -310,7 +341,7 @@ export default function ClienteContasPagar() {
             <h3 className="text-sm font-semibold text-gray-900">Valores por data de vencimento</h3>
             <div className="ml-auto flex items-center gap-3 text-[11px] text-gray-500">
               <Legenda cor="#ef4444" label="Vencido" />
-              <Legenda cor="#f59e0b" label="Proximos 7d" />
+              <Legenda cor="#f59e0b" label="Próximos 7d" />
               <Legenda cor="#3b82f6" label="A vencer" />
             </div>
           </div>
@@ -341,15 +372,16 @@ export default function ClienteContasPagar() {
             type="text"
             value={busca}
             onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar por fornecedor, documento ou historico..."
+            placeholder="Buscar por fornecedor, documento ou histórico..."
             className="w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors"
           />
         </div>
         <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
           {[
             { k: 'todos', label: 'Todos' },
+            { k: 'hoje', label: 'Hoje' },
             { k: 'vencidos', label: 'Vencidos' },
-            { k: 'proximos', label: 'Proximos 7d' },
+            { k: 'proximos', label: 'Próximos 7d' },
             { k: 'futuros', label: 'A vencer' },
           ].map(tab => (
             <button
@@ -371,13 +403,13 @@ export default function ClienteContasPagar() {
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
           <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-          <span className="text-sm">Carregando titulos pendentes...</span>
+          <span className="text-sm">Carregando títulos pendentes...</span>
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium">Nao foi possivel carregar os titulos</p>
+            <p className="font-medium">Não foi possível carregar os títulos</p>
             <p className="text-red-700 mt-1">{error}</p>
           </div>
         </div>
@@ -387,7 +419,7 @@ export default function ClienteContasPagar() {
             <CheckCircle2 className="h-6 w-6 text-emerald-600" />
           </div>
           <p className="text-sm font-medium text-gray-900">
-            {enriched.length === 0 ? 'Nenhum titulo pendente' : 'Nenhum titulo encontrado para o filtro atual'}
+            {enriched.length === 0 ? 'Nenhum título pendente' : 'Nenhum título encontrado para o filtro atual'}
           </p>
           <p className="text-xs text-gray-500 mt-1">
             {enriched.length === 0 ? 'Todas as contas estao em dia' : 'Tente ajustar a busca ou o filtro'}
@@ -553,7 +585,7 @@ function TituloRow({ t }) {
             </span>
           )}
           {t.emissao && (
-            <span className="flex-shrink-0">Emissao: {formatDataBR(t.emissao)}</span>
+            <span className="flex-shrink-0">Emissão: {formatDataBR(t.emissao)}</span>
           )}
           {t.historico && <span className="truncate text-gray-400">{t.historico}</span>}
         </div>

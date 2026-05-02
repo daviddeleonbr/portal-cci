@@ -11,10 +11,12 @@ import {
   BarChart3, FileCheck,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
+import BarraProgressoFetch from '../../components/ui/BarraProgressoFetch';
 import { useClienteSession } from '../../hooks/useAuth';
 import * as mapService from '../../services/mapeamentoService';
 import * as qualityApi from '../../services/qualityApiService';
 import { formatCurrency } from '../../utils/format';
+import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil } from '../../utils/diasUteis';
 
 // ─── Helpers ─────────────────────────────────────────────────
 function formatDataBR(s) {
@@ -30,7 +32,7 @@ function formatDataCurta(s) {
   return m && d ? `${d}/${m}` : '—';
 }
 
-const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado'];
+const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 function diaSemana(iso) {
   if (!iso) return '';
   const [y, m, d] = String(iso).slice(0, 10).split('-');
@@ -121,7 +123,7 @@ function extrairParcela(t) {
 
 const FONTE_CFG = {
   titulo: {
-    label: 'Titulo',
+    label: 'Título',
     icon: ScrollText,
     chipBg: 'bg-indigo-50',
     chipColor: 'text-indigo-700',
@@ -137,7 +139,7 @@ const FONTE_CFG = {
     iconBg: 'bg-violet-50 text-violet-600',
   },
   cartao: {
-    label: 'Cartao',
+    label: 'Cartão',
     icon: CreditCard,
     chipBg: 'bg-cyan-50',
     chipColor: 'text-cyan-700',
@@ -169,20 +171,25 @@ export default function ClienteContasReceber() {
   const [filtroStatus, setFiltroStatus] = useState('vencidos');
   const [filtroFonte, setFiltroFonte] = useState('todos');
   const [expandedDates, setExpandedDates] = useState(new Set());
+  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
 
   const carregar = useCallback(async () => {
     if (!cliente?.chave_api_id || !cliente?.empresa_codigo) {
-      setError('Esta empresa nao tem integracao Webposto configurada.');
+      setError('Esta empresa não tem integração Webposto configurada.');
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     setWarnings([]);
+    // 4 endpoints de titulos + 2 catalogos (clientes + administradoras)
+    const totalTarefas = 6;
+    setProgresso({ feitos: 0, total: totalTarefas });
+    const tick = () => setProgresso(p => ({ ...p, feitos: p.feitos + 1 }));
     try {
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada');
+      if (!chave) throw new Error('Chave API não encontrada');
 
       // Todos os endpoints de contas a receber exigem dataInicial/dataFinal.
       // Janela ampla: 2 anos atras ate 1 ano a frente pra cobrir parcelamentos.
@@ -202,7 +209,7 @@ export default function ClienteContasReceber() {
         console.warn(`[ContasReceber] ${nome} falhou:`, err);
         erros.push({ nome, msg: err.message });
         return [];
-      });
+      }).finally(tick);
 
       const [titulos, duplicatas, cartoes, cheques, clientesQ, administradorasQ] = await Promise.all([
         seguro('TITULO_RECEBER', qualityApi.buscarTitulosReceber(chave.chave, filtros)),
@@ -287,10 +294,28 @@ export default function ClienteContasReceber() {
     });
   }, [lista, clientesMap, administradorasMap]);
 
+  // "Hoje" considera o proximo dia util quando hoje nao e util, alem de
+  // fins de semana/feriados imediatamente anteriores — mesmo mecanismo do
+  // dashboard.
+  const datasHoje = useMemo(() => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const diaAlvo = proximoDiaUtil(hoje);
+    const datas = new Set();
+    datas.add(isoDateUtil(diaAlvo));
+    const cur = new Date(diaAlvo);
+    cur.setDate(cur.getDate() - 1);
+    while (!ehDiaUtil(cur)) {
+      datas.add(isoDateUtil(cur));
+      cur.setDate(cur.getDate() - 1);
+    }
+    return datas;
+  }, []);
+
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return enriched.filter(t => {
       if (filtroFonte !== 'todos' && t.fonte !== filtroFonte) return false;
+      if (filtroStatus === 'hoje' && !(t.vencimento && datasHoje.has(t.vencimento))) return false;
       if (filtroStatus === 'vencidos' && !t.vencido) return false;
       if (filtroStatus === 'proximos' && (t.vencido || !t.proximo)) return false;
       if (filtroStatus === 'futuros' && (t.vencido || t.proximo)) return false;
@@ -301,7 +326,7 @@ export default function ClienteContasReceber() {
         (t.historico || '').toLowerCase().includes(q)
       );
     });
-  }, [enriched, busca, filtroStatus, filtroFonte]);
+  }, [enriched, busca, filtroStatus, filtroFonte, datasHoje]);
 
   // Agrupa por data
   const grupos = useMemo(() => {
@@ -392,7 +417,7 @@ export default function ClienteContasReceber() {
         <PageHeader title="Contas a Receber" description="Valores pendentes em aberto" />
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p>Esta empresa ainda nao tem <strong>integracao Webposto</strong> ativa. Contate o administrador.</p>
+          <p>Esta empresa ainda não tem <strong>integração Webposto</strong> ativa. Contate o administrador.</p>
         </div>
       </div>
     );
@@ -402,7 +427,7 @@ export default function ClienteContasReceber() {
     <div>
       <PageHeader
         title="Contas a Receber"
-        description={`Titulos, duplicatas e cartoes em aberto${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
+        description={`Títulos, duplicatas e cartões em aberto${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
       >
         <button
           onClick={carregar}
@@ -414,13 +439,20 @@ export default function ClienteContasReceber() {
         </button>
       </PageHeader>
 
+      {/* Barra de progresso da busca */}
+      <BarraProgressoFetch
+        loading={loading}
+        feitos={progresso.feitos}
+        total={progresso.total}
+      />
+
       {/* Warnings parciais por endpoint */}
       {warnings.length > 0 && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800">
             <p className="font-medium mb-1">
-              Dados parciais: {warnings.length} {warnings.length === 1 ? 'fonte nao pode ser carregada' : 'fontes nao puderam ser carregadas'}
+              Dados parciais: {warnings.length} {warnings.length === 1 ? 'fonte não pode ser carregada' : 'fontes não puderam ser carregadas'}
             </p>
             <ul className="text-xs text-amber-700/90 space-y-0.5">
               {warnings.map((w, i) => (
@@ -440,7 +472,7 @@ export default function ClienteContasReceber() {
           label="Vencidos" valor={formatCurrency(totais.vencidos)}
           sub={`${totais.qtdVencidos} ${totais.qtdVencidos === 1 ? 'lancamento' : 'lancamentos'}`} />
         <ResumoCard icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600"
-          label="Proximos 7 dias" valor={formatCurrency(totais.proximos)}
+          label="Próximos 7 dias" valor={formatCurrency(totais.proximos)}
           sub={`${totais.qtdProximos} ${totais.qtdProximos === 1 ? 'lancamento' : 'lancamentos'}`} />
         <ResumoCard icon={Calendar} iconBg="bg-blue-50" iconColor="text-blue-600"
           label="A vencer" valor={formatCurrency(totais.futuros)}
@@ -449,11 +481,11 @@ export default function ClienteContasReceber() {
 
       {/* Breakdown por fonte */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <FonteCard fonte="titulo" label="Titulos" valor={totais.porFonte.titulo} qtd={totais.qtdPorFonte.titulo}
+        <FonteCard fonte="titulo" label="Títulos" valor={totais.porFonte.titulo} qtd={totais.qtdPorFonte.titulo}
           ativo={filtroFonte === 'titulo'} onClick={() => setFiltroFonte(filtroFonte === 'titulo' ? 'todos' : 'titulo')} />
         <FonteCard fonte="duplicata" label="Duplicatas" valor={totais.porFonte.duplicata} qtd={totais.qtdPorFonte.duplicata}
           ativo={filtroFonte === 'duplicata'} onClick={() => setFiltroFonte(filtroFonte === 'duplicata' ? 'todos' : 'duplicata')} />
-        <FonteCard fonte="cartao" label="Cartoes" valor={totais.porFonte.cartao} qtd={totais.qtdPorFonte.cartao}
+        <FonteCard fonte="cartao" label="Cartões" valor={totais.porFonte.cartao} qtd={totais.qtdPorFonte.cartao}
           ativo={filtroFonte === 'cartao'} onClick={() => setFiltroFonte(filtroFonte === 'cartao' ? 'todos' : 'cartao')} />
         <FonteCard fonte="cheque" label="Cheques" valor={totais.porFonte.cheque} qtd={totais.qtdPorFonte.cheque}
           ativo={filtroFonte === 'cheque'} onClick={() => setFiltroFonte(filtroFonte === 'cheque' ? 'todos' : 'cheque')} />
@@ -466,9 +498,9 @@ export default function ClienteContasReceber() {
             <BarChart3 className="h-4 w-4 text-emerald-600" />
             <h3 className="text-sm font-semibold text-gray-900">Valores por data de vencimento</h3>
             <div className="ml-auto flex items-center gap-3 text-[11px] text-gray-500 flex-wrap">
-              <Legenda cor="#6366f1" label="Titulos" />
+              <Legenda cor="#6366f1" label="Títulos" />
               <Legenda cor="#8b5cf6" label="Duplicatas" />
-              <Legenda cor="#06b6d4" label="Cartoes" />
+              <Legenda cor="#06b6d4" label="Cartões" />
               <Legenda cor="#14b8a6" label="Cheques" />
             </div>
           </div>
@@ -500,15 +532,16 @@ export default function ClienteContasReceber() {
               type="text"
               value={busca}
               onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar por cliente, documento ou historico..."
+              placeholder="Buscar por cliente, documento ou histórico..."
               className="w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-colors"
             />
           </div>
           <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
             {[
               { k: 'todos', label: 'Todos' },
+              { k: 'hoje', label: 'Hoje' },
               { k: 'vencidos', label: 'Vencidos' },
-              { k: 'proximos', label: 'Proximos 7d' },
+              { k: 'proximos', label: 'Próximos 7d' },
               { k: 'futuros', label: 'A vencer' },
             ].map(tab => (
               <button
@@ -561,7 +594,7 @@ export default function ClienteContasReceber() {
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium">Nao foi possivel carregar os valores</p>
+            <p className="font-medium">Não foi possível carregar os valores</p>
             <p className="text-red-700 mt-1">{error}</p>
           </div>
         </div>
@@ -571,10 +604,10 @@ export default function ClienteContasReceber() {
             <CheckCircle2 className="h-6 w-6 text-emerald-600" />
           </div>
           <p className="text-sm font-medium text-gray-900">
-            {enriched.length === 0 ? 'Nenhum valor pendente' : 'Nenhum lancamento encontrado para o filtro atual'}
+            {enriched.length === 0 ? 'Nenhum valor pendente' : 'Nenhum lançamento encontrado para o filtro atual'}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            {enriched.length === 0 ? 'Nao ha contas a receber em aberto' : 'Tente ajustar a busca ou os filtros'}
+            {enriched.length === 0 ? 'Não ha contas a receber em aberto' : 'Tente ajustar a busca ou os filtros'}
           </p>
         </div>
       ) : (
@@ -698,13 +731,13 @@ function ChartTooltip({ active, payload }) {
       </p>
       <div className="space-y-0.5 mb-1">
         {d.titulo > 0 && (
-          <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#6366f1' }} />Titulos: {formatCurrency(d.titulo)}</p>
+          <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#6366f1' }} />Títulos: {formatCurrency(d.titulo)}</p>
         )}
         {d.duplicata > 0 && (
           <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#8b5cf6' }} />Duplicatas: {formatCurrency(d.duplicata)}</p>
         )}
         {d.cartao > 0 && (
-          <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#06b6d4' }} />Cartoes: {formatCurrency(d.cartao)}</p>
+          <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#06b6d4' }} />Cartões: {formatCurrency(d.cartao)}</p>
         )}
         {d.cheque > 0 && (
           <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#14b8a6' }} />Cheques: {formatCurrency(d.cheque)}</p>
@@ -815,7 +848,7 @@ function LancamentoRow({ t }) {
             </span>
           )}
           {t.emissao && (
-            <span className="flex-shrink-0">Emissao: {formatDataBR(t.emissao)}</span>
+            <span className="flex-shrink-0">Emissão: {formatDataBR(t.emissao)}</span>
           )}
           {t.historico && <span className="truncate text-gray-400">{t.historico}</span>}
         </div>

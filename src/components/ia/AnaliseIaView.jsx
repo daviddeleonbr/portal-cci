@@ -21,7 +21,7 @@ export default function AnaliseIaView({ insights, modoRede = false, usage = null
       {insights.diagnostico_grupos && <CardDiagnosticoGrupos d={insights.diagnostico_grupos} />}
       {insights.combustiveis && <CardCombustiveis c={insights.combustiveis} />}
       {insights.automotivos_analise && <CardCategoriaAnalise a={insights.automotivos_analise} titulo="Automotivos" icone={Package} cor="blue" />}
-      {insights.conveniencia_analise && <CardCategoriaAnalise a={insights.conveniencia_analise} titulo="Conveniencia" icone={Package} cor="emerald" />}
+      {insights.conveniencia_analise && <CardCategoriaAnalise a={insights.conveniencia_analise} titulo="Conveniência" icone={Package} cor="emerald" />}
       {insights.volumes_precos?.analise && <CardVolumesPrecos v={insights.volumes_precos} />}
       {insights.alertas_produtos && <CardAlertasProdutos a={insights.alertas_produtos} />}
       {insights.formas_pagamento && <CardFormasPagamento f={insights.formas_pagamento} />}
@@ -68,7 +68,7 @@ export default function AnaliseIaView({ insights, modoRede = false, usage = null
 
       {usage && (
         <div className="text-[10px] text-gray-400 text-right">
-          entrada: {usage.input_tokens} tok · cache: {usage.cache_read_input_tokens || 0} tok · saida: {usage.output_tokens} tok
+          entrada: {usage.input_tokens} tok · cache: {usage.cache_read_input_tokens || 0} tok · saída: {usage.output_tokens} tok
         </div>
       )}
     </div>
@@ -101,7 +101,7 @@ function ResumoExecutivo({ insights, usage }) {
       className={`rounded-2xl border p-5 shadow-sm ${bg}`}>
       <div className="flex items-center gap-2 mb-2">
         <cfg.Icon className="h-5 w-5" />
-        <h3 className="text-sm font-bold uppercase tracking-wider">Situacao: {cfg.label}</h3>
+        <h3 className="text-sm font-bold uppercase tracking-wider">Situação: {cfg.label}</h3>
         {usage?.cache_read_input_tokens > 0 && (
           <span className="ml-auto text-[10px] text-gray-500 bg-white/60 px-2 py-0.5 rounded-full">
             cache hit {usage.cache_read_input_tokens} tokens
@@ -126,7 +126,7 @@ function ResumoExecutivo({ insights, usage }) {
           )}
           {negativos.length > 0 && (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 mb-1">Pontos de atencao</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 mb-1">Pontos de atenção</p>
               <ul className="space-y-1">
                 {negativos.map((p, i) => (
                   <li key={i} className="text-[12px] flex items-start gap-1.5">
@@ -148,7 +148,7 @@ function CardMixProduto({ mix }) {
     <Card icon={Target} color="blue" titulo="Mix de produto">
       {mix.interpretacao && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{mix.interpretacao}</p>}
       {mix.concentracao?.length > 0 && (
-        <Tabela headers={['Categoria', '% Receita', '% Margem', 'Comentario']}
+        <Tabela headers={['Categoria', '% Receita', '% Margem', 'Comentário']}
           rows={mix.concentracao.map(c => [
             <span className="capitalize">{c.categoria}</span>,
             <span className="font-mono tabular-nums">{Number(c.pct_receita || 0).toFixed(1)}%</span>,
@@ -177,7 +177,7 @@ function CardMixProduto({ mix }) {
 
 function CardDiagnosticoGrupos({ d }) {
   return (
-    <Card icon={Layers} color="violet" titulo="Diagnostico por grupo">
+    <Card icon={Layers} color="violet" titulo="Diagnóstico por grupo">
       {d.interpretacao && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{d.interpretacao}</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {d.grupos_problema?.length > 0 && (
@@ -188,7 +188,7 @@ function CardDiagnosticoGrupos({ d }) {
                 <li key={i} className="rounded-lg border border-red-200 bg-red-50/50 p-2.5">
                   <p className="text-[12.5px] font-semibold text-gray-900">{g.grupo}</p>
                   <p className="text-[11.5px] text-red-700 mt-0.5">{g.motivo}</p>
-                  {g.acao_sugerida && <p className="text-[11px] text-gray-600 mt-1">Acao: {g.acao_sugerida}</p>}
+                  {g.acao_sugerida && <p className="text-[11px] text-gray-600 mt-1">Ação: {g.acao_sugerida}</p>}
                 </li>
               ))}
             </ul>
@@ -214,7 +214,7 @@ function CardDiagnosticoGrupos({ d }) {
 
 function CardCombustiveis({ c }) {
   return (
-    <Card icon={Fuel} color="amber" titulo="Analise de combustiveis">
+    <Card icon={Fuel} color="amber" titulo="Análise de combustíveis">
       {c.analise_por_tipo && (
         <>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Por tipo (Gasolina, Diesel, Etanol, GNV)</p>
@@ -285,7 +285,7 @@ function CardCombustiveis({ c }) {
 
 function CardCategoriaAnalise({ a, titulo, icone: Icone = Package, cor = 'blue' }) {
   return (
-    <Card icon={Icone} color={cor} titulo={`Analise de ${titulo}`}>
+    <Card icon={Icone} color={cor} titulo={`Análise de ${titulo}`}>
       {a.interpretacao && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{a.interpretacao}</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {a.grupos_destaque?.length > 0 && (
@@ -317,7 +317,7 @@ function CardCategoriaAnalise({ a, titulo, icone: Icone = Package, cor = 'blue' 
                 <li key={i} className="rounded-lg border border-red-200 bg-red-50/50 p-2.5">
                   <p className="text-[12.5px] font-semibold text-gray-900">{g.grupo}</p>
                   {g.motivo && <p className="text-[11.5px] text-red-700 mt-0.5">{g.motivo}</p>}
-                  {g.acao && <p className="text-[11px] text-gray-600 mt-1">Acao: {g.acao}</p>}
+                  {g.acao && <p className="text-[11px] text-gray-600 mt-1">Ação: {g.acao}</p>}
                 </li>
               ))}
             </ul>
@@ -445,7 +445,7 @@ function CardMargens({ m }) {
 
 function CardLinhasCriticas({ linhas }) {
   return (
-    <Card icon={ListOrdered} color="red" titulo="Linhas criticas da DRE">
+    <Card icon={ListOrdered} color="red" titulo="Linhas críticas da DRE">
       <Tabela headers={['Linha', 'Atual', 'YoY', 'Var %', 'Impacto']}
         rows={linhas.map(l => [
           <span className="font-medium">{l.linha}</span>,
@@ -471,7 +471,7 @@ function CardCustosDespesas({ c }) {
   return (
     <Card icon={Wallet} color="amber" titulo="Custos e despesas">
       {c.maiores_itens?.length > 0 && (
-        <Tabela headers={['Item', 'Valor', '% Receita', 'Comentario']}
+        <Tabela headers={['Item', 'Valor', '% Receita', 'Comentário']}
           rows={c.maiores_itens.map(i => [
             <span className="font-medium">{i.nome}</span>,
             <span className="font-mono tabular-nums">{formatCurrency(i.valor || 0)}</span>,
@@ -486,7 +486,7 @@ function CardCustosDespesas({ c }) {
               : c.avaliacao === 'alto' ? 'bg-amber-100 text-amber-700'
               : 'bg-emerald-100 text-emerald-700'
           }`}>
-            Avaliacao: {c.avaliacao}
+            Avaliação: {c.avaliacao}
           </span>
         </div>
       )}
@@ -503,7 +503,7 @@ function CardCustosDespesas({ c }) {
 
 function CardVariacaoCaixa({ v }) {
   return (
-    <Card icon={Wallet} color="emerald" titulo="Variacao de caixa">
+    <Card icon={Wallet} color="emerald" titulo="Variação de caixa">
       <p className="text-[13px] text-gray-700 leading-relaxed">{v.interpretacao}</p>
       {v.causas_principais?.length > 0 && (
         <>
@@ -521,7 +521,7 @@ function CardVariacaoCaixa({ v }) {
 
 function CardPadraoGruposFluxo({ p }) {
   return (
-    <Card icon={Layers} color="blue" titulo="Padrao por grupo (caixa)">
+    <Card icon={Layers} color="blue" titulo="Padrão por grupo (caixa)">
       {p.entradas_principais?.length > 0 && (
         <>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 mb-2">Entradas principais</p>
@@ -538,7 +538,7 @@ function CardPadraoGruposFluxo({ p }) {
       )}
       {p.saidas_crescentes?.length > 0 && (
         <>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 mb-2">Saidas crescentes vs YoY</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 mb-2">Saídas crescentes vs YoY</p>
           <ul className="space-y-1.5">
             {p.saidas_crescentes.map((s, i) => (
               <li key={i} className="text-[12px] flex items-start gap-2">
@@ -589,7 +589,7 @@ function CardConcentracoes({ c }) {
 
 function CardDiagnosticoIntegrado({ d }) {
   return (
-    <Card icon={GitBranch} color="indigo" titulo="Diagnostico integrado">
+    <Card icon={GitBranch} color="indigo" titulo="Diagnóstico integrado">
       <p className="text-[14px] text-gray-800 leading-relaxed">{d}</p>
     </Card>
   );
@@ -597,7 +597,7 @@ function CardDiagnosticoIntegrado({ d }) {
 
 function CardGargalos({ g }) {
   return (
-    <Card icon={AlertCircle} color="red" titulo="Gargalos criticos">
+    <Card icon={AlertCircle} color="red" titulo="Gargalos críticos">
       <div className="space-y-2">
         {g.map((item, i) => (
           <div key={i} className="rounded-lg border border-red-200 bg-red-50/50 p-3">
@@ -693,7 +693,7 @@ function CardComparativo({ c }) {
           c.tendencia_direcao === 'crescimento' ? 'bg-emerald-100 text-emerald-700' :
           c.tendencia_direcao === 'queda' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
         }`}>
-          Tendencia: {c.tendencia_direcao}
+          Tendência: {c.tendencia_direcao}
         </span>
       )}
       {c.causas_provaveis?.length > 0 && (
@@ -723,13 +723,13 @@ function CardComparativoYoy({ c }) {
 function CardTendencia({ t }) {
   const direcao = t.direcao || t.saldo_trajetoria;
   return (
-    <Card icon={TrendingUp} color="indigo" titulo="Tendencia">
+    <Card icon={TrendingUp} color="indigo" titulo="Tendência">
       {direcao && (
         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold mb-3 ${
           direcao === 'melhora' || direcao === 'sube' ? 'bg-emerald-100 text-emerald-700'
             : direcao === 'piora' || direcao === 'desce' ? 'bg-red-100 text-red-700'
             : 'bg-gray-100 text-gray-700'
-        }`}>Direcao: {direcao}</span>
+        }`}>Direção: {direcao}</span>
       )}
       {t.resumo_6m && <p className="text-[13px] text-gray-700 leading-relaxed mb-3">{t.resumo_6m}</p>}
       {t.risco_liquidez_proximos_meses && (
@@ -750,7 +750,7 @@ function CardTendencia({ t }) {
 function CardRankingEmpresas({ r }) {
   return (
     <Card icon={Award} color="amber" titulo="Ranking de empresas">
-      <Tabela headers={['#', 'Empresa', 'Receita', 'Margem %', '% Rede', 'Avaliacao']}
+      <Tabela headers={['#', 'Empresa', 'Receita', 'Margem %', '% Rede', 'Avaliação']}
         rows={r.map((e, i) => [
           <span className="font-mono text-gray-400">{e.posicao || i + 1}</span>,
           <span className="font-medium">{e.empresa}</span>,
@@ -765,10 +765,10 @@ function CardRankingEmpresas({ r }) {
 
 function CardDispersao({ d }) {
   return (
-    <Card icon={Award} color="violet" titulo="Analise da rede">
+    <Card icon={Award} color="violet" titulo="Análise da rede">
       {d.concentracao && (
         <div className="mb-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Concentracao</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Concentração</p>
           <p className="text-[13px] text-gray-700 leading-relaxed">{d.concentracao}</p>
         </div>
       )}
@@ -780,7 +780,7 @@ function CardDispersao({ d }) {
       )}
       {d.padrao_rede && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Padrao da rede</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Padrão da rede</p>
           <p className="text-[13px] text-gray-700 leading-relaxed">{d.padrao_rede}</p>
         </div>
       )}
@@ -837,7 +837,7 @@ function CardOportunidades({ o }) {
   const cats = [
     ['Aumentar receita/ticket', o.aumentar_ticket || o.aumentar_receita || o.aumentar_entradas],
     ['Melhorar mix', o.melhorar_mix],
-    ['Crescer conveniencia', o.crescer_conveniencia],
+    ['Crescer conveniência', o.crescer_conveniencia],
     ['Reduzir custos/ineficiencias', o.reduzir_custos || o.reduzir_ineficiencias || o.reduzir_saidas],
     ['Otimizar margens/prazo', o.otimizar_margens || o.otimizar_prazo],
   ].filter(([, l]) => Array.isArray(l) && l.length > 0);
@@ -926,7 +926,7 @@ function CardFormasPagamento({ f }) {
                 </span>
                 <span className={`inline-block rounded-full px-1.5 py-0.5 text-[8.5px] font-bold uppercase ${
                   taxaReal ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-                }`} title={taxaReal ? 'Taxa real da administradora (percentualComissao)' : 'Taxa estimada por heuristica'}>
+                }`} title={taxaReal ? 'Taxa real da administradora (percentualComissao)' : 'Taxa estimada por heurística'}>
                   {taxaReal ? 'real' : 'est.'}
                 </span>
               </span>,
@@ -977,7 +977,7 @@ function CardIntegridadeDados({ i }) {
           <p className="text-[13px] font-bold text-gray-800 tabular-nums">
             {Number(i.pct_outros || 0).toFixed(1)}%
           </p>
-          <p className="text-[10.5px] text-gray-500">produtos sem classificacao (tipoProduto/tipoGrupo)</p>
+          <p className="text-[10.5px] text-gray-500">produtos sem classificação (tipoProduto/tipoGrupo)</p>
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5">Cancelamentos</p>

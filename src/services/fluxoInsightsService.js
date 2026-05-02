@@ -179,18 +179,18 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
   const periodos = calcularPeriodos(mesRef);
   const empresaCodigos = modoRede ? (cliente?._empresaCodigos || []) : [cliente.empresa_codigo];
 
-  onProgress?.('Carregando mascara de fluxo...');
+  onProgress?.('Carregando máscara de fluxo...');
   const [grupos, mapeamentosRede, contasClassif] = await Promise.all([
     mascaraFluxoService.listarGrupos(mascaraFluxoId),
     mascaraFluxoService.listarMapeamentosEmpresa(chaveApiId),
     contasBancariasService.listarPorRede(chaveApiId).catch(() => []),
   ]);
-  if (!grupos?.length) throw new Error('Mascara de fluxo de caixa nao tem grupos configurados');
+  if (!grupos?.length) throw new Error('Máscara de fluxo de caixa não tem grupos configurados');
   // Filtra mapeamentos para manter apenas os de grupos desta mascara
   const gruposIds = new Set(grupos.map(g => g.id));
   const mapeamentos = (mapeamentosRede || []).filter(m => gruposIds.has(m.grupo_fluxo_id));
   if (mapeamentos.length === 0) {
-    throw new Error('Nenhum plano de conta esta mapeado aos grupos desta mascara de fluxo. Configure em Parametros > Mapeamento Fluxo.');
+    throw new Error('Nenhum plano de conta esta mapeado aos grupos desta máscara de fluxo. Configure em Parâmetros > Mapeamento Fluxo.');
   }
   const tipoPorConta = construirTipoPorConta(contasClassif);
 
@@ -305,7 +305,7 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
 }
 
 export async function gerarAnaliseFluxoIA(dados, apiKey) {
-  const user = `Analise o Fluxo de Caixa deste posto (ou rede):\n\n${JSON.stringify(dados, null, 2)}`;
+  const user = `Análise o Fluxo de Caixa deste posto (ou rede):\n\n${JSON.stringify(dados, null, 2)}`;
   return chamarClaudeAPI({
     apiKey,
     system: [{ type: 'text', text: SYSTEM_PROMPT }],

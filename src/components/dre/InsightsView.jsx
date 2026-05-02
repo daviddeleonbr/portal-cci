@@ -96,8 +96,8 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
               <Sparkles className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">Analise estrategica</h3>
-              <p className="text-[11px] text-gray-400">Especializada no setor de postos de combustiveis</p>
+              <h3 className="text-sm font-semibold text-gray-900">Análise estrategica</h3>
+              <p className="text-[11px] text-gray-400">Especializada no setor de postos de combustíveis</p>
             </div>
             {insightsSource === 'ia' && (
               <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-medium">
@@ -106,7 +106,7 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
             )}
             {insightsSource === 'local' && (
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[10px] font-medium">
-                Analise basica
+                Análise basica
               </span>
             )}
           </div>
@@ -119,12 +119,12 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
             )}
             <button onClick={gerarLocal}
               className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-              <Activity className="h-4 w-4" /> Analise basica
+              <Activity className="h-4 w-4" /> Análise basica
             </button>
             <button onClick={gerarInsights} disabled={loading}
               className="flex items-center gap-2 rounded-lg bg-gradient-to-br from-violet-600 to-purple-700 px-4 py-2 text-sm font-medium text-white hover:from-violet-700 hover:to-purple-800 transition-all shadow-sm disabled:opacity-50">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {insights && insightsSource === 'ia' ? 'Nova analise IA' : 'Analise com IA'}
+              {insights && insightsSource === 'ia' ? 'Nova análise IA' : 'Análise com IA'}
             </button>
           </div>
         </div>
@@ -138,13 +138,13 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
                   {errorCode === 'NO_CREDITS' ? 'Sem creditos na API Anthropic'
                     : errorCode === 'INVALID_KEY' ? 'Chave de API invalida'
                     : errorCode === 'RATE_LIMIT' ? 'Limite de requisicoes atingido'
-                    : 'Erro ao gerar analise com IA'}
+                    : 'Erro ao gerar análise com IA'}
                 </p>
                 <p className="text-xs text-red-700 leading-relaxed mb-2">{error}</p>
                 <div className="flex items-center gap-2 mt-3">
                   <button onClick={gerarLocal}
                     className="rounded-lg bg-white border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                    Usar analise basica (sem IA)
+                    Usar análise basica (sem IA)
                   </button>
                   {errorCode === 'NO_CREDITS' && (
                     <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer"
@@ -168,14 +168,14 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
               <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center mb-3">
                 <Sparkles className="h-7 w-7 text-violet-600" />
               </div>
-              <p className="text-sm font-semibold text-gray-800 mb-1">Gere uma analise inteligente</p>
+              <p className="text-sm font-semibold text-gray-800 mb-1">Gere uma análise inteligente</p>
               <p className="text-xs text-gray-500 max-w-md mx-auto mb-4">
-                Receba diagnosticos, oportunidades e recomendacoes baseadas nos numeros da sua DRE,
-                considerando especificidades do setor de combustiveis.
+                Receba diagnósticos, oportunidades e recomendacoes baseadas nos números da sua DRE,
+                considerando especificidades do setor de combustíveis.
               </p>
               <p className="text-[11px] text-gray-400">
-                <strong>Analise basica</strong>: regras de negocio sem IA (gratis, instantaneo) <br/>
-                <strong>Analise com IA</strong>: usa Claude (requer chave Anthropic com creditos)
+                <strong>Análise basica</strong>: regras de negocio sem IA (gratis, instantaneo) <br/>
+                <strong>Análise com IA</strong>: usa Claude (requer chave Anthropic com creditos)
               </p>
             </div>
           )}
@@ -183,7 +183,7 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
           {loading && (
             <div className="text-center py-12">
               <Loader2 className="h-7 w-7 text-violet-500 animate-spin mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-800 mb-1">Analisando seus numeros...</p>
+              <p className="text-sm font-medium text-gray-800 mb-1">Analisando seus números...</p>
               <p className="text-xs text-gray-400">Isso pode levar 10-20 segundos</p>
             </div>
           )}
@@ -228,7 +228,7 @@ function InsightsContent({ insights, kpis }) {
   const situacaoConfig = {
     saudavel: { label: 'Saudavel', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CheckCircle2 },
     alerta:   { label: 'Alerta',   color: 'bg-amber-100 text-amber-800 border-amber-200',         icon: AlertTriangle },
-    critico:  { label: 'Critico',  color: 'bg-red-100 text-red-800 border-red-200',               icon: XCircle },
+    critico:  { label: 'Crítico',  color: 'bg-red-100 text-red-800 border-red-200',               icon: XCircle },
   };
   const sit = situacaoConfig[insights.resumo_executivo?.situacao] || situacaoConfig.alerta;
   const SitIcon = sit.icon;
@@ -240,7 +240,7 @@ function InsightsContent({ insights, kpis }) {
         <div className={`rounded-xl border px-4 py-3 mb-3 flex items-start gap-2.5 ${sit.color}`}>
           <SitIcon className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider mb-1">Situacao: {sit.label}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-1">Situação: {sit.label}</p>
             <p className="text-sm leading-relaxed">{insights.resumo_executivo?.resumo}</p>
           </div>
         </div>
@@ -251,7 +251,7 @@ function InsightsContent({ insights, kpis }) {
       </Section>
 
       {/* 2. Analise de Margens */}
-      <Section title="Analise de Margens" icon={Percent} color="emerald">
+      <Section title="Análise de Margens" icon={Percent} color="emerald">
         <div className="grid sm:grid-cols-3 gap-3 mb-3">
           <MiniKpi label="Margem bruta" value={`${kpis.margemBruta.toFixed(2)}%`} />
           <MiniKpi label="Margem liquida" value={`${kpis.margemLiquida.toFixed(2)}%`} />
@@ -260,7 +260,7 @@ function InsightsContent({ insights, kpis }) {
         <p className="text-sm text-gray-700 leading-relaxed mb-3">{insights.margens?.interpretacao}</p>
         {insights.margens?.causas && insights.margens.causas.length > 0 && (
           <div>
-            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Possiveis causas</p>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Possíveis causas</p>
             <ul className="space-y-1.5">
               {insights.margens.causas.map((c, i) => (
                 <li key={i} className="text-sm text-gray-700 flex gap-2">
@@ -292,12 +292,12 @@ function InsightsContent({ insights, kpis }) {
           </div>
         )}
         {insights.custos_despesas?.excessos && insights.custos_despesas.excessos.length > 0 && (
-          <BulletCard title="Possiveis excessos" items={insights.custos_despesas.excessos} icon={AlertTriangle} color="red" />
+          <BulletCard title="Possíveis excessos" items={insights.custos_despesas.excessos} icon={AlertTriangle} color="red" />
         )}
       </Section>
 
       {/* 4. Pontos de Atencao */}
-      <Section title="Pontos de Atencao" icon={AlertTriangle} color="red">
+      <Section title="Pontos de Atenção" icon={AlertTriangle} color="red">
         <div className="grid sm:grid-cols-3 gap-3">
           <BulletCard title="Gargalos" items={insights.atencao?.gargalos} compact />
           <BulletCard title="Riscos" items={insights.atencao?.riscos} compact />
@@ -310,7 +310,7 @@ function InsightsContent({ insights, kpis }) {
         <div className="grid lg:grid-cols-3 gap-3">
           <BulletCard title="Aumentar margem" items={insights.oportunidades?.aumentar_margem} icon={TrendingUp} color="emerald" />
           <BulletCard title="Reduzir custos" items={insights.oportunidades?.reduzir_custos} icon={TrendingDown} color="orange" />
-          <BulletCard title="Sugestoes praticas" items={insights.oportunidades?.sugestoes_praticas} icon={Lightbulb} color="amber" />
+          <BulletCard title="Sugestoes práticas" items={insights.oportunidades?.sugestoes_praticas} icon={Lightbulb} color="amber" />
         </div>
       </Section>
 
@@ -329,7 +329,7 @@ function InsightsContent({ insights, kpis }) {
       </Section>
 
       {/* 7. Perguntas para o Gestor */}
-      <Section title="Perguntas para reflexao" icon={HelpCircle} color="blue">
+      <Section title="Perguntas para reflexão" icon={HelpCircle} color="blue">
         <div className="grid sm:grid-cols-2 gap-2.5">
           {(insights.perguntas || []).map((p, i) => (
             <div key={i} className="rounded-lg border border-gray-200 bg-white p-3 flex items-start gap-2.5">
@@ -411,10 +411,10 @@ function ModalApiKey({ open, apiKey, onClose, onSave }) {
         <div className="rounded-lg bg-violet-50/60 border border-violet-200 p-3 flex gap-2">
           <Key className="h-4 w-4 text-violet-600 flex-shrink-0 mt-0.5" />
           <div className="text-xs text-violet-900 leading-relaxed">
-            Para gerar analises com IA, e necessaria uma chave da API Anthropic. Obtenha em{' '}
+            Para gerar análises com IA, e necessária uma chave da API Anthropic. Obtenha em{' '}
             <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer"
               className="font-medium underline">console.anthropic.com</a>.
-            A chave fica salva no seu navegador (localStorage) e nao e enviada ao Supabase.
+            A chave fica salva no seu navegador (localStorage) e não e enviada ao Supabase.
           </div>
         </div>
 
@@ -432,7 +432,7 @@ function ModalApiKey({ open, apiKey, onClose, onSave }) {
           </button>
           <button onClick={() => onSave(value.trim())} disabled={!value.trim()}
             className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50">
-            Salvar e gerar analise
+            Salvar e gerar análise
           </button>
         </div>
       </div>

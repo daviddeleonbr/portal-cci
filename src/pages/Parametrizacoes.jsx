@@ -23,7 +23,7 @@ import * as dreService from '../services/mascaraDreService';
 // ─── Tipos de linha na DRE ────────────────────────────────
 const TIPO_LINHA = {
   grupo:     { label: 'Grupo',     icon: FolderOpen, color: 'text-gray-900', bg: 'bg-slate-100 text-slate-700',   desc: 'Agrupa contas (ex: RECEITA BRUTA)' },
-  subtotal:  { label: 'Subtotal',  icon: Equal, color: 'text-blue-700 font-semibold', bg: 'bg-purple-50 text-purple-700', desc: 'Calculo (ex: = RECEITA OPERACIONAL LIQUIDA)' },
+  subtotal:  { label: 'Subtotal',  icon: Equal, color: 'text-blue-700 font-semibold', bg: 'bg-purple-50 text-purple-700', desc: 'Cálculo (ex: = RECEITA OPERACIONAL LIQUIDA)' },
   resultado: { label: 'Resultado', icon: Equal, color: 'text-emerald-700 font-bold', bg: 'bg-emerald-50 text-emerald-700', desc: 'Resultado final (ex: = RESULTADO GERENCIAL)' },
 };
 
@@ -54,7 +54,7 @@ export default function Parametrizacoes() {
       const data = await dreService.listarMascaras();
       setMascaras(data || []);
     } catch (err) {
-      showToast('error', 'Erro ao carregar mascaras: ' + err.message);
+      showToast('error', 'Erro ao carregar máscaras: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -83,10 +83,10 @@ export default function Parametrizacoes() {
       setSaving(true);
       if (form.id) {
         await dreService.atualizarMascara(form.id, { nome: form.nome, descricao: form.descricao });
-        showToast('success', 'Mascara atualizada');
+        showToast('success', 'Máscara atualizada');
       } else {
         await dreService.criarMascara({ nome: form.nome, descricao: form.descricao });
-        showToast('success', 'Mascara criada');
+        showToast('success', 'Máscara criada');
       }
       setModalMascara({ open: false, data: null });
       await carregarMascaras();
@@ -98,7 +98,7 @@ export default function Parametrizacoes() {
     try {
       await dreService.excluirMascara(id);
       if (mascaraSelecionada?.id === id) { setMascaraSelecionada(null); setGrupos([]); setMapeamentos([]); }
-      showToast('success', 'Mascara excluida');
+      showToast('success', 'Máscara excluida');
       await carregarMascaras();
     } catch (err) { showToast('error', err.message); }
   };
@@ -141,11 +141,11 @@ export default function Parametrizacoes() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Mascaras DRE" description="Configure a estrutura das mascaras de DRE">
+      <PageHeader title="Máscaras DRE" description="Configure a estrutura das máscaras de DRE">
         {!mascaraSelecionada && (
           <button onClick={() => setModalMascara({ open: true, data: null })}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-            <Plus className="h-4 w-4" /> Nova Mascara
+            <Plus className="h-4 w-4" /> Nova Máscara
           </button>
         )}
       </PageHeader>
@@ -154,7 +154,7 @@ export default function Parametrizacoes() {
         <MascarasList mascaras={mascaras} loading={loading}
           onSelect={setMascaraSelecionada}
           onEdit={(m) => setModalMascara({ open: true, data: m })}
-          onDelete={(m) => setModalConfirm({ open: true, message: `Excluir mascara "${m.nome}"?`, onConfirm: () => { deletarMascara(m.id); setModalConfirm({ open: false }); } })}
+          onDelete={(m) => setModalConfirm({ open: true, message: `Excluir máscara "${m.nome}"?`, onConfirm: () => { deletarMascara(m.id); setModalConfirm({ open: false }); } })}
         />
       ) : (
         <DreTreeBuilder
@@ -322,7 +322,7 @@ function DreTreeBuilder({ mascara, grupos, saving, onBack, onAddLinha, onUpdateL
             <div className="h-14 w-14 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
               <FileSpreadsheet className="h-7 w-7 text-gray-300" />
             </div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">Mascara vazia</h3>
+            <h3 className="text-sm font-semibold text-gray-800 mb-1">Máscara vazia</h3>
             <p className="text-xs text-gray-400 mb-5 max-w-xs mx-auto leading-relaxed">
               Monte a estrutura da sua DRE adicionando grupos, contas e subtotais.
             </p>
@@ -646,9 +646,9 @@ function MascarasList({ mascaras, loading, onSelect, onEdit, onDelete }) {
         <div className="h-16 w-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
           <FileSpreadsheet className="h-8 w-8 text-blue-500" />
         </div>
-        <h3 className="text-base font-semibold text-gray-900 mb-1">Nenhuma mascara criada</h3>
+        <h3 className="text-base font-semibold text-gray-900 mb-1">Nenhuma máscara criada</h3>
         <p className="text-sm text-gray-500 mb-6 text-center max-w-sm">
-          Crie uma mascara de DRE para configurar a estrutura do demonstrativo.
+          Crie uma máscara de DRE para configurar a estrutura do demonstrativo.
         </p>
       </motion.div>
     );
@@ -748,19 +748,19 @@ function ModalMascara({ open, data, saving, onClose, onSave }) {
   }, [open, data]);
 
   return (
-    <Modal open={open} onClose={onClose} title={data ? 'Editar Mascara' : 'Nova Mascara DRE'} size="sm">
+    <Modal open={open} onClose={onClose} title={data ? 'Editar Máscara' : 'Nova Máscara DRE'} size="sm">
       <form onSubmit={(e) => { e.preventDefault(); onSave(form); }} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
           <input type="text" required value={form.nome} onChange={(e) => setForm(f => ({ ...f, nome: e.target.value }))}
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-shadow"
-            placeholder="Ex: DRE Padrao - Comercio" />
+            placeholder="Ex: DRE Padrão - Comércio" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Descricao</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>
           <textarea value={form.descricao} onChange={(e) => setForm(f => ({ ...f, descricao: e.target.value }))} rows={3}
             className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 resize-none transition-shadow"
-            placeholder="Descricao opcional" />
+            placeholder="Descrição opcional" />
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>

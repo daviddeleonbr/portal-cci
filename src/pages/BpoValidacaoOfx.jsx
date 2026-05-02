@@ -222,7 +222,7 @@ export default function BpoValidacaoOfx() {
       const text = await file.text();
       const parsed = parseOfx(text);
       if (parsed.transacoes.length === 0) {
-        setErro('Arquivo OFX invalido ou sem transacoes (STMTTRN).');
+        setErro('Arquivo OFX invalido ou sem transações (STMTTRN).');
         return;
       }
       setOfx(parsed);
@@ -237,7 +237,7 @@ export default function BpoValidacaoOfx() {
     setErro(null);
     try {
       const chave = chavesApi.find(ch => ch.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada para a rede');
+      if (!chave) throw new Error('Chave API não encontrada para a rede');
       const filtros = {
         dataInicial: ofx.dtStart,
         dataFinal: ofx.dtEnd,
@@ -302,7 +302,7 @@ export default function BpoValidacaoOfx() {
 
   return (
     <div>
-      <PageHeader title="Validacao OFX" description="Compare um arquivo OFX bancario com os lancamentos ja registrados no sistema para identificar o que falta lancar" />
+      <PageHeader title="Validação OFX" description="Compare um arquivo OFX bancário com os lançamentos já registrados no sistema para identificar o que falta lancar" />
 
       {/* Seletor rede + empresa + conta + upload */}
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
@@ -329,11 +329,11 @@ export default function BpoValidacaoOfx() {
           </div>
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
-              3. Conta bancaria {loadingContas && <Loader2 className="inline h-3 w-3 animate-spin ml-1" />}
+              3. Conta bancária {loadingContas && <Loader2 className="inline h-3 w-3 animate-spin ml-1" />}
             </label>
             <select value={contaCodigo} onChange={(e) => setContaCodigo(e.target.value)} disabled={!cliente || loadingContas}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-400">
-              <option value="">{cliente ? (contasElegiveis.length === 0 ? 'Nenhuma conta bancaria' : 'Selecione...') : 'Escolha a empresa primeiro'}</option>
+              <option value="">{cliente ? (contasElegiveis.length === 0 ? 'Nenhuma conta bancária' : 'Selecione...') : 'Escolha a empresa primeiro'}</option>
               {contasElegiveis.map(c => (
                 <option key={c.codigo} value={c.codigo}>{c.descricao} · {c.tipo}</option>
               ))}
@@ -383,7 +383,7 @@ export default function BpoValidacaoOfx() {
               <p className="font-medium text-gray-900">{formatBanco(ofx.bankId, ofx.org)}</p>
             </div>
             <div>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Agencia</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Agência</p>
               <p className="font-mono text-gray-900">{ofx.branchId || '—'}</p>
             </div>
             <div>
@@ -391,11 +391,11 @@ export default function BpoValidacaoOfx() {
               <p className="font-mono text-gray-900">{ofx.acctId || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Periodo</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Período</p>
               <p className="font-mono text-gray-900 text-[12px]">{formatDataBR(ofx.dtStart)} a {formatDataBR(ofx.dtEnd)}</p>
             </div>
             <div>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Transacoes</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Transações</p>
               <p className="font-semibold text-gray-900">{ofx.transacoes.length}</p>
             </div>
           </div>
@@ -405,13 +405,13 @@ export default function BpoValidacaoOfx() {
       {/* Resumo da comparacao (KPIs) */}
       {resumo && (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
-          <Kpi label="OFX" valor={resumo.total} icon={FileText} color="blue" raw hint="transacoes no arquivo" />
+          <Kpi label="OFX" valor={resumo.total} icon={FileText} color="blue" raw hint="transações no arquivo" />
           <Kpi label="Lancadas" valor={resumo.casadas} icon={Check} color="emerald" raw
             hint={`${resumo.total > 0 ? ((resumo.casadas / resumo.total) * 100).toFixed(0) : 0}% do OFX`} />
           <Kpi label="Faltando lancar" valor={resumo.faltando} icon={AlertCircle} color="red" raw
-            hint="no OFX mas nao no sistema" />
+            hint="no OFX mas não no sistema" />
           <Kpi label="Extras no sistema" valor={resumo.extras} icon={ChevronRight} color="amber" raw
-            hint="no sistema mas nao no OFX" />
+            hint="no sistema mas não no OFX" />
         </div>
       )}
 
@@ -422,7 +422,7 @@ export default function BpoValidacaoOfx() {
             <FileSearch className="h-4 w-4 text-blue-500" />
             <h3 className="text-sm font-semibold text-gray-800">Totais: OFX x Sistema</h3>
             <span className="text-[11px] text-gray-400">
-              · diferenca positiva = OFX maior · diferenca negativa = Sistema maior
+              · diferença positiva = OFX maior · diferença negativa = Sistema maior
             </span>
           </div>
           <div className="overflow-x-auto">
@@ -432,7 +432,7 @@ export default function BpoValidacaoOfx() {
                   <th className="px-4 py-2.5"></th>
                   <th className="px-4 py-2.5 text-right">OFX</th>
                   <th className="px-4 py-2.5 text-right">Sistema</th>
-                  <th className="px-4 py-2.5 text-right">Diferenca (OFX - Sistema)</th>
+                  <th className="px-4 py-2.5 text-right">Diferença (OFX - Sistema)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -460,7 +460,7 @@ export default function BpoValidacaoOfx() {
                 <tr className="hover:bg-gray-50/60">
                   <td className="px-4 py-2.5 text-[12.5px]">
                     <span className="inline-flex items-center gap-1.5 font-medium text-gray-800">
-                      <ArrowUpFromLine className="h-3.5 w-3.5 text-red-600" /> Saidas
+                      <ArrowUpFromLine className="h-3.5 w-3.5 text-red-600" /> Saídas
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[13px] text-red-700 font-semibold">
@@ -479,7 +479,7 @@ export default function BpoValidacaoOfx() {
                   </td>
                 </tr>
                 <tr className="bg-gray-50/40 font-semibold">
-                  <td className="px-4 py-2.5 text-[12.5px] text-gray-800">Liquido (Entradas - Saidas)</td>
+                  <td className="px-4 py-2.5 text-[12.5px] text-gray-800">Liquido (Entradas - Saídas)</td>
                   <td className={`px-4 py-2.5 text-right font-mono tabular-nums text-[13px] ${totaisComparativos.ofx.liquido >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                     {totaisComparativos.ofx.liquido >= 0 ? '+' : ''}{formatCurrency(totaisComparativos.ofx.liquido)}
                   </td>
@@ -496,7 +496,7 @@ export default function BpoValidacaoOfx() {
                   </td>
                 </tr>
                 <tr className="text-[11px] text-gray-500">
-                  <td className="px-4 py-1.5">Qtd. de transacoes</td>
+                  <td className="px-4 py-1.5">Qtd. de transações</td>
                   <td className="px-4 py-1.5 text-right font-mono tabular-nums">{totaisComparativos.ofx.qtd}</td>
                   <td className="px-4 py-1.5 text-right font-mono tabular-nums">{totaisComparativos.sistema.qtd}</td>
                   <td className="px-4 py-1.5 text-right font-mono tabular-nums">
@@ -516,7 +516,7 @@ export default function BpoValidacaoOfx() {
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
               <FileSearch className="h-4 w-4 text-blue-500" />
-              <h3 className="text-sm font-semibold text-gray-800">Transacoes do OFX</h3>
+              <h3 className="text-sm font-semibold text-gray-800">Transações do OFX</h3>
               <span className="text-[11px] text-gray-400">· {comparacao.transacoes.length} registros</span>
             </div>
             <div className="overflow-x-auto">
@@ -525,7 +525,7 @@ export default function BpoValidacaoOfx() {
                   <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                     <th className="px-4 py-2.5">Status</th>
                     <th className="px-4 py-2.5">Data</th>
-                    <th className="px-4 py-2.5">Descricao (OFX)</th>
+                    <th className="px-4 py-2.5">Descrição (OFX)</th>
                     <th className="px-4 py-2.5">Doc.</th>
                     <th className="px-4 py-2.5 text-right">Valor</th>
                     <th className="px-4 py-2.5">Correspondente no sistema</th>
@@ -555,7 +555,7 @@ export default function BpoValidacaoOfx() {
                             <span className="truncate">{t.match.descricao}</span>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-red-700">— nao encontrado —</span>
+                          <span className="text-[11px] text-red-700">— não encontrado —</span>
                         )}
                       </td>
                     </tr>
@@ -578,13 +578,13 @@ export default function BpoValidacaoOfx() {
                   <thead className="bg-gray-50/80 border-b border-gray-100">
                     <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                       <th className="px-4 py-2.5">Data</th>
-                      <th className="px-4 py-2.5">Descricao (sistema)</th>
+                      <th className="px-4 py-2.5">Descrição (sistema)</th>
                       <th className="px-4 py-2.5">Doc.</th>
                       <th className="px-4 py-2.5 text-right">
                         <span className="inline-flex items-center gap-1 text-emerald-700"><ArrowDownToLine className="h-3 w-3" /> Entrada</span>
                       </th>
                       <th className="px-4 py-2.5 text-right">
-                        <span className="inline-flex items-center gap-1 text-red-700"><ArrowUpFromLine className="h-3 w-3" /> Saida</span>
+                        <span className="inline-flex items-center gap-1 text-red-700"><ArrowUpFromLine className="h-3 w-3" /> Saída</span>
                       </th>
                     </tr>
                   </thead>
@@ -617,8 +617,8 @@ export default function BpoValidacaoOfx() {
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Envie um arquivo OFX para validar</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            Selecione a rede, a empresa e a conta bancaria; em seguida envie o OFX do banco.
-            A pagina vai cruzar as transacoes do arquivo com os movimentos ja registrados no periodo.
+            Selecione a rede, a empresa e a conta bancária; em seguida envie o OFX do banco.
+            A página vai cruzar as transações do arquivo com os movimentos já registrados no período.
           </p>
         </div>
       )}

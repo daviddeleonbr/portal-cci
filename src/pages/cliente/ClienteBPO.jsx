@@ -27,7 +27,7 @@ function formatDataBR(s) {
   const [y, m, d] = iso.split('-');
   return y && m && d ? `${d}/${m}/${y}` : s;
 }
-const DIAS_SEMANA = ['Domingo', 'Segunda-feira', 'Terca-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sabado'];
+const DIAS_SEMANA = ['Domingo', 'Segunda-feira', 'Terca-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 function diaSemana(iso) {
   if (!iso) return '';
   const [y, m, d] = String(iso).slice(0, 10).split('-');
@@ -81,11 +81,11 @@ export default function ClienteBPO() {
   if (!cliente.usa_webposto || !cliente.chave_api_id || !cliente.empresa_codigo) {
     return (
       <div>
-        <PageHeader title="Servicos BPO" description="Relatorios de fechamento de caixa" />
+        <PageHeader title="Serviços BPO" description="Relatórios de fechamento de caixa" />
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <p>
-            Esta empresa ainda nao tem <strong>integracao Webposto</strong> ativa. Contate o administrador.
+            Esta empresa ainda não tem <strong>integração Webposto</strong> ativa. Contate o administrador.
           </p>
         </div>
       </div>
@@ -119,8 +119,8 @@ export default function ClienteBPO() {
   return (
     <div>
       <PageHeader
-        title="Servicos BPO"
-        description={`Relatorios de fechamento de caixa concluidos${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
+        title="Serviços BPO"
+        description={`Relatórios de fechamento de caixa concluídos${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
       >
         <button
           onClick={carregar}
@@ -154,11 +154,11 @@ export default function ClienteBPO() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <AtalhoPeriodo label="Mes atual" onClick={() => {
+            <AtalhoPeriodo label="Mês atual" onClick={() => {
               setDataInicial(primeiroDiaDoMesIso());
               setDataFinal(hojeIso());
             }} />
-            <AtalhoPeriodo label="Mes anterior" onClick={() => {
+            <AtalhoPeriodo label="Mês anterior" onClick={() => {
               const d = new Date();
               d.setMonth(d.getMonth() - 1);
               const y = d.getFullYear();
@@ -177,16 +177,16 @@ export default function ClienteBPO() {
           icon={CheckCircle2}
           iconBg="bg-emerald-50"
           iconColor="text-emerald-600"
-          label="Relatorios concluidos"
+          label="Relatórios concluídos"
           valor={concluidas.length}
-          sub={diasNoPeriodo > 0 ? `em ${diasNoPeriodo} ${diasNoPeriodo === 1 ? 'dia' : 'dias'} do periodo` : ''}
+          sub={diasNoPeriodo > 0 ? `em ${diasNoPeriodo} ${diasNoPeriodo === 1 ? 'dia' : 'dias'} do período` : ''}
           highlight
         />
         <ResumoCard
           icon={Calendar}
           iconBg="bg-blue-50"
           iconColor="text-blue-600"
-          label="Periodo"
+          label="Período"
           valor={`${formatDataBR(dataInicial)} → ${formatDataBR(dataFinal)}`}
           valorClassName="text-[13px]"
         />
@@ -196,7 +196,7 @@ export default function ClienteBPO() {
           iconColor="text-gray-600"
           label="Dias pendentes"
           valor={diasNoPeriodo > concluidas.length ? (diasNoPeriodo - concluidas.length) : 0}
-          sub="aguardando conciliacao"
+          sub="aguardando conciliação"
         />
       </div>
 
@@ -204,13 +204,13 @@ export default function ClienteBPO() {
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
           <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-          <span className="text-sm">Carregando relatorios...</span>
+          <span className="text-sm">Carregando relatórios...</span>
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium">Nao foi possivel carregar os relatorios</p>
+            <p className="font-medium">Não foi possível carregar os relatórios</p>
             <p className="text-red-700 mt-1">{error}</p>
           </div>
         </div>
@@ -219,10 +219,10 @@ export default function ClienteBPO() {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 mb-3">
             <CalendarDays className="h-6 w-6 text-amber-600" />
           </div>
-          <p className="text-sm font-medium text-gray-900">Nenhum relatorio concluido neste periodo</p>
+          <p className="text-sm font-medium text-gray-900">Nenhum relatório concluído neste período</p>
           <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-            Os relatorios aparecerao aqui assim que o responsavel do BPO finalizar a conciliacao de cada dia.
-            Tente ampliar o periodo ou aguarde a conferencia da equipe.
+            Os relatórios aparecerao aqui assim que o responsavel do BPO finalizar a conciliação de cada dia.
+            Tente ampliar o período ou aguarde a conferência da equipe.
           </p>
         </div>
       ) : (
@@ -295,7 +295,7 @@ function ItemConcluido({ item, onClick, delay }) {
           {item.concluida_em && (
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              Concluido em {new Date(item.concluida_em).toLocaleString('pt-BR')}
+              Concluído em {new Date(item.concluida_em).toLocaleString('pt-BR')}
             </span>
           )}
           {item.concluida_por && (
@@ -310,7 +310,7 @@ function ItemConcluido({ item, onClick, delay }) {
         </div>
       </div>
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[10px] font-medium flex-shrink-0">
-        <CheckCircle2 className="h-2.5 w-2.5" /> Concluido
+        <CheckCircle2 className="h-2.5 w-2.5" /> Concluído
       </span>
       <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
     </motion.button>

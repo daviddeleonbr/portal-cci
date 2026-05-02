@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 export const STATUS = [
   { key: 'pendente',     label: 'Pendente',     cor: 'amber' },
   { key: 'em_andamento', label: 'Em andamento', cor: 'blue' },
-  { key: 'concluida',    label: 'Concluida',    cor: 'emerald' },
+  { key: 'concluida',    label: 'Concluída',    cor: 'emerald' },
   { key: 'cancelada',    label: 'Cancelada',    cor: 'gray' },
 ];
 
@@ -31,7 +31,7 @@ export async function listar(chaveApiId, { status, clienteId } = {}) {
 
 export async function criar({ chave_api_id, cliente_id, titulo, descricao, responsavel, prazo, status = 'pendente', prioridade = 'normal', criado_por }) {
   if (!chave_api_id) throw new Error('Rede e obrigatoria.');
-  if (!titulo?.trim()) throw new Error('Titulo e obrigatorio.');
+  if (!titulo?.trim()) throw new Error('Título e obrigatorio.');
   const payload = {
     chave_api_id,
     cliente_id: cliente_id || null,

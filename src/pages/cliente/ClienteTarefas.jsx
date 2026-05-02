@@ -138,7 +138,7 @@ export default function ClienteTarefas() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <StatCard label="Pendentes" valor={stats.pendentes} icon={Clock} color="amber" />
         <StatCard label="Em andamento" valor={stats.em_andamento} icon={Zap} color="blue" />
-        <StatCard label="Concluidas" valor={stats.concluidas} icon={CheckCircle2} color="emerald" />
+        <StatCard label="Concluídas" valor={stats.concluidas} icon={CheckCircle2} color="emerald" />
         <StatCard label="Atrasadas" valor={stats.atrasadas} icon={AlertCircle} color="red" />
       </div>
 
@@ -147,7 +147,7 @@ export default function ClienteTarefas() {
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input value={busca} onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por titulo, descricao ou responsavel..."
+            placeholder="Buscar por título, descrição ou responsavel..."
             className="w-full h-9 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
         <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
@@ -194,7 +194,7 @@ export default function ClienteTarefas() {
 
       <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir tarefa" size="sm">
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">Excluir a tarefa <strong>"{confirm.tarefa?.titulo}"</strong>?</p>
+          <p className="text-sm text-gray-600">Excluir a tarefa <strong>"{confirm.tarefa?.título}"</strong>?</p>
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false })} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
             <button onClick={confirm.onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
@@ -342,7 +342,7 @@ function ModalTarefa({ open, data, empresas, onClose, onSave }) {
     <Modal open={open} onClose={onClose} title={data?.id ? 'Editar tarefa' : 'Nova tarefa'} size="md">
       <form onSubmit={submit} className="space-y-3">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Titulo *</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Título *</label>
           <input type="text" required autoFocus value={form.titulo || ''}
             onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
             placeholder="Ex: Enviar extrato de abril"
@@ -350,7 +350,7 @@ function ModalTarefa({ open, data, empresas, onClose, onSave }) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Descricao</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Descrição</label>
           <textarea rows={2} value={form.descricao || ''}
             onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
             placeholder="Detalhes da atividade"

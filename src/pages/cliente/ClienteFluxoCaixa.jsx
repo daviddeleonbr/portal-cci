@@ -13,14 +13,14 @@ export default function ClienteFluxoCaixa() {
   if (!cliente.exibir_fluxo_caixa) {
     return (
       <div>
-        <PageHeader title="Fluxo de Caixa" description="Entradas e saidas por periodo" />
+        <PageHeader title="Fluxo de Caixa" description="Entradas e saídas por período" />
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium mb-1">Relatorio nao disponivel para esta empresa</p>
+            <p className="font-medium mb-1">Relatório não disponível para esta empresa</p>
             <p className="text-amber-700">
-              O Fluxo de Caixa ainda nao foi liberado pelo administrador da consultoria. Entre em
-              contato se precisar visualizar este relatorio.
+              O Fluxo de Caixa ainda não foi liberado pelo administrador da consultoria. Entre em
+              contato se precisar visualizar este relatório.
             </p>
           </div>
         </div>

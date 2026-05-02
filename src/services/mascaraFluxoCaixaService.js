@@ -6,22 +6,22 @@ import { supabase } from '../lib/supabase';
 // Pais sao criados antes dos filhos (respeitando parent_id).
 
 const TEMPLATE_INDIRETO = {
-  nome: 'Modelo Padrao - Metodo Indireto',
-  descricao: 'Parte do Lucro Liquido / Prejuizo e ajusta ate chegar na variacao de caixa do periodo. Padrao IFRS (CPC-03).',
+  nome: 'Modelo Padrão - Metodo Indireto',
+  descricao: 'Parte do Lucro Liquido / Prejuízo e ajusta até chegar na variação de caixa do período. Padrão IFRS (CPC-03).',
   grupos: [
     {
       nome: '1. ATIVIDADES OPERACIONAIS', tipo: 'grupo', sinal: 1,
       children: [
-        { nome: 'Lucro Liquido / Prejuizo do periodo', tipo: 'entrada', sinal: 1 },
+        { nome: 'Lucro Liquido / Prejuízo do período', tipo: 'entrada', sinal: 1 },
         {
-          nome: 'Ajustes que nao mexeram no caixa', tipo: 'grupo', sinal: 1,
+          nome: 'Ajustes que não mexeram no caixa', tipo: 'grupo', sinal: 1,
           children: [
-            { nome: 'Depreciacao e amortizacao', tipo: 'entrada', sinal: 1 },
+            { nome: 'Depreciação e amortização', tipo: 'entrada', sinal: 1 },
             { nome: 'Provisoes e reversoes', tipo: 'entrada', sinal: 1 },
           ],
         },
         {
-          nome: 'Variacao no capital de giro', tipo: 'grupo', sinal: 1,
+          nome: 'Variação no capital de giro', tipo: 'grupo', sinal: 1,
           children: [
             { nome: 'Clientes (aumento diminui o caixa)', tipo: 'saida', sinal: -1 },
             { nome: 'Estoques (aumento diminui o caixa)', tipo: 'saida', sinal: -1 },
@@ -30,13 +30,13 @@ const TEMPLATE_INDIRETO = {
         },
       ],
     },
-    { nome: '= Caixa gerado pelas operacoes', tipo: 'subtotal', sinal: 1 },
+    { nome: '= Caixa gerado pelas operações', tipo: 'subtotal', sinal: 1 },
 
     {
       nome: '2. ATIVIDADES DE INVESTIMENTO', tipo: 'grupo', sinal: 1,
       children: [
-        { nome: 'Compras de maquinas, moveis e imoveis', tipo: 'saida', sinal: -1 },
-        { nome: 'Vendas de maquinas, moveis e imoveis', tipo: 'entrada', sinal: 1 },
+        { nome: 'Compras de máquinas, móveis e imóveis', tipo: 'saida', sinal: -1 },
+        { nome: 'Vendas de máquinas, móveis e imóveis', tipo: 'entrada', sinal: 1 },
       ],
     },
     { nome: '= Caixa usado em investimentos', tipo: 'subtotal', sinal: 1 },
@@ -58,8 +58,8 @@ const TEMPLATE_INDIRETO = {
 };
 
 const TEMPLATE_DIRETO = {
-  nome: 'Modelo Padrao - Metodo Direto',
-  descricao: 'Mostra diretamente o dinheiro que entrou e saiu do caixa no periodo. Padrao IFRS (CPC-03).',
+  nome: 'Modelo Padrão - Metodo Direto',
+  descricao: 'Mostra diretamente o dinheiro que entrou e saiu do caixa no período. Padrão IFRS (CPC-03).',
   grupos: [
     {
       nome: '1. ATIVIDADES OPERACIONAIS', tipo: 'grupo', sinal: 1,
@@ -72,10 +72,10 @@ const TEMPLATE_DIRETO = {
           ],
         },
         {
-          nome: 'Pagamentos (saidas de caixa)', tipo: 'grupo', sinal: 1,
+          nome: 'Pagamentos (saídas de caixa)', tipo: 'grupo', sinal: 1,
           children: [
             { nome: 'Pagamentos a fornecedores', tipo: 'saida', sinal: -1 },
-            { nome: 'Salarios e encargos da equipe', tipo: 'saida', sinal: -1 },
+            { nome: 'Salários e encargos da equipe', tipo: 'saida', sinal: -1 },
             { nome: 'Impostos pagos', tipo: 'saida', sinal: -1 },
             { nome: 'Aluguel', tipo: 'saida', sinal: -1 },
             { nome: 'Agua, luz, internet e telefone', tipo: 'saida', sinal: -1 },
@@ -84,14 +84,14 @@ const TEMPLATE_DIRETO = {
         },
       ],
     },
-    { nome: '= Caixa gerado pelas operacoes', tipo: 'subtotal', sinal: 1 },
+    { nome: '= Caixa gerado pelas operações', tipo: 'subtotal', sinal: 1 },
 
     {
       nome: '2. ATIVIDADES DE INVESTIMENTO', tipo: 'grupo', sinal: 1,
       children: [
-        { nome: 'Compras de maquinas, moveis e imoveis', tipo: 'saida', sinal: -1 },
-        { nome: 'Vendas de maquinas, moveis e imoveis', tipo: 'entrada', sinal: 1 },
-        { nome: 'Rendimentos de aplicacoes financeiras', tipo: 'entrada', sinal: 1 },
+        { nome: 'Compras de máquinas, móveis e imóveis', tipo: 'saida', sinal: -1 },
+        { nome: 'Vendas de máquinas, móveis e imóveis', tipo: 'entrada', sinal: 1 },
+        { nome: 'Rendimentos de aplicações financeiras', tipo: 'entrada', sinal: 1 },
       ],
     },
     { nome: '= Caixa usado em investimentos', tipo: 'subtotal', sinal: 1 },
@@ -177,7 +177,7 @@ export async function excluirMascara(id) {
 // metodo: 'indireto' | 'direto'. nome opcional substitui o default do template.
 export async function criarMascaraDoModeloPadrao(metodo, nomePersonalizado) {
   const template = MODELOS_PADRAO[metodo];
-  if (!template) throw new Error(`Modelo padrao desconhecido: ${metodo}`);
+  if (!template) throw new Error(`Modelo padrão desconhecido: ${metodo}`);
 
   const mascara = await criarMascara({
     nome: (nomePersonalizado && nomePersonalizado.trim()) || template.nome,
@@ -351,7 +351,7 @@ export async function listarMapeamentosEmpresa(chaveApiId) {
   if (error) {
     // Tabela ainda nao migrada: retorna vazio para nao quebrar a UI
     if (error.code === '42P01' || /does not exist|mapeamento_empresa_contas_fluxo/i.test(error.message || '')) {
-      console.warn('[fluxoService] mapeamento_empresa_contas_fluxo nao existe. Rode a migration 011_mapeamento_fluxo_caixa.sql no Supabase.');
+      console.warn('[fluxoService] mapeamento_empresa_contas_fluxo não existe. Rode a migration 011_mapeamento_fluxo_caixa.sql no Supabase.');
       return [];
     }
     throw error;
@@ -374,7 +374,7 @@ export async function criarMapeamentosEmpresaBatch(chaveApiId, mapeamentos) {
     .select();
   if (error) {
     if (error.code === '42P01' || /does not exist|mapeamento_empresa_contas_fluxo/i.test(error.message || '')) {
-      throw new Error('Tabela mapeamento_empresa_contas_fluxo nao encontrada. Execute a migration 011_mapeamento_fluxo_caixa.sql no Supabase (SQL Editor).');
+      throw new Error('Tabela mapeamento_empresa_contas_fluxo não encontrada. Execute a migration 011_mapeamento_fluxo_caixa.sql no Supabase (SQL Editor).');
     }
     throw error;
   }

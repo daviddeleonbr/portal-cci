@@ -61,7 +61,7 @@ export default function ClienteFinanceiro() {
           <div>
             <p className="text-xs text-gray-500">Mensalidade Atual</p>
             <p className="text-xl font-semibold text-gray-900">R$ 4.500,00</p>
-            <p className="text-xs text-gray-400 mt-0.5">Venc. dia 10 de cada mes</p>
+            <p className="text-xs text-gray-400 mt-0.5">Venc. dia 10 de cada mês</p>
           </div>
         </div>
       </div>
@@ -143,7 +143,7 @@ export default function ClienteFinanceiro() {
             </div>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Descricao</span>
+                <span className="text-gray-500">Descrição</span>
                 <span className="font-medium text-gray-900">{detailBoleto.descricao}</span>
               </div>
               <div className="flex justify-between text-sm">

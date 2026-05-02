@@ -13,7 +13,7 @@ const permissaoLabels = {
   admin: { label: 'Admin', color: 'bg-red-50 text-red-700' },
   financeiro: { label: 'Financeiro', color: 'bg-blue-50 text-blue-700' },
   clientes: { label: 'Clientes', color: 'bg-purple-50 text-purple-700' },
-  relatorios: { label: 'Relatorios', color: 'bg-emerald-50 text-emerald-700' },
+  relatorios: { label: 'Relatórios', color: 'bg-emerald-50 text-emerald-700' },
   parametrizacoes: { label: 'Config', color: 'bg-amber-50 text-amber-700' },
   colaboradores: { label: 'Pessoas', color: 'bg-pink-50 text-pink-700' },
 };
@@ -36,7 +36,7 @@ export default function Colaboradores() {
 
   if (loading) return (
     <div>
-      <PageHeader title="Colaboradores" description="Gestao de equipe e permissoes" />
+      <PageHeader title="Colaboradores" description="Gestão de equipe e permissões" />
       <TableSkeleton rows={5} cols={5} />
     </div>
   );
@@ -44,7 +44,7 @@ export default function Colaboradores() {
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-      <PageHeader title="Colaboradores" description="Gestao de equipe e permissoes de acesso">
+      <PageHeader title="Colaboradores" description="Gestão de equipe e permissões de acesso">
         <button
           onClick={() => setModalOpen(true)}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm"
@@ -91,7 +91,7 @@ export default function Colaboradores() {
               <tr className="border-b border-gray-50">
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Colaborador</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Departamento</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Permissoes</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Permissões</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-6 py-3 w-12"></th>
               </tr>
@@ -175,7 +175,7 @@ export default function Colaboradores() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Shield className="h-4 w-4 text-gray-500" />
-                <h4 className="text-sm font-semibold text-gray-900">Permissoes de Acesso</h4>
+                <h4 className="text-sm font-semibold text-gray-900">Permissões de Acesso</h4>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {Object.entries(permissaoLabels).map(([key, val]) => {
@@ -207,10 +207,10 @@ export default function Colaboradores() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => { setDetailUser(null); showToast('success', 'Permissoes atualizadas!'); }}
+                onClick={() => { setDetailUser(null); showToast('success', 'Permissões atualizadas!'); }}
                 className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
               >
-                Salvar Permissoes
+                Salvar Permissões
               </button>
             </div>
           </div>

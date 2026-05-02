@@ -8,33 +8,33 @@ export const PERMISSOES_ADMIN = [
   { key: 'dashboard', label: 'Dashboard', grupo: 'Principal' },
   { key: 'clientes', label: 'Clientes', grupo: 'Cadastros' },
   { key: 'colaboradores', label: 'Colaboradores', grupo: 'Cadastros' },
-  { key: 'usuarios', label: 'Usuarios do Sistema', grupo: 'Cadastros' },
+  { key: 'usuarios', label: 'Usuários do Sistema', grupo: 'Cadastros' },
   { key: 'fornecedores', label: 'Fornecedores', grupo: 'Cadastros' },
   { key: 'plano_contas', label: 'Plano de Contas', grupo: 'Cadastros' },
-  { key: 'motivos', label: 'Motivos de Movimentacao', grupo: 'Cadastros' },
+  { key: 'motivos', label: 'Motivos de Movimentação', grupo: 'Cadastros' },
   { key: 'contas_pagar', label: 'Contas a Pagar', grupo: 'Financeiro' },
   { key: 'contas_receber', label: 'Contas a Receber', grupo: 'Financeiro' },
   { key: 'fiscal', label: 'Notas Fiscais e Agendamento', grupo: 'Fiscal' },
-  { key: 'parametros', label: 'Parametros', grupo: 'Consultoria' },
-  { key: 'relatorios_cliente', label: 'Relatorios por Cliente', grupo: 'Consultoria' },
-  { key: 'analise_ia', label: 'Analise com IA (Claude)', grupo: 'Consultoria' },
-  { key: 'conciliacao_bancaria', label: 'Conciliacao Bancaria', grupo: 'BPO' },
-  { key: 'conciliacao_caixas', label: 'Conciliacao de Caixas', grupo: 'BPO' },
+  { key: 'parametros', label: 'Parâmetros', grupo: 'Consultoria' },
+  { key: 'relatorios_cliente', label: 'Relatórios por Cliente', grupo: 'Consultoria' },
+  { key: 'analise_ia', label: 'Análise com IA (Claude)', grupo: 'Consultoria' },
+  { key: 'conciliacao_bancaria', label: 'Conciliação Bancária', grupo: 'BPO' },
+  { key: 'conciliacao_caixas', label: 'Conciliação de Caixas', grupo: 'BPO' },
   { key: 'caixa_administrativo', label: 'Caixa Administrativo', grupo: 'BPO' },
 ];
 
 export const PERMISSOES_CLIENTE = [
-  { key: 'dashboard', label: 'Visao Geral', grupo: 'Principal' },
-  { key: 'dre', label: 'DRE', grupo: 'Relatorios' },
-  { key: 'fluxo_caixa', label: 'Fluxo de Caixa', grupo: 'Relatorios' },
+  { key: 'dashboard', label: 'Visão Geral', grupo: 'Principal' },
+  { key: 'dre', label: 'DRE', grupo: 'Relatórios' },
+  { key: 'fluxo_caixa', label: 'Fluxo de Caixa', grupo: 'Relatórios' },
   { key: 'sangrias', label: 'Sangrias', grupo: 'Operacional' },
-  { key: 'bpo', label: 'Servicos BPO', grupo: 'Operacional' },
+  { key: 'bpo', label: 'Serviços BPO', grupo: 'Operacional' },
   { key: 'documentos', label: 'Documentos', grupo: 'Operacional' },
   { key: 'financeiro', label: 'Financeiro', grupo: 'Operacional' },
   { key: 'tarefas', label: 'Gestor de Tarefas', grupo: 'Operacional' },
   { key: 'suporte', label: 'Suporte', grupo: 'Atendimento' },
-  { key: 'trocar_empresa', label: 'Alternar entre empresas da rede', grupo: 'Administracao da Rede' },
-  { key: 'gerenciar_usuarios', label: 'Gerenciar usuarios da rede', grupo: 'Administracao da Rede' },
+  { key: 'trocar_empresa', label: 'Alternar entre empresas da rede', grupo: 'Administração da Rede' },
+  { key: 'gerenciar_usuarios', label: 'Gerenciar usuários da rede', grupo: 'Administração da Rede' },
 ];
 
 export function permissoesPorTipo(tipo) {
@@ -81,7 +81,7 @@ export async function buscarUsuario(id) {
 
 export async function criarUsuario(campos) {
   const payload = sanitizarPayload(campos);
-  if (!payload.senha) throw new Error('Informe uma senha inicial para o usuario.');
+  if (!payload.senha) throw new Error('Informe uma senha inicial para o usuário.');
   const { data, error } = await supabase
     .from('cci_usuarios_sistema')
     .insert(payload)

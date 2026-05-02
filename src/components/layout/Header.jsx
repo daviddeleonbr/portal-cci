@@ -22,7 +22,7 @@ export default function Header({ onMenuClick }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const nome = usuario?.nome || 'Usuario';
+  const nome = usuario?.nome || 'Usuário';
   const email = usuario?.email || '';
   const initials = nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const { tema, alternar } = useTheme();
@@ -47,7 +47,7 @@ export default function Header({ onMenuClick }) {
 
       <div className="flex items-center gap-2">
         <button onClick={() => setDemoAtivo(!demoAtivo)}
-          title={demoAtivo ? 'Desligar modo demonstracao (mostrar dados reais)' : 'Ligar modo demonstracao (mascarar nome/CNPJ)'}
+          title={demoAtivo ? 'Desligar modo demonstração (mostrar dados reais)' : 'Ligar modo demonstração (mascarar nome/CNPJ)'}
           className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
             demoAtivo
               ? 'bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200'

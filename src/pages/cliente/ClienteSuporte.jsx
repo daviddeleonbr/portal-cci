@@ -5,9 +5,9 @@ import PageHeader from '../../components/ui/PageHeader';
 import Toast from '../../components/ui/Toast';
 
 const chamados = [
-  { id: 1, titulo: 'Duvida sobre DRE de Fevereiro', status: 'respondido', data: '2026-03-15', resposta: 'O valor foi ajustado conforme conciliacao bancaria.' },
+  { id: 1, titulo: 'Duvida sobre DRE de Fevereiro', status: 'respondido', data: '2026-03-15', resposta: 'O valor foi ajustado conforme conciliação bancária.' },
   { id: 2, titulo: 'Solicitar certidao negativa atualizada', status: 'em_atendimento', data: '2026-03-22', resposta: null },
-  { id: 3, titulo: 'Inclusao de novo colaborador', status: 'concluido', data: '2026-03-10', resposta: 'Admissao processada com sucesso no eSocial.' },
+  { id: 3, titulo: 'Inclusão de novo colaborador', status: 'concluido', data: '2026-03-10', resposta: 'Admissão processada com sucesso no eSocial.' },
 ];
 
 export default function ClienteSuporte() {
@@ -52,7 +52,7 @@ export default function ClienteSuporte() {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Escritorio</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Escritório</h3>
             <div className="space-y-2.5 text-sm text-gray-600">
               <div className="flex items-center gap-2.5">
                 <Phone className="h-4 w-4 text-gray-400" />
@@ -84,7 +84,7 @@ export default function ClienteSuporte() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Mensagem</label>
-                <textarea rows={4} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 resize-none" placeholder="Descreva sua duvida ou solicitacao..." />
+                <textarea rows={4} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 resize-none" placeholder="Descreva sua duvida ou solicitação..." />
               </div>
               <div className="flex justify-end">
                 <button type="submit" className="flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition-colors">
@@ -98,7 +98,7 @@ export default function ClienteSuporte() {
           {/* History */}
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-900">Historico de Chamados</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Histórico de Chamados</h3>
             </div>
             <div className="divide-y divide-gray-50">
               {chamados.map((ch, i) => (
@@ -110,7 +110,7 @@ export default function ClienteSuporte() {
                       ch.status === 'respondido' ? 'bg-blue-50 text-blue-700' :
                       'bg-amber-50 text-amber-700'
                     }`}>
-                      {ch.status === 'concluido' ? 'Concluido' : ch.status === 'respondido' ? 'Respondido' : 'Em Atendimento'}
+                      {ch.status === 'concluido' ? 'Concluído' : ch.status === 'respondido' ? 'Respondido' : 'Em Atendimento'}
                     </span>
                   </div>
                   <p className="text-xs text-gray-400 mb-1">{ch.data}</p>

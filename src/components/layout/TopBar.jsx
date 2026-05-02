@@ -12,9 +12,9 @@ const navigation = [
       { name: 'Clientes', href: '/admin/clientes' },
       { name: 'Colaboradores', href: '/admin/colaboradores' },
       {
-        name: 'Parametros',
+        name: 'Parâmetros',
         children: [
-          { name: 'Mascara DRE', href: '/admin/parametrizacoes/mascaras' },
+          { name: 'Máscara DRE', href: '/admin/parametrizacoes/mascaras' },
           { name: 'Mapeamento', href: '/admin/parametrizacoes/mapeamento' },
         ],
       },
@@ -31,7 +31,7 @@ const navigation = [
     name: 'Fiscal',
     children: [
       { name: 'Notas Fiscais', href: '/admin/fiscal/notas-fiscais' },
-      { name: 'Agendamento de Emissao', href: '/admin/fiscal/agendamento' },
+      { name: 'Agendamento de Emissão', href: '/admin/fiscal/agendamento' },
     ],
   },
 ];

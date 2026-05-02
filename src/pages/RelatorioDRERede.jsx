@@ -23,7 +23,7 @@ export default function RelatorioDRERede() {
           clientesService.listarClientes(),
         ]);
         const chave = (chaves || []).find(c => c.id === chaveApiId);
-        if (!chave) throw new Error('Rede nao encontrada');
+        if (!chave) throw new Error('Rede não encontrada');
         const empresas = (todosClientes || []).filter(c =>
           c.chave_api_id === chaveApiId
           && c.status === 'ativo'

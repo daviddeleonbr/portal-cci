@@ -205,7 +205,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       setLoadingProgress({ atual: 0, total: 1, mensagem: 'Conectando com o sistema Webposto...' });
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada');
+      if (!chave) throw new Error('Chave API não encontrada');
 
       // 1. Carregar catalogos (PRODUTO + GRUPO) - apenas se ainda nao carregados
       if (produtosMap.size === 0) {
@@ -234,7 +234,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
       const total = promises.length;
       let concluidas = 0;
-      setLoadingProgress({ atual: 0, total, mensagem: `Buscando lancamentos de ${meses.length} mes(es)...` });
+      setLoadingProgress({ atual: 0, total, mensagem: `Buscando lançamentos de ${meses.length} mês(es)...` });
 
       const results = await Promise.all(
         promises.map(async (p) => {
@@ -276,7 +276,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         const target = r.isPrev ? anterior : atual;
         target[r.key] = { titulosPagar: r.pagar, titulosReceber: r.receber, vendaItens: r.vendaItens, vendas: r.vendas };
       });
-      setLoadingProgress({ atual: total, total, mensagem: 'Montando o relatorio...' });
+      setLoadingProgress({ atual: total, total, mensagem: 'Montando o relatório...' });
       // Pequeno delay para o usuario ver a mensagem final
       await new Promise(r => setTimeout(r, 250));
       setDadosPorMes(atual);
@@ -284,7 +284,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       setDadosCarregados(true);
       setTempoGeracao(performance.now() - _t0);
     } catch (err) {
-      setError('Erro ao buscar lancamentos: ' + err.message);
+      setError('Erro ao buscar lançamentos: ' + err.message);
     } finally {
       setLoadingDados(false);
     }
@@ -959,7 +959,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }
   if (!cliente) {
-    return <div className="text-center py-20 text-gray-500">Cliente nao encontrado</div>;
+    return <div className="text-center py-20 text-gray-500">Cliente não encontrado</div>;
   }
 
   const periodoLabel = meses.length === 1
@@ -1070,7 +1070,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         <div className="flex flex-wrap items-end gap-3">
           {/* Mascara */}
           <div className="min-w-[220px]">
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mascara DRE</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Máscara DRE</label>
             <select value={mascaraSelecionada?.id || ''}
               onChange={(e) => setMascaraSelecionada(mascaras.find(m => m.id === e.target.value))}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
@@ -1080,7 +1080,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
           {/* Mes final (selecionado) — sistema busca 2 meses anteriores automaticamente */}
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mes (referencia)</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
             <div className="flex items-center gap-1 h-10 rounded-lg border border-gray-200 bg-white px-1">
               <button onClick={() => navMes(-1)} className="rounded-md p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
                 <ChevLeft className="h-3.5 w-3.5" />
@@ -1103,14 +1103,14 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
           {/* Quantidade de meses (1 ou 3) */}
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Analise</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
             <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 h-10">
               {[1, 3].map(q => (
                 <button key={q} onClick={() => setQtdMeses(q)}
                   className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
                     qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
-                  {q === 1 ? '1 mes' : '3 meses'}
+                  {q === 1 ? '1 mês' : '3 meses'}
                 </button>
               ))}
             </div>
@@ -1160,7 +1160,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>DRE Gerencial</h1>
             <p style={{ fontSize: '10pt', margin: '4px 0' }}>{labelEmpresa(cliente)}{cliente.cnpj ? ` - CNPJ ${labelCnpj(cliente.cnpj)}` : ''}</p>
-            <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Periodo: {periodoLabel} &middot; Mascara: {mascaraSelecionada?.nome}</p>
+            <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Período: {periodoLabel} &middot; Máscara: {mascaraSelecionada?.nome}</p>
           </div>
           <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#444', lineHeight: 1.25, flexShrink: 0 }}>
             <p style={{ margin: 0, fontSize: '9pt', fontWeight: 600, color: '#000' }}>CCI ASSESSORIA E CONSULTORIA INTELIGENTE LTDA</p>
@@ -1206,26 +1206,26 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
               <FileBarChart className="h-7 w-7 text-white" />
             </div>
-            <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o periodo e clique em "Montar DRE"</p>
+            <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o período e clique em "Montar DRE"</p>
             <p className="text-xs text-gray-500 max-w-md mx-auto">
-              O relatorio sera gerado com os 3 meses terminando em <strong>{meses[meses.length - 1]?.label}</strong>: <strong>{meses.map(m => m.label).join(', ')}</strong>.
+              O relatório sera gerado com os 3 meses terminando em <strong>{meses[meses.length - 1]?.label}</strong>: <strong>{meses.map(m => m.label).join(', ')}</strong>.
             </p>
           </motion.div>
         ) : (loadingDados || loadingGrupos || loadingMapeamentos || (!reportReady && cliente.usa_webposto)) ? (
           <FriendlyLoader key="loader" progress={loadingProgress} cliente={cliente} periodoLabel={periodoLabel}
             stageLabel={
-              loadingGrupos ? 'Carregando estrutura da mascara...'
+              loadingGrupos ? 'Carregando estrutura da máscara...'
                 : loadingMapeamentos ? 'Carregando mapeamentos...'
                 : loadingDados ? null
-                : 'Processando relatorio...'
+                : 'Processando relatório...'
             }
           />
         ) : !grupos.length ? (
           <motion.div key="empty-mascara" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center no-print">
             <Layers className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm font-medium text-gray-800 mb-1">Mascara vazia</p>
-            <p className="text-xs text-gray-400">Configure a estrutura da mascara em Cadastros &gt; Parametros</p>
+            <p className="text-sm font-medium text-gray-800 mb-1">Máscara vazia</p>
+            <p className="text-xs text-gray-400">Configure a estrutura da máscara em Cadastros &gt; Parâmetros</p>
           </motion.div>
         ) : activeTab === 'insights' ? (
           <motion.div key="insights" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -1253,7 +1253,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mes:</label>
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mês:</label>
                   <select value={mesEmpresaKey || ''}
                     onChange={(e) => setMesEmpresaKey(e.target.value)}
                     className="h-9 rounded-lg border border-gray-200 px-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
@@ -1323,7 +1323,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-blue-600" />
                 <h3 className="text-sm font-semibold text-gray-800">Resultado por empresa</h3>
-                <span className="text-[11px] text-gray-400">· participacao de cada unidade no total consolidado</span>
+                <span className="text-[11px] text-gray-400">· participação de cada unidade no total consolidado</span>
                 <span className={`ml-auto text-[13px] font-bold ${resultadoPorEmpresa.totalConsolidado >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                   Total: {formatCurrency(resultadoPorEmpresa.totalConsolidado)}
                 </span>
@@ -1336,7 +1336,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                       <th className="px-4 py-2.5">Empresa</th>
                       <th className="px-4 py-2.5">CNPJ</th>
                       <th className="px-4 py-2.5 text-right">Resultado</th>
-                      <th className="px-4 py-2.5 text-right">Participacao</th>
+                      <th className="px-4 py-2.5 text-right">Participação</th>
                       <th className="px-4 py-2.5 w-[180px]">Peso relativo</th>
                     </tr>
                   </thead>
@@ -1387,7 +1387,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   <p className="text-[11px] text-gray-400">
                     {periodoLabel}
                     {tempoGeracao != null && (
-                      <span className="text-gray-300" title="Tempo total de geracao do relatorio">
+                      <span className="text-gray-300" title="Tempo total de geração do relatório">
                         {' · '}gerado em {formatDuracao(tempoGeracao)}
                       </span>
                     )}
@@ -1458,10 +1458,10 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 // Friendly Loader - mostra progresso durante carregamento
 // ═══════════════════════════════════════════════════════════
 const TIPS = [
-  'A DRE consolida receitas, custos e despesas em um unico relatorio gerencial.',
-  'AV (Analise Vertical) mostra o peso de cada linha em relacao a Receita Bruta.',
-  'AH (Analise Horizontal) compara os valores com o mesmo periodo do ano anterior.',
-  'Voce pode imprimir o relatorio em A4 - apenas os grupos sinteticos serao exportados.',
+  'A DRE consolida receitas, custos e despesas em um unico relatório gerencial.',
+  'AV (Análise Vertical) mostra o peso de cada linha em relacao a Receita Bruta.',
+  'AH (Análise Horizontal) compara os valores com o mesmo período do ano anterior.',
+  'Você pode imprimir o relatório em A4 - apenas os grupos sinteticos serao exportados.',
   'Use o filtro "Ocultar zeradas" para focar apenas nas contas com movimento.',
 ];
 
@@ -1511,9 +1511,9 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
           </div>
 
           {/* Title */}
-          <h3 className="text-base font-semibold text-gray-900 mb-1">Montando seu relatorio</h3>
+          <h3 className="text-base font-semibold text-gray-900 mb-1">Montando seu relatório</h3>
           <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            Estamos buscando os lancamentos de <strong>{labelEmpresa(cliente)}</strong> no periodo de <strong>{periodoLabel}</strong> e do mesmo periodo no ano anterior.
+            Estamos buscando os lançamentos de <strong>{labelEmpresa(cliente)}</strong> no período de <strong>{periodoLabel}</strong> e do mesmo período no ano anterior.
           </p>
 
           {/* Progress bar */}
@@ -1531,7 +1531,7 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
               />
             </div>
             {progress.total > 0 && (
-              <p className="text-[11px] text-gray-400 mt-2">{progress.atual} de {progress.total} consultas concluidas</p>
+              <p className="text-[11px] text-gray-400 mt-2">{progress.atual} de {progress.total} consultas concluídas</p>
             )}
           </div>
 
@@ -1567,7 +1567,7 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
                   transition={{ duration: 0.3 }}
                   className="text-[11px] text-blue-900 leading-relaxed text-left"
                 >
-                  <strong className="text-blue-700">Voce sabia?</strong> {TIPS[tipIndex]}
+                  <strong className="text-blue-700">Você sabia?</strong> {TIPS[tipIndex]}
                 </motion.p>
               </AnimatePresence>
             </div>

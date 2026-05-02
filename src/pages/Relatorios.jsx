@@ -31,14 +31,14 @@ export default function Relatorios() {
 
   if (loading) return (
     <div>
-      <PageHeader title="Relatorios" description="DRE e Fluxo de Caixa" />
+      <PageHeader title="Relatórios" description="DRE e Fluxo de Caixa" />
       <ChartSkeleton />
     </div>
   );
 
   return (
     <div>
-      <PageHeader title="Relatorios" description="Demonstrativos financeiros e contabeis">
+      <PageHeader title="Relatórios" description="Demonstrativos financeiros e contábeis">
         <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600">
           <Calendar className="h-4 w-4" />
           <span>Jan - Mar 2026</span>
@@ -172,7 +172,7 @@ export default function Relatorios() {
                 <Tooltip content={customTooltip} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="saidas" name="Saidas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -206,9 +206,9 @@ export default function Relatorios() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-50">
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mes</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mês</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entradas</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saidas</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saídas</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo</th>
                   </tr>
                 </thead>

@@ -14,7 +14,7 @@ import * as qualityApi from '../../services/qualityApiService';
 import { formatCurrency } from '../../utils/format';
 
 // ─── Helpers ─────────────────────────────────────────────────
-const MESES = ['Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
 
@@ -32,7 +32,7 @@ function diaSemanaLongo(iso) {
   if (!iso) return '';
   const [y, m, d] = String(iso).slice(0, 10).split('-');
   const dt = new Date(+y, +m - 1, +d);
-  return ['Domingo', 'Segunda-feira', 'Terca-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sabado'][dt.getDay()];
+  return ['Domingo', 'Segunda-feira', 'Terca-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'][dt.getDay()];
 }
 
 function hojeIso() {
@@ -97,14 +97,14 @@ function extrairAdministradora(t, admMap) {
   const admCod = t.administradoraCodigo ?? t.codigoAdministradora;
   const inline = t.administradoraDescricao || t.administradoraNome ||
     (typeof t.administradora === 'string' ? t.administradora : '');
-  return inline || (admCod != null ? admMap.get(admCod) : '') || 'Administradora nao informada';
+  return inline || (admCod != null ? admMap.get(admCod) : '') || 'Administradora não informada';
 }
 
 const FONTE_CFG = {
   pagar:     { label: 'Pagar',     icon: Receipt,     color: 'text-red-600',    bg: 'bg-red-50' },
-  titulo:    { label: 'Titulo',    icon: ScrollText,  color: 'text-indigo-600', bg: 'bg-indigo-50' },
+  titulo:    { label: 'Título',    icon: ScrollText,  color: 'text-indigo-600', bg: 'bg-indigo-50' },
   duplicata: { label: 'Duplicata', icon: Landmark,    color: 'text-violet-600', bg: 'bg-violet-50' },
-  cartao:    { label: 'Cartao',    icon: CreditCard,  color: 'text-cyan-600',   bg: 'bg-cyan-50' },
+  cartao:    { label: 'Cartão',    icon: CreditCard,  color: 'text-cyan-600',   bg: 'bg-cyan-50' },
   cheque:    { label: 'Cheque',    icon: FileCheck,   color: 'text-teal-600',   bg: 'bg-teal-50' },
 };
 
@@ -124,7 +124,7 @@ export default function ClienteAgendaFinanceira() {
 
   const carregar = useCallback(async () => {
     if (!cliente?.chave_api_id || !cliente?.empresa_codigo) {
-      setError('Esta empresa nao tem integracao Webposto configurada.');
+      setError('Esta empresa não tem integração Webposto configurada.');
       setLoading(false);
       return;
     }
@@ -134,7 +134,7 @@ export default function ClienteAgendaFinanceira() {
     try {
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada');
+      if (!chave) throw new Error('Chave API não encontrada');
 
       // Janela ampla pra cobrir parcelamentos: 2 anos atras ate 1 ano a frente.
       const hojeDt = new Date();
@@ -285,10 +285,10 @@ export default function ClienteAgendaFinanceira() {
   if (!cliente?.chave_api_id || !cliente?.empresa_codigo) {
     return (
       <div>
-        <PageHeader title="Agenda Financeira" description="Calendario de recebimentos e pagamentos" />
+        <PageHeader title="Agenda Financeira" description="Calendário de recebimentos e pagamentos" />
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p>Esta empresa ainda nao tem <strong>integracao Webposto</strong> ativa. Contate o administrador.</p>
+          <p>Esta empresa ainda não tem <strong>integração Webposto</strong> ativa. Contate o administrador.</p>
         </div>
       </div>
     );
@@ -298,7 +298,7 @@ export default function ClienteAgendaFinanceira() {
     <div>
       <PageHeader
         title="Agenda Financeira"
-        description={`Calendario de vencimentos${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
+        description={`Calendário de vencimentos${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
       >
         <button
           onClick={carregar}
@@ -316,7 +316,7 @@ export default function ClienteAgendaFinanceira() {
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800">
             <p className="font-medium mb-1">
-              Dados parciais: {warnings.length} {warnings.length === 1 ? 'fonte nao pode ser carregada' : 'fontes nao puderam ser carregadas'}
+              Dados parciais: {warnings.length} {warnings.length === 1 ? 'fonte não pode ser carregada' : 'fontes não puderam ser carregadas'}
             </p>
             <ul className="text-xs text-amber-700/90 space-y-0.5">
               {warnings.map((w, i) => (
@@ -333,14 +333,14 @@ export default function ClienteAgendaFinanceira() {
           icon={ArrowUpCircle}
           iconBg="bg-emerald-50"
           iconColor="text-emerald-600"
-          label="A receber no mes"
+          label="A receber no mês"
           valor={formatCurrency(totaisMes.receber)}
         />
         <TotalCard
           icon={ArrowDownCircle}
           iconBg="bg-red-50"
           iconColor="text-red-600"
-          label="A pagar no mes"
+          label="A pagar no mês"
           valor={formatCurrency(totaisMes.pagar)}
         />
         <TotalCard
@@ -364,7 +364,7 @@ export default function ClienteAgendaFinanceira() {
             </h3>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={prevMes} title="Mes anterior"
+            <button onClick={prevMes} title="Mês anterior"
               className="rounded-md p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors">
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -372,7 +372,7 @@ export default function ClienteAgendaFinanceira() {
               className="rounded-md px-3 py-1 text-[12px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">
               Hoje
             </button>
-            <button onClick={nextMes} title="Proximo mes"
+            <button onClick={nextMes} title="Próximo mês"
               className="rounded-md p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors">
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -398,7 +398,7 @@ export default function ClienteAgendaFinanceira() {
           <div className="p-6 bg-red-50 text-sm text-red-800 flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium">Nao foi possivel carregar a agenda</p>
+              <p className="font-medium">Não foi possível carregar a agenda</p>
               <p className="text-red-700 mt-1">{error}</p>
             </div>
           </div>
@@ -548,8 +548,8 @@ function DiaModal({ iso, info, onClose }) {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 mb-3">
             <CalendarDays className="h-6 w-6 text-gray-400" />
           </div>
-          <p className="text-sm font-medium text-gray-900">Nenhuma movimentacao</p>
-          <p className="text-xs text-gray-500 mt-1">Nao ha vencimentos para este dia</p>
+          <p className="text-sm font-medium text-gray-900">Nenhuma movimentação</p>
+          <p className="text-xs text-gray-500 mt-1">Não ha vencimentos para este dia</p>
         </div>
       ) : (
         <div className="space-y-5">
@@ -590,7 +590,7 @@ function DiaModal({ iso, info, onClose }) {
                 {resultado >= 0 ? '+' : ''}{formatCurrency(resultado)}
               </p>
               <p className={`text-[11px] mt-0.5 ${resultado >= 0 ? 'text-blue-600/70' : 'text-orange-600/70'}`}>
-                {resultado >= 0 ? 'Entrada liquida prevista' : 'Saida liquida prevista'}
+                {resultado >= 0 ? 'Entrada liquida prevista' : 'Saída liquida prevista'}
               </p>
             </div>
           </div>
@@ -626,7 +626,7 @@ function DiaModal({ iso, info, onClose }) {
 // Cada grupo inicia COLAPSADO; o usuario clica no header pra expandir.
 function ReceberAgrupado({ itens, totalReceber }) {
   const ORDEM = ['titulo', 'duplicata', 'cartao', 'cheque'];
-  const LABEL_PLURAL = { titulo: 'Titulos', duplicata: 'Duplicatas', cartao: 'Cartoes', cheque: 'Cheques' };
+  const LABEL_PLURAL = { titulo: 'Títulos', duplicata: 'Duplicatas', cartao: 'Cartões', cheque: 'Cheques' };
 
   const grupos = ORDEM
     .map(fonte => {
@@ -729,8 +729,8 @@ function ReceberAgrupado({ itens, totalReceber }) {
 // Cada sub-grupo inicia colapsado e pode ser expandido individualmente.
 function SubgruposPorPessoa({ fonte, lista }) {
   const chaveGrupo = (it) => fonte === 'cartao'
-    ? (it.administradora || 'Administradora nao informada')
-    : (it.pessoa || 'Sem identificacao');
+    ? (it.administradora || 'Administradora não informada')
+    : (it.pessoa || 'Sem identificação');
 
   const subgrupos = useMemo(() => {
     const mapa = new Map();

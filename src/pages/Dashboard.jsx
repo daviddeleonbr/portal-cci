@@ -41,7 +41,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Dashboard" description="Visao geral do seu negocio" />
+        <PageHeader title="Dashboard" description="Visão geral do seu negocio" />
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
           {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
         </div>
@@ -55,7 +55,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <PageHeader title="Dashboard" description="Visao geral do seu negocio" />
+      <PageHeader title="Dashboard" description="Visão geral do seu negocio" />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">

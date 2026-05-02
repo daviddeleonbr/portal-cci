@@ -9,11 +9,11 @@ import Modal from '../components/ui/Modal';
 import * as cciService from '../services/cciFinanceiroService';
 
 const TIPO_OPERACAO = {
-  lancamento_pagar:   { label: 'Lancamento de Conta a Pagar', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  lancamento_pagar:   { label: 'Lançamento de Conta a Pagar', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   pagamento_pagar:    { label: 'Pagamento de Conta a Pagar',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  lancamento_receber: { label: 'Lancamento de Conta a Receber', color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+  lancamento_receber: { label: 'Lançamento de Conta a Receber', color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
   recebimento:        { label: 'Recebimento',                 color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  transferencia:      { label: 'Transferencia',               color: 'bg-violet-50 text-violet-700 border-violet-200' },
+  transferencia:      { label: 'Transferência',               color: 'bg-violet-50 text-violet-700 border-violet-200' },
   ajuste:             { label: 'Ajuste',                      color: 'bg-slate-100 text-slate-700 border-slate-200' },
   outro:              { label: 'Outro',                       color: 'bg-gray-100 text-gray-600 border-gray-200' },
 };
@@ -84,7 +84,7 @@ export default function CciMotivos() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Motivos de Movimentacao" description="Templates contabeis que definem o par Debito/Credito de cada tipo de operacao">
+      <PageHeader title="Motivos de Movimentação" description="Templates contábeis que definem o par Debito/Credito de cada tipo de operação">
         <button onClick={() => setModal({ open: true, data: null })}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
           <Plus className="h-4 w-4" /> Novo Motivo
@@ -116,7 +116,7 @@ export default function CciMotivos() {
           <p className="text-sm text-gray-600">{motivos.length === 0 ? 'Nenhum motivo cadastrado.' : 'Nenhum motivo corresponde aos filtros.'}</p>
           {motivos.length === 0 && (
             <p className="text-xs text-gray-400 mt-1">
-              Crie um motivo para cada tipo de operacao (ex: "Lancamento de contas a pagar") com seu par D/C.
+              Crie um motivo para cada tipo de operação (ex: "Lançamento de contas a pagar") com seu par D/C.
             </p>
           )}
         </div>
@@ -164,7 +164,7 @@ export default function CciMotivos() {
                         <p className="text-[11px] font-mono text-gray-400">{m.conta_debito.codigo}</p>
                         <p className="text-sm text-gray-900 font-medium">{m.conta_debito.nome}</p>
                       </>
-                    ) : <p className="text-xs text-red-500 italic">Nao configurada</p>}
+                    ) : <p className="text-xs text-red-500 italic">Não configurada</p>}
                   </div>
                   <div className="flex items-center px-1 flex-shrink-0">
                     <ArrowRight className="h-4 w-4 text-gray-300" />
@@ -176,7 +176,7 @@ export default function CciMotivos() {
                         <p className="text-[11px] font-mono text-gray-400">{m.conta_credito.codigo}</p>
                         <p className="text-sm text-gray-900 font-medium">{m.conta_credito.nome}</p>
                       </>
-                    ) : <p className="text-xs text-red-500 italic">Nao configurada</p>}
+                    ) : <p className="text-xs text-red-500 italic">Não configurada</p>}
                   </div>
                 </div>
               </div>
@@ -227,7 +227,7 @@ function ModalMotivo({ open, data, contas, onClose, onSave }) {
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-1">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Codigo *</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Código *</label>
             <input type="text" required value={form.codigo || ''}
               onChange={e => setForm(f => ({ ...f, codigo: e.target.value }))}
               placeholder="CP-001"
@@ -237,13 +237,13 @@ function ModalMotivo({ open, data, contas, onClose, onSave }) {
             <label className="block text-xs font-medium text-gray-700 mb-1">Nome *</label>
             <input type="text" required value={form.nome || ''}
               onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-              placeholder="Ex: Lancamento de contas a pagar"
+              placeholder="Ex: Lançamento de contas a pagar"
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Tipo de Operacao</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Tipo de Operação</label>
           <select value={form.tipo_operacao || 'lancamento_pagar'}
             onChange={e => setForm(f => ({ ...f, tipo_operacao: e.target.value }))}
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
@@ -267,10 +267,10 @@ function ModalMotivo({ open, data, contas, onClose, onSave }) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Descricao</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Descrição</label>
           <textarea rows={2} value={form.descricao || ''}
             onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
-            placeholder="Explicacao do que esse motivo representa"
+            placeholder="Explicação do que esse motivo representa"
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 

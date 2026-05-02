@@ -210,7 +210,7 @@ export default function ClienteComercialVendas() {
       if (!apiKey) {
         const chaves = await mapService.listarChavesApi();
         const chave = chaves.find(c => c.id === cliente.chave_api_id);
-        if (!chave) throw new Error('Chave API nao encontrada para esta empresa');
+        if (!chave) throw new Error('Chave API não encontrada para esta empresa');
         apiKey = chave.chave;
       }
 
@@ -325,9 +325,9 @@ export default function ClienteComercialVendas() {
 
   const abas = [
     { key: 'overview',     label: 'Overview',     icon: LayoutGrid },
-    { key: 'combustiveis', label: 'Combustiveis', icon: Fuel },
+    { key: 'combustiveis', label: 'Combustíveis', icon: Fuel },
     { key: 'produtos',     label: 'Produtos',     icon: Package },
-    { key: 'conveniencia', label: 'Conveniencia', icon: Store },
+    { key: 'conveniencia', label: 'Conveniência', icon: Store },
   ];
 
   return (
@@ -337,7 +337,7 @@ export default function ClienteComercialVendas() {
         description={`${cliente.nome} · ${periodos.atual.label} · ${formatDataBR(periodos.atual.dataInicial)} a ${formatDataBR(periodos.atual.dataFinal)}${periodos.atual.ehMesCorrente ? ' (parcial)' : ''}`}
       >
         <label className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mes</span>
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mês</span>
           <input type="month" value={mesSelecionado} max={mesMax}
             onChange={(e) => e.target.value && setMesSelecionado(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -366,7 +366,7 @@ export default function ClienteComercialVendas() {
       <div className="bg-white rounded-xl border border-gray-200/60 p-3 mb-4 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <PeriodoTag label="Selecionado" periodo={periodos.atual} destacado />
-          <PeriodoTag label="Mes anterior" periodo={periodos.mesAnterior} />
+          <PeriodoTag label="Mês anterior" periodo={periodos.mesAnterior} />
           <PeriodoTag label="Ano anterior" periodo={periodos.anoAnterior} />
         </div>
       </div>
@@ -395,7 +395,7 @@ export default function ClienteComercialVendas() {
       {loadingDados && !dados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-800">Buscando vendas dos 3 periodos...</p>
+          <p className="text-sm font-medium text-gray-800">Buscando vendas dos 3 períodos...</p>
         </div>
       ) : !dados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
@@ -423,8 +423,8 @@ function AbaOverview({ dados, geradoEm }) {
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         <KpiComparativo label="Receita Total"   icon={Receipt}       color="blue"    atual={dados.atual.receita}            mesAnt={dados.mesAnterior.receita}            anoAnt={dados.anoAnterior.receita} />
-        <KpiComparativo label="Combustiveis"    icon={Fuel}          color="amber"   atual={dados.atual.receitaCombustivel} mesAnt={dados.mesAnterior.receitaCombustivel} anoAnt={dados.anoAnterior.receitaCombustivel} />
-        <KpiComparativo label="Conveniencia"    icon={Store}         color="emerald" atual={dados.atual.receitaConveniencia} mesAnt={dados.mesAnterior.receitaConveniencia} anoAnt={dados.anoAnterior.receitaConveniencia} />
+        <KpiComparativo label="Combustíveis"    icon={Fuel}          color="amber"   atual={dados.atual.receitaCombustivel} mesAnt={dados.mesAnterior.receitaCombustivel} anoAnt={dados.anoAnterior.receitaCombustivel} />
+        <KpiComparativo label="Conveniência"    icon={Store}         color="emerald" atual={dados.atual.receitaConveniencia} mesAnt={dados.mesAnterior.receitaConveniencia} anoAnt={dados.anoAnterior.receitaConveniencia} />
         <KpiComparativo label="Ticket medio"    icon={ShoppingCart}  color="indigo"  atual={dados.atual.ticketMedio}        mesAnt={dados.mesAnterior.ticketMedio}        anoAnt={dados.anoAnterior.ticketMedio} />
       </div>
 
@@ -441,17 +441,17 @@ function AbaOverview({ dados, geradoEm }) {
             <thead className="bg-gray-50/80 border-b border-gray-100">
               <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                 <th className="px-4 py-2.5">Metrica</th>
-                <th className="px-4 py-2.5 text-right">Mes atual</th>
-                <th className="px-4 py-2.5 text-right">Mes anterior</th>
+                <th className="px-4 py-2.5 text-right">Mês atual</th>
+                <th className="px-4 py-2.5 text-right">Mês anterior</th>
                 <th className="px-4 py-2.5 text-right">Var</th>
                 <th className="px-4 py-2.5 text-right">Ano anterior</th>
                 <th className="px-4 py-2.5 text-right">Var</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              <LinhaComparativa label="Receita Combustiveis" atual={dados.atual.receitaCombustivel} ma={dados.mesAnterior.receitaCombustivel} aa={dados.anoAnterior.receitaCombustivel} />
+              <LinhaComparativa label="Receita Combustíveis" atual={dados.atual.receitaCombustivel} ma={dados.mesAnterior.receitaCombustivel} aa={dados.anoAnterior.receitaCombustivel} />
               <LinhaComparativa label="Receita Automotivos"  atual={dados.atual.receitaAutomotivos}  ma={dados.mesAnterior.receitaAutomotivos}  aa={dados.anoAnterior.receitaAutomotivos} />
-              <LinhaComparativa label="Receita Conveniencia" atual={dados.atual.receitaConveniencia} ma={dados.mesAnterior.receitaConveniencia} aa={dados.anoAnterior.receitaConveniencia} />
+              <LinhaComparativa label="Receita Conveniência" atual={dados.atual.receitaConveniencia} ma={dados.mesAnterior.receitaConveniencia} aa={dados.anoAnterior.receitaConveniencia} />
               <LinhaComparativa label="Receita TOTAL"        atual={dados.atual.receita}             ma={dados.mesAnterior.receita}             aa={dados.anoAnterior.receita} bold />
               <LinhaComparativa label="CMV Total"            atual={dados.atual.cmv}                 ma={dados.mesAnterior.cmv}                 aa={dados.anoAnterior.cmv} inverter />
               <LinhaComparativa label="Lucro Bruto"          atual={dados.atual.lucroBruto}          ma={dados.mesAnterior.lucroBruto}          aa={dados.anoAnterior.lucroBruto} bold />
@@ -464,7 +464,7 @@ function AbaOverview({ dados, geradoEm }) {
           </table>
         </div>
         <div className="px-5 py-2.5 bg-gray-50/60 border-t border-gray-100 text-[10.5px] text-gray-500">
-          Variacao em verde = evolucao positiva; em vermelho = regressao. Para CMV, descontos e canceladas, a variacao <strong>negativa</strong> e considerada positiva (reducao de custo).
+          Variação em verde = evolucao positiva; em vermelho = regressao. Para CMV, descontos e canceladas, a variação <strong>negativa</strong> e considerada positiva (redução de custo).
         </div>
       </div>
     </>
@@ -557,7 +557,7 @@ function AbaCombustiveis({ dados }) {
 
     const dias = Array.from(allDaysMap.values())
       .filter(d => d.data >= dados.atual.dataInicial && d.data <= dados.atual.dataFinal)
-      .sort((a, b) => a.data.localeCompare(b.data));
+      .sort((a, b) => b.data.localeCompare(a.data));
 
     return dias.map(d => {
       const dAnterior = allDaysMap.get(dataMenos7(d.data));
@@ -613,7 +613,7 @@ function AbaCombustiveis({ dados }) {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
-        <KpiComparativo label="Receita combustiveis" icon={Fuel} color="amber"
+        <KpiComparativo label="Receita combustíveis" icon={Fuel} color="amber"
           atual={tAtual.receita} mesAnt={tMesAnt.receita} anoAnt={tAnoAnt.receita} />
         <KpiComparativo label="Litros vendidos" icon={Fuel} color="blue"
           atual={tAtual.litros} mesAnt={tMesAnt.litros} anoAnt={tAnoAnt.litros}
@@ -630,10 +630,10 @@ function AbaCombustiveis({ dados }) {
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-blue-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Projecao estatistica para o mes</h3>
+          <h3 className="text-sm font-semibold text-gray-800">Projecao estatística para o mês</h3>
           <span className="text-[11px] text-gray-400">
             · base {projecoes.atual.diasCobertos}/{projecoes.atual.diasTotalMes} dias
-            · {projecoes.atual.isProjecao ? 'projetado linear' : 'mes fechado'}
+            · {projecoes.atual.isProjecao ? 'projetado linear' : 'mês fechado'}
           </span>
         </div>
         <div className="p-5 space-y-4">
@@ -648,7 +648,7 @@ function AbaCombustiveis({ dados }) {
               atual={projecoes.atual.margem} mesAnt={projecoes.mesAnt.margem} anoAnt={projecoes.anoAnt.margem} />
           </div>
           {projecoes.atual.porProduto.length === 0 ? (
-            <div className="py-6 text-center text-sm text-gray-500">Sem base de combustiveis para projetar.</div>
+            <div className="py-6 text-center text-sm text-gray-500">Sem base de combustíveis para projetar.</div>
           ) : (
             <div className="overflow-x-auto -mx-5">
               <table className="w-full text-sm">
@@ -661,13 +661,13 @@ function AbaCombustiveis({ dados }) {
                   </tr>
                   <tr className="text-right text-[10px] font-medium text-gray-400 uppercase tracking-wider">
                     <th className="px-3 py-2 border-l border-gray-200">Atual</th>
-                    <th className="px-3 py-2">vs mes ant</th>
+                    <th className="px-3 py-2">vs mês ant</th>
                     <th className="px-3 py-2">vs ano ant</th>
                     <th className="px-3 py-2 border-l border-gray-200">Atual</th>
-                    <th className="px-3 py-2">vs mes ant</th>
+                    <th className="px-3 py-2">vs mês ant</th>
                     <th className="px-3 py-2">vs ano ant</th>
                     <th className="px-3 py-2 border-l border-gray-200">Atual</th>
-                    <th className="px-3 py-2">vs mes ant</th>
+                    <th className="px-3 py-2">vs mês ant</th>
                     <th className="px-3 py-2">vs ano ant</th>
                   </tr>
                 </thead>
@@ -712,7 +712,7 @@ function AbaCombustiveis({ dados }) {
             </div>
           )}
           <p className="text-[10px] text-gray-500">
-            Metodo: extrapolacao linear (media diaria × dias do mes). Comparacao contra projecoes equivalentes de mes anterior e ano anterior (calculadas com a mesma base de dias).
+            Metodo: extrapolacao linear (media diária × dias do mês). Comparação contra projecoes equivalentes de mês anterior e ano anterior (calculadas com a mesma base de dias).
           </p>
         </div>
       </div>
@@ -720,11 +720,11 @@ function AbaCombustiveis({ dados }) {
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
           <Fuel className="h-4 w-4 text-amber-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Vendas por combustivel</h3>
+          <h3 className="text-sm font-semibold text-gray-800">Vendas por combustível</h3>
           <span className="text-[11px] text-gray-400">· {produtos.length} produto{produtos.length === 1 ? '' : 's'}</span>
         </div>
         {produtos.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhuma venda de combustivel no periodo.</div>
+          <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhuma venda de combustível no período.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -736,7 +736,7 @@ function AbaCombustiveis({ dados }) {
                   <th className="px-4 py-2.5 text-right">Receita</th>
                   <th className="px-4 py-2.5 text-right">% total</th>
                   <th className="px-4 py-2.5 text-right">Margem</th>
-                  <th className="px-4 py-2.5 text-right">Var mes ant</th>
+                  <th className="px-4 py-2.5 text-right">Var mês ant</th>
                   <th className="px-4 py-2.5 text-right">Var ano ant</th>
                 </tr>
               </thead>
@@ -786,7 +786,7 @@ function AbaCombustiveis({ dados }) {
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
           <Fuel className="h-4 w-4 text-amber-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Vendas por dia &gt; combustivel</h3>
+          <h3 className="text-sm font-semibold text-gray-800">Vendas por dia &gt; combustível</h3>
           <span className="text-[11px] text-gray-400">· {treeDias.length} dia{treeDias.length === 1 ? '' : 's'} · clique para expandir</span>
           <button onClick={() => setDiasExpandidos(treeDias.length === diasExpandidos.size ? new Set() : new Set(treeDias.map(d => d.data)))}
             className="ml-auto text-[11px] text-blue-600 hover:text-blue-800 font-medium">
@@ -794,7 +794,7 @@ function AbaCombustiveis({ dados }) {
           </button>
         </div>
         {treeDias.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-gray-500">Sem vendas de combustivel no periodo.</div>
+          <div className="px-6 py-12 text-center text-sm text-gray-500">Sem vendas de combustível no período.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -865,7 +865,7 @@ function AbaCombustiveis({ dados }) {
           </div>
         )}
         <div className="px-5 py-2 bg-gray-50/60 border-t border-gray-100 text-[10px] text-gray-500">
-          Comparacao com semana anterior: dia D vs D-7. Inclui os 7 dias antes do inicio do mes para cobrir os dias 1-7 do periodo selecionado.
+          Comparação com semana anterior: dia D vs D-7. Inclui os 7 dias antes do início do mês para cobrir os dias 1-7 do período selecionado.
         </div>
       </div>
     </>
@@ -903,9 +903,9 @@ function AbaProdutos({ dados }) {
 
   const CATEGORIAS = [
     { key: 'todos',        label: 'Todos',        valor: resumos.todos },
-    { key: 'combustivel',  label: 'Combustiveis', valor: resumos.combustivel },
+    { key: 'combustivel',  label: 'Combustíveis', valor: resumos.combustivel },
     { key: 'automotivos',  label: 'Automotivos',  valor: resumos.automotivos },
-    { key: 'conveniencia', label: 'Conveniencia', valor: resumos.conveniencia },
+    { key: 'conveniencia', label: 'Conveniência', valor: resumos.conveniencia },
     { key: 'outros',       label: 'Outros',       valor: resumos.outros },
   ];
 
@@ -945,7 +945,7 @@ function AbaProdutos({ dados }) {
                   <th className="px-4 py-2.5 text-right">Receita</th>
                   <th className="px-4 py-2.5 text-right">% total</th>
                   <th className="px-4 py-2.5 text-right">Margem</th>
-                  <th className="px-4 py-2.5 text-right">Var mes ant</th>
+                  <th className="px-4 py-2.5 text-right">Var mês ant</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1038,7 +1038,7 @@ function AbaConveniencia({ dados }) {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
-        <Kpi label="Receita conveniencia" valor={formatCurrency(totalReceita)} icon={Store} color="emerald" />
+        <Kpi label="Receita conveniência" valor={formatCurrency(totalReceita)} icon={Store} color="emerald" />
         <Kpi label="Margem" valor={formatCurrency(margemTotal)} icon={TrendingUp} color={margemTotal >= 0 ? 'emerald' : 'red'} hint={totalReceita > 0 ? `${((margemTotal / totalReceita) * 100).toFixed(1)}%` : null} />
         <Kpi label="Grupos" valor={porGrupo.length} icon={LayoutGrid} color="blue" raw />
         <Kpi label="Itens vendidos"
@@ -1052,7 +1052,7 @@ function AbaConveniencia({ dados }) {
           <h3 className="text-sm font-semibold text-gray-800">Receita por grupo</h3>
         </div>
         {porGrupo.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhuma venda de conveniencia no periodo.</div>
+          <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhuma venda de conveniência no período.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1095,10 +1095,10 @@ function AbaConveniencia({ dados }) {
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
           <Package className="h-4 w-4 text-emerald-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Top 30 produtos (conveniencia)</h3>
+          <h3 className="text-sm font-semibold text-gray-800">Top 30 produtos (conveniência)</h3>
         </div>
         {produtos.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhum produto de conveniencia no periodo.</div>
+          <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhum produto de conveniência no período.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1111,7 +1111,7 @@ function AbaConveniencia({ dados }) {
                   <th className="px-4 py-2.5 text-right">Receita</th>
                   <th className="px-4 py-2.5 text-right">% total</th>
                   <th className="px-4 py-2.5 text-right">Margem</th>
-                  <th className="px-4 py-2.5 text-right">Var mes ant</th>
+                  <th className="px-4 py-2.5 text-right">Var mês ant</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1175,7 +1175,7 @@ function KpiComparativo({ label, icon: Icon, color, atual, mesAnt, anoAnt, forma
       <p className="text-xl font-bold text-gray-900 tabular-nums">{fmt(atual)}</p>
       {hint && <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>}
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
-        <BadgeVariacao label="vs mes ant" variacao={varMes} />
+        <BadgeVariacao label="vs mês ant" variacao={varMes} />
         <BadgeVariacao label="vs ano ant" variacao={varAno} />
       </div>
     </motion.div>
@@ -1206,7 +1206,7 @@ function KpiMargemPct({ label, icon: Icon, color, atualPct, mesAntPct, anoAntPct
       </div>
       <p className="text-xl font-bold text-gray-900 tabular-nums">{fmtPct(atualPct)}</p>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
-        <BadgeDeltaPP label={`vs mes ant (${fmtPct(mesAntPct)})`} pp={deltaPP(mesAntPct)} />
+        <BadgeDeltaPP label={`vs mês ant (${fmtPct(mesAntPct)})`} pp={deltaPP(mesAntPct)} />
         <BadgeDeltaPP label={`vs ano ant (${fmtPct(anoAntPct)})`} pp={deltaPP(anoAntPct)} />
       </div>
     </motion.div>
@@ -1310,9 +1310,9 @@ function MiniVar({ v, inverter }) {
 
 function CategoriaBadge({ cat }) {
   const MAP = {
-    combustivel:  { label: 'Combustivel',  cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    combustivel:  { label: 'Combustível',  cls: 'bg-amber-50 text-amber-700 border-amber-200' },
     automotivos:  { label: 'Automotivos',  cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-    conveniencia: { label: 'Conveniencia', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    conveniencia: { label: 'Conveniência', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
     outros:       { label: 'Outros',       cls: 'bg-gray-50 text-gray-600 border-gray-200' },
   };
   const v = MAP[cat] || MAP.outros;

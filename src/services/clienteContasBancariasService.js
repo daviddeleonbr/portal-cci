@@ -5,10 +5,10 @@ import { supabase } from '../lib/supabase';
 // configuracao vale para todas as empresas da rede.
 
 export const TIPOS_CONTA = [
-  { key: 'bancaria',    label: 'Conta bancaria',               hint: 'Aparece na conciliacao bancaria e no fluxo de caixa', incluir: true },
-  { key: 'aplicacao',   label: 'Conta aplicacao',              hint: 'Aparece na conciliacao bancaria (nao entra no fluxo)', incluir: true },
+  { key: 'bancaria',    label: 'Conta bancária',               hint: 'Aparece na conciliação bancária e no fluxo de caixa', incluir: true },
+  { key: 'aplicacao',   label: 'Conta aplicação',              hint: 'Aparece na conciliação bancária (não entra no fluxo)', incluir: true },
   { key: 'caixa',       label: 'Conta caixa',                  hint: 'Caixa administrativo + fluxo de caixa',               incluir: false },
-  { key: 'outras',      label: 'Outras contas',                hint: 'Oculta em todos os relatorios',                        incluir: false },
+  { key: 'outras',      label: 'Outras contas',                hint: 'Oculta em todos os relatórios',                        incluir: false },
 ];
 
 export const TIPOS_PARA_CONCILIACAO = TIPOS_CONTA.filter(t => t.incluir).map(t => t.key);

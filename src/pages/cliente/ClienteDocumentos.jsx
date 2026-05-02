@@ -43,7 +43,7 @@ export default function ClienteDocumentos() {
 
   if (loading) return (
     <div>
-      <PageHeader title="Documentos" description="Seus documentos contabeis e fiscais" />
+      <PageHeader title="Documentos" description="Seus documentos contábeis e fiscais" />
       <TableSkeleton rows={6} cols={4} />
     </div>
   );

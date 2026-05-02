@@ -58,7 +58,7 @@ function resolvePessoa(m, mapaClientesQ, mapaFornecedores) {
     return { tipo: 'Fornecedor', razao: extrairRazao(reg) || m.nomeFornecedor || '', cnpj: extrairCnpj(reg) || m.fornecedorCpfCnpj || cnpjGen || '', codigo: pessoaId };
   }
   if (t === 'FU' || t === 'FUNCIONARIO') {
-    return { tipo: 'Funcionario', razao: m.nomeFuncionario || '', cnpj: cnpjGen || '', codigo: pessoaId };
+    return { tipo: 'Funcionário', razao: m.nomeFuncionario || '', cnpj: cnpjGen || '', codigo: pessoaId };
   }
   return { tipo: '', razao: m?.razaoSocial || '', cnpj: cnpjGen || '', codigo: null };
 }
@@ -131,14 +131,14 @@ export default function BpoCaixaAdministrativo() {
 
   const carregar = useCallback(async () => {
     if (!redeId || empresasDaRede.length === 0) { setError('Selecione uma rede com empresas Webposto ativas.'); return; }
-    if (!dataInicial || !dataFinal) { setError('Informe o periodo.'); return; }
-    if (dataInicial > dataFinal) { setError('Data inicial nao pode ser maior que a final.'); return; }
+    if (!dataInicial || !dataFinal) { setError('Informe o período.'); return; }
+    if (dataInicial > dataFinal) { setError('Data inicial não pode ser maior que a final.'); return; }
     setLoadingDados(true);
     setError(null);
     try {
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === redeId);
-      if (!chave) throw new Error('Chave API da rede nao encontrada');
+      if (!chave) throw new Error('Chave API da rede não encontrada');
 
       // Catalogos (sao por rede, nao por empresa — buscamos uma vez so)
       setLoadingProgress({ atual: 0, total: empresasDaRede.length + 1, mensagem: 'Carregando catalogos da rede...' });
@@ -500,7 +500,7 @@ export default function BpoCaixaAdministrativo() {
 
   return (
     <div>
-      <PageHeader title="Caixa Administrativo" description="Movimentacoes das contas caixa de toda a rede, organizadas em arvore Empresa > Conta > Lancamentos" />
+      <PageHeader title="Caixa Administrativo" description="Movimentações das contas caixa de toda a rede, organizadas em arvore Empresa > Conta > Lançamentos" />
 
       {/* Seletor rede + periodo */}
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
@@ -524,7 +524,7 @@ export default function BpoCaixaAdministrativo() {
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Ate</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Até</label>
             <input type="date" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
@@ -548,9 +548,9 @@ export default function BpoCaixaAdministrativo() {
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <Wallet className="h-7 w-7 text-white" />
           </div>
-          <p className="text-sm font-semibold text-gray-900 mb-1">Selecione a rede e o periodo</p>
+          <p className="text-sm font-semibold text-gray-900 mb-1">Selecione a rede e o período</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            Aparecerao lancamentos de todas as empresas da rede, nas contas marcadas como <strong>Conta caixa</strong> em Cadastros &gt; Clientes.
+            Aparecerao lançamentos de todas as empresas da rede, nas contas marcadas como <strong>Conta caixa</strong> em Cadastros &gt; Clientes.
           </p>
         </div>
       ) : loadingDados ? (
@@ -571,13 +571,13 @@ export default function BpoCaixaAdministrativo() {
           <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
           <p className="text-sm font-semibold text-gray-900 mb-1">Nenhuma conta classificada como "Conta caixa"</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            Nesta rede nenhuma conta foi marcada como <strong>Conta caixa</strong>. Ajuste em <strong>Cadastros &gt; Clientes &gt; Classificar contas bancarias</strong>.
+            Nesta rede nenhuma conta foi marcada como <strong>Conta caixa</strong>. Ajuste em <strong>Cadastros &gt; Clientes &gt; Classificar contas bancárias</strong>.
           </p>
         </div>
       ) : movimentosEnriquecidos.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <AlertCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-600">Nenhum movimento encontrado nas contas caixa no periodo.</p>
+          <p className="text-sm text-gray-600">Nenhum movimento encontrado nas contas caixa no período.</p>
         </div>
       ) : (
         <>
@@ -585,7 +585,7 @@ export default function BpoCaixaAdministrativo() {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
             <Kpi label="Registros" valor={movimentosEnriquecidos.length} icon={FileText} color="blue" raw />
             <Kpi label="Entradas" valor={formatCurrency(totais.entradas)} icon={ArrowDownToLine} color="emerald" />
-            <Kpi label="Saidas" valor={formatCurrency(totais.saidas)} icon={ArrowUpFromLine} color="red" />
+            <Kpi label="Saídas" valor={formatCurrency(totais.saidas)} icon={ArrowUpFromLine} color="red" />
             <Kpi label="Saldo"
               valor={formatCurrency(totais.saldo)}
               icon={totais.saldo >= 0 ? TrendingUp : TrendingDown}
@@ -607,8 +607,8 @@ export default function BpoCaixaAdministrativo() {
                       <th className="px-4 py-2.5">Empresa / Caixa</th>
                       <th className="px-4 py-2.5 text-right">Saldo inicial</th>
                       <th className="px-4 py-2.5 text-right">Entradas</th>
-                      <th className="px-4 py-2.5 text-right">Saidas</th>
-                      <th className="px-4 py-2.5 text-right">Variacao</th>
+                      <th className="px-4 py-2.5 text-right">Saídas</th>
+                      <th className="px-4 py-2.5 text-right">Variação</th>
                       <th className="px-4 py-2.5 text-right">Saldo atual</th>
                     </tr>
                   </thead>
@@ -684,14 +684,14 @@ export default function BpoCaixaAdministrativo() {
             <div className="relative flex-1 min-w-[220px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input value={busca} onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por descricao, empresa, caixa, pessoa, documento..."
+                placeholder="Buscar por descrição, empresa, caixa, pessoa, documento..."
                 className="w-full h-9 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
               {[
                 { key: 'todos', label: 'Todos' },
                 { key: 'credito', label: 'Entradas' },
-                { key: 'debito', label: 'Saidas' },
+                { key: 'debito', label: 'Saídas' },
               ].map(opt => (
                 <button key={opt.key} onClick={() => setFiltroTipo(opt.key)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
@@ -705,15 +705,15 @@ export default function BpoCaixaAdministrativo() {
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
               <Wallet className="h-4 w-4 text-blue-500" />
-              <h3 className="text-sm font-semibold text-gray-800">Movimentos do periodo</h3>
-              <span className="text-[11px] text-gray-400">· {filtrados.length} de {movimentosEnriquecidos.length} lancamentos</span>
+              <h3 className="text-sm font-semibold text-gray-800">Movimentos do período</h3>
+              <span className="text-[11px] text-gray-400">· {filtrados.length} de {movimentosEnriquecidos.length} lançamentos</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                     <th className="px-4 py-2.5">Empresa / Caixa / Data</th>
-                    <th className="px-4 py-2.5">Descricao</th>
+                    <th className="px-4 py-2.5">Descrição</th>
                     <th className="px-4 py-2.5">Doc.</th>
                     <th className="px-4 py-2.5 text-right">
                       <span className="inline-flex items-center gap-1 text-emerald-700">
@@ -722,10 +722,10 @@ export default function BpoCaixaAdministrativo() {
                     </th>
                     <th className="px-4 py-2.5 text-right">
                       <span className="inline-flex items-center gap-1 text-red-700">
-                        <ArrowUpFromLine className="h-3 w-3" /> Saida
+                        <ArrowUpFromLine className="h-3 w-3" /> Saída
                       </span>
                     </th>
-                    <th className="px-4 py-2.5 text-right">Saldo apos</th>
+                    <th className="px-4 py-2.5 text-right">Saldo após</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -898,7 +898,7 @@ function ModalDetalheMovimento({ mov, onClose }) {
                 isCredito ? 'text-emerald-700' : 'text-red-700'
               }`}>
                 {isCredito ? <ArrowDownToLine className="h-3 w-3" /> : <ArrowUpFromLine className="h-3 w-3" />}
-                {isCredito ? 'Entrada' : 'Saida'}
+                {isCredito ? 'Entrada' : 'Saída'}
               </p>
               <p className={`text-2xl font-bold font-mono tabular-nums leading-none mt-1 ${
                 isCredito ? 'text-emerald-700' : 'text-red-700'
@@ -917,7 +917,7 @@ function ModalDetalheMovimento({ mov, onClose }) {
           <DetalheLinha label="Empresa" valor={mov.empresaNome || '—'} hint={mov.empresaCnpj || null} />
           <DetalheLinha label="Caixa" valor={mov.contaNome}
             hint={mov.contaCodigo != null ? `#${mov.contaCodigo}` : null} />
-          <DetalheLinha label="Descricao" valor={mov.descricao} />
+          <DetalheLinha label="Descrição" valor={mov.descricao} />
           <DetalheLinha label="Conta gerencial" valor={mov.planoNome}
             hint={mov.planoCodigo != null ? `#${mov.planoCodigo}` : null} />
           <DetalheLinha label={mov.pessoaTipo || 'Pessoa'} valor={mov.pessoaRazao || '—'}

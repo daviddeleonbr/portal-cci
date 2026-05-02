@@ -163,7 +163,7 @@ export default function NotasFiscais() {
   if (loadingConfig) {
     return (
       <div>
-        <PageHeader title="Notas Fiscais" description="Emissao de NFS-e via Asaas" />
+        <PageHeader title="Notas Fiscais" description="Emissão de NFS-e via Asaas" />
         <TableSkeleton rows={6} cols={5} />
       </div>
     );
@@ -173,7 +173,7 @@ export default function NotasFiscais() {
     return (
       <div>
         <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-        <PageHeader title="Notas Fiscais" description="Emissao de NFS-e via Asaas" />
+        <PageHeader title="Notas Fiscais" description="Emissão de NFS-e via Asaas" />
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-2xl border border-gray-200/60 p-10 text-center shadow-sm">
@@ -182,7 +182,7 @@ export default function NotasFiscais() {
           </div>
           <h3 className="text-base font-semibold text-gray-900 mb-1">Configure o Asaas</h3>
           <p className="text-sm text-gray-500 mb-5 max-w-md mx-auto">
-            Para emitir notas fiscais de servico (NFS-e), cadastre suas credenciais da API do Asaas. Voce pode usar o ambiente sandbox para testes.
+            Para emitir notas fiscais de serviço (NFS-e), cadastre suas credenciais da API do Asaas. Você pode usar o ambiente sandbox para testes.
           </p>
           <button onClick={() => setModalConfig(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
@@ -203,11 +203,11 @@ export default function NotasFiscais() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Notas Fiscais" description={`Emissao via Asaas ${config.ambiente === 'sandbox' ? '(Sandbox)' : ''}`}>
+      <PageHeader title="Notas Fiscais" description={`Emissão via Asaas ${config.ambiente === 'sandbox' ? '(Sandbox)' : ''}`}>
         <div className="flex items-center gap-2">
           <button onClick={() => setModalConfig(true)}
             className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            title="Configuracoes">
+            title="Configurações">
             <Settings className="h-4 w-4" />
           </button>
           <button onClick={sincronizarComAsaas} disabled={syncing}
@@ -234,7 +234,7 @@ export default function NotasFiscais() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por cliente, numero ou descricao..."
+            placeholder="Buscar por cliente, número ou descrição..."
             className="w-full h-10 rounded-lg border border-gray-200 bg-white pl-10 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
@@ -263,11 +263,11 @@ export default function NotasFiscais() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-xs text-gray-500 uppercase">
-                  <th className="text-left px-6 py-3 font-medium">Numero</th>
+                  <th className="text-left px-6 py-3 font-medium">Número</th>
                   <th className="text-left px-6 py-3 font-medium">Cliente</th>
-                  <th className="text-left px-6 py-3 font-medium">Descricao</th>
+                  <th className="text-left px-6 py-3 font-medium">Descrição</th>
                   <th className="text-right px-6 py-3 font-medium">Valor</th>
-                  <th className="text-left px-6 py-3 font-medium">Emissao</th>
+                  <th className="text-left px-6 py-3 font-medium">Emissão</th>
                   <th className="text-center px-6 py-3 font-medium">Status</th>
                   <th className="px-6 py-3 w-20"></th>
                 </tr>
@@ -283,7 +283,7 @@ export default function NotasFiscais() {
                       className="hover:bg-gray-50/50 transition-colors group">
                       <td className="px-6 py-3">
                         <span className="font-mono text-xs text-gray-600">
-                          {n.numero || <span className="italic text-gray-400">sem numero</span>}
+                          {n.numero || <span className="italic text-gray-400">sem número</span>}
                         </span>
                       </td>
                       <td className="px-6 py-3">
@@ -416,10 +416,10 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Cliente */}
         <div>
-          <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Tomador do Servico</h4>
+          <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Tomador do Serviço</h4>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Nome / Razao Social *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Nome / Razão Social *</label>
               <input type="text" required value={form.cliente_nome}
                 onChange={(e) => setForm(f => ({ ...f, cliente_nome: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -428,7 +428,7 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
               <label className="block text-xs font-medium text-gray-700 mb-1">CPF/CNPJ *</label>
               <input type="text" required value={form.cliente_cnpj}
                 onChange={(e) => setForm(f => ({ ...f, cliente_cnpj: e.target.value }))}
-                placeholder="apenas numeros"
+                placeholder="apenas números"
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
             <div>
@@ -442,10 +442,10 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
 
         {/* Servico */}
         <div>
-          <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Servico</h4>
+          <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Serviço</h4>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Descricao do servico *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Descrição do serviço *</label>
               <textarea required value={form.descricao} rows={3}
                 onChange={(e) => setForm(f => ({ ...f, descricao: e.target.value }))}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -457,7 +457,7 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Data de emissao *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Data de emissão *</label>
               <input type="date" required value={form.data_emissao}
                 onChange={(e) => setForm(f => ({ ...f, data_emissao: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -479,28 +479,28 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
 
         {/* Servico Municipal */}
         <div>
-          <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Servico Municipal</h4>
+          <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Serviço Municipal</h4>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">ID Servico</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">ID Serviço</label>
               <input type="text" value={form.municipio_servico_id}
                 onChange={(e) => setForm(f => ({ ...f, municipio_servico_id: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Codigo</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Código</label>
               <input type="text" value={form.municipio_servico_codigo}
                 onChange={(e) => setForm(f => ({ ...f, municipio_servico_codigo: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Descricao</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Descrição</label>
               <input type="text" value={form.municipio_servico_descricao}
                 onChange={(e) => setForm(f => ({ ...f, municipio_servico_descricao: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
           </div>
-          <p className="text-[11px] text-gray-400 mt-1">Se deixar em branco, usa valores padrao da configuracao.</p>
+          <p className="text-[11px] text-gray-400 mt-1">Se deixar em branco, usa valores padrão da configuração.</p>
         </div>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
@@ -521,7 +521,7 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
 // ═══════════════════════════════════════════════════════════
 function ModalConfig({ open, config, onClose, onSaved, showToast }) {
   const [form, setForm] = useState({
-    nome: 'Padrao', ambiente: 'sandbox', api_key: '',
+    nome: 'Padrão', ambiente: 'sandbox', api_key: '',
     municipio_servico_id: '', municipio_servico_codigo: '', municipio_servico_descricao: '',
     aliquota_iss: '', observacoes_padrao: '', ativo: true,
   });
@@ -531,7 +531,7 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
   useEffect(() => {
     if (open) {
       setForm(config || {
-        nome: 'Padrao', ambiente: 'sandbox', api_key: '',
+        nome: 'Padrão', ambiente: 'sandbox', api_key: '',
         municipio_servico_id: '', municipio_servico_codigo: '', municipio_servico_descricao: '',
         aliquota_iss: '', observacoes_padrao: '', ativo: true,
       });
@@ -543,9 +543,9 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
     try {
       setTesting(true);
       const res = await asaasApi.testarConexao(form.ambiente, form.api_key);
-      showToast('success', `Conexao OK - saldo: ${formatCurrency(res?.balance || 0)}`);
+      showToast('success', `Conexão OK - saldo: ${formatCurrency(res?.balance || 0)}`);
     } catch (err) {
-      showToast('error', 'Conexao falhou: ' + err.message);
+      showToast('error', 'Conexão falhou: ' + err.message);
     } finally {
       setTesting(false);
     }
@@ -559,7 +559,7 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
         ...form,
         aliquota_iss: form.aliquota_iss === '' ? 0 : parseFloat(form.aliquota_iss),
       });
-      showToast('success', 'Configuracao salva');
+      showToast('success', 'Configuração salva');
       onSaved();
     } catch (err) {
       showToast('error', err.message);
@@ -569,10 +569,10 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Configuracao Asaas" size="md">
+    <Modal open={open} onClose={onClose} title="Configuração Asaas" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Nome da configuracao</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Nome da configuração</label>
           <input type="text" required value={form.nome}
             onChange={(e) => setForm(f => ({ ...f, nome: e.target.value }))}
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -589,7 +589,7 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
                     ? amb === 'producao' ? 'bg-red-50 border-2 border-red-300 text-red-700' : 'bg-blue-50 border-2 border-blue-300 text-blue-700'
                     : 'bg-gray-50 border-2 border-transparent text-gray-500 hover:text-gray-700'
                 }`}>
-                {amb === 'sandbox' ? 'Sandbox (teste)' : 'Producao'}
+                {amb === 'sandbox' ? 'Sandbox (teste)' : 'Produção'}
               </button>
             ))}
           </div>
@@ -611,28 +611,28 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
         </div>
 
         <div className="pt-3 border-t border-gray-100">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Servico Municipal Padrao</p>
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Serviço Municipal Padrão</p>
           <div className="grid grid-cols-3 gap-2 mb-3">
             <input type="text" value={form.municipio_servico_id || ''}
               onChange={(e) => setForm(f => ({ ...f, municipio_servico_id: e.target.value }))}
               placeholder="ID" className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             <input type="text" value={form.municipio_servico_codigo || ''}
               onChange={(e) => setForm(f => ({ ...f, municipio_servico_codigo: e.target.value }))}
-              placeholder="Codigo" className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              placeholder="Código" className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             <input type="text" value={form.municipio_servico_descricao || ''}
               onChange={(e) => setForm(f => ({ ...f, municipio_servico_descricao: e.target.value }))}
-              placeholder="Descricao" className="h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              placeholder="Descrição" className="h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Aliquota ISS (%) padrao</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Aliquota ISS (%) padrão</label>
               <input type="number" step="0.01" value={form.aliquota_iss || ''}
                 onChange={(e) => setForm(f => ({ ...f, aliquota_iss: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
           </div>
           <div className="mt-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Observacoes padrao</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Observacoes padrão</label>
             <textarea rows={2} value={form.observacoes_padrao || ''}
               onChange={(e) => setForm(f => ({ ...f, observacoes_padrao: e.target.value }))}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -644,7 +644,7 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
           <button type="submit" disabled={saving}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Salvar configuracao
+            Salvar configuração
           </button>
         </div>
       </form>
@@ -680,7 +680,7 @@ function ModalDetail({ open, nota, onClose }) {
             <p className="font-semibold text-gray-900">{formatCurrency(Number(nota.valor))}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-0.5">Data Emissao</p>
+            <p className="text-xs text-gray-500 mb-0.5">Data Emissão</p>
             <p className="text-gray-900">{formatDate(nota.data_emissao)}</p>
           </div>
           <div>
@@ -691,7 +691,7 @@ function ModalDetail({ open, nota, onClose }) {
 
         {nota.servico_descricao && (
           <div>
-            <p className="text-xs text-gray-500 mb-1">Descricao</p>
+            <p className="text-xs text-gray-500 mb-1">Descrição</p>
             <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{nota.servico_descricao}</p>
           </div>
         )}

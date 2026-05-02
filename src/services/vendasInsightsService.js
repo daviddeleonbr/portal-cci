@@ -430,7 +430,7 @@ export function agregarDadosEmpresa({ cliente, periodoLabel, vendaItens, vendas,
   const pctCanceladas = (atual.receita + atual.canceladas) > 0
     ? (atual.canceladas / (atual.receita + atual.canceladas)) * 100 : 0;
   const alertasIntegridade = [];
-  if (pctOutros > 5) alertasIntegridade.push(`${round(pctOutros, 1)}% da receita em "Outros" — cadastro de produtos/grupos pode estar incompleto (tipoProduto ou tipoGrupo nao classificados).`);
+  if (pctOutros > 5) alertasIntegridade.push(`${round(pctOutros, 1)}% da receita em "Outros" — cadastro de produtos/grupos pode estar incompleto (tipoProduto ou tipoGrupo não classificados).`);
   if (pctCanceladas > 2) alertasIntegridade.push(`${round(pctCanceladas, 1)}% das vendas foram canceladas — investigar causas operacionais.`);
 
   const ativo = demoAtivo();
@@ -1173,7 +1173,7 @@ export async function gerarAnaliseVendasIA(dados, apiKey, { modoRede = false } =
   const systemBlocks = [{ type: 'text', text: SYSTEM_PROMPT }];
   if (modoRede) systemBlocks.push({ type: 'text', text: SYSTEM_PROMPT_REDE_EXTRA });
   const user = modoRede
-    ? `Analise a performance comercial desta REDE de postos:\n\n${JSON.stringify(dados, null, 2)}`
-    : `Analise a performance comercial deste posto:\n\n${JSON.stringify(dados, null, 2)}`;
+    ? `Análise a performance comercial desta REDE de postos:\n\n${JSON.stringify(dados, null, 2)}`
+    : `Análise a performance comercial deste posto:\n\n${JSON.stringify(dados, null, 2)}`;
   return chamarClaudeAPI({ apiKey, system: systemBlocks, user });
 }

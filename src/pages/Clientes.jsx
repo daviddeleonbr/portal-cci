@@ -110,7 +110,7 @@ export default function Clientes() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Clientes" description="Gestao de clientes e empresas atendidas">
+      <PageHeader title="Clientes" description="Gestão de clientes e empresas atendidas">
         <button onClick={() => setModalWizard({ open: true, preRede: null })}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
           <Plus className="h-4 w-4" /> Novo Cliente
@@ -129,7 +129,7 @@ export default function Clientes() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Buscar por nome, razao social ou CNPJ..."
+            placeholder="Buscar por nome, razão social ou CNPJ..."
             className="w-full h-10 rounded-lg border border-gray-200 bg-white pl-10 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
@@ -161,7 +161,7 @@ export default function Clientes() {
                 <tr className="border-b border-gray-100 text-xs text-gray-500 uppercase tracking-wide">
                   <th className="text-left px-6 py-3 font-medium">Rede</th>
                   <th className="text-left px-6 py-3 font-medium">Provedor</th>
-                  <th className="text-center px-6 py-3 font-medium">Integracao</th>
+                  <th className="text-center px-6 py-3 font-medium">Integração</th>
                   <th className="text-center px-6 py-3 font-medium">Empresas</th>
                   <th className="text-center px-6 py-3 font-medium">Status</th>
                   <th className="px-6 py-3 w-32"></th>
@@ -235,7 +235,7 @@ export default function Clientes() {
                                   <Link2 className="h-3.5 w-3.5" />
                                 </button>
                                 <button onClick={() => setModalContas({ open: true, cliente: rede.empresas[0] })}
-                                  className="rounded-md p-1.5 text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Classificar contas bancarias">
+                                  className="rounded-md p-1.5 text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Classificar contas bancárias">
                                   <Landmark className="h-3.5 w-3.5" />
                                 </button>
                               </>
@@ -414,7 +414,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
           setMethod('webposto');
           const chaves = await mapService.listarChavesApi();
           const chave = chaves.find(c => c.id === preRede.chaveApiId);
-          if (!chave) throw new Error('Chave API nao encontrada');
+          if (!chave) throw new Error('Chave API não encontrada');
           setChaveApiRecord(chave);
           setChaveNome(chave.nome);
           setChaveValor(chave.chave);
@@ -502,7 +502,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
         cidade: e.cidade,
         estado: e.estado,
         cep: e.cep,
-        segmento: 'Posto de Combustivel',
+        segmento: 'Posto de Combustível',
         status: 'ativo',
         chave_api_id: chaveApiRecord.id,
         empresa_codigo: e.empresaCodigo || e.codigo,
@@ -604,12 +604,12 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
             <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-3 flex gap-2">
               <Key className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-amber-800 leading-relaxed">
-                Forneca a <strong>chave de integracao Webposto</strong> do cliente. Vamos buscar todas as empresas vinculadas a essa chave e voce podera escolher quais cadastrar.
+                Forneca a <strong>chave de integração Webposto</strong> do cliente. Vamos buscar todas as empresas vinculadas a essa chave e você podera escolher quais cadastrar.
               </p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Nome da chave (identificacao)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Nome da chave (identificação)</label>
               <input type="text" value={chaveNome} onChange={e => setChaveNome(e.target.value)}
                 placeholder="Ex: Rede Trivela"
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -692,7 +692,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                     </div>
                     {jaVinculada && (
                       <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 flex-shrink-0">
-                        Ja vinculada
+                        Já vinculada
                       </span>
                     )}
                     <span className="text-[10px] font-mono text-gray-400 bg-gray-50 rounded px-1.5 py-0.5 flex-shrink-0">
@@ -740,7 +740,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
             <div className="rounded-xl bg-violet-50/60 border border-violet-200 p-3 flex gap-2">
               <Network className="h-4 w-4 text-violet-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-violet-900 leading-relaxed">
-                Cadastre apenas a <strong>rede de empresas Autosystem</strong>. Esse cadastro e usado pelo sistema de sincronizacao de dados e nao cria um cliente individual.
+                Cadastre apenas a <strong>rede de empresas Autosystem</strong>. Esse cadastro e usado pelo sistema de sincronizacao de dados e não cria um cliente individual.
               </p>
             </div>
 
@@ -783,7 +783,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
 
 function titleFor(step) {
   if (step === 'choice') return 'Novo Cliente';
-  if (step === 'webposto-key') return 'Integracao Webposto';
+  if (step === 'webposto-key') return 'Integração Webposto';
   if (step === 'webposto-select') return 'Selecionar empresas';
   if (step === 'form') return 'Cadastro manual';
   if (step === 'rede-form') return 'Cadastrar Rede (Autosystem)';
@@ -807,7 +807,7 @@ function emptyForm() {
 const STEPS = [
   { id: 1, label: 'Empresa', fields: ['nome', 'razao_social', 'cnpj', 'regime_tributario', 'segmento', 'status'] },
   { id: 2, label: 'Contato', fields: ['contato_nome', 'contato_email', 'contato_telefone'] },
-  { id: 3, label: 'Endereco', fields: ['endereco', 'numero', 'bairro', 'cidade', 'estado', 'cep'] },
+  { id: 3, label: 'Endereço', fields: ['endereco', 'numero', 'bairro', 'cidade', 'estado', 'cep'] },
 ];
 
 function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitLabel = 'Salvar' }) {
@@ -877,7 +877,7 @@ function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitL
                   className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Razao Social</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Razão Social</label>
                 <input type="text" value={form.razao_social || ''} onChange={e => setField('razao_social', e.target.value)}
                   className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
@@ -888,7 +888,7 @@ function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitL
                     className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Regime Tributario</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Regime Tributário</label>
                   <select value={form.regime_tributario || ''} onChange={e => setField('regime_tributario', e.target.value)}
                     className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
                     <option value="">—</option>
@@ -940,13 +940,13 @@ function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitL
             <motion.div key="step3" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
               className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Endereco</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Endereço</label>
                 <input type="text" autoFocus value={form.endereco || ''} onChange={e => setField('endereco', e.target.value)}
                   className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Numero</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Número</label>
                   <input type="text" value={form.numero || ''} onChange={e => setField('numero', e.target.value)}
                     className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                 </div>
@@ -987,7 +987,7 @@ function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitL
           <button type="submit" disabled={saving || !canAdvance}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
             {saving && isLast && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isLast ? submitLabel : 'Proximo'}
+            {isLast ? submitLabel : 'Próximo'}
             {!isLast && <ChevronRight className="h-3.5 w-3.5" />}
           </button>
         </div>
@@ -1016,7 +1016,7 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
     try {
       setTogglingFlag(campo);
       await clientesService.atualizarCliente(cliente.id, { [campo]: novo });
-      showToast('success', novo ? 'Relatorio liberado para o cliente' : 'Relatorio bloqueado para o cliente');
+      showToast('success', novo ? 'Relatório liberado para o cliente' : 'Relatório bloqueado para o cliente');
       onSaved?.();
     } catch (err) {
       setForm(f => ({ ...f, [campo]: !novo })); // rollback
@@ -1046,7 +1046,7 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
       if (!chave) {
-        showToast('error', 'Chave API nao encontrada');
+        showToast('error', 'Chave API não encontrada');
         return;
       }
 
@@ -1055,7 +1055,7 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
       const empresa = empresas.find(e => (e.empresaCodigo || e.codigo) === cliente.empresa_codigo);
 
       if (!empresa) {
-        showToast('error', 'Empresa nao encontrada na API');
+        showToast('error', 'Empresa não encontrada na API');
         return;
       }
 
@@ -1109,7 +1109,7 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-amber-900 mb-0.5">Cliente integrado com Webposto</p>
                 <p className="text-xs text-amber-700 leading-relaxed">
-                  Os dados cadastrais deste cliente sao sincronizados automaticamente com a API Webposto. Para atualizar, clique no botao abaixo.
+                  Os dados cadastrais deste cliente são sincronizados automaticamente com a API Webposto. Para atualizar, clique no botão abaixo.
                 </p>
               </div>
             </div>
@@ -1123,7 +1123,7 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
           {/* Relatorios liberados pro portal do cliente */}
           <div className="rounded-xl border border-gray-200 p-4 space-y-3">
             <div>
-              <p className="text-xs font-semibold text-gray-900">Relatorios no portal do cliente</p>
+              <p className="text-xs font-semibold text-gray-900">Relatórios no portal do cliente</p>
               <p className="text-[11px] text-gray-500 mt-0.5">
                 Controle o que este cliente pode visualizar ao acessar o portal.
               </p>
@@ -1131,7 +1131,7 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
             <ToggleRelatorio
               icon={BarChart3}
               label="DRE"
-              desc="Demonstracao do resultado do exercicio"
+              desc="Demonstração do resultado do exercicio"
               ativo={!!form.exibir_dre}
               loading={togglingFlag === 'exibir_dre'}
               disabled={togglingFlag !== null}
@@ -1140,7 +1140,7 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
             <ToggleRelatorio
               icon={TrendingUp}
               label="Fluxo de Caixa"
-              desc="Entradas e saidas por periodo"
+              desc="Entradas e saídas por período"
               ativo={!!form.exibir_fluxo_caixa}
               loading={togglingFlag === 'exibir_fluxo_caixa'}
               disabled={togglingFlag !== null}
@@ -1264,7 +1264,7 @@ function ModalDetail({ open, cliente, onClose, onClassificarContas }) {
 
         {endereco && (
           <div>
-            <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Endereco</h4>
+            <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Endereço</h4>
             <ContactLine icon={MapPin}>{endereco} {cliente.cep && <span className="text-gray-400">· CEP {cliente.cep}</span>}</ContactLine>
           </div>
         )}
@@ -1273,7 +1273,7 @@ function ModalDetail({ open, cliente, onClose, onClassificarContas }) {
           <div className="rounded-lg bg-amber-50/40 dark:bg-amber-500/10 border border-amber-200 p-3 space-y-2">
             <div className="flex items-center gap-2">
               <Zap className="h-3.5 w-3.5 text-amber-600" />
-              <p className="text-xs font-semibold text-amber-900">Integracao Webposto</p>
+              <p className="text-xs font-semibold text-amber-900">Integração Webposto</p>
             </div>
             {cliente.chaves_api && (
               <p className="text-[11px] text-amber-700">
@@ -1284,7 +1284,7 @@ function ModalDetail({ open, cliente, onClose, onClassificarContas }) {
             {onClassificarContas && (
               <button type="button" onClick={() => onClassificarContas(cliente)}
                 className="flex items-center gap-2 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-[11px] font-medium text-amber-800 hover:bg-amber-50 transition-colors">
-                <Landmark className="h-3.5 w-3.5" /> Classificar contas bancarias
+                <Landmark className="h-3.5 w-3.5" /> Classificar contas bancárias
               </button>
             )}
           </div>
@@ -1348,7 +1348,7 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
       setError(null);
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada');
+      if (!chave) throw new Error('Chave API não encontrada');
       const contasQuality = await qualityApi.buscarContas(chave.chave);
       const atualizados = await contasBancariasService.sincronizarComQuality(cliente.chave_api_id, contasQuality || []);
       setItens(atualizados);
@@ -1392,9 +1392,9 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
     <Modal open={open} onClose={onClose} title={`Classificar contas - ${redeNome}`} size="lg">
       <div className="space-y-4">
         <div className="rounded-lg bg-blue-50/60 dark:bg-blue-500/10 border border-blue-200 p-3 text-[11px] text-blue-800">
-          Classificacao por <strong>rede</strong>: configure uma vez e vale para todas as empresas da {redeNome}.
-          No Quality todas as contas vem como <strong>bancaria</strong> — apenas as classificadas como
-          <strong> Conta bancaria</strong> ou <strong>Conta aplicacao</strong> aparecem na Conciliacao Bancaria.
+          Classificação por <strong>rede</strong>: configure uma vez e vale para todas as empresas da {redeNome}.
+          No Quality todas as contas vem como <strong>bancária</strong> — apenas as classificadas como
+          <strong> Conta bancária</strong> ou <strong>Conta aplicação</strong> aparecem na Conciliação Bancária.
         </div>
 
         <div className="flex items-center justify-between">
@@ -1423,7 +1423,7 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
           <div className="rounded-xl border border-dashed border-gray-200 px-6 py-10 text-center">
             <Landmark className="h-7 w-7 text-gray-300 mx-auto mb-2" />
             <p className="text-sm text-gray-600">Nenhuma conta classificada.</p>
-            <p className="text-[11px] text-gray-400 mt-1">Clique em "Sincronizar com Quality" para puxar as contas disponiveis.</p>
+            <p className="text-[11px] text-gray-400 mt-1">Clique em "Sincronizar com Quality" para puxar as contas disponíveis.</p>
           </div>
         ) : (
           <div className="rounded-xl border border-gray-200 overflow-hidden">

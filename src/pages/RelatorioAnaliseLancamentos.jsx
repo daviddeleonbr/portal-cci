@@ -137,11 +137,11 @@ export default function RelatorioAnaliseLancamentos() {
 
     try {
       if (!cliente.usa_webposto || !cliente.chave_api_id) {
-        throw new Error('Analise disponivel apenas para clientes Webposto (que integram com a API Quality).');
+        throw new Error('Análise disponível apenas para clientes Webposto (que integram com a API Quality).');
       }
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada para este cliente');
+      if (!chave) throw new Error('Chave API não encontrada para este cliente');
 
       // Fetch titulos para cada mes
       const promises = meses.map(async m => {
@@ -182,7 +182,7 @@ export default function RelatorioAnaliseLancamentos() {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }
   if (!cliente) {
-    return <div className="text-center py-20 text-gray-500">Cliente nao encontrado</div>;
+    return <div className="text-center py-20 text-gray-500">Cliente não encontrado</div>;
   }
 
   const periodoLabel = meses.length === 1
@@ -204,7 +204,7 @@ export default function RelatorioAnaliseLancamentos() {
           main { padding: 0 !important; margin: 0 !important; }
           .print-page { padding: 0 !important; }
           .print-conta { page-break-inside: avoid; break-inside: avoid; }
-          .print-mes { page-break-inside: avoid; break-inside: avoid; }
+          .print-mês { page-break-inside: avoid; break-inside: avoid; }
           .print-hide-chevron > svg:first-of-type,
           button .print-hide-chevron svg { display: none !important; }
           button { pointer-events: none !important; }
@@ -225,7 +225,7 @@ export default function RelatorioAnaliseLancamentos() {
             <FlaskConical className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 truncate">Analise de Lancamentos</h2>
+            <h2 className="text-lg font-semibold text-gray-900 truncate">Análise de Lançamentos</h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Building2 className="h-3 w-3" />
               <span className="truncate">{cliente.nome}</span>
@@ -247,12 +247,12 @@ export default function RelatorioAnaliseLancamentos() {
 
       {/* Cabecalho do relatorio (so na impressao) */}
       <div className="print-only" style={{ display: 'none', marginBottom: 16, borderBottom: '2px solid #000', paddingBottom: 10 }}>
-        <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>Analise de Lancamentos</h1>
+        <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>Análise de Lançamentos</h1>
         <p style={{ fontSize: '10pt', margin: '4px 0' }}>
           {cliente.nome}{cliente.cnpj ? ` - CNPJ ${cliente.cnpj}` : ''}
         </p>
         <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>
-          Periodo: {periodoLabel} &middot; Emitido em: {new Date().toLocaleDateString('pt-BR')}
+          Período: {periodoLabel} &middot; Emitido em: {new Date().toLocaleDateString('pt-BR')}
         </p>
       </div>
 
@@ -262,7 +262,7 @@ export default function RelatorioAnaliseLancamentos() {
         <div className="flex flex-wrap items-end gap-3">
           {/* Mes referencia */}
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mes (referencia)</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
             <div className="flex items-center gap-1 h-10 rounded-lg border border-gray-200 bg-white px-1">
               <button onClick={() => navMes(-1)} className="rounded-md p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
                 <ChevronLeft className="h-3.5 w-3.5" />
@@ -285,14 +285,14 @@ export default function RelatorioAnaliseLancamentos() {
 
           {/* Analise */}
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Analise</label>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
             <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 h-10">
               {[1, 3].map(q => (
                 <button key={q} onClick={() => setQtdMeses(q)}
                   className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
                     qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
-                  {q === 1 ? '1 mes' : '3 meses'}
+                  {q === 1 ? '1 mês' : '3 meses'}
                 </button>
               ))}
             </div>
@@ -303,7 +303,7 @@ export default function RelatorioAnaliseLancamentos() {
             <button onClick={rodarAnalise} disabled={loadingDados || qtdFlags === 0}
               className="flex items-center gap-2 h-10 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
-              Rodar analise
+              Rodar análise
             </button>
           </div>
 
@@ -333,16 +333,16 @@ export default function RelatorioAnaliseLancamentos() {
           </div>
           {qtdFlags === 0 ? (
             <>
-              <p className="text-sm font-semibold text-gray-900 mb-1">Nenhuma conta marcada para analise</p>
+              <p className="text-sm font-semibold text-gray-900 mb-1">Nenhuma conta marcada para análise</p>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
-                Em <strong>Parametros &gt; Analise de Lancamentos</strong>, marque as contas da rede cujos lancamentos devem ser verificados.
+                Em <strong>Parâmetros &gt; Análise de Lançamentos</strong>, marque as contas da rede cujos lançamentos devem ser verificados.
               </p>
             </>
           ) : (
             <>
-              <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o periodo e clique em "Rodar analise"</p>
+              <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o período e clique em "Rodar análise"</p>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
-                Serao consultados os lancamentos de <strong>{meses.map(m => m.label).join(', ')}</strong> nas {qtdFlags} contas marcadas da rede.
+                Serao consultados os lançamentos de <strong>{meses.map(m => m.label).join(', ')}</strong> nas {qtdFlags} contas marcadas da rede.
               </p>
             </>
           )}
@@ -350,8 +350,8 @@ export default function RelatorioAnaliseLancamentos() {
       ) : loadingDados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center">
           <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-800 mb-1">Buscando lancamentos...</p>
-          <p className="text-xs text-gray-400">{meses.length} mes(es) · {qtdFlags} contas</p>
+          <p className="text-sm font-medium text-gray-800 mb-1">Buscando lançamentos...</p>
+          <p className="text-xs text-gray-400">{meses.length} mês(es) · {qtdFlags} contas</p>
         </div>
       ) : resultado ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}

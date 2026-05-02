@@ -230,7 +230,7 @@ export async function agregarDadosDRE({ cliente, modoRede = false, chaveApi, cha
     : [cliente.empresa_codigo];
 
   // Mascara + grupos + mapeamentos (rede, filtrados pela mascara) + mapeamento de vendas + catalogos
-  onProgress?.('Carregando mascara DRE, mapeamento de vendas e catalogos...');
+  onProgress?.('Carregando máscara DRE, mapeamento de vendas e catalogos...');
   const [grupos, mapeamentosRede, mapeamentoVendas, produtos, gruposQuality] = await Promise.all([
     mascaraDreService.listarGrupos(mascaraId),
     mapService.listarMapeamentos(chaveApiId),
@@ -238,12 +238,12 @@ export async function agregarDadosDRE({ cliente, modoRede = false, chaveApi, cha
     qualityApi.buscarProdutos(chaveApi).catch(() => []),
     qualityApi.buscarGrupos(chaveApi).catch(() => []),
   ]);
-  if (!grupos?.length) throw new Error('Mascara DRE nao tem grupos configurados');
+  if (!grupos?.length) throw new Error('Máscara DRE não tem grupos configurados');
   const gruposIds = new Set(grupos.map(g => g.id));
   const mapeamentos = (mapeamentosRede || []).filter(m => gruposIds.has(m.grupo_dre_id));
   const mapVendasFiltrado = (mapeamentoVendas || []).filter(m => gruposIds.has(m.grupo_dre_id));
   if (mapeamentos.length === 0 && mapVendasFiltrado.length === 0) {
-    throw new Error('Nenhum plano de conta nem mapeamento de vendas configurado para esta mascara DRE. Configure em Parametros.');
+    throw new Error('Nenhum plano de conta nem mapeamento de vendas configurado para esta máscara DRE. Configure em Parâmetros.');
   }
   const produtosMap = new Map();
   (produtos || []).forEach(p => produtosMap.set(p.produtoCodigo || p.codigo, p));
@@ -347,7 +347,7 @@ export async function agregarDadosDRE({ cliente, modoRede = false, chaveApi, cha
 
 // ─── Chamada Claude ────────────────────────────────────────────
 export async function gerarAnaliseDREIA(dados, apiKey) {
-  const user = `Analise a DRE desta empresa (ou rede de postos):\n\n${JSON.stringify(dados, null, 2)}`;
+  const user = `Análise a DRE desta empresa (ou rede de postos):\n\n${JSON.stringify(dados, null, 2)}`;
   return chamarClaudeAPI({
     apiKey,
     system: [{ type: 'text', text: SYSTEM_PROMPT }],

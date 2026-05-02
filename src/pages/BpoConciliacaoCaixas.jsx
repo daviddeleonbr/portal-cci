@@ -156,7 +156,7 @@ export default function BpoConciliacaoCaixas({
     try {
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API nao encontrada para este cliente');
+      if (!chave) throw new Error('Chave API não encontrada para este cliente');
 
       const filtros = { dataInicial: data, dataFinal: data, empresaCodigo: cliente.empresa_codigo };
       // Para vendas aprovadas usamos situacao=A (filtro do endpoint VENDA do Quality)
@@ -371,7 +371,7 @@ export default function BpoConciliacaoCaixas({
           const f = mapaFuncionarios.get(item.funcionarioCodigo);
           return {
             ...item,
-            nome: f?.nome || `Funcionario #${item.funcionarioCodigo}`,
+            nome: f?.nome || `Funcionário #${item.funcionarioCodigo}`,
             numeroReferencia: f?.numeroReferencia || '',
           };
         })
@@ -381,7 +381,7 @@ export default function BpoConciliacaoCaixas({
         turno: c.turno,
         turnoCodigo: c.turnoCodigo,
         funcionarioCodigo: c.funcionarioCodigo,
-        funcionarioNome: funcResp?.nome || `Funcionario #${c.funcionarioCodigo}`,
+        funcionarioNome: funcResp?.nome || `Funcionário #${c.funcionarioCodigo}`,
         funcionarioReferencia: funcResp?.numeroReferencia || '',
         abertura: c.abertura,
         fechamento: c.fechamento,
@@ -428,10 +428,10 @@ export default function BpoConciliacaoCaixas({
 
       <div className="no-print">
         <PageHeader
-          title={modoCliente ? 'Fechamento de Caixas' : 'Conciliacao de Caixas'}
+          title={modoCliente ? 'Fechamento de Caixas' : 'Conciliação de Caixas'}
           description={modoCliente
-            ? 'Relatorio do dia com vendas, formas de pagamento e caixas apresentados'
-            : 'Compara vendas com o total recebido em formas de pagamento por funcionario para apontar sobras/faltas'}
+            ? 'Relatório do dia com vendas, formas de pagamento e caixas apresentados'
+            : 'Compara vendas com o total recebido em formas de pagamento por funcionário para apontar sobras/faltas'}
         >
           <div className="flex items-center gap-2">
             {!modoCliente && carregado && statusConciliacao?.concluida && (
@@ -464,7 +464,7 @@ export default function BpoConciliacaoCaixas({
                 className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50"
               >
                 {salvandoStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                Marcar como concluido
+                Marcar como concluído
               </button>
             )}
             {carregado && (
@@ -555,7 +555,7 @@ export default function BpoConciliacaoCaixas({
             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           </div>
           <div className="flex-1 text-[12px] text-emerald-800">
-            <p className="font-semibold">Conciliacao concluida</p>
+            <p className="font-semibold">Conciliação concluída</p>
             <p className="text-[11px] text-emerald-700/80">
               Marcada em <strong>{new Date(statusConciliacao.concluida_em).toLocaleString('pt-BR')}</strong>
               {statusConciliacao.concluida_por && <> por <strong>{statusConciliacao.concluida_por}</strong></>}
@@ -570,10 +570,10 @@ export default function BpoConciliacaoCaixas({
           <div className="h-14 w-14 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
             <Lock className="h-7 w-7 text-amber-600" />
           </div>
-          <p className="text-sm font-semibold text-gray-900 mb-1">Relatorio ainda nao disponivel</p>
+          <p className="text-sm font-semibold text-gray-900 mb-1">Relatório ainda não disponível</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
-            A conciliacao do dia <strong>{formatDataBR(data)}</strong> ainda nao foi concluida pelo responsavel do BPO.
-            O relatorio ficara visivel aqui assim que a equipe finalizar a conferencia do caixa.
+            A conciliação do dia <strong>{formatDataBR(data)}</strong> ainda não foi concluída pelo responsavel do BPO.
+            O relatório ficara visivel aqui assim que a equipe finalizar a conferência do caixa.
           </p>
         </div>
       )}
@@ -625,7 +625,7 @@ export default function BpoConciliacaoCaixas({
                 <p className="text-[11px] text-emerald-700 mt-0.5">
                   Fechado em <strong>{new Date(fechamentoSangria.confirmado_em).toLocaleString('pt-BR')}</strong>
                   {fechamentoSangria.confirmado_por && <> por <strong>{fechamentoSangria.confirmado_por}</strong></>}
-                  {' · '}{(fechamentoSangria.registros || []).length} funcionario(s)
+                  {' · '}{(fechamentoSangria.registros || []).length} funcionário(s)
                 </p>
               </div>
               <div className="text-right hidden sm:block">
@@ -641,9 +641,9 @@ export default function BpoConciliacaoCaixas({
                 <AlertCircle className="h-5 w-5 text-amber-600" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-amber-900">Sangria ainda nao conferida</p>
+                <p className="text-sm font-semibold text-amber-900">Sangria ainda não conferida</p>
                 <p className="text-[11px] text-amber-700 mt-0.5">
-                  O responsavel do cliente ainda nao registrou a contagem de dinheiro deste dia no portal.
+                  O responsavel do cliente ainda não registrou a contagem de dinheiro deste dia no portal.
                   As colunas Dinh. Contado aparecerao quando o fechamento for confirmado.
                 </p>
               </div>
@@ -665,14 +665,14 @@ export default function BpoConciliacaoCaixas({
               </div>
               <div className="divide-y divide-gray-100 flex-1">
                 <LinhaBreakdown icon={Fuel} iconColor="text-amber-600" iconBg="bg-amber-50" barHex="#f59e0b"
-                  label="Combustiveis" valor={totaisPorCategoria.combustivel} total={totalCategoria} />
+                  label="Combustíveis" valor={totaisPorCategoria.combustivel} total={totalCategoria} />
                 <LinhaBreakdown icon={Wrench} iconColor="text-slate-600" iconBg="bg-slate-100 dark:bg-slate-500/25" barHex="#64748b"
                   label="Produtos automotivos" valor={totaisPorCategoria.automotivos} total={totalCategoria} />
                 <LinhaBreakdown icon={ShoppingBag} iconColor="text-emerald-600" iconBg="bg-emerald-50" barHex="#10b981"
-                  label="Conveniencia" valor={totaisPorCategoria.conveniencia} total={totalCategoria} />
+                  label="Conveniência" valor={totaisPorCategoria.conveniencia} total={totalCategoria} />
                 {totaisPorCategoria.outros > 0 && (
                   <LinhaBreakdown icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100 dark:bg-gray-500/25" barHex="#6b7280"
-                    label="Outros (nao classificados)" valor={totaisPorCategoria.outros} total={totalCategoria} />
+                    label="Outros (não classificados)" valor={totaisPorCategoria.outros} total={totalCategoria} />
                 )}
               </div>
               <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between">
@@ -694,7 +694,7 @@ export default function BpoConciliacaoCaixas({
                 <LinhaBreakdown icon={Banknote} iconColor="text-emerald-600" iconBg="bg-emerald-50" barHex="#10b981"
                   label="Dinheiro" valor={totaisPorForma.dinheiro} total={totalForma} />
                 <LinhaBreakdown icon={CreditCard} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#3b82f6"
-                  label="Cartao / PIX" valor={totaisPorForma.cartao} total={totalForma} />
+                  label="Cartão / PIX" valor={totaisPorForma.cartao} total={totalForma} />
                 <LinhaBreakdown icon={FileText} iconColor="text-violet-600" iconBg="bg-violet-50" barHex="#8b5cf6"
                   label="Cheque" valor={totaisPorForma.cheque} total={totalForma} />
                 {totaisPorForma.outros > 0 && (
@@ -712,7 +712,7 @@ export default function BpoConciliacaoCaixas({
           {/* Acrescimos e Descontos do dia */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 print-no-break print-grid-2">
             <AjusteCard
-              label="Acrescimos aplicados"
+              label="Acréscimos aplicados"
               valor={ajustesItens.acrescimos}
               qtd={ajustesItens.itensComAcrescimo}
               icon={PlusCircle}
@@ -734,7 +734,7 @@ export default function BpoConciliacaoCaixas({
             <ResumoCard label="Caixas/Turnos" valor={caixasEnriquecidos.length} icon={Clock} color="blue" />
             <ResumoCard label="Apresentado (turno)" valor={formatCurrency(totais.apresentadoTotal)} icon={TrendingUp} color="blue" />
             <ResumoCard label="Apurado (turno)" valor={formatCurrency(totais.apuradoTotal)} icon={CheckCircle2} color="emerald" />
-            <ResumoCard label="Diferenca (turno)"
+            <ResumoCard label="Diferença (turno)"
               valor={formatCurrency(totais.diferencaTotal)}
               icon={Math.abs(totais.diferencaTotal) < 0.01 ? CheckCircle2 : totais.diferencaTotal > 0 ? TrendingUp : TrendingDown}
               color={Math.abs(totais.diferencaTotal) < 0.01 ? 'emerald' : totais.diferencaTotal > 0 ? 'amber' : 'red'} />
@@ -768,7 +768,7 @@ export default function BpoConciliacaoCaixas({
                     <th className="px-4 py-3 text-right">Qtd vendas</th>
                     <th className="px-4 py-3 text-right">Apresentado</th>
                     <th className="px-4 py-3 text-right">Apurado</th>
-                    <th className="px-4 py-3 text-right">Diferenca</th>
+                    <th className="px-4 py-3 text-right">Diferença</th>
                     <th className="px-4 py-3 text-center">Status</th>
                   </tr>
                 </thead>
@@ -849,7 +849,7 @@ export default function BpoConciliacaoCaixas({
                                     <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider mb-1">Apresentado do turno (agregado)</p>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                                       <DetalheTurno label="Dinheiro" apr={c.apresentado.dinheiroApresentado} apu={c.apresentado.dinheiroApurado} diff={c.apresentado.dinheiroDiferenca} />
-                                      <DetalheTurno label="Cartao" apr={c.apresentado.cartaoApresentado} apu={c.apresentado.cartaoApurado} diff={c.apresentado.cartaoDiferenca} />
+                                      <DetalheTurno label="Cartão" apr={c.apresentado.cartaoApresentado} apu={c.apresentado.cartaoApurado} diff={c.apresentado.cartaoDiferenca} />
                                       <DetalheTurno label="Cheque" apr={c.apresentado.chequeApresentado} apu={c.apresentado.chequeApurado} diff={c.apresentado.chequeDiferenca} />
                                       <DetalheTurno label="Total" apr={c.apresentado.totalApresentado} apu={c.apresentado.totalApurado} diff={c.apresentado.totalDiferenca} bold />
                                     </div>
@@ -862,15 +862,15 @@ export default function BpoConciliacaoCaixas({
                                 <table className="w-full text-[12px]">
                                   <thead>
                                     <tr className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">
-                                      <th className="text-left py-1.5 pr-2">Funcionario</th>
+                                      <th className="text-left py-1.5 pr-2">Funcionário</th>
                                       <th className="text-right py-1.5 pr-2">Qtd</th>
                                       <th className="text-right py-1.5 pr-2">Vendas</th>
                                       <th className="text-right py-1.5 pr-2">Dinh. Apurado</th>
-                                      <th className="text-right py-1.5 pr-2">Cartao</th>
+                                      <th className="text-right py-1.5 pr-2">Cartão</th>
                                       <th className="text-right py-1.5 pr-2">Cheque</th>
                                       <th className="text-right py-1.5 pr-2">Outros</th>
                                       <th className="text-right py-1.5 pr-2">Dinh. Contado</th>
-                                      <th className="text-right py-1.5 pr-2">Diferenca</th>
+                                      <th className="text-right py-1.5 pr-2">Diferença</th>
                                       <th className="text-center py-1.5 pr-2">Status</th>
                                     </tr>
                                   </thead>
@@ -1039,7 +1039,7 @@ function VendasCanceladas({ vendas, mapaFuncionarios, caixas = [], clientesQuali
                 <th className="px-4 py-2.5">Nota</th>
                 <th className="px-4 py-2.5">Hora</th>
                 <th className="px-4 py-2.5">Cliente</th>
-                <th className="px-4 py-2.5">Funcionario</th>
+                <th className="px-4 py-2.5">Funcionário</th>
                 <th className="px-4 py-2.5">Caixa</th>
                 <th className="px-4 py-2.5 text-right">Valor</th>
               </tr>
@@ -1048,7 +1048,7 @@ function VendasCanceladas({ vendas, mapaFuncionarios, caixas = [], clientesQuali
               {ordenadas.map(v => {
                 const vc = v.vendaCodigo || v.codigo;
                 const func = mapaFuncionarios.get(v.funcionarioCodigo);
-                const nome = func?.nome || `Funcionario #${v.funcionarioCodigo || '—'}`;
+                const nome = func?.nome || `Funcionário #${v.funcionarioCodigo || '—'}`;
                 const referencia = func?.numeroReferencia || '';
                 const dh = v.dataHora || v.dataHoraVenda || v.dataVenda || '';
                 const hora = formatHora(dh);
@@ -1368,7 +1368,7 @@ function PrintHeader({ cliente, rede, data }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: '7.5pt', color: '#6b7280', margin: 0, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
-            CCI Consultoria · Relatorio de Conciliacao de Caixas
+            CCI Consultoria · Relatório de Conciliação de Caixas
           </p>
           <h1 style={{ fontSize: '13pt', fontWeight: 700, margin: '0.15rem 0 0.1rem', lineHeight: 1.1 }}>
             {cliente?.nome || ''}

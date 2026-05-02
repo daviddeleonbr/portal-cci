@@ -25,8 +25,8 @@ import * as fluxoService from '../services/mascaraFluxoCaixaService';
 const TIPO_LINHA = {
   grupo:     { label: 'Grupo',     icon: FolderOpen,      color: 'text-gray-900',                bg: 'bg-slate-100 text-slate-700',     desc: 'Agrupa contas (ex: ATIVIDADES OPERACIONAIS)' },
   entrada:   { label: 'Entrada',   icon: ArrowDownCircle, color: 'text-emerald-700',             bg: 'bg-emerald-50 text-emerald-700',  desc: 'Entrada de caixa' },
-  saida:     { label: 'Saida',     icon: ArrowUpCircle,   color: 'text-red-700',                 bg: 'bg-red-50 text-red-600',          desc: 'Saida de caixa' },
-  subtotal:  { label: 'Subtotal',  icon: Equal,           color: 'text-blue-700 font-semibold',  bg: 'bg-purple-50 text-purple-700',    desc: 'Calculo intermediario (ex: = FLUXO OPERACIONAL)' },
+  saida:     { label: 'Saída',     icon: ArrowUpCircle,   color: 'text-red-700',                 bg: 'bg-red-50 text-red-600',          desc: 'Saída de caixa' },
+  subtotal:  { label: 'Subtotal',  icon: Equal,           color: 'text-blue-700 font-semibold',  bg: 'bg-purple-50 text-purple-700',    desc: 'Cálculo intermediario (ex: = FLUXO OPERACIONAL)' },
   resultado: { label: 'Resultado', icon: Equal,           color: 'text-emerald-700 font-bold',   bg: 'bg-emerald-50 text-emerald-700',  desc: 'Resultado liquido (ex: = VARIACAO DE CAIXA)' },
 };
 
@@ -47,13 +47,13 @@ function ModeloDropdown({ onCriar, saving }) {
     {
       metodo: 'indireto',
       titulo: 'Metodo Indireto',
-      descricao: 'Parte do Lucro Liquido e chega na variacao de caixa',
+      descricao: 'Parte do Lucro Liquido e chega na variação de caixa',
       icon: FileBarChart,
     },
     {
       metodo: 'direto',
       titulo: 'Metodo Direto',
-      descricao: 'Mostra entradas e saidas de caixa diretamente',
+      descricao: 'Mostra entradas e saídas de caixa diretamente',
       icon: ArrowDownCircle,
     },
   ];
@@ -62,7 +62,7 @@ function ModeloDropdown({ onCriar, saving }) {
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(!open)} disabled={saving}
         className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
-        <Sparkles className="h-4 w-4 text-blue-600" /> Usar modelo padrao
+        <Sparkles className="h-4 w-4 text-blue-600" /> Usar modelo padrão
       </button>
       <AnimatePresence>
         {open && (
@@ -119,7 +119,7 @@ export default function ParametrizacoesFluxo() {
       const data = await fluxoService.listarMascaras();
       setMascaras(data || []);
     } catch (err) {
-      showToast('error', 'Erro ao carregar mascaras: ' + err.message);
+      showToast('error', 'Erro ao carregar máscaras: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -147,10 +147,10 @@ export default function ParametrizacoesFluxo() {
       setSaving(true);
       if (form.id) {
         await fluxoService.atualizarMascara(form.id, { nome: form.nome, descricao: form.descricao });
-        showToast('success', 'Mascara atualizada');
+        showToast('success', 'Máscara atualizada');
       } else {
         await fluxoService.criarMascara({ nome: form.nome, descricao: form.descricao });
-        showToast('success', 'Mascara criada');
+        showToast('success', 'Máscara criada');
       }
       setModalMascara({ open: false, data: null });
       await carregarMascaras();
@@ -162,7 +162,7 @@ export default function ParametrizacoesFluxo() {
     try {
       setSaving(true);
       await fluxoService.criarMascaraDoModeloPadrao(metodo);
-      showToast('success', `Mascara criada a partir do modelo ${metodo}`);
+      showToast('success', `Máscara criada a partir do modelo ${metodo}`);
       await carregarMascaras();
     } catch (err) { showToast('error', err.message); }
     finally { setSaving(false); }
@@ -172,7 +172,7 @@ export default function ParametrizacoesFluxo() {
     try {
       await fluxoService.excluirMascara(id);
       if (mascaraSelecionada?.id === id) { setMascaraSelecionada(null); setGrupos([]); }
-      showToast('success', 'Mascara excluida');
+      showToast('success', 'Máscara excluida');
       await carregarMascaras();
     } catch (err) { showToast('error', err.message); }
   };
@@ -215,13 +215,13 @@ export default function ParametrizacoesFluxo() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Mascaras Fluxo de Caixa" description="Configure a estrutura das mascaras de Fluxo de Caixa">
+      <PageHeader title="Máscaras Fluxo de Caixa" description="Configure a estrutura das máscaras de Fluxo de Caixa">
         {!mascaraSelecionada && (
           <div className="flex items-center gap-2">
             <ModeloDropdown onCriar={criarDoModelo} saving={saving} />
             <button onClick={() => setModalMascara({ open: true, data: null })}
               className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-              <Plus className="h-4 w-4" /> Nova Mascara
+              <Plus className="h-4 w-4" /> Nova Máscara
             </button>
           </div>
         )}
@@ -231,7 +231,7 @@ export default function ParametrizacoesFluxo() {
         <MascarasList mascaras={mascaras} loading={loading}
           onSelect={setMascaraSelecionada}
           onEdit={(m) => setModalMascara({ open: true, data: m })}
-          onDelete={(m) => setModalConfirm({ open: true, message: `Excluir mascara "${m.nome}"?`, onConfirm: () => { deletarMascara(m.id); setModalConfirm({ open: false }); } })}
+          onDelete={(m) => setModalConfirm({ open: true, message: `Excluir máscara "${m.nome}"?`, onConfirm: () => { deletarMascara(m.id); setModalConfirm({ open: false }); } })}
         />
       ) : (
         <FluxoTreeBuilder
@@ -390,9 +390,9 @@ function FluxoTreeBuilder({ mascara, grupos, saving, onBack, onAddLinha, onUpdat
             <div className="h-14 w-14 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
               <FileSpreadsheet className="h-7 w-7 text-gray-300" />
             </div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">Mascara vazia</h3>
+            <h3 className="text-sm font-semibold text-gray-800 mb-1">Máscara vazia</h3>
             <p className="text-xs text-gray-400 mb-5 max-w-xs mx-auto leading-relaxed">
-              Monte a estrutura do seu Fluxo de Caixa adicionando grupos, entradas, saidas e subtotais.
+              Monte a estrutura do seu Fluxo de Caixa adicionando grupos, entradas, saídas e subtotais.
             </p>
             <button onClick={() => onAddLinha('grupo')}
               className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white hover:bg-gray-800 transition-colors">
@@ -419,7 +419,7 @@ function FluxoTreeBuilder({ mascara, grupos, saving, onBack, onAddLinha, onUpdat
         {grupos.length > 0 && (
           <div className="mx-5 py-3 border-t border-gray-100 flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-gray-900" />
-            <span className="text-[11px] font-bold text-gray-900 uppercase tracking-widest">Variacao Liquida</span>
+            <span className="text-[11px] font-bold text-gray-900 uppercase tracking-widest">Variação Liquida</span>
           </div>
         )}
       </motion.div>
@@ -627,7 +627,7 @@ function AddLineDropdown({ onAdd }) {
   const items = [
     { tipo: 'grupo',     label: 'Grupo',     desc: 'Categoria agrupadora',       icon: FolderOpen },
     { tipo: 'entrada',   label: 'Entrada',   desc: 'Entrada de caixa',           icon: ArrowDownCircle },
-    { tipo: 'saida',     label: 'Saida',     desc: 'Saida de caixa',             icon: ArrowUpCircle },
+    { tipo: 'saida',     label: 'Saída',     desc: 'Saída de caixa',             icon: ArrowUpCircle },
     { tipo: 'subtotal',  label: 'Subtotal',  desc: 'Linha calculada (=)',        icon: Equal },
     { tipo: 'resultado', label: 'Resultado', desc: 'Resultado liquido final',    icon: Equal },
   ];
@@ -677,7 +677,7 @@ function AddChildDropdown({ onAdd }) {
   const items = [
     { tipo: 'grupo',    label: 'Sub-grupo', icon: FolderOpen },
     { tipo: 'entrada',  label: 'Entrada',   icon: ArrowDownCircle },
-    { tipo: 'saida',    label: 'Saida',     icon: ArrowUpCircle },
+    { tipo: 'saida',    label: 'Saída',     icon: ArrowUpCircle },
     { tipo: 'subtotal', label: 'Subtotal',  icon: Equal },
   ];
 
@@ -735,9 +735,9 @@ function MascarasList({ mascaras, loading, onSelect, onEdit, onDelete }) {
         <div className="h-16 w-16 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
           <FileSpreadsheet className="h-8 w-8 text-emerald-500" />
         </div>
-        <h3 className="text-base font-semibold text-gray-900 mb-1">Nenhuma mascara criada</h3>
+        <h3 className="text-base font-semibold text-gray-900 mb-1">Nenhuma máscara criada</h3>
         <p className="text-sm text-gray-500 mb-6 text-center max-w-sm">
-          Crie uma mascara de Fluxo de Caixa para configurar a estrutura do demonstrativo.
+          Crie uma máscara de Fluxo de Caixa para configurar a estrutura do demonstrativo.
         </p>
       </motion.div>
     );
@@ -786,7 +786,7 @@ function ModalMascara({ open, data, saving, onClose, onSave }) {
   }, [open, data]);
 
   return (
-    <Modal open={open} onClose={onClose} title={data ? 'Editar Mascara' : 'Nova Mascara Fluxo de Caixa'} size="sm">
+    <Modal open={open} onClose={onClose} title={data ? 'Editar Máscara' : 'Nova Máscara Fluxo de Caixa'} size="sm">
       <form onSubmit={(e) => { e.preventDefault(); onSave(form); }} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
@@ -795,10 +795,10 @@ function ModalMascara({ open, data, saving, onClose, onSave }) {
             placeholder="Ex: Fluxo Operacional - Postos" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Descricao</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>
           <textarea value={form.descricao} onChange={(e) => setForm(f => ({ ...f, descricao: e.target.value }))} rows={3}
             className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 resize-none transition-shadow"
-            placeholder="Descricao opcional" />
+            placeholder="Descrição opcional" />
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>

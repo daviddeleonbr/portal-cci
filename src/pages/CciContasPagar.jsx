@@ -143,7 +143,7 @@ export default function CciContasPagar() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Contas a Pagar (CCI)" description="Controle de obrigacoes financeiras da CCI">
+      <PageHeader title="Contas a Pagar (CCI)" description="Controle de obrigações financeiras da CCI">
         <button onClick={() => setModal({ open: true, data: null })}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
           <Plus className="h-4 w-4" /> Nova Conta
@@ -154,7 +154,7 @@ export default function CciContasPagar() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
         <KpiCard label="Em aberto" valor={kpis.aberto} qtd={kpis.qtdAberto} icon={Clock} color="blue" />
         <KpiCard label="Vencidos" valor={kpis.vencido} qtd={kpis.qtdVencido} icon={AlertCircle} color="red" />
-        <KpiCard label="Pagos (no periodo)" valor={kpis.pago} qtd={kpis.qtdPago} icon={CheckCircle2} color="emerald" />
+        <KpiCard label="Pagos (no período)" valor={kpis.pago} qtd={kpis.qtdPago} icon={CheckCircle2} color="emerald" />
       </div>
 
       {/* Filtros */}
@@ -162,7 +162,7 @@ export default function CciContasPagar() {
         <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input value={busca} onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por descricao, fornecedor ou documento..."
+            placeholder="Buscar por descrição, fornecedor ou documento..."
             className="w-full h-9 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
         <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
@@ -191,7 +191,7 @@ export default function CciContasPagar() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50/80 border-b border-gray-100">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-4 py-3">Descricao</th>
+                  <th className="px-4 py-3">Descrição</th>
                   <th className="px-4 py-3">Fornecedor</th>
                   <th className="px-4 py-3">Plano de contas</th>
                   <th className="px-4 py-3">Vencimento</th>
@@ -344,10 +344,10 @@ function ModalContaPagar({ open, data, fornecedores, planoContas, motivos, onClo
     <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Conta a Pagar' : 'Nova Conta a Pagar'} size="md">
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Descricao *</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Descrição *</label>
           <input type="text" required autoFocus value={form.descricao || ''}
             onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
-            placeholder="Ex: Aluguel escritorio - Jan/2026"
+            placeholder="Ex: Aluguel escritório - Jan/2026"
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 
@@ -374,10 +374,10 @@ function ModalContaPagar({ open, data, fornecedores, planoContas, motivos, onClo
 
         {/* Motivo */}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Motivo de Movimentacao *</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Motivo de Movimentação *</label>
           {(motivos?.length || 0) === 0 ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              Nenhum motivo de tipo "Lancamento de Conta a Pagar" cadastrado. Vá em <strong>Cadastros &gt; Motivos de Movimentacao</strong> para criar.
+              Nenhum motivo de tipo "Lançamento de Conta a Pagar" cadastrado. Vá em <strong>Cadastros &gt; Motivos de Movimentação</strong> para criar.
             </div>
           ) : (
             <>
@@ -412,7 +412,7 @@ function ModalContaPagar({ open, data, fornecedores, planoContas, motivos, onClo
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Data de emissao</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Data de emissão</label>
             <input type="date" value={form.data_emissao || ''}
               onChange={e => setForm(f => ({ ...f, data_emissao: e.target.value }))}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -519,9 +519,9 @@ function ModalPagamento({ open, data, motivos, onClose, onSave }) {
                 <option value="">Selecionar...</option>
                 <option value="pix">PIX</option>
                 <option value="boleto">Boleto</option>
-                <option value="transferencia">Transferencia</option>
+                <option value="transferencia">Transferência</option>
                 <option value="dinheiro">Dinheiro</option>
-                <option value="cartao">Cartao</option>
+                <option value="cartao">Cartão</option>
                 <option value="cheque">Cheque</option>
               </select>
             </div>
@@ -552,7 +552,7 @@ function ModalPagamento({ open, data, motivos, onClose, onSave }) {
 
           {/* Motivo de pagamento */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Motivo de Movimentacao *</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Motivo de Movimentação *</label>
             {(motivos?.length || 0) === 0 ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 Cadastre um motivo tipo "Pagamento de Conta a Pagar" em <strong>Cadastros &gt; Motivos</strong>.

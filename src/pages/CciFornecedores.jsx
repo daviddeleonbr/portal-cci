@@ -172,7 +172,7 @@ function ModalFornecedor({ open, data, onClose, onSave }) {
           <label className="block text-xs font-medium text-gray-700 mb-1">Nome *</label>
           <input type="text" required autoFocus value={form.nome || ''}
             onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-            placeholder="Nome ou razao social"
+            placeholder="Nome ou razão social"
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 
