@@ -4,7 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, BarChart3, TrendingUp,
-  Receipt, HelpCircle, Coins, UserCog, ClipboardCheck, Store,
+  HelpCircle, Coins, UserCog, ClipboardCheck,
+  ShoppingCart, Activity, Gauge,
+  ArrowUpRight, ArrowDownLeft,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
@@ -24,27 +26,18 @@ const navigationAll = [
     ],
   },
   {
-    section: 'Operacional',
+    section: 'Comercial',
     items: [
-      {
-        name: 'Comercial',
-        icon: Store,
-        children: [
-          { name: 'Vendas', href: '/cliente/comercial/vendas' },
-          { name: 'Operação', href: '/cliente/comercial/operacao' },
-          { name: 'Produtividade', href: '/cliente/comercial/produtividade' },
-        ],
-      },
-      {
-        name: 'Financeiro',
-        icon: Receipt,
-        permissao: 'financeiro',
-        children: [
-          { name: 'Contas a Pagar', href: '/cliente/financeiro/contas-pagar', permissao: 'financeiro' },
-          { name: 'Contas a Receber', href: '/cliente/financeiro/contas-receber', permissao: 'financeiro' },
-          { name: 'Agenda Financeira', href: '/cliente/financeiro/agenda', permissao: 'financeiro' },
-        ],
-      },
+      { name: 'Vendas', href: '/cliente/comercial/vendas', icon: ShoppingCart },
+      { name: 'Operação', href: '/cliente/comercial/operacao', icon: Activity },
+      { name: 'Produtividade', href: '/cliente/comercial/produtividade', icon: Gauge },
+    ],
+  },
+  {
+    section: 'Financeiro',
+    items: [
+      { name: 'Contas a Pagar', href: '/cliente/financeiro/contas-pagar', icon: ArrowUpRight, permissao: 'financeiro' },
+      { name: 'Contas a Receber', href: '/cliente/financeiro/contas-receber', icon: ArrowDownLeft, permissao: 'financeiro' },
     ],
   },
   {

@@ -48,7 +48,6 @@ import ClienteBPO from './pages/cliente/ClienteBPO';
 import ClienteDocumentos from './pages/cliente/ClienteDocumentos';
 import ClienteContasPagar from './pages/cliente/ClienteContasPagar';
 import ClienteContasReceber from './pages/cliente/ClienteContasReceber';
-import ClienteAgendaFinanceira from './pages/cliente/ClienteAgendaFinanceira';
 import ClienteSuporte from './pages/cliente/ClienteSuporte';
 import ClienteSangrias from './pages/cliente/ClienteSangrias';
 import ClienteUsuarios from './pages/cliente/ClienteUsuarios';
@@ -141,7 +140,6 @@ export default function App() {
           <Route path="/cliente/financeiro" element={<Navigate to="/cliente/financeiro/contas-pagar" replace />} />
           <Route path="/cliente/financeiro/contas-pagar" element={<ClienteContasPagar />} />
           <Route path="/cliente/financeiro/contas-receber" element={<ClienteContasReceber />} />
-          <Route path="/cliente/financeiro/agenda" element={<ClienteAgendaFinanceira />} />
           <Route path="/cliente/sangrias" element={<ClienteSangrias />} />
           <Route path="/cliente/suporte" element={<ClienteSuporte />} />
           <Route path="/cliente/usuarios" element={<ClienteUsuarios />} />
