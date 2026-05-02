@@ -1,14 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
-} from 'recharts';
-import {
-  Loader2, AlertCircle, Search, RefreshCw, ChevronDown,
+  Loader2, AlertCircle, Search, RefreshCw, ChevronDown, ChevronRight,
   Clock, AlertTriangle, CheckCircle2, Calendar, Users,
   DollarSign, FileText, CreditCard, ScrollText, Landmark,
-  BarChart3, FileCheck,
+  FileCheck, Building2, LayoutGrid,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import BarraProgressoFetch from '../../components/ui/BarraProgressoFetch';
@@ -24,12 +20,6 @@ function formatDataBR(s) {
   const iso = String(s).slice(0, 10);
   const [y, m, d] = iso.split('-');
   return y && m && d ? `${d}/${m}/${y}` : s;
-}
-
-function formatDataCurta(s) {
-  const iso = String(s).slice(0, 10);
-  const [, m, d] = iso.split('-');
-  return m && d ? `${d}/${m}` : '—';
 }
 
 const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -156,53 +146,96 @@ const FONTE_CFG = {
   },
 };
 
+// ─── Cache em memoria (sobrevive a desmontagens da pagina) ──────
+// TTL = 5 min, mesmo padrao dos endpoints internos do qualityApi.
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const _cacheContasReceber = {
+  data: null,        // { lista, clientesMap, administradorasMap, warnings }
+  empresasKey: null,
+  timestamp: 0,
+};
+function chaveEmpresas(empresasSelIds) {
+  return Array.from(empresasSelIds).sort().join(',');
+}
+function cacheValido(empresasKey) {
+  return _cacheContasReceber.data
+    && _cacheContasReceber.empresasKey === empresasKey
+    && (Date.now() - _cacheContasReceber.timestamp) < CACHE_TTL_MS;
+}
+
 // ─── Componente ──────────────────────────────────────────────
 export default function ClienteContasReceber() {
   const session = useClienteSession();
   const cliente = session?.cliente;
+  const clientesRede = session?.clientesRede || [];
 
-  const [loading, setLoading] = useState(true);
-  const [lista, setLista] = useState([]);
-  const [clientesMap, setClientesMap] = useState(new Map());
-  const [administradorasMap, setAdministradorasMap] = useState(new Map());
+  // Multi-selecao de empresas — independente da topbar.
+  // Default: todas as empresas da rede selecionadas.
+  const [empresasSelIds, setEmpresasSelIds] = useState(() =>
+    new Set((session?.clientesRede || []).map(c => c.id))
+  );
+  const empresasSel = useMemo(
+    () => clientesRede.filter(c => empresasSelIds.has(c.id)),
+    [clientesRede, empresasSelIds]
+  );
+  const podeFiltrarEmpresa = clientesRede.length > 1;
+  const multiEmpresa = empresasSel.length > 1;
+
+  // Hidrata a partir do cache
+  const empresasKeyInicial = chaveEmpresas(empresasSelIds);
+  const cacheInicial = cacheValido(empresasKeyInicial) ? _cacheContasReceber.data : null;
+
+  const [loading, setLoading] = useState(!cacheInicial);
+  const [lista, setLista] = useState(cacheInicial?.lista || []);
+  const [clientesMap, setClientesMap] = useState(cacheInicial?.clientesMap || new Map());
+  const [administradorasMap, setAdministradorasMap] = useState(cacheInicial?.administradorasMap || new Map());
   const [error, setError] = useState(null);
-  const [warnings, setWarnings] = useState([]); // erros parciais por endpoint
+  const [warnings, setWarnings] = useState(cacheInicial?.warnings || []);
   const [busca, setBusca] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState('vencidos');
+  const [filtroStatus, setFiltroStatus] = useState('hoje');
   const [filtroFonte, setFiltroFonte] = useState('todos');
   const [expandedDates, setExpandedDates] = useState(new Set());
+  const [empresasExpandidas, setEmpresasExpandidas] = useState(new Set());
   const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
 
-  const carregar = useCallback(async () => {
-    if (!cliente?.chave_api_id || !cliente?.empresa_codigo) {
-      setError('Esta empresa não tem integração Webposto configurada.');
+  const carregar = useCallback(async ({ force = false } = {}) => {
+    if (empresasSel.length === 0) {
+      setError('Selecione ao menos uma empresa.');
+      setLista([]);
       setLoading(false);
       return;
     }
+
+    // Tenta servir do cache antes de bater na API
+    const empresasKey = chaveEmpresas(empresasSelIds);
+    if (!force && cacheValido(empresasKey)) {
+      const c = _cacheContasReceber.data;
+      setLista(c.lista);
+      setClientesMap(c.clientesMap);
+      setAdministradorasMap(c.administradorasMap);
+      setWarnings(c.warnings || []);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setWarnings([]);
-    // 4 endpoints de titulos + 2 catalogos (clientes + administradoras)
-    const totalTarefas = 6;
+    // 4 endpoints de titulos por empresa + 2 catalogos por chave_api distinta
+    const chavesDistintas = new Set(empresasSel.map(e => e.chave_api_id).filter(Boolean));
+    const totalTarefas = empresasSel.length * 4 + chavesDistintas.size * 2;
     setProgresso({ feitos: 0, total: totalTarefas });
     const tick = () => setProgresso(p => ({ ...p, feitos: p.feitos + 1 }));
     try {
       const chaves = await mapService.listarChavesApi();
-      const chave = chaves.find(c => c.id === cliente.chave_api_id);
-      if (!chave) throw new Error('Chave API não encontrada');
 
       // Todos os endpoints de contas a receber exigem dataInicial/dataFinal.
-      // Janela ampla: 2 anos atras ate 1 ano a frente pra cobrir parcelamentos.
+      // Janela: 2 anos para tras + 1 ano a frente, filtrando apenasPendente=true.
       const hoje = new Date();
       const fmt = (d) => d.toISOString().slice(0, 10);
       const doisAnosAtras = new Date(hoje); doisAnosAtras.setFullYear(hoje.getFullYear() - 2);
       const umAnoAFrente = new Date(hoje); umAnoAFrente.setFullYear(hoje.getFullYear() + 1);
-      const filtros = {
-        empresaCodigo: cliente.empresa_codigo,
-        apenasPendente: true,
-        dataInicial: fmt(doisAnosAtras),
-        dataFinal: fmt(umAnoAFrente),
-      };
 
       const erros = [];
       const seguro = (nome, promise) => promise.catch(err => {
@@ -211,66 +244,135 @@ export default function ClienteContasReceber() {
         return [];
       }).finally(tick);
 
-      const [titulos, duplicatas, cartoes, cheques, clientesQ, administradorasQ] = await Promise.all([
-        seguro('TITULO_RECEBER', qualityApi.buscarTitulosReceber(chave.chave, filtros)),
-        seguro('DUPLICATA',      qualityApi.buscarDuplicatas(chave.chave, filtros)),
-        seguro('CARTAO',         qualityApi.buscarCartoes(chave.chave, filtros)),
-        seguro('CHEQUE',         qualityApi.buscarCheques(chave.chave, filtros)),
-        seguro('CLIENTE',        qualityApi.buscarClientesQuality(chave.chave)),
-        seguro('ADMINISTRADORA', qualityApi.buscarAdministradoras(chave.chave)),
+      // FETCH PARALELO TOTAL: catalogos (clientes + administradoras) e
+      // titulos/duplicatas/cartoes/cheques de cada empresa disparam todos
+      // ao mesmo tempo. Cada chamada do qualityApiService ja paginalisa
+      // internamente em chunks paralelos por dia, com cache + dedup global.
+      const clientesPorChave = new Map();
+      const admPorChave = new Map();
+
+      const catalogoPromises = Array.from(chavesDistintas).map(async (chaveApiId) => {
+        const chave = chaves.find(c => c.id === chaveApiId);
+        if (!chave) { tick(); tick(); return; }
+        // Mesmo dentro de cada chave_api, clientes e administradoras correm juntos
+        const [clientesQ, administradorasQ] = await Promise.all([
+          seguro(`CLIENTE @${chaveApiId}`, qualityApi.buscarClientesQuality(chave.chave)),
+          seguro(`ADMINISTRADORA @${chaveApiId}`, qualityApi.buscarAdministradoras(chave.chave)),
+        ]);
+        const mapaCli = new Map();
+        (clientesQ || []).forEach(c => {
+          const cod = c.clienteCodigo ?? c.codigo;
+          if (cod != null) mapaCli.set(cod, c.razao || c.fantasia || c.nome || `Cliente #${cod}`);
+        });
+        clientesPorChave.set(chaveApiId, mapaCli);
+
+        const mapaAdm = new Map();
+        (administradorasQ || []).forEach(a => {
+          const cod = a.administradoraCodigo ?? a.codigo ?? a.codigoAdministradora;
+          const nome = a.descricao || a.nomeAdministradora || a.nome ||
+            a.razao || a.razaoSocial || a.fantasia || a.nomeFantasia || '';
+          if (cod != null && nome) mapaAdm.set(cod, nome);
+        });
+        admPorChave.set(chaveApiId, mapaAdm);
+      });
+
+      const titulosPromises = empresasSel.map(async (emp) => {
+        const chave = chaves.find(c => c.id === emp.chave_api_id);
+        if (!chave) {
+          for (let i = 0; i < 4; i++) tick();
+          return [];
+        }
+        const filtros = {
+          empresaCodigo: emp.empresa_codigo,
+          apenasPendente: true,
+          dataInicial: fmt(doisAnosAtras),
+          dataFinal: fmt(umAnoAFrente),
+        };
+        const [titulos, duplicatas, cartoes, cheques] = await Promise.all([
+          seguro(`TITULO_RECEBER #${emp.empresa_codigo}`, qualityApi.buscarTitulosReceber(chave.chave, filtros)),
+          seguro(`DUPLICATA #${emp.empresa_codigo}`,      qualityApi.buscarDuplicatas(chave.chave, filtros)),
+          seguro(`CARTAO #${emp.empresa_codigo}`,         qualityApi.buscarCartoes(chave.chave, filtros)),
+          seguro(`CHEQUE #${emp.empresa_codigo}`,         qualityApi.buscarCheques(chave.chave, filtros)),
+        ]);
+        const tag = (arr, fonte) => (arr || []).map(r => ({
+          fonte,
+          raw: r,
+          empresaId: emp.id,
+          empresaNome: emp.nome,
+          chaveApiId: emp.chave_api_id,
+        }));
+        return [
+          ...tag(titulos, 'titulo'),
+          ...tag(duplicatas, 'duplicata'),
+          ...tag(cartoes, 'cartao'),
+          ...tag(cheques, 'cheque'),
+        ];
+      });
+
+      // Dispara catalogos + transacionais juntos
+      const [, resultadosPorEmp] = await Promise.all([
+        Promise.all(catalogoPromises),
+        Promise.all(titulosPromises),
       ]);
       setWarnings(erros);
 
-      const mapaCli = new Map();
-      (clientesQ || []).forEach(c => {
-        const cod = c.clienteCodigo ?? c.codigo;
-        if (cod != null) mapaCli.set(cod, c.razao || c.fantasia || c.nome || `Cliente #${cod}`);
+      // Mescla os mapas em chaves compostas chaveApiId:codigo (evita colisao)
+      const mapaCliGlobal = new Map();
+      clientesPorChave.forEach((mapa, chaveApiId) => {
+        mapa.forEach((nome, cod) => mapaCliGlobal.set(`${chaveApiId}:${cod}`, nome));
       });
-      setClientesMap(mapaCli);
-
-      const mapaAdm = new Map();
-      (administradorasQ || []).forEach(a => {
-        const cod = a.administradoraCodigo ?? a.codigo ?? a.codigoAdministradora;
-        const nome = a.descricao || a.nomeAdministradora || a.nome ||
-          a.razao || a.razaoSocial || a.fantasia || a.nomeFantasia || '';
-        if (cod != null && nome) mapaAdm.set(cod, nome);
+      const mapaAdmGlobal = new Map();
+      admPorChave.forEach((mapa, chaveApiId) => {
+        mapa.forEach((nome, cod) => mapaAdmGlobal.set(`${chaveApiId}:${cod}`, nome));
       });
-      setAdministradorasMap(mapaAdm);
 
-      const todos = [
-        ...(titulos || []).map(r => ({ fonte: 'titulo', raw: r })),
-        ...(duplicatas || []).map(r => ({ fonte: 'duplicata', raw: r })),
-        ...(cartoes || []).map(r => ({ fonte: 'cartao', raw: r })),
-        ...(cheques || []).map(r => ({ fonte: 'cheque', raw: r })),
-      ];
-      setLista(todos);
+      const novaLista = resultadosPorEmp.flat();
+      setClientesMap(mapaCliGlobal);
+      setAdministradorasMap(mapaAdmGlobal);
+      setLista(novaLista);
+
+      // Persiste no cache
+      _cacheContasReceber.data = {
+        lista: novaLista,
+        clientesMap: mapaCliGlobal,
+        administradorasMap: mapaAdmGlobal,
+        warnings: erros,
+      };
+      _cacheContasReceber.empresasKey = empresasKey;
+      _cacheContasReceber.timestamp = Date.now();
     } catch (err) {
       setError(err.message);
       setLista([]);
     } finally {
       setLoading(false);
     }
-  }, [cliente?.chave_api_id, cliente?.empresa_codigo]);
+  }, [empresasSel, empresasSelIds]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
   const enriched = useMemo(() => {
     return lista.map(it => {
       const t = it.raw;
+      const chaveApiId = it.chaveApiId;
       const venc = extrairVencimento(t);
       const dias = diffDias(venc);
       const valor = extrairValor(t);
       const cliCod = extrairClienteCod(t);
-      const cliNome = extrairClienteNome(t) || (cliCod != null ? clientesMap.get(cliCod) : '') || 'Cliente';
+      const cliNome = extrairClienteNome(t)
+        || (cliCod != null ? clientesMap.get(`${chaveApiId}:${cliCod}`) : '')
+        || (cliCod != null ? clientesMap.get(cliCod) : '')
+        || 'Cliente';
 
       // Para CARTAO: resolve administradora pelo codigo (mostra descricao, nao codigo)
       let admNome = '';
       if (it.fonte === 'cartao') {
         const admCod = extrairAdministradoraCod(t);
-        // Se o payload ja trouxer o nome, usa. Senao resolve via catalogo.
         const inline = t.administradoraDescricao || t.administradoraNome ||
           (typeof t.administradora === 'string' ? t.administradora : '');
-        admNome = inline || (admCod != null ? administradorasMap.get(admCod) : '') || '';
+        admNome = inline
+          || (admCod != null ? administradorasMap.get(`${chaveApiId}:${admCod}`) : '')
+          || (admCod != null ? administradorasMap.get(admCod) : '')
+          || '';
       }
       // Para CHEQUE: banco/agencia ajuda a identificar
       const banco = it.fonte === 'cheque' ? extrairBanco(t) : '';
@@ -329,9 +431,9 @@ export default function ClienteContasReceber() {
   }, [enriched, busca, filtroStatus, filtroFonte, datasHoje]);
 
   // Agrupa por data
-  const grupos = useMemo(() => {
+  const agruparPorData = (lista) => {
     const mapa = new Map();
-    filtrados.forEach(t => {
+    lista.forEach(t => {
       const key = t.vencimento || 'sem-data';
       if (!mapa.has(key)) mapa.set(key, { data: t.vencimento, itens: [], total: 0, porFonte: {} });
       const g = mapa.get(key);
@@ -353,22 +455,32 @@ export default function ClienteContasReceber() {
       g.itens.sort((a, b) => b.valor - a.valor);
     });
     return arr;
-  }, [filtrados]);
+  };
 
-  const chartData = useMemo(() => grupos
-    .filter(g => g.data)
-    .map(g => ({
-      data: g.data,
-      label: formatDataCurta(g.data),
-      valor: Number(g.total.toFixed(2)),
-      titulo: Number((g.porFonte.titulo || 0).toFixed(2)),
-      duplicata: Number((g.porFonte.duplicata || 0).toFixed(2)),
-      cartao: Number((g.porFonte.cartao || 0).toFixed(2)),
-      cheque: Number((g.porFonte.cheque || 0).toFixed(2)),
-      vencido: g.vencido,
-      proximo: g.proximo,
-      qtd: g.itens.length,
-    })), [grupos]);
+  const grupos = useMemo(() => agruparPorData(filtrados), [filtrados]);
+
+  // Em modo multi-empresa, agrupa: empresa → data → itens
+  const empresasComGrupos = useMemo(() => {
+    if (!multiEmpresa) return [];
+    const porEmp = new Map();
+    filtrados.forEach(t => {
+      const empId = t.empresaId ?? 'sem-empresa';
+      if (!porEmp.has(empId)) {
+        porEmp.set(empId, {
+          empresaId: empId,
+          empresaNome: t.empresaNome || 'Sem empresa',
+          itens: [], total: 0, qtdVencidos: 0,
+        });
+      }
+      const e = porEmp.get(empId);
+      e.itens.push(t);
+      e.total += t.valor;
+      if (t.vencido) e.qtdVencidos += 1;
+    });
+    return Array.from(porEmp.values())
+      .map(e => ({ ...e, grupos: agruparPorData(e.itens), qtd: e.itens.length }))
+      .sort((a, b) => b.total - a.total);
+  }, [filtrados, multiEmpresa]);
 
   const totais = useMemo(() => {
     const tot = enriched.reduce((s, t) => s + t.valor, 0);
@@ -395,10 +507,11 @@ export default function ClienteContasReceber() {
     };
   }, [enriched]);
 
+  // Recolhe a tree quando filtros/empresas mudam — usuario expande sob demanda
   useEffect(() => {
-    if (grupos.length === 0) return;
-    setExpandedDates(new Set(grupos.slice(0, 5).map(g => g.data || 'sem-data')));
-  }, [grupos.length, filtroStatus, filtroFonte]); // eslint-disable-line react-hooks/exhaustive-deps
+    setEmpresasExpandidas(new Set());
+    setExpandedDates(new Set());
+  }, [filtroStatus, filtroFonte, multiEmpresa, empresasComGrupos, grupos.length]);
 
   const toggleDate = (key) => {
     setExpandedDates(prev => {
@@ -408,16 +521,38 @@ export default function ClienteContasReceber() {
     });
   };
 
-  const expandirTodos = () => setExpandedDates(new Set(grupos.map(g => g.data || 'sem-data')));
-  const colapsarTodos = () => setExpandedDates(new Set());
+  const toggleEmpresa = (empId) => {
+    setEmpresasExpandidas(prev => {
+      const next = new Set(prev);
+      if (next.has(empId)) next.delete(empId); else next.add(empId);
+      return next;
+    });
+  };
 
-  if (!cliente?.chave_api_id || !cliente?.empresa_codigo) {
+  const expandirTodos = () => {
+    if (multiEmpresa) {
+      setEmpresasExpandidas(new Set(empresasComGrupos.map(e => e.empresaId)));
+      const datas = new Set();
+      empresasComGrupos.forEach(e =>
+        e.grupos.forEach(g => datas.add(`${e.empresaId}|${g.data || 'sem-data'}`))
+      );
+      setExpandedDates(datas);
+    } else {
+      setExpandedDates(new Set(grupos.map(g => g.data || 'sem-data')));
+    }
+  };
+  const colapsarTodos = () => {
+    setExpandedDates(new Set());
+    setEmpresasExpandidas(new Set());
+  };
+
+  if (clientesRede.length === 0) {
     return (
       <div>
         <PageHeader title="Contas a Receber" description="Valores pendentes em aberto" />
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p>Esta empresa ainda não tem <strong>integração Webposto</strong> ativa. Contate o administrador.</p>
+          <p>Sua rede ainda não tem <strong>empresas Webposto</strong> ativas. Contate o administrador.</p>
         </div>
       </div>
     );
@@ -427,11 +562,26 @@ export default function ClienteContasReceber() {
     <div>
       <PageHeader
         title="Contas a Receber"
-        description={`Títulos, duplicatas e cartões em aberto${cliente?.nome ? ` • ${cliente.nome}` : ''}`}
+        description="Títulos, duplicatas e cartões em aberto"
       >
+        {podeFiltrarEmpresa && (
+          <EmpresaMultiSelect
+            clientesRede={clientesRede}
+            selecionadas={empresasSelIds}
+            onToggle={(id) => setEmpresasSelIds(prev => {
+              const next = new Set(prev);
+              next.has(id) ? next.delete(id) : next.add(id);
+              return next;
+            })}
+            onToggleTodas={() => setEmpresasSelIds(prev =>
+              prev.size === clientesRede.length ? new Set() : new Set(clientesRede.map(c => c.id))
+            )}
+          />
+        )}
         <button
-          onClick={carregar}
-          disabled={loading}
+          onClick={() => carregar({ force: true })}
+          disabled={loading || empresasSel.length === 0}
+          title="Força recarga ignorando o cache"
           className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -479,107 +629,84 @@ export default function ClienteContasReceber() {
           sub={`${totais.qtdFuturos} ${totais.qtdFuturos === 1 ? 'lancamento' : 'lancamentos'}`} />
       </div>
 
-      {/* Breakdown por fonte */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <FonteCard fonte="titulo" label="Títulos" valor={totais.porFonte.titulo} qtd={totais.qtdPorFonte.titulo}
-          ativo={filtroFonte === 'titulo'} onClick={() => setFiltroFonte(filtroFonte === 'titulo' ? 'todos' : 'titulo')} />
-        <FonteCard fonte="duplicata" label="Duplicatas" valor={totais.porFonte.duplicata} qtd={totais.qtdPorFonte.duplicata}
-          ativo={filtroFonte === 'duplicata'} onClick={() => setFiltroFonte(filtroFonte === 'duplicata' ? 'todos' : 'duplicata')} />
-        <FonteCard fonte="cartao" label="Cartões" valor={totais.porFonte.cartao} qtd={totais.qtdPorFonte.cartao}
-          ativo={filtroFonte === 'cartao'} onClick={() => setFiltroFonte(filtroFonte === 'cartao' ? 'todos' : 'cartao')} />
-        <FonteCard fonte="cheque" label="Cheques" valor={totais.porFonte.cheque} qtd={totais.qtdPorFonte.cheque}
-          ativo={filtroFonte === 'cheque'} onClick={() => setFiltroFonte(filtroFonte === 'cheque' ? 'todos' : 'cheque')} />
+      {/* Abas por tipo (fonte) */}
+      <div className="bg-white rounded-xl border border-gray-100 dark:border-white/10 mb-4 overflow-hidden">
+        <div className="flex items-center gap-1 px-2 border-b border-gray-100 dark:border-white/10 overflow-x-auto">
+          {[
+            { k: 'todos',     label: 'Visão Geral', icon: LayoutGrid,                qtd: totais.qtd,                       valor: totais.total,                cor: 'emerald' },
+            { k: 'titulo',    label: 'Títulos',     icon: FONTE_CFG.titulo.icon,    qtd: totais.qtdPorFonte.titulo || 0,    valor: totais.porFonte.titulo || 0,    cor: 'indigo'  },
+            { k: 'duplicata', label: 'Duplicatas',  icon: FONTE_CFG.duplicata.icon, qtd: totais.qtdPorFonte.duplicata || 0, valor: totais.porFonte.duplicata || 0, cor: 'violet'  },
+            { k: 'cartao',    label: 'Cartões',     icon: FONTE_CFG.cartao.icon,    qtd: totais.qtdPorFonte.cartao || 0,    valor: totais.porFonte.cartao || 0,    cor: 'cyan'    },
+            { k: 'cheque',    label: 'Cheques',     icon: FONTE_CFG.cheque.icon,    qtd: totais.qtdPorFonte.cheque || 0,    valor: totais.porFonte.cheque || 0,    cor: 'teal'    },
+          ].map(a => {
+            const Icon = a.icon;
+            const ativo = filtroFonte === a.k;
+            const corClasses = {
+              emerald: ativo ? 'border-emerald-600 text-emerald-700' : '',
+              indigo:  ativo ? 'border-indigo-600 text-indigo-700' : '',
+              violet:  ativo ? 'border-violet-600 text-violet-700' : '',
+              cyan:    ativo ? 'border-cyan-600 text-cyan-700' : '',
+              teal:    ativo ? 'border-teal-600 text-teal-700' : '',
+            }[a.cor];
+            const badgeClasses = {
+              emerald: ativo ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+              indigo:  ativo ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+              violet:  ativo ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+              cyan:    ativo ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+              teal:    ativo ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+            }[a.cor];
+            return (
+              <button key={a.k} onClick={() => setFiltroFonte(a.k)}
+                className={`flex flex-col items-start gap-0.5 px-4 py-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap min-w-[140px] ${
+                  ativo ? corClasses : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60 dark:hover:bg-white/5'
+                }`}>
+                <span className="flex items-center gap-2 w-full">
+                  <Icon className="h-4 w-4" />
+                  {a.label}
+                  <span className={`ml-auto text-[10.5px] px-1.5 py-0.5 rounded-full ${badgeClasses}`}>
+                    {a.qtd}
+                  </span>
+                </span>
+                <span className="font-mono tabular-nums text-[12px] font-semibold text-gray-800 dark:text-gray-100">
+                  {formatCurrency(a.valor)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Grafico */}
-      {!loading && !error && chartData.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 p-5 mb-6">
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <BarChart3 className="h-4 w-4 text-emerald-600" />
-            <h3 className="text-sm font-semibold text-gray-900">Valores por data de vencimento</h3>
-            <div className="ml-auto flex items-center gap-3 text-[11px] text-gray-500 flex-wrap">
-              <Legenda cor="#6366f1" label="Títulos" />
-              <Legenda cor="#8b5cf6" label="Duplicatas" />
-              <Legenda cor="#06b6d4" label="Cartões" />
-              <Legenda cor="#14b8a6" label="Cheques" />
-            </div>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false}
-                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f9fafb' }} />
-                <Bar dataKey="titulo" stackId="a" fill="#6366f1" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="duplicata" stackId="a" fill="#8b5cf6" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="cartao" stackId="a" fill="#06b6d4" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="cheque" stackId="a" fill="#14b8a6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Filtros */}
-      <div className="space-y-3 mb-4">
-        {/* Linha 1: busca + status */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar por cliente, documento ou histórico..."
-              className="w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-colors"
-            />
-          </div>
-          <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
-            {[
-              { k: 'todos', label: 'Todos' },
-              { k: 'hoje', label: 'Hoje' },
-              { k: 'vencidos', label: 'Vencidos' },
-              { k: 'proximos', label: 'Próximos 7d' },
-              { k: 'futuros', label: 'A vencer' },
-            ].map(tab => (
-              <button
-                key={tab.k}
-                onClick={() => setFiltroStatus(tab.k)}
-                className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
-                  filtroStatus === tab.k
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Linha 2: tipo (fonte) */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mr-1">Tipo:</span>
-          <TipoFiltroBtn
-            ativo={filtroFonte === 'todos'}
-            onClick={() => setFiltroFonte('todos')}
-            label="Todos"
-            qtd={totais.qtd}
+      {/* Filtros: busca + status */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por cliente, documento ou histórico..."
+            className="w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-colors"
           />
-          {Object.entries(FONTE_CFG).map(([fonte, cfg]) => (
-            <TipoFiltroBtn
-              key={fonte}
-              ativo={filtroFonte === fonte}
-              onClick={() => setFiltroFonte(fonte)}
-              label={cfg.label + 's'}
-              icon={cfg.icon}
-              qtd={totais.qtdPorFonte[fonte] || 0}
-              activeBg={cfg.chipBg}
-              activeColor={cfg.chipColor}
-              activeRing={cfg.chipRing}
-            />
+        </div>
+        <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
+          {[
+            { k: 'todos', label: 'Todos' },
+            { k: 'hoje', label: 'Hoje' },
+            { k: 'vencidos', label: 'Vencidos' },
+            { k: 'proximos', label: 'Próximos 7d' },
+            { k: 'futuros', label: 'A vencer' },
+          ].map(tab => (
+            <button
+              key={tab.k}
+              onClick={() => setFiltroStatus(tab.k)}
+              className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
+                filtroStatus === tab.k
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
           ))}
         </div>
       </div>
@@ -614,7 +741,9 @@ export default function ClienteContasReceber() {
         <>
           <div className="flex items-center justify-between mb-2 px-1">
             <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">
-              {grupos.length} {grupos.length === 1 ? 'data' : 'datas'} • {filtrados.length} {filtrados.length === 1 ? 'lancamento' : 'lancamentos'}
+              {multiEmpresa
+                ? `${empresasComGrupos.length} ${empresasComGrupos.length === 1 ? 'empresa' : 'empresas'} • ${filtrados.length} ${filtrados.length === 1 ? 'lancamento' : 'lancamentos'}`
+                : `${grupos.length} ${grupos.length === 1 ? 'data' : 'datas'} • ${filtrados.length} ${filtrados.length === 1 ? 'lancamento' : 'lancamentos'}`}
             </p>
             <div className="flex items-center gap-2">
               <button onClick={expandirTodos} className="text-[11px] text-gray-500 hover:text-emerald-600 transition-colors">
@@ -626,17 +755,84 @@ export default function ClienteContasReceber() {
               </button>
             </div>
           </div>
-          <div className="space-y-2">
-            {grupos.map((g, i) => (
-              <DateGroup
-                key={g.data || 'sem-data'}
-                grupo={g}
-                expanded={expandedDates.has(g.data || 'sem-data')}
-                onToggle={() => toggleDate(g.data || 'sem-data')}
-                delay={Math.min(i * 0.02, 0.2)}
-              />
-            ))}
-          </div>
+          {multiEmpresa ? (
+            <div className="space-y-3">
+              {empresasComGrupos.map(emp => {
+                const empAberta = empresasExpandidas.has(emp.empresaId);
+                return (
+                  <div key={emp.empresaId} className="bg-white rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
+                    <button
+                      onClick={() => toggleEmpresa(emp.empresaId)}
+                      className={`w-full flex items-center gap-3 px-5 py-3 transition-colors text-left ${
+                        empAberta
+                          ? 'bg-emerald-50/40 dark:bg-emerald-500/10 border-b border-emerald-100 dark:border-emerald-500/20'
+                          : 'hover:bg-gray-50/60 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      <motion.div animate={{ rotate: empAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                      </motion.div>
+                      <div className="h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 flex items-center justify-center flex-shrink-0">
+                        <Building2 className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 truncate">{emp.empresaNome}</p>
+                        <p className="text-[10.5px] text-gray-500">
+                          {emp.grupos.length} {emp.grupos.length === 1 ? 'data' : 'datas'} ·
+                          {' '}{emp.qtd} {emp.qtd === 1 ? 'lancamento' : 'lancamentos'}
+                          {emp.qtdVencidos > 0 && <span className="ml-1 text-red-600 dark:text-red-400">· {emp.qtdVencidos} vencido{emp.qtdVencidos === 1 ? '' : 's'}</span>}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Total</p>
+                        <p className="text-[14px] font-bold tabular-nums text-gray-900 dark:text-gray-100">{formatCurrency(emp.total)}</p>
+                      </div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {empAberta && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                          className="overflow-hidden"
+                        >
+                          <div className="space-y-2 p-3 bg-gray-50/30 dark:bg-white/[0.02]">
+                            {emp.grupos.map((g, i) => {
+                              const dataKey = `${emp.empresaId}|${g.data || 'sem-data'}`;
+                              return (
+                                <DateGroup
+                                  key={dataKey}
+                                  grupo={g}
+                                  expanded={expandedDates.has(dataKey)}
+                                  onToggle={() => toggleDate(dataKey)}
+                                  delay={Math.min(i * 0.02, 0.2)}
+                                  multiEmpresa={false}
+                                />
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {grupos.map((g, i) => (
+                <DateGroup
+                  key={g.data || 'sem-data'}
+                  grupo={g}
+                  expanded={expandedDates.has(g.data || 'sem-data')}
+                  onToggle={() => toggleDate(g.data || 'sem-data')}
+                  delay={Math.min(i * 0.02, 0.2)}
+                  multiEmpresa={false}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -660,97 +856,7 @@ function ResumoCard({ icon: Icon, iconBg, iconColor, label, valor, sub, highligh
   );
 }
 
-function FonteCard({ fonte, label, valor, qtd, ativo, onClick }) {
-  const cfg = FONTE_CFG[fonte];
-  const Icon = cfg.icon;
-  return (
-    <button
-      onClick={onClick}
-      className={`text-left bg-white rounded-xl border p-4 transition-all ${
-        ativo ? `${cfg.chipRing.replace('ring-', 'border-')} shadow-sm` : 'border-gray-100 hover:border-gray-200'
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`rounded-lg ${cfg.iconBg} p-2`}>
-            <Icon className="h-4 w-4" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-500">{label}</p>
-            <p className="text-[15px] font-semibold text-gray-900">{formatCurrency(valor)}</p>
-          </div>
-        </div>
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${cfg.chipBg} ${cfg.chipColor} ring-1 ${cfg.chipRing}`}>
-          {qtd} {qtd === 1 ? 'item' : 'itens'}
-        </span>
-      </div>
-    </button>
-  );
-}
-
-function TipoFiltroBtn({ ativo, onClick, label, icon: Icon, qtd, activeBg, activeColor, activeRing }) {
-  const activeCls = activeBg && activeColor && activeRing
-    ? `${activeBg} ${activeColor} ring-1 ${activeRing}`
-    : 'bg-gray-900 text-white ring-1 ring-gray-900';
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium transition-all ${
-        ativo
-          ? activeCls
-          : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:ring-gray-300 hover:text-gray-900'
-      }`}
-    >
-      {Icon && <Icon className="h-3.5 w-3.5" />}
-      <span>{label}</span>
-      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-        ativo ? 'bg-white/25' : 'bg-gray-100 text-gray-500'
-      }`}>
-        {qtd}
-      </span>
-    </button>
-  );
-}
-
-function Legenda({ cor, label }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="h-2 w-2 rounded-sm" style={{ background: cor }} />
-      {label}
-    </span>
-  );
-}
-
-function ChartTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-lg px-3 py-2 text-xs">
-      <p className="font-medium text-gray-900 mb-1">
-        {formatDataBR(d.data)} • {diaSemana(d.data)}
-      </p>
-      <div className="space-y-0.5 mb-1">
-        {d.titulo > 0 && (
-          <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#6366f1' }} />Títulos: {formatCurrency(d.titulo)}</p>
-        )}
-        {d.duplicata > 0 && (
-          <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#8b5cf6' }} />Duplicatas: {formatCurrency(d.duplicata)}</p>
-        )}
-        {d.cartao > 0 && (
-          <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#06b6d4' }} />Cartões: {formatCurrency(d.cartao)}</p>
-        )}
-        {d.cheque > 0 && (
-          <p className="text-gray-600"><span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ background: '#14b8a6' }} />Cheques: {formatCurrency(d.cheque)}</p>
-        )}
-      </div>
-      <p className="font-semibold text-gray-900 pt-1 border-t border-gray-100">
-        Total: {formatCurrency(d.valor)}
-      </p>
-    </div>
-  );
-}
-
-function DateGroup({ grupo, expanded, onToggle, delay }) {
+function DateGroup({ grupo, expanded, onToggle, delay, multiEmpresa }) {
   const { data, itens, total, vencido, proximo, diasAteVenc } = grupo;
 
   const statusChip = vencido
@@ -804,7 +910,7 @@ function DateGroup({ grupo, expanded, onToggle, delay }) {
           >
             <div className="border-t border-gray-100 divide-y divide-gray-50 bg-gray-50/30">
               {itens.map((t, i) => (
-                <LancamentoRow key={`${t.fonte}-${t.documento}-${i}`} t={t} />
+                <LancamentoRow key={`${t.fonte}-${t.documento}-${i}`} t={t} multiEmpresa={multiEmpresa} />
               ))}
             </div>
           </motion.div>
@@ -814,7 +920,7 @@ function DateGroup({ grupo, expanded, onToggle, delay }) {
   );
 }
 
-function LancamentoRow({ t }) {
+function LancamentoRow({ t, multiEmpresa }) {
   const cfg = FONTE_CFG[t.fonte];
   return (
     <div className="flex items-center gap-4 pl-8 pr-5 py-2.5 hover:bg-white transition-colors">
@@ -852,10 +958,90 @@ function LancamentoRow({ t }) {
           )}
           {t.historico && <span className="truncate text-gray-400">{t.historico}</span>}
         </div>
+        {multiEmpresa && t.empresaNome && (
+          <p className="text-[10px] text-gray-400 truncate flex items-center gap-1 mt-0.5">
+            <Building2 className="h-2.5 w-2.5" /> {t.empresaNome}
+          </p>
+        )}
       </div>
       <p className="text-[13px] font-semibold text-gray-900 flex-shrink-0">
         {formatCurrency(t.valor)}
       </p>
+    </div>
+  );
+}
+
+// ─── Multi-select de empresas (dropdown com checkboxes) ──────
+function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleTodas }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  if (clientesRede.length === 0) return null;
+
+  const todasMarcadas = selecionadas.size === clientesRede.length;
+  const label = selecionadas.size === 0
+    ? 'Nenhuma'
+    : todasMarcadas
+    ? `Todas (${clientesRede.length})`
+    : selecionadas.size === 1
+    ? clientesRede.find(c => selecionadas.has(c.id))?.nome || '1 selecionada'
+    : `${selecionadas.size} empresas`;
+
+  return (
+    <div ref={ref} className="relative">
+      <label className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+          <Building2 className="h-3 w-3" /> Empresas
+        </span>
+        <button type="button" onClick={() => setAberto(o => !o)}
+          className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[180px] max-w-[260px] ${
+            aberto ? 'border-emerald-400 ring-2 ring-emerald-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-emerald-300'
+          }`}>
+          <span className="truncate">{label}</span>
+          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+        </button>
+      </label>
+
+      <AnimatePresence>
+        {aberto && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
+            <button type="button" onClick={onToggleTodas}
+              className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left">
+              <input type="checkbox" checked={todasMarcadas}
+                onChange={() => {}} className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+              <span className="text-[12.5px] font-medium text-gray-700">
+                {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
+              </span>
+            </button>
+            <div className="max-h-72 overflow-y-auto">
+              {clientesRede.map(emp => {
+                const marcada = selecionadas.has(emp.id);
+                return (
+                  <label key={emp.id}
+                    className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer">
+                    <input type="checkbox" checked={marcada}
+                      onChange={() => onToggle(emp.id)}
+                      className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12.5px] text-gray-800 truncate">{emp.nome}</p>
+                      {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

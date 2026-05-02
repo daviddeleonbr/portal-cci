@@ -2,8 +2,10 @@
 const DEFAULT_URL_BASE = '/api/quality';
 const LIMITE_PADRAO = 1500;
 
-// Concorrencia: HTTP/1.1 limita ~6/host. HTTP/2 multiplexa - subir para 12 e seguro.
-const MAX_CONCURRENT = 12;
+// Concorrencia: HTTP/1.1 limita ~6/host. HTTP/2 multiplexa.
+// Subimos para 24 para acelerar fetch de varias empresas em paralelo
+// (multi-empresa selecionado em Pagar/Receber/Operacao).
+const MAX_CONCURRENT = 24;
 // Chunks de 5 dias = mais paralelismo (cada chunk geralmente 1 pagina so)
 const DIAS_POR_CHUNK = 5;
 
