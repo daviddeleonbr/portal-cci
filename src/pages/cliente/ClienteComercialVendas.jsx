@@ -2,11 +2,17 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from 'recharts';
+import {
   ShoppingCart, Fuel, Package, Store, TrendingUp, TrendingDown, Minus,
   Loader2, AlertCircle, RefreshCw, Receipt, LayoutGrid, Percent, ChevronRight,
+  Calendar, BarChart3, PieChart as PieChartIcon, Building2,
 } from 'lucide-react';
 import React from 'react';
 import PageHeader from '../../components/ui/PageHeader';
+import BarraProgressoTopo from '../../components/ui/BarraProgressoTopo';
 import { useClienteSession } from '../../hooks/useAuth';
 import * as mapService from '../../services/mapeamentoService';
 import * as qualityApi from '../../services/qualityApiService';
@@ -183,7 +189,16 @@ function agregarPorProduto(vendaItens, vendasMap, produtosMap, gruposMap) {
 export default function ClienteComercialVendas() {
   const session = useClienteSession();
   const cliente = session?.cliente;
+  const clientesRede = session?.clientesRede || [];
   const chaveApiSessao = session?.chaveApi?.chave || null;
+
+  // Selecao local de empresa para esta pagina — independente da topbar
+  const [empresaSelId, setEmpresaSelId] = useState(() => cliente?.id || null);
+  const empresaSel = useMemo(
+    () => clientesRede.find(c => c.id === empresaSelId) || cliente || null,
+    [clientesRede, empresaSelId, cliente]
+  );
+  const podeFiltrarEmpresa = clientesRede.length > 1;
 
   const [loadingDados, setLoadingDados] = useState(false);
   const [erro, setErro] = useState(null);
@@ -195,6 +210,13 @@ export default function ClienteComercialVendas() {
   const [mesSelecionado, setMesSelecionado] = useState(() => mesKeyHoje());
   const [apenasDiasFechados, setApenasDiasFechados] = useState(true);
 
+  // Reseta cache de catalogos quando troca a empresa selecionada (chave api
+  // pode ser diferente entre redes; entre empresas da mesma rede e a mesma).
+  useEffect(() => {
+    setProdutosMap(new Map());
+    setGruposCatMap(new Map());
+  }, [empresaSel?.chave_api_id]);
+
   const periodos = useMemo(
     () => calcularPeriodos(mesSelecionado, new Date(), apenasDiasFechados),
     [mesSelecionado, apenasDiasFechados]
@@ -202,14 +224,14 @@ export default function ClienteComercialVendas() {
   const mesMax = mesKeyHoje();
 
   const carregar = useCallback(async () => {
-    if (!cliente?.empresa_codigo) return;
+    if (!empresaSel?.empresa_codigo) return;
     setLoadingDados(true);
     setErro(null);
     try {
       let apiKey = chaveApiSessao;
       if (!apiKey) {
         const chaves = await mapService.listarChavesApi();
-        const chave = chaves.find(c => c.id === cliente.chave_api_id);
+        const chave = chaves.find(c => c.id === empresaSel.chave_api_id);
         if (!chave) throw new Error('Chave API não encontrada para esta empresa');
         apiKey = chave.chave;
       }
@@ -232,7 +254,7 @@ export default function ClienteComercialVendas() {
         const filtros = {
           dataInicial: periodo.dataInicial,
           dataFinal: periodo.dataFinal,
-          empresaCodigo: cliente.empresa_codigo,
+          empresaCodigo: empresaSel.empresa_codigo,
         };
         const [vendaItens, vendas] = await Promise.all([
           qualityApi.buscarVendaItens(apiKey, filtros).catch(() => []),
@@ -283,7 +305,7 @@ export default function ClienteComercialVendas() {
         const filtros = {
           dataInicial: ymd(dtIni),
           dataFinal: ymd(dtFim),
-          empresaCodigo: cliente.empresa_codigo,
+          empresaCodigo: empresaSel.empresa_codigo,
         };
         const [vendaItens, vendas] = await Promise.all([
           qualityApi.buscarVendaItens(apiKey, filtros).catch(() => []),
@@ -314,12 +336,12 @@ export default function ClienteComercialVendas() {
     } finally {
       setLoadingDados(false);
     }
-  }, [cliente, chaveApiSessao, periodos, produtosMap, gruposCatMap]);
+  }, [empresaSel, chaveApiSessao, periodos, produtosMap, gruposCatMap]);
 
   useEffect(() => {
-    if (cliente?.empresa_codigo) carregar();
+    if (empresaSel?.empresa_codigo) carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cliente?.id, mesSelecionado, apenasDiasFechados]);
+  }, [empresaSel?.id, mesSelecionado, apenasDiasFechados]);
 
   if (!cliente?.id) return <Navigate to="/cliente/dashboard" replace />;
 
@@ -332,10 +354,27 @@ export default function ClienteComercialVendas() {
 
   return (
     <div>
+      <BarraProgressoTopo loading={loadingDados} />
       <PageHeader
         title="Vendas"
-        description={`${cliente.nome} · ${periodos.atual.label} · ${formatDataBR(periodos.atual.dataInicial)} a ${formatDataBR(periodos.atual.dataFinal)}${periodos.atual.ehMesCorrente ? ' (parcial)' : ''}`}
+        description={`${formatDataBR(periodos.atual.dataInicial)} a ${formatDataBR(periodos.atual.dataFinal)}${periodos.atual.ehMesCorrente ? ' (parcial)' : ''}`}
       >
+        {podeFiltrarEmpresa && (
+          <label className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+              <Building2 className="h-3 w-3" /> Empresa
+            </span>
+            <select
+              value={empresaSelId || ''}
+              onChange={(e) => setEmpresaSelId(e.target.value)}
+              className="h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 max-w-[220px] truncate"
+            >
+              {clientesRede.map(emp => (
+                <option key={emp.id} value={emp.id}>{emp.nome}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex items-center gap-2">
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mês</span>
           <input type="month" value={mesSelecionado} max={mesMax}
@@ -361,15 +400,6 @@ export default function ClienteComercialVendas() {
           <p className="text-xs text-red-700">{erro}</p>
         </div>
       )}
-
-      {/* Tarja com os 3 periodos comparados */}
-      <div className="bg-white rounded-xl border border-gray-200/60 p-3 mb-4 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <PeriodoTag label="Selecionado" periodo={periodos.atual} destacado />
-          <PeriodoTag label="Mês anterior" periodo={periodos.mesAnterior} />
-          <PeriodoTag label="Ano anterior" periodo={periodos.anoAnterior} />
-        </div>
-      </div>
 
       {/* Abas */}
       <div className="bg-white rounded-xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
@@ -407,7 +437,7 @@ export default function ClienteComercialVendas() {
           {tab === 'overview' && <AbaOverview dados={dados} geradoEm={geradoEm} />}
           {tab === 'combustiveis' && <AbaCombustiveis dados={dados} />}
           {tab === 'produtos' && <AbaProdutos dados={dados} />}
-          {tab === 'conveniencia' && <AbaConveniencia dados={dados} />}
+          {tab === 'conveniencia' && <AbaProdutos dados={dados} categoriaFiltro="conveniencia" />}
         </>
       )}
     </div>
@@ -876,263 +906,840 @@ function AbaCombustiveis({ dados }) {
 // Aba Produtos
 // ────────────────────────────────────────────────────────────────────
 
-function AbaProdutos({ dados }) {
-  const [filtroCategoria, setFiltroCategoria] = useState('todos');
+// `categoriaFiltro`: null = todos os nao-combustiveis (aba Produtos)
+//                     'conveniencia' = somente conveniencia (aba Conveniencia)
+function AbaProdutos({ dados, categoriaFiltro = null }) {
+  const [subTab, setSubTab] = useState('dia'); // dia | grupo | abc | graficos
+  const [diasExpandidos, setDiasExpandidos] = useState(new Set());
+  const [gruposDiaExpandidos, setGruposDiaExpandidos] = useState(new Set());
+  const [rankingExpandido, setRankingExpandido] = useState(new Set());
 
-  const { produtos, total, resumos } = useMemo(() => {
-    let itens = Array.from(dados.atual.porProduto.values());
-    const totais = {
-      todos: itens.reduce((s, p) => s + p.totalVenda, 0),
-      combustivel: itens.filter(p => p.categoria === 'combustivel').reduce((s, p) => s + p.totalVenda, 0),
-      automotivos: itens.filter(p => p.categoria === 'automotivos').reduce((s, p) => s + p.totalVenda, 0),
-      conveniencia: itens.filter(p => p.categoria === 'conveniencia').reduce((s, p) => s + p.totalVenda, 0),
-      outros: itens.filter(p => p.categoria === 'outros').reduce((s, p) => s + p.totalVenda, 0),
+  const passaCategoria = useCallback(
+    (p) => {
+      if (p.categoria === 'combustivel') return false;
+      if (categoriaFiltro) return p.categoria === categoriaFiltro;
+      return true;
+    },
+    [categoriaFiltro]
+  );
+
+  // Totais do periodo (apenas nao-combustiveis)
+  const totaisPeriodo = useCallback((periodo) => {
+    const itens = Array.from(periodo.porProduto.values()).filter(passaCategoria);
+    const receita = itens.reduce((s, p) => s + p.totalVenda, 0);
+    const custo   = itens.reduce((s, p) => s + p.totalCusto, 0);
+    const qtd     = itens.reduce((s, p) => s + p.quantidade, 0);
+    return { receita, custo, quantidade: qtd, margem: receita - custo };
+  }, [passaCategoria]);
+
+  const tAtual  = totaisPeriodo(dados.atual);
+  const tMesAnt = totaisPeriodo(dados.mesAnterior);
+  const tAnoAnt = totaisPeriodo(dados.anoAnterior);
+  const margemPctAtual  = tAtual.receita  > 0 ? (tAtual.margem / tAtual.receita) * 100 : null;
+  const margemPctMesAnt = tMesAnt.receita > 0 ? (tMesAnt.margem / tMesAnt.receita) * 100 : null;
+  const margemPctAnoAnt = tAnoAnt.receita > 0 ? (tAnoAnt.margem / tAnoAnt.receita) * 100 : null;
+
+  // Projecao linear: extrapola pelo total de dias do mes
+  const projecoes = useMemo(() => {
+    const calc = (periodo) => {
+      const diasCobertos = diasNoIntervalo(periodo.dataInicial, periodo.dataFinal);
+      const diasTotalMes = diasDoMes(periodo.dataInicial);
+      const fator = diasCobertos > 0 ? diasTotalMes / diasCobertos : 0;
+      const itens = Array.from(periodo.porProduto.values()).filter(passaCategoria);
+      const totReceita = itens.reduce((s, p) => s + p.totalVenda, 0);
+      const totCusto   = itens.reduce((s, p) => s + p.totalCusto, 0);
+      return {
+        diasCobertos, diasTotalMes, fator, isProjecao: fator > 1,
+        receita: totReceita * fator,
+        custo:   totCusto * fator,
+        margem:  (totReceita - totCusto) * fator,
+      };
     };
-    if (filtroCategoria !== 'todos') {
-      itens = itens.filter(p => p.categoria === filtroCategoria);
-    }
-    const total = itens.reduce((s, p) => s + p.totalVenda, 0);
-    const processados = itens.map(p => ({
-      ...p,
-      participacao: total > 0 ? (p.totalVenda / total) * 100 : 0,
-      margem: p.totalVenda - p.totalCusto,
-      varReceitaMesAnt: dados.mesAnterior.porProduto.get(p.produtoCodigo)?.totalVenda ?? null,
-    })).sort((a, b) => b.totalVenda - a.totalVenda);
-    return { produtos: processados, total, resumos: totais };
-  }, [dados, filtroCategoria]);
+    return { atual: calc(dados.atual), mesAnt: calc(dados.mesAnterior), anoAnt: calc(dados.anoAnterior) };
+  }, [dados, passaCategoria]);
 
-  const CATEGORIAS = [
-    { key: 'todos',        label: 'Todos',        valor: resumos.todos },
-    { key: 'combustivel',  label: 'Combustíveis', valor: resumos.combustivel },
-    { key: 'automotivos',  label: 'Automotivos',  valor: resumos.automotivos },
-    { key: 'conveniencia', label: 'Conveniência', valor: resumos.conveniencia },
-    { key: 'outros',       label: 'Outros',       valor: resumos.outros },
-  ];
+  // Arvore: dia > grupo > produto. Inclui buffer de 7 dias antes do mes
+  // selecionado (presente em dados.atual.porDia) para conseguir o D-7.
+  const treeDias = useMemo(() => {
+    const allDaysMap = new Map();
+    for (const [data, produtosDia] of dados.atual.porDia.entries()) {
+      const itensRaw = Array.from(produtosDia.values()).filter(passaCategoria);
+      if (itensRaw.length === 0) continue;
+
+      // Enriquece cada produto com grupo (lookup em porProduto) e metricas
+      const itens = itensRaw.map(p => {
+        const meta = dados.atual.porProduto.get(p.produtoCodigo);
+        return {
+          produtoCodigo: p.produtoCodigo,
+          produtoNome: p.produtoNome,
+          grupoCodigo: meta?.grupoCodigo ?? null,
+          grupoNome: meta?.grupoNome || 'Sem grupo',
+          quantidade: p.quantidade,
+          receita: p.receita,
+          custo: p.custo,
+          margem: p.receita - p.custo,
+          margemPct: p.receita > 0 ? ((p.receita - p.custo) / p.receita) * 100 : 0,
+          precoMedio: p.quantidade > 0 ? p.receita / p.quantidade : 0,
+          custoMedio: p.quantidade > 0 ? p.custo / p.quantidade : 0,
+          margemRs: p.quantidade > 0 ? (p.receita - p.custo) / p.quantidade : 0,
+        };
+      });
+
+      // Agrupa por grupo
+      const gruposMap = new Map();
+      itens.forEach(p => {
+        const key = p.grupoCodigo ?? 'sem-grupo';
+        if (!gruposMap.has(key)) {
+          gruposMap.set(key, {
+            grupoCodigo: p.grupoCodigo,
+            grupoNome: p.grupoNome,
+            quantidade: 0, receita: 0, custo: 0,
+            produtos: [],
+          });
+        }
+        const g = gruposMap.get(key);
+        g.quantidade += p.quantidade;
+        g.receita    += p.receita;
+        g.custo      += p.custo;
+        g.produtos.push(p);
+      });
+
+      const grupos = Array.from(gruposMap.values())
+        .map(g => ({
+          ...g,
+          margem: g.receita - g.custo,
+          margemPct: g.receita > 0 ? ((g.receita - g.custo) / g.receita) * 100 : 0,
+          precoMedio: g.quantidade > 0 ? g.receita / g.quantidade : 0,
+          custoMedio: g.quantidade > 0 ? g.custo / g.quantidade : 0,
+          margemRs: g.quantidade > 0 ? (g.receita - g.custo) / g.quantidade : 0,
+          produtos: g.produtos.sort((a, b) => b.receita - a.receita),
+        }))
+        .sort((a, b) => b.receita - a.receita);
+
+      const qtdDia = itens.reduce((s, p) => s + p.quantidade, 0);
+      const recDia = itens.reduce((s, p) => s + p.receita, 0);
+      const cusDia = itens.reduce((s, p) => s + p.custo, 0);
+
+      allDaysMap.set(data, {
+        data,
+        diaSemana: diaSemanaCurto(data),
+        quantidade: qtdDia,
+        receita: recDia,
+        custo: cusDia,
+        margem: recDia - cusDia,
+        margemPct: recDia > 0 ? ((recDia - cusDia) / recDia) * 100 : 0,
+        precoMedio: qtdDia > 0 ? recDia / qtdDia : 0,
+        custoMedio: qtdDia > 0 ? cusDia / qtdDia : 0,
+        margemRs: qtdDia > 0 ? (recDia - cusDia) / qtdDia : 0,
+        grupos,
+      });
+    }
+
+    const dias = Array.from(allDaysMap.values())
+      .filter(d => d.data >= dados.atual.dataInicial && d.data <= dados.atual.dataFinal)
+      .sort((a, b) => b.data.localeCompare(a.data));
+
+    // Variacao semanal (D vs D-7) sobre faturamento
+    return dias.map(d => {
+      const dAnt = allDaysMap.get(dataMenos7(d.data));
+      const varReceita = dAnt && dAnt.receita > 0
+        ? ((d.receita - dAnt.receita) / dAnt.receita) * 100
+        : null;
+      return {
+        ...d,
+        receitaSemAnt: dAnt?.receita ?? null,
+        varReceitaSemAnt: varReceita,
+      };
+    });
+  }, [dados, passaCategoria]);
+
+  // Ranking: tree grupo > produto, com comparacao vs ano anterior
+  const treeRanking = useMemo(() => {
+    const itens = Array.from(dados.atual.porProduto.values()).filter(passaCategoria);
+    const totalGeral = itens.reduce((s, p) => s + p.totalVenda, 0);
+
+    const gruposMap = new Map();
+    itens.forEach(p => {
+      const key = p.grupoCodigo ?? 'sem-grupo';
+      if (!gruposMap.has(key)) {
+        gruposMap.set(key, {
+          grupoCodigo: p.grupoCodigo,
+          grupoNome: p.grupoNome || 'Sem grupo',
+          quantidade: 0, receita: 0, custo: 0,
+          receitaMesAnt: 0,
+          receitaAnoAnt: 0,
+          qtdProdutos: 0,
+          produtos: [],
+        });
+      }
+      const g = gruposMap.get(key);
+      const pMesAnt = dados.mesAnterior.porProduto.get(p.produtoCodigo);
+      const pAnoAnt = dados.anoAnterior.porProduto.get(p.produtoCodigo);
+      g.quantidade   += p.quantidade;
+      g.receita      += p.totalVenda;
+      g.custo        += p.totalCusto;
+      g.receitaMesAnt += pMesAnt?.totalVenda ?? 0;
+      g.receitaAnoAnt += pAnoAnt?.totalVenda ?? 0;
+      g.qtdProdutos  += 1;
+      g.produtos.push({
+        produtoCodigo: p.produtoCodigo,
+        produtoNome: p.produtoNome,
+        categoria: p.categoria,
+        quantidade: p.quantidade,
+        receita: p.totalVenda,
+        custo: p.totalCusto,
+        margem: p.totalVenda - p.totalCusto,
+        margemPct: p.totalVenda > 0 ? ((p.totalVenda - p.totalCusto) / p.totalVenda) * 100 : 0,
+        participacao: totalGeral > 0 ? (p.totalVenda / totalGeral) * 100 : 0,
+        receitaMesAnt: pMesAnt?.totalVenda ?? null,
+        receitaAnoAnt: pAnoAnt?.totalVenda ?? null,
+      });
+    });
+
+    const grupos = Array.from(gruposMap.values()).map(g => ({
+      ...g,
+      margem: g.receita - g.custo,
+      margemPct: g.receita > 0 ? ((g.receita - g.custo) / g.receita) * 100 : 0,
+      participacao: totalGeral > 0 ? (g.receita / totalGeral) * 100 : 0,
+      varReceitaMesAnt: g.receitaMesAnt > 0 ? ((g.receita - g.receitaMesAnt) / g.receitaMesAnt) * 100 : null,
+      varReceitaAnoAnt: g.receitaAnoAnt > 0 ? ((g.receita - g.receitaAnoAnt) / g.receitaAnoAnt) * 100 : null,
+      produtos: g.produtos.sort((a, b) => b.receita - a.receita),
+    })).sort((a, b) => b.receita - a.receita);
+
+    return { totalGeral, grupos };
+  }, [dados, passaCategoria]);
+
+  // Curva ABC: classifica produtos pelo % cumulativo de receita
+  // A: ate 80% acumulado (top performers, ~20% dos itens trazem 80% da receita)
+  // B: 80-95%
+  // C: >95%
+  const curvaABC = useMemo(() => {
+    const itens = Array.from(dados.atual.porProduto.values())
+      .filter(passaCategoria)
+      .sort((a, b) => b.totalVenda - a.totalVenda);
+    const totalGeral = itens.reduce((s, p) => s + p.totalVenda, 0);
+    let acumulado = 0;
+    const classificados = itens.map((p, i) => {
+      acumulado += p.totalVenda;
+      const acumPct = totalGeral > 0 ? (acumulado / totalGeral) * 100 : 0;
+      const participacao = totalGeral > 0 ? (p.totalVenda / totalGeral) * 100 : 0;
+      const classe = acumPct <= 80 ? 'A' : acumPct <= 95 ? 'B' : 'C';
+      return {
+        rank: i + 1,
+        produtoCodigo: p.produtoCodigo,
+        produtoNome: p.produtoNome,
+        grupoNome: p.grupoNome || 'Sem grupo',
+        categoria: p.categoria,
+        quantidade: p.quantidade,
+        receita: p.totalVenda,
+        margem: p.totalVenda - p.totalCusto,
+        margemPct: p.totalVenda > 0 ? ((p.totalVenda - p.totalCusto) / p.totalVenda) * 100 : 0,
+        participacao,
+        acumPct,
+        classe,
+      };
+    });
+    const resumo = { A: { qtd: 0, receita: 0 }, B: { qtd: 0, receita: 0 }, C: { qtd: 0, receita: 0 } };
+    classificados.forEach(p => {
+      resumo[p.classe].qtd += 1;
+      resumo[p.classe].receita += p.receita;
+    });
+    return { itens: classificados, totalGeral, resumo };
+  }, [dados, passaCategoria]);
+
+  // Dados para os graficos analiticos
+  const dadosGraficos = useMemo(() => {
+    // Receita diaria (ordem cronologica)
+    const linhaReceita = treeDias
+      .slice()
+      .sort((a, b) => a.data.localeCompare(b.data))
+      .map(d => ({
+        data: d.data,
+        label: formatDataBR(d.data).slice(0, 5), // dd/mm
+        receita: d.receita,
+        margem: d.margem,
+      }));
+
+    // Top 10 produtos por receita
+    const top10 = Array.from(dados.atual.porProduto.values())
+      .filter(passaCategoria)
+      .sort((a, b) => b.totalVenda - a.totalVenda)
+      .slice(0, 10)
+      .map(p => ({
+        produto: p.produtoNome.length > 28 ? p.produtoNome.slice(0, 28) + '…' : p.produtoNome,
+        receita: p.totalVenda,
+      }));
+
+    // Participacao por grupo (donut) — top 7 + outros
+    const todosGrupos = treeRanking.grupos;
+    const top7 = todosGrupos.slice(0, 7);
+    const outros = todosGrupos.slice(7);
+    const outrosReceita = outros.reduce((s, g) => s + g.receita, 0);
+    const donut = top7.map(g => ({ name: g.grupoNome, value: g.receita }));
+    if (outrosReceita > 0) donut.push({ name: 'Outros', value: outrosReceita });
+
+    // Margem % por grupo (so grupos com receita > 0)
+    const barrasMargem = todosGrupos
+      .filter(g => g.receita > 0)
+      .map(g => ({
+        grupo: g.grupoNome.length > 16 ? g.grupoNome.slice(0, 16) + '…' : g.grupoNome,
+        margemPct: Number(g.margemPct.toFixed(1)),
+      }));
+
+    return { linhaReceita, top10, donut, barrasMargem };
+  }, [treeDias, treeRanking, dados, passaCategoria]);
+
+  const toggleDia = (data) => setDiasExpandidos(prev => {
+    const next = new Set(prev);
+    next.has(data) ? next.delete(data) : next.add(data);
+    return next;
+  });
+  const toggleGrupoDia = (key) => setGruposDiaExpandidos(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+  const toggleGrupoRanking = (key) => setRankingExpandido(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  const expandirTudoDia = () => {
+    if (diasExpandidos.size > 0) {
+      setDiasExpandidos(new Set());
+      setGruposDiaExpandidos(new Set());
+    } else {
+      setDiasExpandidos(new Set(treeDias.map(d => d.data)));
+      const todosGrupos = new Set();
+      treeDias.forEach(d => d.grupos.forEach(g => todosGrupos.add(`${d.data}|${g.grupoCodigo ?? 'sem-grupo'}`)));
+      setGruposDiaExpandidos(todosGrupos);
+    }
+  };
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        {CATEGORIAS.map(c => (
-          <button key={c.key} onClick={() => setFiltroCategoria(c.key)}
-            className={`flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg border text-left transition-colors ${
-              filtroCategoria === c.key
-                ? 'border-blue-400 bg-blue-50/40 text-blue-800'
-                : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
-            }`}>
-            <span className="text-[10px] uppercase tracking-wider opacity-70">{c.label}</span>
-            <span className="text-[13px] font-semibold font-mono tabular-nums">{formatCurrency(c.valor)}</span>
-          </button>
-        ))}
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
+        <KpiComparativo label="Receita produtos" icon={Receipt} color="blue"
+          atual={tAtual.receita} mesAnt={tMesAnt.receita} anoAnt={tAnoAnt.receita} />
+        <KpiComparativo label="Itens vendidos" icon={Package} color="indigo"
+          atual={tAtual.quantidade} mesAnt={tMesAnt.quantidade} anoAnt={tAnoAnt.quantidade}
+          formatter={(v) => formatNumero(v, 0)} />
+        <KpiMargemPct
+          label="Margem %" icon={Percent} color="violet"
+          atualPct={margemPctAtual} mesAntPct={margemPctMesAnt} anoAntPct={margemPctAnoAnt} />
+        <KpiComparativo label="Margem bruta" icon={TrendingUp}
+          color={tAtual.margem >= 0 ? 'emerald' : 'red'}
+          atual={tAtual.margem} mesAnt={tMesAnt.margem} anoAnt={tAnoAnt.margem} />
       </div>
 
+      {/* Projecao */}
+      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-blue-500" />
+          <h3 className="text-sm font-semibold text-gray-800">Projeção estatística para o mês</h3>
+          <span className="text-[11px] text-gray-400">
+            · base {projecoes.atual.diasCobertos}/{projecoes.atual.diasTotalMes} dias
+            · {projecoes.atual.isProjecao ? 'projetado linear' : 'mês fechado'}
+          </span>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <KpiComparativo label="Projeção faturamento" icon={Receipt} color="blue"
+              atual={projecoes.atual.receita} mesAnt={projecoes.mesAnt.receita} anoAnt={projecoes.anoAnt.receita} />
+            <KpiComparativo label="Projeção margem" icon={TrendingUp}
+              color={projecoes.atual.margem >= 0 ? 'emerald' : 'red'}
+              atual={projecoes.atual.margem} mesAnt={projecoes.mesAnt.margem} anoAnt={projecoes.anoAnt.margem} />
+            <KpiMargemPct
+              label="Projeção margem %" icon={Percent} color="violet"
+              atualPct={projecoes.atual.receita > 0 ? (projecoes.atual.margem / projecoes.atual.receita) * 100 : null}
+              mesAntPct={projecoes.mesAnt.receita > 0 ? (projecoes.mesAnt.margem / projecoes.mesAnt.receita) * 100 : null}
+              anoAntPct={projecoes.anoAnt.receita > 0 ? (projecoes.anoAnt.margem / projecoes.anoAnt.receita) * 100 : null}
+            />
+            <KpiComparativo label="Ticket médio" icon={ShoppingCart} color="indigo"
+              atual={dados.atual.ticketMedio} mesAnt={dados.mesAnterior.ticketMedio} anoAnt={dados.anoAnterior.ticketMedio} />
+          </div>
+          <p className="text-[10px] text-gray-500">
+            Método: extrapolação linear (média diária × dias do mês) para faturamento e margem. Margem %
+            comparada em pontos percentuais. Ticket médio é por transação (não extrapolado), comparado
+            contra os mesmos períodos de referência.
+          </p>
+        </div>
+      </div>
+
+      {/* Card unico com sub-abas: dia / grupo / abc / graficos */}
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+        <div className="border-b border-gray-100 flex items-center gap-1 px-2 overflow-x-auto">
+          {[
+            { k: 'dia',      label: 'Vendas por dia',      icon: Calendar },
+            { k: 'grupo',    label: 'Vendas por grupo',    icon: Package },
+            { k: 'abc',      label: 'Curva ABC',           icon: BarChart3 },
+            { k: 'graficos', label: 'Gráficos analíticos', icon: PieChartIcon },
+          ].map(t => {
+            const Icon = t.icon;
+            const ativo = subTab === t.k;
+            return (
+              <button key={t.k} onClick={() => setSubTab(t.k)}
+                className={`relative flex items-center gap-2 px-4 py-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  ativo
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
+                }`}>
+                <Icon className="h-4 w-4" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+      {subTab === 'dia' && (
+        <>
         <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
           <Package className="h-4 w-4 text-blue-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Ranking de produtos</h3>
-          <span className="text-[11px] text-gray-400">· {produtos.length} produto{produtos.length === 1 ? '' : 's'}</span>
+          <h3 className="text-sm font-semibold text-gray-800">Vendas por dia &gt; grupo &gt; produto</h3>
+          <span className="text-[11px] text-gray-400">· {treeDias.length} dia{treeDias.length === 1 ? '' : 's'} · clique para expandir</span>
+          <button onClick={expandirTudoDia}
+            className="ml-auto text-[11px] text-blue-600 hover:text-blue-800 font-medium">
+            {diasExpandidos.size > 0 ? 'Recolher todos' : 'Expandir todos'}
+          </button>
         </div>
-        {produtos.length === 0 ? (
+        {treeDias.length === 0 ? (
+          <div className="px-6 py-12 text-center text-sm text-gray-500">Sem vendas no período para esse filtro.</div>
+        ) : (
+          <div className="overflow-auto max-h-[480px]">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50/95 backdrop-blur sticky top-0 z-10 shadow-[0_1px_0_0_#e5e7eb]">
+                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2.5">Data / Grupo / Produto</th>
+                  <th className="px-2 py-2.5">Dia</th>
+                  <th className="px-3 py-2.5 text-right">Qtd</th>
+                  <th className="px-3 py-2.5 text-right">Faturamento</th>
+                  <th className="px-3 py-2.5 text-right">vs sem. ant</th>
+                  <th className="px-3 py-2.5 text-right">Custo</th>
+                  <th className="px-3 py-2.5 text-right">Lucro bruto</th>
+                  <th className="px-3 py-2.5 text-right">Margem %</th>
+                  <th className="px-3 py-2.5 text-right">Preço médio</th>
+                  <th className="px-3 py-2.5 text-right">Custo médio</th>
+                  <th className="px-3 py-2.5 text-right">Margem R$/un</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {treeDias.map(d => {
+                  const aberto = diasExpandidos.has(d.data);
+                  return (
+                    <React.Fragment key={d.data}>
+                      <tr onClick={() => toggleDia(d.data)}
+                        className={`cursor-pointer transition-colors ${aberto ? 'bg-blue-50/30' : 'hover:bg-gray-50/60'}`}>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                              <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                            </motion.div>
+                            <span className="font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatDataBR(d.data)}</span>
+                            <span className="text-[10px] text-gray-400">({d.grupos.length} grupo{d.grupos.length === 1 ? '' : 's'})</span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 text-[11px] text-gray-600 font-medium uppercase tracking-wider">{d.diaSemana}</td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums text-[12px] text-gray-800 font-semibold">{formatNumero(d.quantidade, 0)}</td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums text-[12px] text-gray-800 font-semibold">{formatCurrency(d.receita)}</td>
+                        <td className="px-3 py-2 text-right"><MiniVar v={d.varReceitaSemAnt} /></td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-600">{formatCurrency(d.custo)}</td>
+                        <td className={`px-3 py-2 text-right font-mono tabular-nums text-[12px] font-semibold ${d.margem >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{formatCurrency(d.margem)}</td>
+                        <td className={`px-3 py-2 text-right font-mono tabular-nums text-[11.5px] ${d.margemPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{d.margemPct.toFixed(1)}%</td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-700">{formatCurrency(d.precoMedio)}</td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-600">{formatCurrency(d.custoMedio)}</td>
+                        <td className={`px-3 py-2 text-right font-mono tabular-nums text-[11.5px] ${d.margemRs >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(d.margemRs)}</td>
+                      </tr>
+                      {aberto && d.grupos.map(g => {
+                        const gKey = `${d.data}|${g.grupoCodigo ?? 'sem-grupo'}`;
+                        const gAberto = gruposDiaExpandidos.has(gKey);
+                        return (
+                          <React.Fragment key={gKey}>
+                            <tr onClick={() => toggleGrupoDia(gKey)}
+                              className={`cursor-pointer transition-colors ${gAberto ? 'bg-indigo-50/40' : 'bg-gray-50/30 hover:bg-gray-50/60'}`}>
+                              <td className="px-3 py-1.5" style={{ paddingLeft: 32 }}>
+                                <div className="flex items-center gap-1.5">
+                                  <motion.div animate={{ rotate: gAberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                    <ChevronRight className="h-3 w-3 text-gray-400" />
+                                  </motion.div>
+                                  <span className="text-[11.5px] font-medium text-gray-800 truncate">{g.grupoNome}</span>
+                                  <span className="text-[10px] text-gray-400">({g.produtos.length})</span>
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5" />
+                              <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11.5px] text-gray-700">{formatNumero(g.quantidade, 0)}</td>
+                              <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11.5px] text-gray-700 font-medium">{formatCurrency(g.receita)}</td>
+                              <td className="px-3 py-1.5" />
+                              <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11px] text-gray-500">{formatCurrency(g.custo)}</td>
+                              <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-[11.5px] font-medium ${g.margem >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(g.margem)}</td>
+                              <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-[11px] ${g.margemPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{g.margemPct.toFixed(1)}%</td>
+                              <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11px] text-gray-600">{formatCurrency(g.precoMedio)}</td>
+                              <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11px] text-gray-500">{formatCurrency(g.custoMedio)}</td>
+                              <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-[11px] ${g.margemRs >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(g.margemRs)}</td>
+                            </tr>
+                            {gAberto && g.produtos.map(p => (
+                              <tr key={`${gKey}-${p.produtoCodigo}`} className="bg-gray-50/20 hover:bg-gray-50/50">
+                                <td className="px-3 py-1.5" style={{ paddingLeft: 56 }}>
+                                  <span className="text-[11px] text-gray-700 truncate">{p.produtoNome}</span>
+                                </td>
+                                <td className="px-2 py-1.5" />
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11px] text-gray-600">{formatNumero(p.quantidade, 0)}</td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11px] text-gray-600">{formatCurrency(p.receita)}</td>
+                                <td className="px-3 py-1.5" />
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11px] text-gray-500">{formatCurrency(p.custo)}</td>
+                                <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-[11px] ${p.margem >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(p.margem)}</td>
+                                <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-[10.5px] ${p.margemPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{p.margemPct.toFixed(1)}%</td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[10.5px] text-gray-600">{formatCurrency(p.precoMedio)}</td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[10.5px] text-gray-500">{formatCurrency(p.custoMedio)}</td>
+                                <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-[10.5px] ${p.margemRs >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(p.margemRs)}</td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="px-5 py-2 bg-gray-50/60 border-t border-gray-100 text-[10px] text-gray-500">
+          Variação semanal do faturamento: dia D vs D-7 (mesmo dia da semana anterior). Buffer de 7 dias antes do início do mês cobre os dias 1-7 do período.
+        </div>
+        </>
+      )}
+
+      {subTab === 'grupo' && (
+        <>
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+          <Package className="h-4 w-4 text-violet-500" />
+          <h3 className="text-sm font-semibold text-gray-800">Vendas por grupo &gt; produto</h3>
+          <span className="text-[11px] text-gray-400">
+            · {treeRanking.grupos.length} grupo{treeRanking.grupos.length === 1 ? '' : 's'} · sem combustíveis · vs mesmo período do ano anterior
+          </span>
+          <button
+            onClick={() => setRankingExpandido(rankingExpandido.size === treeRanking.grupos.length
+              ? new Set()
+              : new Set(treeRanking.grupos.map(g => g.grupoCodigo ?? 'sem-grupo')))}
+            className="ml-auto text-[11px] text-violet-600 hover:text-violet-800 font-medium">
+            {rankingExpandido.size > 0 ? 'Recolher todos' : 'Expandir todos'}
+          </button>
+        </div>
+        {treeRanking.grupos.length === 0 ? (
           <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhum produto vendido neste filtro.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50/80 border-b border-gray-100">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-4 py-2.5 w-10">#</th>
-                  <th className="px-4 py-2.5">Produto</th>
-                  <th className="px-4 py-2.5">Categoria</th>
-                  <th className="px-4 py-2.5 text-right">Qtd</th>
-                  <th className="px-4 py-2.5 text-right">Receita</th>
-                  <th className="px-4 py-2.5 text-right">% total</th>
-                  <th className="px-4 py-2.5 text-right">Margem</th>
-                  <th className="px-4 py-2.5 text-right">Var mês ant</th>
+                  <th className="px-4 py-2.5">Grupo / Produto</th>
+                  <th className="px-3 py-2.5 text-right">Quantidade</th>
+                  <th className="px-3 py-2.5 text-right">Faturamento</th>
+                  <th className="px-3 py-2.5 text-right">vs mês ant</th>
+                  <th className="px-3 py-2.5 text-right">vs ano ant</th>
+                  <th className="px-3 py-2.5 text-right">Margem</th>
+                  <th className="px-3 py-2.5 text-right">Margem %</th>
+                  <th className="px-3 py-2.5 text-right">% total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {produtos.map((p, i) => (
-                  <tr key={p.produtoCodigo} className="hover:bg-gray-50/60">
-                    <td className="px-4 py-2 text-[11px] text-gray-400 font-mono tabular-nums">{i + 1}</td>
-                    <td className="px-4 py-2 text-[12.5px] text-gray-800">
-                      <p className="font-medium truncate max-w-[260px]">{p.produtoNome}</p>
-                      {p.grupoNome && <p className="text-[10px] text-gray-400">{p.grupoNome}</p>}
-                    </td>
-                    <td className="px-4 py-2">
-                      <CategoriaBadge cat={p.categoria} />
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[12px] text-gray-700">{formatNumero(p.quantidade, p.categoria === 'combustivel' ? 2 : 0)}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(p.totalVenda)}</td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center gap-2 justify-end">
-                        <span className="font-mono text-[11px] tabular-nums text-gray-600">{p.participacao.toFixed(1)}%</span>
-                        <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden flex-shrink-0">
-                          <div className="h-full bg-blue-400" style={{ width: `${p.participacao}%` }} />
-                        </div>
-                      </div>
-                    </td>
-                    <td className={`px-4 py-2 text-right font-mono tabular-nums text-[12px] ${p.margem >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {formatCurrency(p.margem)}
-                    </td>
-                    <td className="px-4 py-2 text-right"><MiniVar v={variacao(p.totalVenda, p.varReceitaMesAnt)} /></td>
-                  </tr>
-                ))}
+                {treeRanking.grupos.map(g => {
+                  const gKey = g.grupoCodigo ?? 'sem-grupo';
+                  const aberto = rankingExpandido.has(gKey);
+                  return (
+                    <React.Fragment key={gKey}>
+                      <tr onClick={() => toggleGrupoRanking(gKey)}
+                        className={`cursor-pointer transition-colors ${aberto ? 'bg-violet-50/30' : 'hover:bg-gray-50/60'}`}>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                              <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                            </motion.div>
+                            <span className="text-[12.5px] font-semibold text-gray-900">{g.grupoNome}</span>
+                            <span className="text-[10px] text-gray-400">({g.qtdProdutos} prod.)</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums text-[12px] text-gray-800 font-semibold">{formatNumero(g.quantidade, 0)}</td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(g.receita)}</td>
+                        <td className="px-3 py-2 text-right"><MiniVar v={g.varReceitaMesAnt} /></td>
+                        <td className="px-3 py-2 text-right"><MiniVar v={g.varReceitaAnoAnt} /></td>
+                        <td className={`px-3 py-2 text-right font-mono tabular-nums text-[12px] font-semibold ${g.margem >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{formatCurrency(g.margem)}</td>
+                        <td className={`px-3 py-2 text-right font-mono tabular-nums text-[11.5px] ${g.margemPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{g.margemPct.toFixed(1)}%</td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex items-center gap-2 justify-end">
+                            <span className="font-mono text-[11px] tabular-nums text-gray-600">{g.participacao.toFixed(1)}%</span>
+                            <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden flex-shrink-0">
+                              <div className="h-full bg-violet-400" style={{ width: `${g.participacao}%` }} />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                      {aberto && g.produtos.map(p => (
+                        <tr key={`${gKey}-${p.produtoCodigo}`} className="bg-gray-50/20 hover:bg-gray-50/50">
+                          <td className="px-4 py-1.5" style={{ paddingLeft: 40 }}>
+                            <span className="text-[11.5px] text-gray-700 truncate">{p.produtoNome}</span>
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11.5px] text-gray-700">{formatNumero(p.quantidade, 0)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11.5px] text-gray-800">{formatCurrency(p.receita)}</td>
+                          <td className="px-3 py-1.5 text-right"><MiniVar v={variacao(p.receita, p.receitaMesAnt)} /></td>
+                          <td className="px-3 py-1.5 text-right"><MiniVar v={variacao(p.receita, p.receitaAnoAnt)} /></td>
+                          <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-[11px] ${p.margem >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(p.margem)}</td>
+                          <td className={`px-3 py-1.5 text-right font-mono tabular-nums text-[10.5px] ${p.margemPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{p.margemPct.toFixed(1)}%</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <span className="font-mono text-[10.5px] tabular-nums text-gray-500">{p.participacao.toFixed(2)}%</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
               <tfoot className="bg-gray-50/60 border-t border-gray-200">
                 <tr className="text-[12px] font-semibold">
-                  <td className="px-4 py-3" colSpan={4}>Total ({produtos.length} produtos)</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-900">{formatCurrency(total)}</td>
-                  <td className="px-4 py-3 text-right text-gray-400">100%</td>
-                  <td colSpan={2} />
+                  <td className="px-4 py-3" colSpan={2}>Total ({treeRanking.grupos.length} grupos)</td>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums text-gray-900">{formatCurrency(treeRanking.totalGeral)}</td>
+                  <td colSpan={4} />
+                  <td className="px-3 py-3 text-right text-gray-400">100%</td>
                 </tr>
               </tfoot>
             </table>
           </div>
         )}
+        </>
+      )}
+
+      {subTab === 'abc' && <PaneCurvaABC curvaABC={curvaABC} />}
+
+      {subTab === 'graficos' && <PaneGraficosAnaliticos dadosGraficos={dadosGraficos} />}
       </div>
     </>
   );
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Aba Conveniencia
+// Curva ABC (Pareto): classifica produtos pelo % cumulativo de receita
 // ────────────────────────────────────────────────────────────────────
+function PaneCurvaABC({ curvaABC }) {
+  const { itens, totalGeral, resumo } = curvaABC;
 
-function AbaConveniencia({ dados }) {
-  const { porGrupo, produtos, totalReceita } = useMemo(() => {
-    const itens = Array.from(dados.atual.porProduto.values()).filter(p => p.categoria === 'conveniencia');
-    const totalReceita = itens.reduce((s, p) => s + p.totalVenda, 0);
-    const grupos = new Map();
-    itens.forEach(p => {
-      const g = grupos.get(p.grupoCodigo) || {
-        grupoCodigo: p.grupoCodigo,
-        grupoNome: p.grupoNome || 'Sem grupo',
-        quantidade: 0, totalVenda: 0, totalCusto: 0, produtos: 0,
-      };
-      g.quantidade += p.quantidade;
-      g.totalVenda += p.totalVenda;
-      g.totalCusto += p.totalCusto;
-      g.produtos += 1;
-      grupos.set(p.grupoCodigo, g);
-    });
-    const porGrupo = Array.from(grupos.values())
-      .map(g => ({
-        ...g,
-        margem: g.totalVenda - g.totalCusto,
-        participacao: totalReceita > 0 ? (g.totalVenda / totalReceita) * 100 : 0,
-      }))
-      .sort((a, b) => b.totalVenda - a.totalVenda);
-    const produtos = itens
-      .map(p => ({
-        ...p,
-        margem: p.totalVenda - p.totalCusto,
-        participacao: totalReceita > 0 ? (p.totalVenda / totalReceita) * 100 : 0,
-        varReceitaMesAnt: dados.mesAnterior.porProduto.get(p.produtoCodigo)?.totalVenda ?? null,
-      }))
-      .sort((a, b) => b.totalVenda - a.totalVenda)
-      .slice(0, 30);
-    return { porGrupo, produtos, totalReceita };
-  }, [dados]);
+  if (itens.length === 0) {
+    return <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhum produto vendido neste filtro.</div>;
+  }
 
-  const totalCusto  = porGrupo.reduce((s, g) => s + g.totalCusto, 0);
-  const margemTotal = totalReceita - totalCusto;
+  const pctReceita = (cls) => totalGeral > 0 ? (resumo[cls].receita / totalGeral) * 100 : 0;
+  const pctQtd = (cls) => itens.length > 0 ? (resumo[cls].qtd / itens.length) * 100 : 0;
+
+  const CLASSE_CFG = {
+    A: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', chip: 'bg-emerald-100 text-emerald-800' },
+    B: { bg: 'bg-amber-50',   border: 'border-amber-200',   text: 'text-amber-700',   chip: 'bg-amber-100 text-amber-800' },
+    C: { bg: 'bg-gray-50',    border: 'border-gray-200',    text: 'text-gray-700',    chip: 'bg-gray-200 text-gray-700' },
+  };
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
-        <Kpi label="Receita conveniência" valor={formatCurrency(totalReceita)} icon={Store} color="emerald" />
-        <Kpi label="Margem" valor={formatCurrency(margemTotal)} icon={TrendingUp} color={margemTotal >= 0 ? 'emerald' : 'red'} hint={totalReceita > 0 ? `${((margemTotal / totalReceita) * 100).toFixed(1)}%` : null} />
-        <Kpi label="Grupos" valor={porGrupo.length} icon={LayoutGrid} color="blue" raw />
-        <Kpi label="Itens vendidos"
-          valor={formatNumero(porGrupo.reduce((s, g) => s + g.quantidade, 0), 0)}
-          icon={Package} color="indigo" raw />
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <BarChart3 className="h-4 w-4 text-violet-500" />
+        <h3 className="text-sm font-semibold text-gray-800">Curva ABC</h3>
+        <span className="text-[11px] text-gray-400">· {itens.length} produto{itens.length === 1 ? '' : 's'} · classificação por % cumulativo de receita</span>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-          <LayoutGrid className="h-4 w-4 text-emerald-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Receita por grupo</h3>
-        </div>
-        {porGrupo.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhuma venda de conveniência no período.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 border-b border-gray-100">
-                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-4 py-2.5">Grupo</th>
-                  <th className="px-4 py-2.5 text-right">Qtd itens</th>
-                  <th className="px-4 py-2.5 text-right">Receita</th>
-                  <th className="px-4 py-2.5 text-right">% total</th>
-                  <th className="px-4 py-2.5 text-right">Margem</th>
-                  <th className="px-4 py-2.5 text-right">Produtos</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {porGrupo.map(g => (
-                  <tr key={g.grupoCodigo || 'sem-grupo'} className="hover:bg-gray-50/60">
-                    <td className="px-4 py-2 text-[12.5px] text-gray-800 font-medium">{g.grupoNome}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[12px] text-gray-700">{formatNumero(g.quantidade, 0)}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(g.totalVenda)}</td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center gap-2 justify-end">
-                        <span className="font-mono text-[11px] tabular-nums text-gray-600">{g.participacao.toFixed(1)}%</span>
-                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden flex-shrink-0">
-                          <div className="h-full bg-emerald-400" style={{ width: `${g.participacao}%` }} />
-                        </div>
+      {/* Resumo por classe */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-5 border-b border-gray-100">
+        {['A', 'B', 'C'].map(cls => {
+          const cfg = CLASSE_CFG[cls];
+          const desc = cls === 'A' ? 'até 80% da receita' : cls === 'B' ? '80–95% da receita' : '95–100% da receita';
+          return (
+            <div key={cls} className={`rounded-xl border p-4 ${cfg.bg} ${cfg.border}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-bold ${cfg.chip}`}>{cls}</span>
+                <span className="text-[11px] text-gray-500 uppercase tracking-wider">{desc}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">Produtos</p>
+                  <p className={`text-[18px] font-bold tabular-nums ${cfg.text}`}>{resumo[cls].qtd}</p>
+                  <p className="text-[10px] text-gray-500">{pctQtd(cls).toFixed(1)}% dos itens</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">Receita</p>
+                  <p className={`text-[14px] font-bold tabular-nums ${cfg.text}`}>{formatCurrency(resumo[cls].receita)}</p>
+                  <p className="text-[10px] text-gray-500">{pctReceita(cls).toFixed(1)}% do total</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Tabela classificada */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50/80 border-b border-gray-100">
+            <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2.5 w-10">#</th>
+              <th className="px-4 py-2.5">Produto</th>
+              <th className="px-4 py-2.5">Grupo</th>
+              <th className="px-4 py-2.5 text-right">Qtd</th>
+              <th className="px-4 py-2.5 text-right">Receita</th>
+              <th className="px-4 py-2.5 text-right">% individual</th>
+              <th className="px-4 py-2.5 text-right">% acumulado</th>
+              <th className="px-4 py-2.5 text-right">Margem %</th>
+              <th className="px-4 py-2.5 text-center">Classe</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {itens.map(p => {
+              const cfg = CLASSE_CFG[p.classe];
+              return (
+                <tr key={p.produtoCodigo} className="hover:bg-gray-50/60">
+                  <td className="px-4 py-2 text-[11px] text-gray-400 font-mono tabular-nums">{p.rank}</td>
+                  <td className="px-4 py-2 text-[12.5px] text-gray-800 font-medium truncate max-w-[300px]">{p.produtoNome}</td>
+                  <td className="px-4 py-2 text-[11px] text-gray-500">{p.grupoNome}</td>
+                  <td className="px-4 py-2 text-right font-mono tabular-nums text-[12px] text-gray-700">{formatNumero(p.quantidade, 0)}</td>
+                  <td className="px-4 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(p.receita)}</td>
+                  <td className="px-4 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-600">{p.participacao.toFixed(2)}%</td>
+                  <td className="px-4 py-2 text-right">
+                    <div className="flex items-center gap-2 justify-end">
+                      <span className="font-mono text-[11.5px] tabular-nums text-gray-700 font-medium">{p.acumPct.toFixed(1)}%</span>
+                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden flex-shrink-0">
+                        <div className={`h-full ${p.classe === 'A' ? 'bg-emerald-500' : p.classe === 'B' ? 'bg-amber-500' : 'bg-gray-400'}`}
+                          style={{ width: `${p.acumPct}%` }} />
                       </div>
-                    </td>
-                    <td className={`px-4 py-2 text-right font-mono tabular-nums text-[12px] ${g.margem >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {formatCurrency(g.margem)}
-                    </td>
-                    <td className="px-4 py-2 text-right text-[11px] text-gray-500 tabular-nums">{g.produtos}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                    </div>
+                  </td>
+                  <td className={`px-4 py-2 text-right font-mono tabular-nums text-[11.5px] ${p.margemPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{p.margemPct.toFixed(1)}%</td>
+                  <td className="px-4 py-2 text-center">
+                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${cfg.chip}`}>{p.classe}</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-5 py-2 bg-gray-50/60 border-t border-gray-100 text-[10px] text-gray-500">
+        Princípio de Pareto (80/20): geralmente ~20% dos produtos respondem por 80% da receita. Produtos classe A são prioridade de gestão (estoque, negociação, exposição).
+      </div>
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Graficos analiticos: receita diaria, top 10, donut por grupo, margem por grupo
+// ────────────────────────────────────────────────────────────────────
+const CORES_GRAFICO = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#94a3b8'];
+
+function PaneGraficosAnaliticos({ dadosGraficos }) {
+  const { linhaReceita, top10, donut, barrasMargem } = dadosGraficos;
+
+  return (
+    <>
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <PieChartIcon className="h-4 w-4 text-blue-500" />
+        <h3 className="text-sm font-semibold text-gray-800">Gráficos analíticos</h3>
+        <span className="text-[11px] text-gray-400">· visão visual do período</span>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-          <Package className="h-4 w-4 text-emerald-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Top 30 produtos (conveniência)</h3>
-        </div>
-        {produtos.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-gray-500">Nenhum produto de conveniência no período.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 border-b border-gray-100">
-                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-4 py-2.5 w-10">#</th>
-                  <th className="px-4 py-2.5">Produto</th>
-                  <th className="px-4 py-2.5">Grupo</th>
-                  <th className="px-4 py-2.5 text-right">Qtd</th>
-                  <th className="px-4 py-2.5 text-right">Receita</th>
-                  <th className="px-4 py-2.5 text-right">% total</th>
-                  <th className="px-4 py-2.5 text-right">Margem</th>
-                  <th className="px-4 py-2.5 text-right">Var mês ant</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {produtos.map((p, i) => (
-                  <tr key={p.produtoCodigo} className="hover:bg-gray-50/60">
-                    <td className="px-4 py-2 text-[11px] text-gray-400 font-mono tabular-nums">{i + 1}</td>
-                    <td className="px-4 py-2 text-[12.5px] text-gray-800 font-medium truncate max-w-[260px]">{p.produtoNome}</td>
-                    <td className="px-4 py-2 text-[11px] text-gray-500">{p.grupoNome}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[12px] text-gray-700">{formatNumero(p.quantidade, 0)}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(p.totalVenda)}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[11px] text-gray-600">{p.participacao.toFixed(1)}%</td>
-                    <td className={`px-4 py-2 text-right font-mono tabular-nums text-[12px] ${p.margem >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {formatCurrency(p.margem)}
-                    </td>
-                    <td className="px-4 py-2 text-right"><MiniVar v={variacao(p.totalVenda, p.varReceitaMesAnt)} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-5">
+        {/* Receita diaria */}
+        <div className="rounded-xl border border-gray-100 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[12.5px] font-semibold text-gray-800">Receita diária</p>
+            <span className="text-[10px] text-gray-400">{linhaReceita.length} dias</span>
           </div>
-        )}
+          {linhaReceita.length === 0 ? (
+            <div className="h-56 flex items-center justify-center text-xs text-gray-400">Sem dados no período</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={linhaReceita} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
+                  formatter={(v, n) => [formatCurrency(v), n === 'receita' ? 'Receita' : 'Margem']} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="receita" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} name="Receita" />
+                <Line type="monotone" dataKey="margem" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} name="Margem" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Donut: participacao por grupo */}
+        <div className="rounded-xl border border-gray-100 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[12.5px] font-semibold text-gray-800">Participação por grupo</p>
+            <span className="text-[10px] text-gray-400">top 7 + outros</span>
+          </div>
+          {donut.length === 0 ? (
+            <div className="h-56 flex items-center justify-center text-xs text-gray-400">Sem dados</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={donut} dataKey="value" nameKey="name"
+                  innerRadius={50} outerRadius={80} paddingAngle={2}>
+                  {donut.map((_, i) => <Cell key={i} fill={CORES_GRAFICO[i % CORES_GRAFICO.length]} />)}
+                </Pie>
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
+                  formatter={(v) => formatCurrency(v)} />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconSize={8} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Top 10 produtos (barras horizontais) */}
+        <div className="rounded-xl border border-gray-100 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[12.5px] font-semibold text-gray-800">Top 10 produtos por receita</p>
+            <span className="text-[10px] text-gray-400">{top10.length} produtos</span>
+          </div>
+          {top10.length === 0 ? (
+            <div className="h-72 flex items-center justify-center text-xs text-gray-400">Sem dados</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(220, top10.length * 28)}>
+              <BarChart data={top10} layout="vertical" margin={{ top: 5, right: 20, left: 5, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                <YAxis type="category" dataKey="produto" tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} width={140} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
+                  formatter={(v) => [formatCurrency(v), 'Receita']} />
+                <Bar dataKey="receita" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Margem % por grupo (barras) */}
+        <div className="rounded-xl border border-gray-100 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[12.5px] font-semibold text-gray-800">Margem % por grupo</p>
+            <span className="text-[10px] text-gray-400">{barrasMargem.length} grupos</span>
+          </div>
+          {barrasMargem.length === 0 ? (
+            <div className="h-56 flex items-center justify-center text-xs text-gray-400">Sem dados</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(220, barrasMargem.length * 36)}>
+              <BarChart data={barrasMargem} layout="vertical" margin={{ top: 5, right: 20, left: 5, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                  tickFormatter={(v) => `${v}%`} />
+                <YAxis type="category" dataKey="grupo" tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} width={130} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
+                  formatter={(v) => [`${v.toFixed(1)}%`, 'Margem']} />
+                <Bar dataKey="margemPct" radius={[0, 4, 4, 0]}>
+                  {barrasMargem.map((d, i) => (
+                    <Cell key={i} fill={d.margemPct >= 0 ? '#10b981' : '#ef4444'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
     </>
   );
@@ -1141,16 +1748,6 @@ function AbaConveniencia({ dados }) {
 // ────────────────────────────────────────────────────────────────────
 // Componentes compartilhados
 // ────────────────────────────────────────────────────────────────────
-
-function PeriodoTag({ label, periodo, destacado }) {
-  return (
-    <div className={`rounded-lg p-2.5 ${destacado ? 'bg-blue-50 border border-blue-100' : 'bg-gray-50 border border-gray-100'}`}>
-      <p className={`text-[9.5px] font-semibold uppercase tracking-[0.15em] mb-0.5 ${destacado ? 'text-blue-700' : 'text-gray-500'}`}>{label}</p>
-      <p className={`text-[13px] font-semibold ${destacado ? 'text-blue-900' : 'text-gray-800'}`}>{periodo.label}</p>
-      <p className="text-[10.5px] text-gray-500 font-mono tabular-nums mt-0.5">{formatDataBR(periodo.dataInicial)} a {formatDataBR(periodo.dataFinal)}</p>
-    </div>
-  );
-}
 
 function KpiComparativo({ label, icon: Icon, color, atual, mesAnt, anoAnt, formatter, hint }) {
   const bgColors = {
