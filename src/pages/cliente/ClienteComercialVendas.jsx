@@ -214,6 +214,7 @@ export default function ClienteComercialVendas() {
   const podeFiltrarEmpresa = clientesRede.length > 1;
 
   const [loadingDados, setLoadingDados] = useState(false);
+  const [bgRefresh, setBgRefresh] = useState(false); // refresh silencioso (stale-while-revalidate)
   const [erro, setErro] = useState(null);
   const [dados, setDados] = useState(null);
   const [produtosMap, setProdutosMap] = useState(new Map());
@@ -239,8 +240,12 @@ export default function ClienteComercialVendas() {
   const carregar = useCallback(async ({ force = false } = {}) => {
     if (!empresaSel?.empresa_codigo) return;
 
-    // Cache em memoria — evita refetch ao voltar pra pagina dentro de 5min
+    // Cache em memoria — chave inclui empresa selecionada
     const cacheKey = chaveCacheVendas(empresaSel.id, mesSelecionado, apenasDiasFechados);
+
+    // STALE-WHILE-REVALIDATE: se ha cache, hidrata IMEDIATAMENTE e segue
+    // re-buscando em background. UI ja aparece sem nenhum delay.
+    let modoSilencioso = false;
     if (!force) {
       const cached = lerCacheVendas(cacheKey);
       if (cached) {
@@ -249,19 +254,25 @@ export default function ClienteComercialVendas() {
         setGruposCatMap(cached.gruposCatMap);
         setGeradoEm(cached.geradoEm);
         setLoadingDados(false);
-        return;
+        modoSilencioso = true;
       }
     }
 
-    setLoadingDados(true);
+    if (modoSilencioso) {
+      setBgRefresh(true);
+    } else {
+      setLoadingDados(true);
+    }
     setErro(null);
     try {
+      // Resolve apiKey: usa a chave da sessao quando bate com a empresa selecionada
+      // (caso comum), senao busca no Supabase.
       let apiKey = chaveApiSessao;
-      if (!apiKey) {
-        const chaves = await mapService.listarChavesApi();
-        const chave = chaves.find(c => c.id === empresaSel.chave_api_id);
-        if (!chave) throw new Error('Chave API não encontrada para esta empresa');
-        apiKey = chave.chave;
+      if (!apiKey || empresaSel.chave_api_id !== session?.chaveApi?.id) {
+        const chavesApi = await mapService.listarChavesApi();
+        const c = chavesApi.find(ch => ch.id === empresaSel.chave_api_id);
+        if (!c) throw new Error('Chave API não encontrada para esta empresa');
+        apiKey = c.chave;
       }
 
       // Calcula periodo de buffer (7 dias antes do inicio do mes atual)
@@ -274,7 +285,6 @@ export default function ClienteComercialVendas() {
         empresaCodigo: empresaSel.empresa_codigo,
       };
 
-      // Helper que so dispara o fetch (nao agrega) — para rodar tudo em paralelo
       const fetchPeriodoRaw = (periodo) => {
         const filtros = {
           dataInicial: periodo.dataInicial,
@@ -288,19 +298,10 @@ export default function ClienteComercialVendas() {
       };
 
       const inicio = performance.now();
-
-      // FETCH PARALELO TOTAL: catalogos (produtos/grupos) + vendas/itens dos
-      // 4 periodos (atual + buffer + mes anterior + ano anterior) disparam
-      // todos juntos. Catalogos so sao buscados se ainda nao estao em cache.
       const precisaCatalogos = produtosMap.size === 0 || gruposCatMap.size === 0;
-      const [
-        prods,
-        grps,
-        rawAtual,
-        rawBuffer,
-        rawMesAnt,
-        rawAnoAnt,
-      ] = await Promise.all([
+
+      // FETCH PARALELO TOTAL: catalogos + 4 periodos disparam todos juntos
+      const [prods, grps, rawAtual, rawBuffer, rawMesAnt, rawAnoAnt] = await Promise.all([
         precisaCatalogos ? qualityApi.buscarProdutos(apiKey).catch(() => []) : Promise.resolve(null),
         precisaCatalogos ? qualityApi.buscarGrupos(apiKey).catch(() => [])   : Promise.resolve(null),
         fetchPeriodoRaw(periodos.atual),
@@ -309,7 +310,6 @@ export default function ClienteComercialVendas() {
         fetchPeriodoRaw(periodos.anoAnterior),
       ]);
 
-      // Monta mapas de catalogo (ou reusa os ja em estado)
       let pMap = produtosMap, gMap = gruposCatMap;
       if (precisaCatalogos) {
         pMap = new Map();
@@ -320,7 +320,6 @@ export default function ClienteComercialVendas() {
         setGruposCatMap(gMap);
       }
 
-      // Agrega cada periodo agora que catalogos e dados estao prontos
       const agregar = (periodo, [vendaItens, vendas]) => {
         const vendasMap = new Map();
         (vendas || []).forEach(v => vendasMap.set(v.vendaCodigo || v.codigo, v));
@@ -356,7 +355,6 @@ export default function ClienteComercialVendas() {
       const mesAnt = agregar(periodos.mesAnterior, rawMesAnt);
       const anoAnt = agregar(periodos.anoAnterior, rawAnoAnt);
 
-      // Buffer: so precisa do porDia para comparacao D vs D-7
       const [bufVendaItens, bufVendas] = rawBuffer;
       const bufVendasMap = new Map();
       (bufVendas || []).forEach(v => bufVendasMap.set(v.vendaCodigo || v.codigo, v));
@@ -372,8 +370,6 @@ export default function ClienteComercialVendas() {
 
       setDados(dadosFinais);
       setGeradoEm(tempo);
-
-      // Persiste no cache
       _cacheVendas.set(cacheKey, {
         timestamp: Date.now(),
         data: { dados: dadosFinais, produtosMap: pMap, gruposCatMap: gMap, geradoEm: tempo },
@@ -382,8 +378,9 @@ export default function ClienteComercialVendas() {
       setErro('Erro ao buscar vendas: ' + err.message);
     } finally {
       setLoadingDados(false);
+      setBgRefresh(false);
     }
-  }, [empresaSel, chaveApiSessao, periodos, produtosMap, gruposCatMap, mesSelecionado, apenasDiasFechados]);
+  }, [empresaSel, chaveApiSessao, periodos, produtosMap, gruposCatMap, mesSelecionado, apenasDiasFechados, session?.chaveApi?.id]);
 
   useEffect(() => {
     if (empresaSel?.empresa_codigo) carregar();
@@ -401,7 +398,7 @@ export default function ClienteComercialVendas() {
 
   return (
     <div>
-      <BarraProgressoTopo loading={loadingDados} />
+      <BarraProgressoTopo loading={loadingDados || bgRefresh} />
       <PageHeader
         title="Vendas"
         description={`${formatDataBR(periodos.atual.dataInicial)} a ${formatDataBR(periodos.atual.dataFinal)}${periodos.atual.ehMesCorrente ? ' (parcial)' : ''}`}
@@ -1986,3 +1983,4 @@ function Kpi({ label, valor, icon: Icon, color, raw, hint }) {
     </motion.div>
   );
 }
+

@@ -62,7 +62,9 @@ export default function ClienteComercialOperacao() {
   const hojeIso = ymd(new Date());
   const seteDiasAtrasIso = ymd(new Date(Date.now() - 6 * 86400000));
 
-  const [empresasSelIds, setEmpresasSelIds] = useState(() => new Set(cliente?.id ? [cliente.id] : []));
+  const [empresasSelIds, setEmpresasSelIds] = useState(() =>
+    new Set((session?.clientesRede || []).map(c => c.id))
+  );
   const [dataInicial, setDataInicial] = useState(seteDiasAtrasIso);
   const [dataFinal, setDataFinal] = useState(hojeIso);
   const [loading, setLoading] = useState(false);
