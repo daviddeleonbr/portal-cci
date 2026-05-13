@@ -4,7 +4,7 @@ import {
   Search, Plus, Building2, Mail, Phone, MapPin, Users as UsersIcon,
   Loader2, AlertCircle, Pencil, Trash2, ChevronRight, ChevronDown,
   Check, Zap, ArrowLeft, RefreshCw, Key, Network, Landmark, Wallet, Coins, Boxes,
-  Link2, BarChart3, TrendingUp,
+  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -24,12 +24,14 @@ export default function Clientes() {
   const [statusFilter, setStatusFilter] = useState('todos');
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
 
-  const [modalWizard, setModalWizard] = useState({ open: false, preRede: null });
+  const [modalWizard, setModalWizard] = useState({ open: false, preRede: null, editandoRede: null });
   const [modalEdit, setModalEdit] = useState({ open: false, data: null });
   const [modalDetail, setModalDetail] = useState({ open: false, cliente: null });
   const [modalConfirm, setModalConfirm] = useState({ open: false, message: '', onConfirm: null });
   const [modalContas, setModalContas] = useState({ open: false, cliente: null });
   const [expandedRedes, setExpandedRedes] = useState(new Set());
+  const [redesAutosystem, setRedesAutosystem] = useState([]);
+  const [modalEmpresasAS, setModalEmpresasAS] = useState({ open: false, rede: null });
 
   const showToast = (type, message) => {
     setToast({ show: true, type, message });
@@ -39,8 +41,12 @@ export default function Clientes() {
   const carregar = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await clientesService.listarClientes();
+      const [data, redes] = await Promise.all([
+        clientesService.listarClientes(),
+        autosystemService.listarRedes().catch(() => []),
+      ]);
       setClientes(data || []);
+      setRedesAutosystem(redes || []);
     } catch (err) {
       showToast('error', 'Erro ao carregar clientes: ' + err.message);
     } finally {
@@ -49,6 +55,16 @@ export default function Clientes() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const handleExcluirRedeAS = async (rede) => {
+    try {
+      await autosystemService.excluirRede(rede.id);
+      showToast('success', `Rede "${rede.nome}" excluída`);
+      await carregar();
+    } catch (err) {
+      showToast('error', err.message);
+    }
+  };
 
   const handleDelete = async (cliente) => {
     try {
@@ -111,7 +127,7 @@ export default function Clientes() {
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
       <PageHeader title="Clientes" description="Gestão de clientes e empresas atendidas">
-        <button onClick={() => setModalWizard({ open: true, preRede: null })}
+        <button onClick={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
           <Plus className="h-4 w-4" /> Novo Cliente
         </button>
@@ -230,7 +246,7 @@ export default function Clientes() {
                           <div className="flex items-center justify-end gap-1">
                             {rede.chaveApiId && (
                               <>
-                                <button onClick={() => setModalWizard({ open: true, preRede: rede })}
+                                <button onClick={() => setModalWizard({ open: true, preRede: rede, editandoRede: null })}
                                   className="rounded-md p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Vincular empresas">
                                   <Link2 className="h-3.5 w-3.5" />
                                 </button>
@@ -301,16 +317,31 @@ export default function Clientes() {
         )}
       </motion.div>
 
+      {/* Redes Autosystem */}
+      <SecaoRedesAutosystem
+        redes={redesAutosystem}
+        loading={loading}
+        onNova={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
+        onEditar={(rede) => setModalWizard({ open: true, preRede: null, editandoRede: rede })}
+        onImportar={(rede) => setModalEmpresasAS({ open: true, rede })}
+        onExcluir={(rede) => setModalConfirm({
+          open: true,
+          message: `Excluir a rede "${rede.nome}"? Esta ação não pode ser desfeita.`,
+          onConfirm: () => { handleExcluirRedeAS(rede); setModalConfirm({ open: false }); },
+        })}
+      />
+
       {/* Modals */}
       <WizardNovoCliente
         open={modalWizard.open}
         preRede={modalWizard.preRede}
+        editandoRede={modalWizard.editandoRede}
         empresasJaVinculadas={modalWizard.preRede
           ? (clientes.filter(c => c.chave_api_id === modalWizard.preRede.chaveApiId)
               .map(c => c.empresa_codigo).filter(v => v != null))
           : []}
-        onClose={() => setModalWizard({ open: false, preRede: null })}
-        onSaved={() => { setModalWizard({ open: false, preRede: null }); carregar(); }}
+        onClose={() => setModalWizard({ open: false, preRede: null, editandoRede: null })}
+        onSaved={() => { setModalWizard({ open: false, preRede: null, editandoRede: null }); carregar(); }}
         showToast={showToast}
       />
 
@@ -338,7 +369,109 @@ export default function Clientes() {
 
       <ModalConfirm open={modalConfirm.open} message={modalConfirm.message}
         onClose={() => setModalConfirm({ open: false })} onConfirm={modalConfirm.onConfirm} />
+
+      <ModalEmpresasAutosystem
+        open={modalEmpresasAS.open}
+        rede={modalEmpresasAS.rede}
+        clientesExistentes={clientes}
+        onClose={() => setModalEmpresasAS({ open: false, rede: null })}
+        onSaved={() => { setModalEmpresasAS({ open: false, rede: null }); carregar(); }}
+        showToast={showToast}
+      />
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Seção: Redes Autosystem (listagem + ações)
+// ═══════════════════════════════════════════════════════════
+function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, onExcluir }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      className="bg-white dark:bg-slate-900/40 rounded-xl border border-gray-200/60 dark:border-white/10 overflow-hidden shadow-sm mt-6">
+      <div className="px-6 py-4 border-b border-gray-100 dark:border-white/10 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white">
+            <Network className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Redes Autosystem</h3>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              {redes.length} {redes.length === 1 ? 'rede cadastrada' : 'redes cadastradas'}
+            </p>
+          </div>
+        </div>
+        <button onClick={onNova}
+          className="flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-700 transition-colors">
+          <Plus className="h-3.5 w-3.5" /> Nova rede
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">Carregando...</div>
+      ) : redes.length === 0 ? (
+        <div className="px-6 py-12 text-center">
+          <Network className="h-9 w-9 text-gray-300 dark:text-white/10 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Nenhuma rede Autosystem</p>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">
+            Clique em "Nova rede" para cadastrar a primeira rede com credenciais de conexão.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-white/10 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                <th className="text-left px-6 py-3 font-medium">Nome</th>
+                <th className="text-left px-6 py-3 font-medium">Slug</th>
+                <th className="text-center px-6 py-3 font-medium">Status</th>
+                <th className="px-6 py-3 w-32"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+              {redes.map(rede => (
+                <tr key={rede.id} className="hover:bg-gray-50/60 dark:hover:bg-white/5 transition-colors">
+                  <td className="px-6 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/15 text-violet-600 dark:text-violet-300 flex-shrink-0">
+                        <Network className="h-3.5 w-3.5" />
+                      </div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{rede.nome}</p>
+                    </div>
+                  </td>
+                  <td className="px-6 py-3 text-[12px] text-gray-600 dark:text-gray-400 font-mono">{rede.slug}</td>
+                  <td className="px-6 py-3 text-center">
+                    {rede.ativo ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30 px-2 py-0.5 text-[10px] font-medium">
+                        <Check className="h-2.5 w-2.5" /> Ativa
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400 px-2 py-0.5 text-[10px] font-medium">Inativa</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => onImportar(rede)} title="Importar empresas"
+                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors">
+                        <Database className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => onEditar(rede)} title="Editar credenciais"
+                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => onExcluir(rede)} title="Excluir rede"
+                        className="rounded-md p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </motion.div>
   );
 }
 
@@ -368,7 +501,7 @@ function KpiCard({ label, value, icon: Icon, color }) {
 // ═══════════════════════════════════════════════════════════
 // Wizard: Novo Cliente (Manual ou Webposto)
 // ═══════════════════════════════════════════════════════════
-function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, empresasJaVinculadas = [] }) {
+function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, editandoRede = null, empresasJaVinculadas = [] }) {
   const [step, setStep] = useState('choice');  // choice | webposto-key | webposto-select | form
   const [method, setMethod] = useState(null);
 
@@ -389,6 +522,12 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   const [redeNome, setRedeNome] = useState('');
   const [redeSlug, setRedeSlug] = useState('');
   const [redeSlugEdited, setRedeSlugEdited] = useState(false);
+  const [redeIp, setRedeIp] = useState('');
+  const [redePorta, setRedePorta] = useState('');
+  const [redeBanco, setRedeBanco] = useState('');
+  const [redeUsuario, setRedeUsuario] = useState('');
+  const [redeSenha, setRedeSenha] = useState('');
+  const [mostrarSenha, setMostrarSenha] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -404,10 +543,38 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
     setRedeNome('');
     setRedeSlug('');
     setRedeSlugEdited(false);
+    setRedeIp('');
+    setRedePorta('');
+    setRedeBanco('');
+    setRedeUsuario('');
+    setRedeSenha('');
+    setMostrarSenha(false);
 
+    // Modo EDITAR rede Autosystem: pula choice, pre-popula tudo, vai pra rede-form
+    if (editandoRede?.id) {
+      setMethod('rede');
+      setRedeNome(editandoRede.nome || '');
+      setRedeSlug(editandoRede.slug || '');
+      setRedeSlugEdited(true); // impede o auto-gerador de slug
+      setStep('rede-form');
+      (async () => {
+        try {
+          setBuscando(true);
+          const cred = await autosystemService.obterCredenciais(editandoRede.id);
+          setRedeIp(cred?.conexao_ip || '');
+          setRedePorta(cred?.conexao_porta != null ? String(cred.conexao_porta) : '');
+          setRedeBanco(cred?.conexao_banco || '');
+          setRedeUsuario(cred?.conexao_usuario || '');
+          // Senha intencionalmente vazia — "deixe em branco para manter a atual"
+          setRedeSenha('');
+        } catch (err) {
+          showToast?.('error', 'Erro ao carregar credenciais: ' + err.message);
+        } finally { setBuscando(false); }
+      })();
+    }
     // Modo vincular empresas em uma rede ja existente:
     // pula direto para o step de selecao, ja com a chave e empresas carregadas.
-    if (preRede?.chaveApiId) {
+    else if (preRede?.chaveApiId) {
       (async () => {
         try {
           setBuscando(true);
@@ -431,7 +598,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
       setStep('choice');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, preRede?.chaveApiId]);
+  }, [open, preRede?.chaveApiId, editandoRede?.id]);
 
   // auto-gerar slug enquanto o usuario nao tiver editado manualmente
   useEffect(() => {
@@ -441,8 +608,31 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   const salvarRede = async () => {
     try {
       setSaving(true);
-      await autosystemService.criarRede({ nome: redeNome.trim(), slug: redeSlug.trim() });
-      showToast('success', 'Rede cadastrada');
+      if (editandoRede?.id) {
+        // Modo edicao: senha vazia = manter atual (undefined no service)
+        await autosystemService.atualizarRede(editandoRede.id, {
+          nome: redeNome.trim(),
+          slug: redeSlug.trim(),
+          conexao_ip: redeIp.trim(),
+          conexao_porta: redePorta !== '' ? redePorta : null,
+          conexao_banco: redeBanco.trim(),
+          conexao_usuario: redeUsuario.trim(),
+          // se nao digitou nada, undefined → service nao manda → RPC preserva
+          senha: redeSenha ? redeSenha : undefined,
+        });
+        showToast('success', 'Rede atualizada');
+      } else {
+        await autosystemService.criarRede({
+          nome: redeNome.trim(),
+          slug: redeSlug.trim(),
+          conexao_ip: redeIp.trim() || null,
+          conexao_porta: redePorta || null,
+          conexao_banco: redeBanco.trim() || null,
+          conexao_usuario: redeUsuario.trim() || null,
+          senha: redeSenha || null,
+        });
+        showToast('success', 'Rede cadastrada');
+      }
       onSaved();
     } catch (err) {
       showToast('error', err.message);
@@ -541,53 +731,53 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={titleFor(step)} size={step === 'webposto-select' ? 'lg' : 'md'}>
+    <Modal open={open} onClose={onClose} title={titleFor(step, !!editandoRede)} size={step === 'webposto-select' ? 'lg' : 'md'}>
       <AnimatePresence mode="wait">
         {/* STEP 1: CHOICE */}
         {step === 'choice' && (
           <motion.div key="choice" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="space-y-3">
-            <p className="text-sm text-gray-500 mb-4">Como deseja cadastrar o cliente?</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Como deseja cadastrar o cliente?</p>
 
             <button onClick={() => escolherMetodo('webposto')}
-              className="w-full text-left rounded-xl border-2 border-amber-200 bg-amber-50/40 p-4 hover:border-amber-300 hover:bg-amber-50 transition-all group">
+              className="w-full text-left rounded-xl border-2 border-amber-200 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-500/10 p-4 hover:border-amber-300 hover:bg-amber-50 dark:hover:border-amber-500/50 dark:hover:bg-amber-500/15 transition-all group">
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0">
                   <Zap className="h-5 w-5 text-white" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-900 mb-0.5">Integrar com Webposto</p>
-                  <p className="text-xs text-gray-500">Cliente usa o sistema Webposto. Insira a chave API para importar os dados automaticamente.</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-0.5">Integrar com Webposto</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Cliente usa o sistema Webposto. Insira a chave API para importar os dados automaticamente.</p>
                 </div>
-                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-amber-600 transition-colors mt-3" />
+                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors mt-3" />
+              </div>
+            </button>
+
+            <button onClick={() => escolherMetodo('rede')}
+              className="w-full text-left rounded-xl border-2 border-violet-200 bg-violet-50/40 dark:border-violet-500/30 dark:bg-violet-500/10 p-4 hover:border-violet-300 hover:bg-violet-50 dark:hover:border-violet-500/50 dark:hover:bg-violet-500/15 transition-all group">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                  <Zap className="h-5 w-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-0.5">Integrar com Autosystem</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Cadastra apenas a rede de empresas que utiliza Autosystem, sem dados individuais.</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-violet-600 dark:group-hover:text-violet-300 transition-colors mt-3" />
               </div>
             </button>
 
             <button onClick={() => escolherMetodo('manual')}
-              className="w-full text-left rounded-xl border-2 border-gray-200 p-4 hover:border-blue-300 hover:bg-blue-50/40 transition-all group">
+              className="w-full text-left rounded-xl border-2 border-gray-200 dark:border-white/10 p-4 hover:border-blue-300 hover:bg-blue-50/40 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 transition-all group">
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
                   <Pencil className="h-5 w-5 text-white" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-900 mb-0.5">Cadastro manual</p>
-                  <p className="text-xs text-gray-500">Preencha os dados do cliente manualmente.</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-0.5">Cadastro manual</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Preencha os dados do cliente manualmente.</p>
                 </div>
-                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 transition-colors mt-3" />
-              </div>
-            </button>
-
-            <button onClick={() => escolherMetodo('rede')}
-              className="w-full text-left rounded-xl border-2 border-violet-200 bg-violet-50/40 p-4 hover:border-violet-300 hover:bg-violet-50 transition-all group">
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                  <Network className="h-5 w-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-900 mb-0.5">Cadastrar Rede (Autosystem)</p>
-                  <p className="text-xs text-gray-500">Cadastra apenas a rede de empresas que utiliza Autosystem, sem dados individuais.</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-violet-600 transition-colors mt-3" />
+                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-300 transition-colors mt-3" />
               </div>
             </button>
           </motion.div>
@@ -727,51 +917,153 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
           </motion.div>
         )}
 
-        {/* STEP 5: REDE AUTOSYSTEM */}
+        {/* STEP 5a: REDE AUTOSYSTEM — Identificação */}
         {step === 'rede-form' && (
           <motion.form key="rede" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
-            onSubmit={(e) => { e.preventDefault(); salvarRede(); }}
+            onSubmit={(e) => { e.preventDefault(); setStep('rede-conexao'); }}
             className="space-y-5">
-            <button type="button" onClick={() => setStep('choice')}
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
-              <ArrowLeft className="h-3 w-3" /> Voltar
-            </button>
+            <div className="flex items-center justify-between">
+              {editandoRede ? <div /> : (
+                <button type="button" onClick={() => setStep('choice')}
+                  className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors">
+                  <ArrowLeft className="h-3 w-3" /> Voltar
+                </button>
+              )}
+              <PassoIndicador atual={1} total={2} />
+            </div>
 
-            <div className="rounded-xl bg-violet-50/60 border border-violet-200 p-3 flex gap-2">
-              <Network className="h-4 w-4 text-violet-600 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-violet-900 leading-relaxed">
-                Cadastre apenas a <strong>rede de empresas Autosystem</strong>. Esse cadastro e usado pelo sistema de sincronizacao de dados e não cria um cliente individual.
+            <div className="rounded-xl bg-violet-50/60 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 p-3 flex gap-2">
+              <Network className="h-4 w-4 text-violet-600 dark:text-violet-300 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-violet-900 dark:text-violet-200 leading-relaxed">
+                {editandoRede ? (
+                  <>Editando a rede <strong>{editandoRede.nome}</strong>. Atualize o nome/slug abaixo ou avance para alterar as credenciais.</>
+                ) : (
+                  <>Cadastre apenas a <strong>rede de empresas Autosystem</strong>. Esse cadastro é usado pelo sistema de sincronização de dados e não cria um cliente individual.</>
+                )}
               </p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Nome da rede *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nome da rede *</label>
               <input type="text" required autoFocus value={redeNome}
                 onChange={(e) => setRedeNome(e.target.value)}
                 placeholder="Ex: Rede Trivela"
-                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Slug <span className="text-gray-400 font-normal">(identificador unico)</span>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Slug <span className="text-gray-400 dark:text-gray-500 font-normal">(identificador único)</span>
               </label>
               <input type="text" required value={redeSlug}
                 onChange={(e) => { setRedeSlug(e.target.value); setRedeSlugEdited(true); }}
                 placeholder="rede-trivela"
-                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
-              <p className="text-[11px] text-gray-400 mt-1">Gerado automaticamente a partir do nome. Pode ser editado.</p>
+                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Gerado automaticamente a partir do nome. Pode ser editado.</p>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-white/10">
               <button type="button" onClick={onClose}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
                 Cancelar
               </button>
-              <button type="submit" disabled={saving || !redeNome.trim() || !redeSlug.trim()}
+              <button type="submit" disabled={!redeNome.trim() || !redeSlug.trim()}
+                className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50">
+                Próximo <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </motion.form>
+        )}
+
+        {/* STEP 5b: REDE AUTOSYSTEM — Conexão */}
+        {step === 'rede-conexao' && (
+          <motion.form key="rede-conexao" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+            onSubmit={(e) => { e.preventDefault(); salvarRede(); }}
+            className="space-y-5">
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={() => setStep('rede-form')}
+                className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors">
+                <ArrowLeft className="h-3 w-3" /> Voltar
+              </button>
+              <PassoIndicador atual={2} total={2} />
+            </div>
+
+            <div className="rounded-xl bg-violet-50/60 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 p-3 flex gap-2">
+              <Server className="h-4 w-4 text-violet-600 dark:text-violet-300 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-violet-900 dark:text-violet-200 leading-relaxed">
+                  Credenciais de conexão ao servidor <strong>{redeNome}</strong>.
+                  {editandoRede
+                    ? ' Todos os campos são criptografados antes de serem armazenados. Deixe a senha em branco para manter a atual.'
+                    : ' Todos os campos são criptografados antes de serem armazenados.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <Network className="inline h-3 w-3 mr-1" /> IP do servidor
+                </label>
+                <input type="text" autoFocus value={redeIp}
+                  onChange={(e) => setRedeIp(e.target.value)}
+                  placeholder="187.45.123.45 ou hostname"
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Porta</label>
+                <input type="number" min="1" max="65535" value={redePorta}
+                  onChange={(e) => setRedePorta(e.target.value)}
+                  placeholder="5432"
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <Database className="inline h-3 w-3 mr-1" /> Banco de dados
+              </label>
+              <input type="text" value={redeBanco}
+                onChange={(e) => setRedeBanco(e.target.value)}
+                placeholder="autosystem_prod"
+                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Usuário</label>
+                <input type="text" value={redeUsuario} autoComplete="off"
+                  onChange={(e) => setRedeUsuario(e.target.value)}
+                  placeholder="usuario_db"
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <Lock className="inline h-3 w-3 mr-1" /> Senha
+                </label>
+                <div className="relative">
+                  <input type={mostrarSenha ? 'text' : 'password'} value={redeSenha} autoComplete="new-password"
+                    onChange={(e) => setRedeSenha(e.target.value)}
+                    placeholder={editandoRede ? 'Deixe em branco para manter' : '••••••••'}
+                    className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 pr-10 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+                  <button type="button" onClick={() => setMostrarSenha(o => !o)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 p-1.5">
+                    {mostrarSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-white/10">
+              <button type="button" onClick={onClose}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+                Cancelar
+              </button>
+              <button type="submit" disabled={saving}
                 className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50">
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                <Network className="h-4 w-4" /> Cadastrar rede
+                <Network className="h-4 w-4" />
+                {editandoRede ? 'Atualizar rede' : 'Cadastrar rede'}
               </button>
             </div>
           </motion.form>
@@ -781,13 +1073,41 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   );
 }
 
-function titleFor(step) {
+function titleFor(step, editando = false) {
   if (step === 'choice') return 'Novo Cliente';
   if (step === 'webposto-key') return 'Integração Webposto';
   if (step === 'webposto-select') return 'Selecionar empresas';
   if (step === 'form') return 'Cadastro manual';
-  if (step === 'rede-form') return 'Cadastrar Rede (Autosystem)';
+  if (step === 'rede-form') return editando ? 'Editar Rede (Autosystem) — Identificação' : 'Cadastrar Rede (Autosystem) — Identificação';
+  if (step === 'rede-conexao') return editando ? 'Editar Rede (Autosystem) — Conexão' : 'Cadastrar Rede (Autosystem) — Conexão';
   return 'Novo Cliente';
+}
+
+// Indicador de passos (1/N) usado em fluxos com múltiplas telas
+function PassoIndicador({ atual, total }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {Array.from({ length: total }).map((_, i) => {
+        const passo = i + 1;
+        const ativo = passo === atual;
+        const concluido = passo < atual;
+        return (
+          <div key={i} className="flex items-center gap-1.5">
+            <div className={`flex items-center justify-center h-6 w-6 rounded-full text-[10px] font-bold transition-colors ${
+              ativo ? 'bg-violet-600 text-white' :
+              concluido ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200' :
+              'bg-gray-100 text-gray-400 dark:bg-white/10 dark:text-gray-500'
+            }`}>
+              {concluido ? <Check className="h-3 w-3" /> : passo}
+            </div>
+            {passo < total && (
+              <div className={`h-px w-6 ${concluido ? 'bg-violet-300 dark:bg-violet-500/40' : 'bg-gray-200 dark:bg-white/10'}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function emptyForm() {
@@ -1477,6 +1797,287 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
       </div>
     </Modal>
   );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Modal: Importar empresas do Autosystem
+// ═══════════════════════════════════════════════════════════
+function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSaved, showToast }) {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [empresas, setEmpresas] = useState([]);
+  const [selecionadas, setSelecionadas] = useState(new Set());
+  const [erro, setErro] = useState('');
+  const [busca, setBusca] = useState('');
+
+  // CNPJs já cadastrados nesta rede (para marcar como "já importada")
+  const cnpjsExistentes = useMemo(() => {
+    if (!rede) return new Set();
+    return new Set(
+      (clientesExistentes || [])
+        .filter(c => c.as_rede_id === rede.id && c.cnpj)
+        .map(c => normalizarCnpj(c.cnpj))
+    );
+  }, [clientesExistentes, rede]);
+
+  useEffect(() => {
+    if (!open || !rede) return;
+    setEmpresas([]);
+    setSelecionadas(new Set());
+    setErro('');
+    setBusca('');
+    (async () => {
+      try {
+        setLoading(true);
+        const result = await autosystemService.buscarEmpresasAutosystem(rede.id);
+        setEmpresas(result);
+      } catch (err) {
+        setErro(err.message || 'Falha ao buscar empresas');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [open, rede]);
+
+  const empresasFiltradas = useMemo(() => {
+    if (!busca.trim()) return empresas;
+    const q = busca.trim().toLowerCase();
+    return empresas.filter(e => {
+      const nome = extrairNomeEmpresa(e)?.toLowerCase() || '';
+      const cnpj = extrairCnpjEmpresa(e) || '';
+      return nome.includes(q) || cnpj.includes(busca.trim());
+    });
+  }, [empresas, busca]);
+
+  const toggleEmpresa = (key) => {
+    setSelecionadas(prev => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  };
+
+  const toggleTodas = () => {
+    const importaveis = empresasFiltradas.filter(e =>
+      !cnpjsExistentes.has(normalizarCnpj(extrairCnpjEmpresa(e)))
+    );
+    if (selecionadas.size === importaveis.length) {
+      setSelecionadas(new Set());
+    } else {
+      setSelecionadas(new Set(importaveis.map((_, i) => chaveEmpresa(empresasFiltradas[i], i))));
+    }
+  };
+
+  const salvar = async () => {
+    if (selecionadas.size === 0 || !rede) return;
+    try {
+      setSaving(true);
+      const escolhidas = empresasFiltradas.filter((emp, i) => selecionadas.has(chaveEmpresa(emp, i)));
+      const payload = escolhidas.map(emp => mapearEmpresaParaCliente(emp, rede.id));
+      await clientesService.criarClientesBatch(payload);
+      showToast('success', `${payload.length} ${payload.length === 1 ? 'empresa importada' : 'empresas importadas'}`);
+      onSaved();
+    } catch (err) {
+      showToast('error', 'Erro ao importar: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose}
+      title={`Importar empresas — ${rede?.nome || ''}`} size="xl">
+      <div className="space-y-4">
+        <p className="text-xs text-gray-600 dark:text-gray-400">
+          Selecione as empresas do servidor Autosystem que deseja cadastrar como clientes nesta rede.
+        </p>
+
+        {loading ? (
+          <div className="py-12 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p className="text-sm">Conectando ao servidor e buscando empresas...</p>
+          </div>
+        ) : erro ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-500/10 dark:border-red-500/30 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-red-700 dark:text-red-300">
+              <p className="font-medium mb-1">Falha ao buscar empresas</p>
+              <p className="text-xs">{erro}</p>
+            </div>
+          </div>
+        ) : empresas.length === 0 ? (
+          <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+            Nenhuma empresa retornada pelo servidor.
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome ou CNPJ..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+                />
+              </div>
+              <button onClick={toggleTodas}
+                className="text-xs font-medium text-violet-600 dark:text-violet-300 hover:underline whitespace-nowrap">
+                {selecionadas.size > 0 ? 'Limpar seleção' : 'Selecionar todas'}
+              </button>
+            </div>
+
+            <div className="border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden max-h-[420px] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50 dark:bg-white/5 z-10">
+                  <tr className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    <th className="px-3 py-2 w-10"></th>
+                    <th className="text-left px-3 py-2 font-medium">Nome / Razão social</th>
+                    <th className="text-left px-3 py-2 font-medium">CNPJ</th>
+                    <th className="text-center px-3 py-2 font-medium w-32">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {empresasFiltradas.map((emp, i) => {
+                    const nome = extrairNomeEmpresa(emp) || '(sem nome)';
+                    const cnpj = extrairCnpjEmpresa(emp);
+                    const cnpjNorm = normalizarCnpj(cnpj);
+                    const jaImportada = cnpjNorm && cnpjsExistentes.has(cnpjNorm);
+                    const key = chaveEmpresa(emp, i);
+                    const isChecked = selecionadas.has(key);
+                    return (
+                      <tr key={key}
+                        className={`${jaImportada ? 'bg-gray-50 dark:bg-white/5 opacity-60' : 'hover:bg-violet-50/40 dark:hover:bg-violet-500/5 cursor-pointer'} transition-colors`}
+                        onClick={() => !jaImportada && toggleEmpresa(key)}>
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={jaImportada}
+                            onChange={() => toggleEmpresa(key)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{nome}</p>
+                        </td>
+                        <td className="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400">
+                          {formatarCnpj(cnpj) || '—'}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {jaImportada ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 px-2 py-0.5 text-[10px] font-medium">
+                              <Check className="h-2.5 w-2.5" /> Importada
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30 px-2 py-0.5 text-[10px] font-medium">
+                              Disponível
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100 dark:border-white/10">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {selecionadas.size} {selecionadas.size === 1 ? 'empresa selecionada' : 'empresas selecionadas'}
+                {empresas.length > 0 && ` de ${empresas.length}`}
+              </p>
+              <div className="flex gap-3">
+                <button onClick={onClose}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={salvar} disabled={selecionadas.size === 0 || saving}
+                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Importar {selecionadas.size > 0 && `(${selecionadas.size})`}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// Helpers de extração de dados das empresas Autosystem.
+// A query é `SELECT *`, então os campos podem variar de schema para schema.
+// Tentamos as colunas mais comuns; quem não bater fica null/—.
+function pickField(obj, keys) {
+  if (!obj) return null;
+  for (const k of keys) {
+    const v = obj[k];
+    if (v != null && String(v).trim() !== '') return String(v).trim();
+  }
+  return null;
+}
+
+function extrairNomeEmpresa(emp) {
+  return pickField(emp, [
+    'fantasia', 'nome_fantasia', 'nomefantasia',
+    'razao_social', 'razaosocial', 'razao',
+    'nome', 'descricao',
+  ]);
+}
+
+function extrairRazaoSocial(emp) {
+  return pickField(emp, [
+    'razao_social', 'razaosocial', 'razao',
+    'nome', 'descricao',
+  ]);
+}
+
+function extrairCnpjEmpresa(emp) {
+  return pickField(emp, ['cnpj', 'cnpj_cpf', 'cgc', 'cnpjcpf']);
+}
+
+function normalizarCnpj(cnpj) {
+  if (!cnpj) return '';
+  return String(cnpj).replace(/\D/g, '');
+}
+
+function formatarCnpj(cnpj) {
+  const v = normalizarCnpj(cnpj);
+  if (v.length !== 14) return cnpj || '';
+  return `${v.slice(0, 2)}.${v.slice(2, 5)}.${v.slice(5, 8)}/${v.slice(8, 12)}-${v.slice(12)}`;
+}
+
+function chaveEmpresa(emp, i) {
+  const cnpj = normalizarCnpj(extrairCnpjEmpresa(emp));
+  if (cnpj) return `cnpj:${cnpj}`;
+  const id = pickField(emp, ['id', 'codigo', 'cod_empresa', 'empresa_id']);
+  if (id) return `id:${id}`;
+  return `idx:${i}`;
+}
+
+function mapearEmpresaParaCliente(emp, redeId) {
+  const cnpj = normalizarCnpj(extrairCnpjEmpresa(emp));
+  return {
+    nome: extrairNomeEmpresa(emp) || extrairRazaoSocial(emp) || 'Empresa sem nome',
+    razao_social: extrairRazaoSocial(emp) || null,
+    cnpj: cnpj ? formatarCnpj(cnpj) : null,
+    inscricao_estadual: pickField(emp, ['inscricao_estadual', 'ie', 'inscricaoestadual']),
+    inscricao_municipal: pickField(emp, ['inscricao_municipal', 'im', 'inscricaomunicipal']),
+    contato_email: pickField(emp, ['email', 'e_mail', 'mail']),
+    contato_telefone: pickField(emp, ['telefone', 'fone', 'celular']),
+    endereco: pickField(emp, ['endereco', 'logradouro', 'rua']),
+    numero: pickField(emp, ['numero', 'num', 'nro']),
+    bairro: pickField(emp, ['bairro']),
+    cidade: pickField(emp, ['cidade', 'municipio']),
+    estado: pickField(emp, ['estado', 'uf']),
+    cep: pickField(emp, ['cep']),
+    status: 'ativo',
+    as_rede_id: redeId,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
