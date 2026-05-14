@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { MessageCircle, Phone, Mail, Send, Clock, CheckCircle } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import Toast from '../../components/ui/Toast';
+import PageHeader from '../../../components/ui/PageHeader';
+import Toast from '../../../components/ui/Toast';
 
 const chamados = [
   { id: 1, titulo: 'Duvida sobre DRE de Fevereiro', status: 'respondido', data: '2026-03-15', resposta: 'O valor foi ajustado conforme conciliação bancária.' },

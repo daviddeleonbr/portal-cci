@@ -6,13 +6,13 @@ import {
   DollarSign, Fuel, Wrench, Store, Package,
   CreditCard, TrendingUp, TrendingDown, Gauge,
 } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import BarraProgressoTopo from '../../components/ui/BarraProgressoTopo';
-import { useClienteSession } from '../../hooks/useAuth';
-import * as mapService from '../../services/mapeamentoService';
-import * as qualityApi from '../../services/qualityApiService';
-import { classificarItem } from '../../services/mapeamentoVendasService';
-import { formatCurrency } from '../../utils/format';
+import PageHeader from '../../../components/ui/PageHeader';
+import BarraProgressoTopo from '../../../components/ui/BarraProgressoTopo';
+import { useClienteSession } from '../../../hooks/useAuth';
+import * as mapService from '../../../services/mapeamentoService';
+import * as qualityApi from '../../../services/qualityApiService';
+import { classificarItem } from '../../../services/mapeamentoVendasService';
+import { formatCurrency } from '../../../utils/format';
 
 // ─── Helpers ─────────────────────────────────────────────────
 function ymd(d) {

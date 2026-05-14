@@ -19,7 +19,12 @@ export default function ClienteHeader({ onMenuClick }) {
   const cliente = session?.cliente;
   const clientesRede = session?.clientesRede || [];
   const usuario = session?.usuario;
-  const podeTrocarEmpresa = !!usuario?.permissoes?.includes('trocar_empresa') && clientesRede.length > 1;
+  const tipoCliente = session?.tipoCliente || 'webposto';
+  // No portal Autosystem cada página agrega os dados de todas as empresas
+  // da rede (modo "tree"), então o seletor de empresa ativa é dispensável.
+  const podeTrocarEmpresa = tipoCliente !== 'autosystem'
+    && !!usuario?.permissoes?.includes('trocar_empresa')
+    && clientesRede.length > 1;
   const { tema, alternar } = useTheme();
   const escuro = tema === 'dark';
   const unread = clienteNotificacoes.filter(n => !n.lida).length;
@@ -108,6 +113,16 @@ export default function ClienteHeader({ onMenuClick }) {
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
+        ) : tipoCliente === 'autosystem' ? (
+          <div className="hidden sm:flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+              <Building2 className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{session?.asRede?.nome || 'Rede Autosystem'}</p>
+              <p className="text-[10px] text-gray-500">{clientesRede.length} empresa{clientesRede.length === 1 ? '' : 's'} na rede</p>
+            </div>
           </div>
         ) : (
           <div className="hidden sm:block">

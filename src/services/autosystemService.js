@@ -132,6 +132,45 @@ export async function obterCredenciais(id) {
   return Array.isArray(data) ? data[0] : data;
 }
 
+// Helper compartilhado: extrai mensagem detalhada de FunctionsHttpError
+async function _extrairErroFn(error, dataFallback) {
+  let detail = error.message;
+  try {
+    if (error.context && typeof error.context.json === 'function') {
+      const body = await error.context.json();
+      // eslint-disable-next-line no-console
+      console.error('[autosystem fn] erro:', body);
+      detail = body?.detail || body?.error || JSON.stringify(body);
+    } else if (error.context && typeof error.context.text === 'function') {
+      detail = await error.context.text();
+    }
+  } catch {
+    // mantém error.message
+  }
+  return new Error(detail || dataFallback || 'Falha ao chamar Edge Function');
+}
+
+// ─── Contas a pagar (banco remoto Autosystem) ────────────────
+// Filtros suportados:
+//   - vencto_de  / vencto_ate  (YYYY-MM-DD, opcional)
+export async function buscarContasPagar(redeId, empresaCodigo, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (empresaCodigo == null || empresaCodigo === '') {
+    throw new Error('Esta empresa ainda não foi vinculada ao Autosystem (empresa_codigo vazio).');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-contas-pagar', {
+    body: {
+      rede_id: redeId,
+      empresa_codigo: empresaCodigo,
+      vencto_de: filtros.vencto_de || null,
+      vencto_ate: filtros.vencto_ate || null,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar contas a pagar');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.contas) ? data.contas : [];
+}
+
 // ─── Empresas (banco remoto Autosystem) ──────────────────────
 // Chama a Edge Function `autosystem-empresas`, que:
 //   1) busca credenciais via RPC `as_rede_get_credenciais`

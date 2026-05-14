@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Receipt, Download, Copy, Eye, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import StatusBadge from '../../components/ui/StatusBadge';
-import Modal from '../../components/ui/Modal';
-import Toast from '../../components/ui/Toast';
-import { TableSkeleton } from '../../components/ui/LoadingSkeleton';
-import { useSimulatedLoading } from '../../hooks/useSimulatedLoading';
-import { clienteBoletos } from '../../data/clienteMockData';
-import { useClienteSession } from '../../hooks/useAuth';
-import { formatCurrency, formatDate } from '../../utils/format';
+import PageHeader from '../../../components/ui/PageHeader';
+import StatusBadge from '../../../components/ui/StatusBadge';
+import Modal from '../../../components/ui/Modal';
+import Toast from '../../../components/ui/Toast';
+import { TableSkeleton } from '../../../components/ui/LoadingSkeleton';
+import { useSimulatedLoading } from '../../../hooks/useSimulatedLoading';
+import { clienteBoletos } from '../../../data/clienteMockData';
+import { useClienteSession } from '../../../hooks/useAuth';
+import { formatCurrency, formatDate } from '../../../utils/format';
 
 export default function ClienteFinanceiro() {
   const loading = useSimulatedLoading(500);

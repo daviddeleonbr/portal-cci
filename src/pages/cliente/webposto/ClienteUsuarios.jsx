@@ -3,11 +3,11 @@ import {
   Plus, Pencil, Trash2, Loader2, Search, Users, Mail, Building2,
   Check, Eye, EyeOff, KeyRound, ShieldCheck, AlertCircle,
 } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import Toast from '../../components/ui/Toast';
-import Modal from '../../components/ui/Modal';
-import { useClienteSession } from '../../hooks/useAuth';
-import * as usuariosService from '../../services/usuariosSistemaService';
+import PageHeader from '../../../components/ui/PageHeader';
+import Toast from '../../../components/ui/Toast';
+import Modal from '../../../components/ui/Modal';
+import { useClienteSession } from '../../../hooks/useAuth';
+import * as usuariosService from '../../../services/usuariosSistemaService';
 
 export default function ClienteUsuarios() {
   const session = useClienteSession();

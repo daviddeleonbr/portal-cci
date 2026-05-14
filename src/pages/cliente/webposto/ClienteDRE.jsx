@@ -1,14 +1,14 @@
 import { Navigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import RelatorioDRE from '../RelatorioDRE';
-import { useClienteSession } from '../../hooks/useAuth';
+import PageHeader from '../../../components/ui/PageHeader';
+import RelatorioDRE from '../../RelatorioDRE';
+import { useClienteSession } from '../../../hooks/useAuth';
 
 export default function ClienteDRE() {
   const session = useClienteSession();
   const cliente = session?.cliente;
 
-  if (!cliente?.id) return <Navigate to="/cliente/dashboard" replace />;
+  if (!cliente?.id) return <Navigate to="/cliente/webposto/dashboard" replace />;
 
   // Admin controla visibilidade por empresa via toggle em Cadastros > Clientes.
   if (!cliente.exibir_dre) {
@@ -29,5 +29,5 @@ export default function ClienteDRE() {
     );
   }
 
-  return <RelatorioDRE clienteIdOverride={cliente.id} backHref="/cliente/dashboard" />;
+  return <RelatorioDRE clienteIdOverride={cliente.id} backHref="/cliente/webposto/dashboard" />;
 }

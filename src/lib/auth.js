@@ -53,18 +53,29 @@ export async function loginAdmin(email, senha) {
   return session;
 }
 
+// Login do cliente: detecta automaticamente se é portal Webposto ou
+// Autosystem baseado em qual coluna do usuário está preenchida.
+// A sessão inclui `tipoCliente` que governa o prefixo de URLs.
 export async function loginCliente(email, senha) {
-  const { usuario, chaveApi, clientesRede } = await autenticar(email, senha, 'cliente');
-  if (!chaveApi) throw new Error('Este usuário não esta vinculado a nenhuma rede.');
+  const { usuario, chaveApi, asRede, clientesRede, tipoCliente } =
+    await autenticar(email, senha, 'cliente');
+
+  if (!tipoCliente) {
+    throw new Error('Este usuário não está vinculado a nenhuma rede.');
+  }
+
+  const rede = tipoCliente === 'autosystem' ? asRede : chaveApi;
   if (!clientesRede || clientesRede.length === 0) {
-    throw new Error(`A rede "${chaveApi.nome}" ainda não tem empresas cadastradas. Contate o administrador.`);
+    throw new Error(`A rede "${rede?.nome || ''}" ainda não tem empresas cadastradas. Contate o administrador.`);
   }
   // Cliente ativo = primeira empresa da rede. O usuario podera trocar no portal.
   const cliente = clientesRede[0];
   const session = {
     usuario,
     cliente,
+    tipoCliente,
     chaveApi,
+    asRede,
     clientesRede,
     loggedAt: new Date().toISOString(),
   };
@@ -78,7 +89,7 @@ async function autenticar(email, senha, tipoEsperado) {
 
   const { data: usuario, error } = await supabase
     .from('cci_usuarios_sistema')
-    .select('*, chaves_api(*)')
+    .select('*, chaves_api(*), as_rede(*)')
     .eq('email', emailNorm)
     .maybeSingle();
   if (error) throw new Error('Falha ao validar credenciais: ' + error.message);
@@ -102,13 +113,22 @@ async function autenticar(email, senha, tipoEsperado) {
     .then(() => {}, () => {});
 
   const chaveApi = usuario.chaves_api || null;
+  const asRede = usuario.as_rede || null;
   const usuarioSemSenha = { ...usuario };
   delete usuarioSemSenha.senha;
   delete usuarioSemSenha.chaves_api;
+  delete usuarioSemSenha.as_rede;
+
+  // Determina tipo do portal cliente pelo vínculo (constraint XOR no schema garante exclusividade)
+  let tipoCliente = null;
+  if (tipoEsperado === 'cliente') {
+    if (asRede?.id) tipoCliente = 'autosystem';
+    else if (chaveApi?.id) tipoCliente = 'webposto';
+  }
 
   // Para usuario cliente, carrega empresas da rede respeitando empresas_permitidas
   let clientesRede = null;
-  if (tipoEsperado === 'cliente' && chaveApi?.id) {
+  if (tipoCliente === 'webposto') {
     const { data: emps, error: errEmps } = await supabase
       .from('clientes')
       .select('*')
@@ -118,13 +138,25 @@ async function autenticar(email, senha, tipoEsperado) {
     if (errEmps) throw new Error('Falha ao carregar empresas da rede: ' + errEmps.message);
 
     const permitidas = Array.isArray(usuarioSemSenha.empresas_permitidas) ? usuarioSemSenha.empresas_permitidas : null;
-    // NULL/vazio = acesso total; preenchido = filtra
+    clientesRede = permitidas && permitidas.length > 0
+      ? (emps || []).filter(c => permitidas.includes(c.id))
+      : (emps || []);
+  } else if (tipoCliente === 'autosystem') {
+    const { data: emps, error: errEmps } = await supabase
+      .from('clientes')
+      .select('*')
+      .eq('as_rede_id', asRede.id)
+      .eq('status', 'ativo')
+      .order('nome', { ascending: true });
+    if (errEmps) throw new Error('Falha ao carregar empresas da rede: ' + errEmps.message);
+
+    const permitidas = Array.isArray(usuarioSemSenha.empresas_permitidas) ? usuarioSemSenha.empresas_permitidas : null;
     clientesRede = permitidas && permitidas.length > 0
       ? (emps || []).filter(c => permitidas.includes(c.id))
       : (emps || []);
   }
 
-  return { usuario: usuarioSemSenha, chaveApi, clientesRede };
+  return { usuario: usuarioSemSenha, chaveApi, asRede, clientesRede, tipoCliente };
 }
 
 // Troca a empresa ativa na sessao (usado pelo seletor no header do cliente)

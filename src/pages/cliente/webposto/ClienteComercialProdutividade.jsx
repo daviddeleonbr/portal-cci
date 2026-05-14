@@ -1,6 +1,6 @@
 import { Gauge } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import EmptyState from '../../components/ui/EmptyState';
+import PageHeader from '../../../components/ui/PageHeader';
+import EmptyState from '../../../components/ui/EmptyState';
 
 export default function ClienteComercialProdutividade() {
   return (

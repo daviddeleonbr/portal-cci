@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Download, FileText, File, FileArchive, FolderOpen, Filter } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import Toast from '../../components/ui/Toast';
-import { TableSkeleton } from '../../components/ui/LoadingSkeleton';
-import { useSimulatedLoading } from '../../hooks/useSimulatedLoading';
-import { clienteDocumentos } from '../../data/clienteMockData';
-import { formatDate } from '../../utils/format';
+import PageHeader from '../../../components/ui/PageHeader';
+import Toast from '../../../components/ui/Toast';
+import { TableSkeleton } from '../../../components/ui/LoadingSkeleton';
+import { useSimulatedLoading } from '../../../hooks/useSimulatedLoading';
+import { clienteDocumentos } from '../../../data/clienteMockData';
+import { formatDate } from '../../../utils/format';
 
 const tipoIcons = {
   PDF: FileText,

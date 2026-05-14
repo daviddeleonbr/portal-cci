@@ -11,17 +11,17 @@ import {
   ShoppingCart, ArrowUpRight, ArrowDownLeft,
   ScrollText, Landmark, CreditCard, FileCheck, MoreHorizontal,
 } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import { CardSkeleton } from '../../components/ui/LoadingSkeleton';
-import BarraProgressoFetch from '../../components/ui/BarraProgressoFetch';
-import { useSimulatedLoading } from '../../hooks/useSimulatedLoading';
-import { useClienteSession } from '../../hooks/useAuth';
-import { supabase } from '../../lib/supabase';
-import * as mapService from '../../services/mapeamentoService';
-import * as qualityApi from '../../services/qualityApiService';
-import { agregarVendasItens } from '../../services/mapeamentoVendasService';
-import { formatCurrency } from '../../utils/format';
-import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil } from '../../utils/diasUteis';
+import PageHeader from '../../../components/ui/PageHeader';
+import { CardSkeleton } from '../../../components/ui/LoadingSkeleton';
+import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
+import { useSimulatedLoading } from '../../../hooks/useSimulatedLoading';
+import { useClienteSession } from '../../../hooks/useAuth';
+import { supabase } from '../../../lib/supabase';
+import * as mapService from '../../../services/mapeamentoService';
+import * as qualityApi from '../../../services/qualityApiService';
+import { agregarVendasItens } from '../../../services/mapeamentoVendasService';
+import { formatCurrency } from '../../../utils/format';
+import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil } from '../../../utils/diasUteis';
 
 // ─── Helpers de data ────────────────────────────────────────────
 function isoDate(d) {
@@ -502,7 +502,7 @@ export default function ClienteDashboard() {
           cor="amber"
           itens={stats?.pagarTop || []}
           loading={loadingQuality && !stats}
-          link="/cliente/financeiro/contas-pagar"
+          link="/cliente/webposto/financeiro/contas-pagar"
           campoNome="fornecedor"
         />
         <AgrupamentoReceberCard
@@ -510,7 +510,7 @@ export default function ClienteDashboard() {
           qtdPorFonte={stats?.receberQtdPorFonte}
           total={stats?.receberTotal || 0}
           loading={loadingQuality && !stats}
-          link="/cliente/financeiro/contas-receber"
+          link="/cliente/webposto/financeiro/contas-receber"
         />
       </div>
 
@@ -553,7 +553,7 @@ export default function ClienteDashboard() {
               cor="amber"
               dias={pendencias.sangrias}
               linkLabel="Enviar sangrias"
-              link="/cliente/sangrias"
+              link="/cliente/webposto/sangrias"
             />
             <DiasPendentesCard
               titulo="Extratos bancários não enviados"
@@ -561,7 +561,7 @@ export default function ClienteDashboard() {
               cor="blue"
               dias={pendencias.extratos}
               linkLabel="Enviar extratos"
-              link="/cliente/documentos"
+              link="/cliente/webposto/documentos"
             />
           </div>
         </>

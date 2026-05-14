@@ -11,57 +11,61 @@ import {
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
 
-const navigationAll = [
-  {
-    section: 'Principal',
-    items: [
-      { name: 'Visão Geral', href: '/cliente/dashboard', icon: LayoutDashboard, permissao: 'dashboard' },
-    ],
-  },
-  {
-    section: 'Relatórios',
-    items: [
-      { name: 'DRE', href: '/cliente/dre', icon: BarChart3, permissao: 'dre', requerFlag: 'exibir_dre' },
-      { name: 'Fluxo de Caixa', href: '/cliente/fluxo-caixa', icon: TrendingUp, permissao: 'fluxo_caixa', requerFlag: 'exibir_fluxo_caixa' },
-    ],
-  },
-  {
-    section: 'Comercial',
-    items: [
-      { name: 'Vendas', href: '/cliente/comercial/vendas', icon: ShoppingCart },
-      { name: 'Operação', href: '/cliente/comercial/operacao', icon: Activity },
-      { name: 'Produtividade', href: '/cliente/comercial/produtividade', icon: Gauge },
-    ],
-  },
-  {
-    section: 'Financeiro',
-    items: [
-      { name: 'Contas a Pagar', href: '/cliente/financeiro/contas-pagar', icon: ArrowUpRight, permissao: 'financeiro' },
-      { name: 'Contas a Receber', href: '/cliente/financeiro/contas-receber', icon: ArrowDownLeft, permissao: 'financeiro' },
-    ],
-  },
-  {
-    section: 'BPO',
-    items: [
-      { name: 'Sangrias', href: '/cliente/sangrias', icon: Coins, permissao: 'sangrias' },
-      { name: 'Serviços BPO', href: '/cliente/bpo', icon: ClipboardCheck, permissao: 'bpo' },
-    ],
-  },
-  {
-    section: 'Atendimento',
-    items: [
-      { name: 'Suporte', href: '/cliente/suporte', icon: HelpCircle, permissao: 'suporte' },
-    ],
-  },
-  {
-    section: 'Administração da Rede',
-    items: [
-      { name: 'Usuários da Rede', href: '/cliente/usuarios', icon: UserCog, permissao: 'gerenciar_usuarios' },
-    ],
-  },
-];
+// Os hrefs são montados em runtime com prefixo `/cliente/<tipoCliente>`
+// para que webposto e autosystem reusem o mesmo menu.
+function buildNavigation(prefix) {
+  return [
+    {
+      section: 'Principal',
+      items: [
+        { name: 'Visão Geral', href: `${prefix}/dashboard`, icon: LayoutDashboard, permissao: 'dashboard' },
+      ],
+    },
+    {
+      section: 'Relatórios',
+      items: [
+        { name: 'DRE', href: `${prefix}/dre`, icon: BarChart3, permissao: 'dre', requerFlag: 'exibir_dre' },
+        { name: 'Fluxo de Caixa', href: `${prefix}/fluxo-caixa`, icon: TrendingUp, permissao: 'fluxo_caixa', requerFlag: 'exibir_fluxo_caixa' },
+      ],
+    },
+    {
+      section: 'Comercial',
+      items: [
+        { name: 'Vendas', href: `${prefix}/comercial/vendas`, icon: ShoppingCart },
+        { name: 'Operação', href: `${prefix}/comercial/operacao`, icon: Activity },
+        { name: 'Produtividade', href: `${prefix}/comercial/produtividade`, icon: Gauge },
+      ],
+    },
+    {
+      section: 'Financeiro',
+      items: [
+        { name: 'Contas a Pagar', href: `${prefix}/financeiro/contas-pagar`, icon: ArrowUpRight, permissao: 'financeiro' },
+        { name: 'Contas a Receber', href: `${prefix}/financeiro/contas-receber`, icon: ArrowDownLeft, permissao: 'financeiro' },
+      ],
+    },
+    {
+      section: 'BPO',
+      items: [
+        { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: 'sangrias' },
+        { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo' },
+      ],
+    },
+    {
+      section: 'Atendimento',
+      items: [
+        { name: 'Suporte', href: `${prefix}/suporte`, icon: HelpCircle, permissao: 'suporte' },
+      ],
+    },
+    {
+      section: 'Administração da Rede',
+      items: [
+        { name: 'Usuários da Rede', href: `${prefix}/usuarios`, icon: UserCog, permissao: 'gerenciar_usuarios' },
+      ],
+    },
+  ];
+}
 
-function filtrarNavegacao(permissoes, cliente) {
+function filtrarNavegacao(navigationAll, permissoes, cliente) {
   const perms = new Set(permissoes || []);
   const visivel = (item) => {
     if (item.permissao && !perms.has(item.permissao)) return false;
@@ -96,8 +100,13 @@ export default function ClienteSidebar({ collapsed, onToggle }) {
   const session = useClienteSession();
   const cliente = session?.cliente;
   const usuario = session?.usuario;
+  const tipoCliente = session?.tipoCliente || 'webposto';
+  const prefix = `/cliente/${tipoCliente}`;
 
-  const navigation = useMemo(() => filtrarNavegacao(usuario?.permissoes, cliente), [usuario?.permissoes, cliente]);
+  const navigation = useMemo(
+    () => filtrarNavegacao(buildNavigation(prefix), usuario?.permissoes, cliente),
+    [prefix, usuario?.permissoes, cliente],
+  );
 
   const [expanded, setExpanded] = useState(() => {
     const open = new Set();
@@ -150,7 +159,7 @@ export default function ClienteSidebar({ collapsed, onToggle }) {
 
       {/* Logo */}
       <div className="flex h-16 items-center px-5 flex-shrink-0 border-b border-gray-100">
-        <Link to="/cliente/dashboard" className={`flex items-center gap-3 ${collapsed ? 'mx-auto' : ''}`}>
+        <Link to={`${prefix}/dashboard`} className={`flex items-center gap-3 ${collapsed ? 'mx-auto' : ''}`}>
           <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-[15px] shadow-md shadow-blue-500/30 flex-shrink-0">
             C
             <div className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-white" />

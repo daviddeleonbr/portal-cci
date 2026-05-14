@@ -2009,9 +2009,17 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
   );
 }
 
-// Helpers de extração de dados das empresas Autosystem.
-// A query é `SELECT *`, então os campos podem variar de schema para schema.
-// Tentamos as colunas mais comuns; quem não bater fica null/—.
+// Mapeamento exato de colunas do Autosystem (tabela `empresa`) → colunas
+// de `clientes` no Supabase. As correspondências foram fornecidas pelo
+// cliente e refletem o schema real do servidor:
+//
+//   nome           → razao_social
+//   nome_reduzido  → nome
+//   grid           → empresa_codigo
+//   cpf            → cnpj
+//   inscr_est      → inscricao_estadual
+//   logradouro     → endereco
+//   numero, complemento, bairro, cidade, estado, cep → idem
 function pickField(obj, keys) {
   if (!obj) return null;
   for (const k of keys) {
@@ -2022,22 +2030,15 @@ function pickField(obj, keys) {
 }
 
 function extrairNomeEmpresa(emp) {
-  return pickField(emp, [
-    'fantasia', 'nome_fantasia', 'nomefantasia',
-    'razao_social', 'razaosocial', 'razao',
-    'nome', 'descricao',
-  ]);
+  return pickField(emp, ['nome_reduzido', 'fantasia', 'nome_fantasia', 'nome']);
 }
 
 function extrairRazaoSocial(emp) {
-  return pickField(emp, [
-    'razao_social', 'razaosocial', 'razao',
-    'nome', 'descricao',
-  ]);
+  return pickField(emp, ['nome', 'razao_social', 'razao']);
 }
 
 function extrairCnpjEmpresa(emp) {
-  return pickField(emp, ['cnpj', 'cnpj_cpf', 'cgc', 'cnpjcpf']);
+  return pickField(emp, ['cpf', 'cnpj', 'cnpj_cpf', 'cgc']);
 }
 
 function normalizarCnpj(cnpj) {
@@ -2054,29 +2055,37 @@ function formatarCnpj(cnpj) {
 function chaveEmpresa(emp, i) {
   const cnpj = normalizarCnpj(extrairCnpjEmpresa(emp));
   if (cnpj) return `cnpj:${cnpj}`;
-  const id = pickField(emp, ['id', 'codigo', 'cod_empresa', 'empresa_id']);
+  const id = pickField(emp, ['grid', 'codigo', 'cod_empresa', 'empresa_id', 'id']);
   if (id) return `id:${id}`;
   return `idx:${i}`;
 }
 
 function mapearEmpresaParaCliente(emp, redeId) {
   const cnpj = normalizarCnpj(extrairCnpjEmpresa(emp));
+  // `grid` é o identificador interno da empresa no Autosystem (usado por
+  // `movto.empresa` nas consultas de contas a pagar/receber etc.).
+  // Reusamos a coluna `empresa_codigo` (integer) já existente em clientes.
+  const gridRaw = pickField(emp, ['grid', 'codigo', 'cod_empresa', 'id']);
+  const empresaCodigo = gridRaw != null && /^-?\d+$/.test(String(gridRaw))
+    ? Number(gridRaw)
+    : null;
+
   return {
     nome: extrairNomeEmpresa(emp) || extrairRazaoSocial(emp) || 'Empresa sem nome',
     razao_social: extrairRazaoSocial(emp) || null,
     cnpj: cnpj ? formatarCnpj(cnpj) : null,
-    inscricao_estadual: pickField(emp, ['inscricao_estadual', 'ie', 'inscricaoestadual']),
-    inscricao_municipal: pickField(emp, ['inscricao_municipal', 'im', 'inscricaomunicipal']),
-    contato_email: pickField(emp, ['email', 'e_mail', 'mail']),
-    contato_telefone: pickField(emp, ['telefone', 'fone', 'celular']),
-    endereco: pickField(emp, ['endereco', 'logradouro', 'rua']),
+    inscricao_estadual: pickField(emp, ['inscr_est', 'inscricao_estadual', 'ie']),
+    inscricao_municipal: pickField(emp, ['inscr_mun', 'inscricao_municipal', 'im']),
+    endereco: pickField(emp, ['logradouro', 'endereco', 'rua']),
     numero: pickField(emp, ['numero', 'num', 'nro']),
+    complemento: pickField(emp, ['complemento', 'compl']),
     bairro: pickField(emp, ['bairro']),
     cidade: pickField(emp, ['cidade', 'municipio']),
     estado: pickField(emp, ['estado', 'uf']),
     cep: pickField(emp, ['cep']),
     status: 'ativo',
     as_rede_id: redeId,
+    empresa_codigo: empresaCodigo,
   };
 }
 

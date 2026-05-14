@@ -11,13 +11,13 @@ import {
   Calendar, BarChart3, PieChart as PieChartIcon, Building2,
 } from 'lucide-react';
 import React from 'react';
-import PageHeader from '../../components/ui/PageHeader';
-import BarraProgressoTopo from '../../components/ui/BarraProgressoTopo';
-import { useClienteSession } from '../../hooks/useAuth';
-import * as mapService from '../../services/mapeamentoService';
-import * as qualityApi from '../../services/qualityApiService';
-import { agregarVendasItens, classificarItem } from '../../services/mapeamentoVendasService';
-import { formatCurrency } from '../../utils/format';
+import PageHeader from '../../../components/ui/PageHeader';
+import BarraProgressoTopo from '../../../components/ui/BarraProgressoTopo';
+import { useClienteSession } from '../../../hooks/useAuth';
+import * as mapService from '../../../services/mapeamentoService';
+import * as qualityApi from '../../../services/qualityApiService';
+import { agregarVendasItens, classificarItem } from '../../../services/mapeamentoVendasService';
+import { formatCurrency } from '../../../utils/format';
 
 const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
@@ -387,7 +387,7 @@ export default function ClienteComercialVendas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaSel?.id, mesSelecionado, apenasDiasFechados]);
 
-  if (!cliente?.id) return <Navigate to="/cliente/dashboard" replace />;
+  if (!cliente?.id) return <Navigate to="/cliente/webposto/dashboard" replace />;
 
   const abas = [
     { key: 'overview',     label: 'Overview',     icon: LayoutGrid },

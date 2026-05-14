@@ -41,19 +41,34 @@ import BpoValidacaoOfx from './pages/BpoValidacaoOfx';
 // Cliente
 import ClienteLayout from './components/layout/cliente/ClienteLayout';
 import ClienteLogin from './pages/cliente/ClienteLogin';
-import ClienteDashboard from './pages/cliente/ClienteDashboard';
-import ClienteDRE from './pages/cliente/ClienteDRE';
-import ClienteFluxoCaixa from './pages/cliente/ClienteFluxoCaixa';
-import ClienteBPO from './pages/cliente/ClienteBPO';
-import ClienteDocumentos from './pages/cliente/ClienteDocumentos';
-import ClienteContasPagar from './pages/cliente/ClienteContasPagar';
-import ClienteContasReceber from './pages/cliente/ClienteContasReceber';
-import ClienteSuporte from './pages/cliente/ClienteSuporte';
-import ClienteSangrias from './pages/cliente/ClienteSangrias';
-import ClienteUsuarios from './pages/cliente/ClienteUsuarios';
-import ClienteComercialVendas from './pages/cliente/ClienteComercialVendas';
-import ClienteComercialOperacao from './pages/cliente/ClienteComercialOperacao';
-import ClienteComercialProdutividade from './pages/cliente/ClienteComercialProdutividade';
+// Cliente Webposto
+import WpDashboard from './pages/cliente/webposto/ClienteDashboard';
+import WpDRE from './pages/cliente/webposto/ClienteDRE';
+import WpFluxoCaixa from './pages/cliente/webposto/ClienteFluxoCaixa';
+import WpBPO from './pages/cliente/webposto/ClienteBPO';
+import WpDocumentos from './pages/cliente/webposto/ClienteDocumentos';
+import WpContasPagar from './pages/cliente/webposto/ClienteContasPagar';
+import WpContasReceber from './pages/cliente/webposto/ClienteContasReceber';
+import WpSuporte from './pages/cliente/webposto/ClienteSuporte';
+import WpSangrias from './pages/cliente/webposto/ClienteSangrias';
+import WpUsuarios from './pages/cliente/webposto/ClienteUsuarios';
+import WpComercialVendas from './pages/cliente/webposto/ClienteComercialVendas';
+import WpComercialOperacao from './pages/cliente/webposto/ClienteComercialOperacao';
+import WpComercialProdutividade from './pages/cliente/webposto/ClienteComercialProdutividade';
+// Cliente Autosystem (esqueletos — implementados página a página)
+import AsDashboard from './pages/cliente/autosystem/ClienteDashboard';
+import AsDRE from './pages/cliente/autosystem/ClienteDRE';
+import AsFluxoCaixa from './pages/cliente/autosystem/ClienteFluxoCaixa';
+import AsBPO from './pages/cliente/autosystem/ClienteBPO';
+import AsDocumentos from './pages/cliente/autosystem/ClienteDocumentos';
+import AsContasPagar from './pages/cliente/autosystem/ClienteContasPagar';
+import AsContasReceber from './pages/cliente/autosystem/ClienteContasReceber';
+import AsSuporte from './pages/cliente/autosystem/ClienteSuporte';
+import AsSangrias from './pages/cliente/autosystem/ClienteSangrias';
+import AsUsuarios from './pages/cliente/autosystem/ClienteUsuarios';
+import AsComercialVendas from './pages/cliente/autosystem/ClienteComercialVendas';
+import AsComercialOperacao from './pages/cliente/autosystem/ClienteComercialOperacao';
+import AsComercialProdutividade from './pages/cliente/autosystem/ClienteComercialProdutividade';
 
 // Auth
 import { RequireAdmin, RequireCliente } from './components/auth/RequireAuth';
@@ -131,23 +146,57 @@ export default function App() {
 
         {/* Cliente Portal */}
         <Route path="/cliente/login" element={<ClienteLogin />} />
+
+        {/* Cliente Webposto */}
         <Route element={<RequireCliente><ClienteLayout /></RequireCliente>}>
-          <Route path="/cliente/dashboard" element={<ClienteDashboard />} />
-          <Route path="/cliente/dre" element={<ClienteDRE />} />
-          <Route path="/cliente/fluxo-caixa" element={<ClienteFluxoCaixa />} />
-          <Route path="/cliente/bpo" element={<ClienteBPO />} />
-          <Route path="/cliente/documentos" element={<ClienteDocumentos />} />
-          <Route path="/cliente/financeiro" element={<Navigate to="/cliente/financeiro/contas-pagar" replace />} />
-          <Route path="/cliente/financeiro/contas-pagar" element={<ClienteContasPagar />} />
-          <Route path="/cliente/financeiro/contas-receber" element={<ClienteContasReceber />} />
-          <Route path="/cliente/sangrias" element={<ClienteSangrias />} />
-          <Route path="/cliente/suporte" element={<ClienteSuporte />} />
-          <Route path="/cliente/usuarios" element={<ClienteUsuarios />} />
-          <Route path="/cliente/comercial" element={<Navigate to="/cliente/comercial/vendas" replace />} />
-          <Route path="/cliente/comercial/vendas" element={<ClienteComercialVendas />} />
-          <Route path="/cliente/comercial/operacao" element={<ClienteComercialOperacao />} />
-          <Route path="/cliente/comercial/produtividade" element={<ClienteComercialProdutividade />} />
+          <Route path="/cliente/webposto/dashboard" element={<WpDashboard />} />
+          <Route path="/cliente/webposto/dre" element={<WpDRE />} />
+          <Route path="/cliente/webposto/fluxo-caixa" element={<WpFluxoCaixa />} />
+          <Route path="/cliente/webposto/bpo" element={<WpBPO />} />
+          <Route path="/cliente/webposto/documentos" element={<WpDocumentos />} />
+          <Route path="/cliente/webposto/financeiro" element={<Navigate to="/cliente/webposto/financeiro/contas-pagar" replace />} />
+          <Route path="/cliente/webposto/financeiro/contas-pagar" element={<WpContasPagar />} />
+          <Route path="/cliente/webposto/financeiro/contas-receber" element={<WpContasReceber />} />
+          <Route path="/cliente/webposto/sangrias" element={<WpSangrias />} />
+          <Route path="/cliente/webposto/suporte" element={<WpSuporte />} />
+          <Route path="/cliente/webposto/usuarios" element={<WpUsuarios />} />
+          <Route path="/cliente/webposto/comercial" element={<Navigate to="/cliente/webposto/comercial/vendas" replace />} />
+          <Route path="/cliente/webposto/comercial/vendas" element={<WpComercialVendas />} />
+          <Route path="/cliente/webposto/comercial/operacao" element={<WpComercialOperacao />} />
+          <Route path="/cliente/webposto/comercial/produtividade" element={<WpComercialProdutividade />} />
+
+          {/* Cliente Autosystem */}
+          <Route path="/cliente/autosystem/dashboard" element={<AsDashboard />} />
+          <Route path="/cliente/autosystem/dre" element={<AsDRE />} />
+          <Route path="/cliente/autosystem/fluxo-caixa" element={<AsFluxoCaixa />} />
+          <Route path="/cliente/autosystem/bpo" element={<AsBPO />} />
+          <Route path="/cliente/autosystem/documentos" element={<AsDocumentos />} />
+          <Route path="/cliente/autosystem/financeiro" element={<Navigate to="/cliente/autosystem/financeiro/contas-pagar" replace />} />
+          <Route path="/cliente/autosystem/financeiro/contas-pagar" element={<AsContasPagar />} />
+          <Route path="/cliente/autosystem/financeiro/contas-receber" element={<AsContasReceber />} />
+          <Route path="/cliente/autosystem/sangrias" element={<AsSangrias />} />
+          <Route path="/cliente/autosystem/suporte" element={<AsSuporte />} />
+          <Route path="/cliente/autosystem/usuarios" element={<AsUsuarios />} />
+          <Route path="/cliente/autosystem/comercial" element={<Navigate to="/cliente/autosystem/comercial/vendas" replace />} />
+          <Route path="/cliente/autosystem/comercial/vendas" element={<AsComercialVendas />} />
+          <Route path="/cliente/autosystem/comercial/operacao" element={<AsComercialOperacao />} />
+          <Route path="/cliente/autosystem/comercial/produtividade" element={<AsComercialProdutividade />} />
         </Route>
+
+        {/* Legacy redirects: /cliente/X → /cliente/webposto/X (URL antiga) */}
+        <Route path="/cliente/dashboard" element={<Navigate to="/cliente/webposto/dashboard" replace />} />
+        <Route path="/cliente/dre" element={<Navigate to="/cliente/webposto/dre" replace />} />
+        <Route path="/cliente/fluxo-caixa" element={<Navigate to="/cliente/webposto/fluxo-caixa" replace />} />
+        <Route path="/cliente/bpo" element={<Navigate to="/cliente/webposto/bpo" replace />} />
+        <Route path="/cliente/documentos" element={<Navigate to="/cliente/webposto/documentos" replace />} />
+        <Route path="/cliente/financeiro/contas-pagar" element={<Navigate to="/cliente/webposto/financeiro/contas-pagar" replace />} />
+        <Route path="/cliente/financeiro/contas-receber" element={<Navigate to="/cliente/webposto/financeiro/contas-receber" replace />} />
+        <Route path="/cliente/sangrias" element={<Navigate to="/cliente/webposto/sangrias" replace />} />
+        <Route path="/cliente/suporte" element={<Navigate to="/cliente/webposto/suporte" replace />} />
+        <Route path="/cliente/usuarios" element={<Navigate to="/cliente/webposto/usuarios" replace />} />
+        <Route path="/cliente/comercial/vendas" element={<Navigate to="/cliente/webposto/comercial/vendas" replace />} />
+        <Route path="/cliente/comercial/operacao" element={<Navigate to="/cliente/webposto/comercial/operacao" replace />} />
+        <Route path="/cliente/comercial/produtividade" element={<Navigate to="/cliente/webposto/comercial/produtividade" replace />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

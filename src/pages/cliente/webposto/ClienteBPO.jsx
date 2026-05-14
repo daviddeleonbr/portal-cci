@@ -5,10 +5,10 @@ import {
   AlertCircle, Loader2, CalendarDays, CheckCircle2, ArrowLeft,
   ChevronRight, Calendar, FileText, RefreshCw, Clock,
 } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import BpoConciliacaoCaixas from '../BpoConciliacaoCaixas';
-import * as bpoConciliacaoService from '../../services/bpoConciliacaoService';
-import { useClienteSession } from '../../hooks/useAuth';
+import PageHeader from '../../../components/ui/PageHeader';
+import BpoConciliacaoCaixas from '../../BpoConciliacaoCaixas';
+import * as bpoConciliacaoService from '../../../services/bpoConciliacaoService';
+import { useClienteSession } from '../../../hooks/useAuth';
 
 // ─── Helpers de data ─────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -76,7 +76,7 @@ export default function ClienteBPO() {
     return Math.round((b - a) / (1000 * 60 * 60 * 24)) + 1;
   }, [dataInicial, dataFinal]);
 
-  if (!cliente?.id) return <Navigate to="/cliente/dashboard" replace />;
+  if (!cliente?.id) return <Navigate to="/cliente/webposto/dashboard" replace />;
 
   if (!cliente.usa_webposto || !cliente.chave_api_id || !cliente.empresa_codigo) {
     return (

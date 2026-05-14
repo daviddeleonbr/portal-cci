@@ -5,14 +5,14 @@ import {
   TrendingUp, TrendingDown, RefreshCw, Lock, History, Save,
   Building2,
 } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import Toast from '../../components/ui/Toast';
-import Modal from '../../components/ui/Modal';
-import { useClienteSession } from '../../hooks/useAuth';
-import * as mapService from '../../services/mapeamentoService';
-import * as qualityApi from '../../services/qualityApiService';
-import * as sangriasService from '../../services/clienteSangriasService';
-import { formatCurrency } from '../../utils/format';
+import PageHeader from '../../../components/ui/PageHeader';
+import Toast from '../../../components/ui/Toast';
+import Modal from '../../../components/ui/Modal';
+import { useClienteSession } from '../../../hooks/useAuth';
+import * as mapService from '../../../services/mapeamentoService';
+import * as qualityApi from '../../../services/qualityApiService';
+import * as sangriasService from '../../../services/clienteSangriasService';
+import { formatCurrency } from '../../../utils/format';
 
 // Usa componentes locais (nao UTC) para evitar que, a noite no Brasil,
 // o "hoje UTC" ja seja o dia seguinte do "hoje local" e libere o dia atual.

@@ -13,7 +13,11 @@ export default function ClienteLogin() {
   const [erro, setErro] = useState('');
 
   useEffect(() => {
-    if (getClienteSession()) navigate('/cliente/dashboard', { replace: true });
+    const s = getClienteSession();
+    if (s) {
+      const dest = `/cliente/${s.tipoCliente || 'webposto'}/dashboard`;
+      navigate(dest, { replace: true });
+    }
   }, [navigate]);
 
   const handleSubmit = async (e) => {
@@ -21,8 +25,9 @@ export default function ClienteLogin() {
     setErro('');
     setLoading(true);
     try {
-      await loginCliente(email, senha);
-      navigate('/cliente/dashboard', { replace: true });
+      const session = await loginCliente(email, senha);
+      const dest = `/cliente/${session.tipoCliente || 'webposto'}/dashboard`;
+      navigate(dest, { replace: true });
     } catch (err) {
       setErro(err.message || 'Falha ao entrar.');
     } finally {

@@ -49,7 +49,7 @@ export function todasPermissoes(tipo) {
 export async function listarUsuarios() {
   const { data, error } = await supabase
     .from('cci_usuarios_sistema')
-    .select('*, chaves_api(id, nome, provedor)')
+    .select('*, chaves_api(id, nome, provedor), as_rede(id, nome, slug)')
     .order('nome', { ascending: true });
   if (error) throw error;
   return data || [];
@@ -118,9 +118,17 @@ function sanitizarPayload(campos) {
   delete p.created_at;
   delete p.updated_at;
   delete p.chaves_api; // relacao retornada pelo select
+  delete p.as_rede;    // idem (autosystem)
+  delete p.rede_tipo;  // campo de UI, nao existe na tabela
+
   if (p.tipo === 'admin') {
     p.chave_api_id = null;
+    p.as_rede_id = null;
     p.empresas_permitidas = null;
+  } else {
+    // tipo=cliente: garante XOR (chave_api OU as_rede, nunca os dois)
+    if (p.chave_api_id) p.as_rede_id = null;
+    else if (p.as_rede_id) p.chave_api_id = null;
   }
   // Array vazio equivale a null (acesso total na rede)
   if (Array.isArray(p.empresas_permitidas) && p.empresas_permitidas.length === 0) {

@@ -10,11 +10,13 @@ import Modal from '../components/ui/Modal';
 import * as usuariosService from '../services/usuariosSistemaService';
 import * as clientesService from '../services/clientesService';
 import * as mapeamentoService from '../services/mapeamentoService';
+import * as autosystemService from '../services/autosystemService';
 
 export default function CciUsuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [clientes, setClientes] = useState([]);
-  const [chavesApi, setChavesApi] = useState([]); // lista de redes
+  const [chavesApi, setChavesApi] = useState([]); // lista de redes Webposto
+  const [redesAutosystem, setRedesAutosystem] = useState([]); // lista de redes Autosystem
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('todos');
@@ -30,14 +32,16 @@ export default function CciUsuarios() {
   const carregar = useCallback(async () => {
     try {
       setLoading(true);
-      const [us, cs, chs] = await Promise.all([
+      const [us, cs, chs, ars] = await Promise.all([
         usuariosService.listarUsuarios(),
         clientesService.listarClientes(),
         mapeamentoService.listarChavesApi(),
+        autosystemService.listarRedes().catch(() => []),
       ]);
       setUsuarios(us);
       setClientes(cs || []);
       setChavesApi((chs || []).filter(c => c.ativo !== false));
+      setRedesAutosystem((ars || []).filter(r => r.ativo !== false));
     } catch (err) { showToast('error', err.message); }
     finally { setLoading(false); }
   }, []);
@@ -72,12 +76,12 @@ export default function CciUsuarios() {
     } catch (err) { showToast('error', err.message); }
   };
 
-  // Conta quantas empresas cada rede (chave_api) possui
+  // Conta quantas empresas cada rede (Webposto OU Autosystem) possui
   const empresasPorRede = useMemo(() => {
     const m = new Map();
     clientes.forEach(c => {
-      if (!c.chave_api_id) return;
-      m.set(c.chave_api_id, (m.get(c.chave_api_id) || 0) + 1);
+      if (c.chave_api_id) m.set(c.chave_api_id, (m.get(c.chave_api_id) || 0) + 1);
+      if (c.as_rede_id) m.set(c.as_rede_id, (m.get(c.as_rede_id) || 0) + 1);
     });
     return m;
   }, [clientes]);
@@ -198,7 +202,17 @@ export default function CciUsuarios() {
                           <div>
                             <p className="text-sm text-gray-800 truncate max-w-[220px]">{u.chaves_api.nome}</p>
                             <p className="text-[10px] text-gray-400">
-                              {empresasPorRede.get(u.chaves_api.id) || 0} empresa(s)
+                              Webposto · {empresasPorRede.get(u.chaves_api.id) || 0} empresa(s)
+                            </p>
+                          </div>
+                        </div>
+                      ) : u.as_rede ? (
+                        <div className="flex items-center gap-2">
+                          <Network className="h-3.5 w-3.5 text-violet-500 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm text-gray-800 truncate max-w-[220px]">{u.as_rede.nome}</p>
+                            <p className="text-[10px] text-gray-400">
+                              Autosystem · {empresasPorRede.get(u.as_rede.id) || 0} empresa(s)
                             </p>
                           </div>
                         </div>
@@ -244,7 +258,8 @@ export default function CciUsuarios() {
       )}
 
       <ModalUsuario open={modal.open} data={modal.data}
-        chavesApi={chavesApi} empresasPorRede={empresasPorRede} clientes={clientes}
+        chavesApi={chavesApi} redesAutosystem={redesAutosystem}
+        empresasPorRede={empresasPorRede} clientes={clientes}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
       <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuário" size="sm">
@@ -286,7 +301,7 @@ const STEPS = [
   { id: 3, titulo: 'Permissões', icon: ShieldCheck },
 ];
 
-function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClose, onSave }) {
+function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede, clientes, onClose, onSave }) {
   const [form, setForm] = useState({});
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -295,10 +310,19 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
   useEffect(() => {
     if (!open) return;
     if (data?.id) {
-      setForm({ ...data, senha: '', empresas_permitidas: data.empresas_permitidas || null });
+      // Deduz tipo de portal a partir do que está preenchido
+      const redeTipo = data.as_rede_id ? 'autosystem' : 'webposto';
+      setForm({
+        ...data,
+        senha: '',
+        empresas_permitidas: data.empresas_permitidas || null,
+        rede_tipo: redeTipo,
+      });
     } else {
       setForm({
-        nome: '', email: '', senha: '', tipo: 'admin', chave_api_id: null,
+        nome: '', email: '', senha: '', tipo: 'admin',
+        rede_tipo: 'webposto',
+        chave_api_id: null, as_rede_id: null,
         empresas_permitidas: null, // null = acesso total na rede
         permissoes: [], status: 'ativo', observacoes: '',
       });
@@ -307,11 +331,17 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
     setMostrarSenha(false);
   }, [open, data]);
 
-  // Empresas da rede selecionada
+  // Empresas da rede selecionada (Webposto ou Autosystem)
   const empresasDaRede = useMemo(() => {
+    if (form.rede_tipo === 'autosystem') {
+      if (!form.as_rede_id) return [];
+      return (clientes || []).filter(c => c.as_rede_id === form.as_rede_id);
+    }
     if (!form.chave_api_id) return [];
     return (clientes || []).filter(c => c.chave_api_id === form.chave_api_id);
-  }, [form.chave_api_id, clientes]);
+  }, [form.rede_tipo, form.chave_api_id, form.as_rede_id, clientes]);
+
+  const redeIdSelecionada = form.rede_tipo === 'autosystem' ? form.as_rede_id : form.chave_api_id;
 
   const acessoTotalEmpresas = !form.empresas_permitidas || form.empresas_permitidas.length === 0;
 
@@ -340,8 +370,20 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
       ...f,
       tipo: novoTipo,
       chave_api_id: novoTipo === 'admin' ? null : f.chave_api_id,
+      as_rede_id: novoTipo === 'admin' ? null : f.as_rede_id,
       empresas_permitidas: novoTipo === 'admin' ? null : f.empresas_permitidas,
       permissoes: (f.permissoes || []).filter(p => permsValidas.includes(p)),
+    }));
+  };
+
+  // Alterna entre rede Webposto/Autosystem, zerando o vínculo oposto
+  const trocarRedeTipo = (novoRedeTipo) => {
+    setForm(f => ({
+      ...f,
+      rede_tipo: novoRedeTipo,
+      chave_api_id: novoRedeTipo === 'webposto' ? f.chave_api_id : null,
+      as_rede_id: novoRedeTipo === 'autosystem' ? f.as_rede_id : null,
+      empresas_permitidas: null,
     }));
   };
 
@@ -365,7 +407,10 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
   const passoValido = (n) => {
     if (n === 1) {
       if (!form.nome?.trim() || !form.email?.trim()) return false;
-      if (form.tipo === 'cliente' && !form.chave_api_id) return false;
+      if (form.tipo === 'cliente') {
+        if (form.rede_tipo === 'autosystem' && !form.as_rede_id) return false;
+        if (form.rede_tipo !== 'autosystem' && !form.chave_api_id) return false;
+      }
       return true;
     }
     if (n === 2) {
@@ -487,23 +532,73 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
             {form.tipo === 'cliente' && (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Rede vinculada *</label>
-                  <select value={form.chave_api_id || ''}
-                    onChange={e => setForm(f => ({ ...f, chave_api_id: e.target.value || null, empresas_permitidas: null }))}
-                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-                    <option value="">Selecione uma rede</option>
-                    {(chavesApi || []).map(ch => {
-                      const qtd = (empresasPorRede?.get(ch.id)) || 0;
-                      return (
-                        <option key={ch.id} value={ch.id}>
-                          {ch.nome} · {qtd} empresa{qtd === 1 ? '' : 's'}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <label className="block text-xs font-semibold text-gray-700 mb-2">Tipo de portal *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => trocarRedeTipo('webposto')}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-lg border-2 text-left transition-all ${
+                        form.rede_tipo !== 'autosystem'
+                          ? 'border-amber-400 bg-amber-50/60'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}>
+                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center flex-shrink-0">
+                        <Network className="h-3.5 w-3.5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-900">Webposto</p>
+                        <p className="text-[10px] text-gray-500">Integração Quality</p>
+                      </div>
+                    </button>
+                    <button type="button" onClick={() => trocarRedeTipo('autosystem')}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-lg border-2 text-left transition-all ${
+                        form.rede_tipo === 'autosystem'
+                          ? 'border-violet-400 bg-violet-50/60'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}>
+                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                        <Network className="h-3.5 w-3.5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-900">Autosystem</p>
+                        <p className="text-[10px] text-gray-500">Conexão Postgres remoto</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
 
-                {form.chave_api_id && empresasDaRede.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Rede vinculada *</label>
+                  {form.rede_tipo === 'autosystem' ? (
+                    <select value={form.as_rede_id || ''}
+                      onChange={e => setForm(f => ({ ...f, as_rede_id: e.target.value || null, empresas_permitidas: null }))}
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100">
+                      <option value="">Selecione uma rede Autosystem</option>
+                      {(redesAutosystem || []).map(r => {
+                        const qtd = (empresasPorRede?.get(r.id)) || 0;
+                        return (
+                          <option key={r.id} value={r.id}>
+                            {r.nome} · {qtd} empresa{qtd === 1 ? '' : 's'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  ) : (
+                    <select value={form.chave_api_id || ''}
+                      onChange={e => setForm(f => ({ ...f, chave_api_id: e.target.value || null, empresas_permitidas: null }))}
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                      <option value="">Selecione uma rede Webposto</option>
+                      {(chavesApi || []).map(ch => {
+                        const qtd = (empresasPorRede?.get(ch.id)) || 0;
+                        return (
+                          <option key={ch.id} value={ch.id}>
+                            {ch.nome} · {qtd} empresa{qtd === 1 ? '' : 's'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                </div>
+
+                {redeIdSelecionada && empresasDaRede.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-medium text-gray-700">
@@ -536,9 +631,9 @@ function ModalUsuario({ open, data, chavesApi, empresasPorRede, clientes, onClos
                   </div>
                 )}
 
-                {form.chave_api_id && empresasDaRede.length === 0 && (
+                {redeIdSelecionada && empresasDaRede.length === 0 && (
                   <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-700">
-                    Esta rede ainda não possui empresas cadastradas. Cadastre clientes com esta chave API antes de criar usuários.
+                    Esta rede ainda não possui empresas cadastradas. Importe/cadastre empresas nesta rede antes de criar usuários.
                   </div>
                 )}
               </>

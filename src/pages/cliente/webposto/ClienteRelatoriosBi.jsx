@@ -9,9 +9,9 @@ import { motion } from 'framer-motion';
 import {
   BarChart3, Eye, Loader2, ArrowLeft, ExternalLink, AlertCircle, Maximize2,
 } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import { useClienteSession } from '../../hooks/useAuth';
-import * as relatoriosBiService from '../../services/relatoriosBiService';
+import PageHeader from '../../../components/ui/PageHeader';
+import { useClienteSession } from '../../../hooks/useAuth';
+import * as relatoriosBiService from '../../../services/relatoriosBiService';
 
 export default function ClienteRelatoriosBi() {
   const session = useClienteSession();

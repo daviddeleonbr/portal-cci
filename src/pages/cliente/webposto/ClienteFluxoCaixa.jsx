@@ -1,14 +1,14 @@
 import { Navigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
-import PageHeader from '../../components/ui/PageHeader';
-import RelatorioFluxoCaixa from '../RelatorioFluxoCaixa';
-import { useClienteSession } from '../../hooks/useAuth';
+import PageHeader from '../../../components/ui/PageHeader';
+import RelatorioFluxoCaixa from '../../RelatorioFluxoCaixa';
+import { useClienteSession } from '../../../hooks/useAuth';
 
 export default function ClienteFluxoCaixa() {
   const session = useClienteSession();
   const cliente = session?.cliente;
 
-  if (!cliente?.id) return <Navigate to="/cliente/dashboard" replace />;
+  if (!cliente?.id) return <Navigate to="/cliente/webposto/dashboard" replace />;
 
   if (!cliente.exibir_fluxo_caixa) {
     return (
@@ -28,5 +28,5 @@ export default function ClienteFluxoCaixa() {
     );
   }
 
-  return <RelatorioFluxoCaixa clienteIdOverride={cliente.id} backHref="/cliente/dashboard" />;
+  return <RelatorioFluxoCaixa clienteIdOverride={cliente.id} backHref="/cliente/webposto/dashboard" />;
 }
