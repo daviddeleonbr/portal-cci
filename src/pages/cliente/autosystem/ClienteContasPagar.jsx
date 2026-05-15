@@ -1,31 +1,43 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Loader2, AlertCircle, Search, Calendar, RefreshCw,
-  ArrowUpRight, AlertTriangle, CheckCircle2, FileText,
-  Building2, ChevronRight,
+  Loader2, AlertCircle, Search, RefreshCw, ChevronRight, ChevronDown,
+  Clock, AlertTriangle, CheckCircle2, Calendar,
+  DollarSign, Building2,
 } from 'lucide-react';
+import PageHeader from '../../../components/ui/PageHeader';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as autosystemService from '../../../services/autosystemService';
-import { ehDiaUtil, vencimentoEfetivoIso } from '../../../utils/diasUteis';
+import { formatCurrency } from '../../../utils/format';
+import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil, vencimentoEfetivoIso } from '../../../utils/diasUteis';
 
 // ─── Helpers ────────────────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
-
-function isoHoje() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 function inicioMesAtual() {
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
 }
-
 function fimMesAtual() {
   const d = new Date();
   const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0);
   return `${ultimo.getFullYear()}-${pad(ultimo.getMonth() + 1)}-${pad(ultimo.getDate())}`;
+}
+
+function formatDataBR(s) {
+  if (!s) return '—';
+  const iso = String(s).slice(0, 10);
+  const [y, m, d] = iso.split('-');
+  return y && m && d ? `${d}/${m}/${y}` : s;
+}
+
+const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+function diaSemana(iso) {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).slice(0, 10).split('-');
+  if (!y || !m || !d) return '';
+  const dt = new Date(+y, +m - 1, +d);
+  return DIAS_SEMANA[dt.getDay()] || '';
 }
 
 function dataIso(vencto) {
@@ -33,514 +45,736 @@ function dataIso(vencto) {
   return typeof vencto === 'string' ? vencto.slice(0, 10) : '';
 }
 
-function formatDate(dateLike) {
-  if (!dateLike) return '—';
-  const s = typeof dateLike === 'string' ? dateLike.slice(0, 10) : null;
-  if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const [y, m, d] = s.split('-');
-    return `${d}/${m}/${y}`;
-  }
-  try {
-    const d = new Date(dateLike);
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-  } catch { return '—'; }
-}
-
-function diffDiasAteHoje(vencto) {
-  const s = dataIso(vencto);
-  if (!s) return null;
-  const [y, m, d] = s.split('-').map(Number);
-  const v = new Date(y, m - 1, d);
+function diffDias(dataIsoStr) {
+  if (!dataIsoStr) return null;
+  const [y, m, d] = String(dataIsoStr).slice(0, 10).split('-');
+  if (!y || !m || !d) return null;
+  const alvo = new Date(+y, +m - 1, +d);
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
-  return Math.round((v - hoje) / (1000 * 60 * 60 * 24));
+  alvo.setHours(0, 0, 0, 0);
+  return Math.round((alvo - hoje) / (1000 * 60 * 60 * 24));
 }
 
-const fmtBRL = new Intl.NumberFormat('pt-BR', {
-  style: 'currency', currency: 'BRL', minimumFractionDigits: 2,
-});
+const toNumber = (v) => {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+};
 
-function formatValor(v) {
-  if (v == null) return 'R$ 0,00';
-  const num = typeof v === 'number' ? v : Number(v);
-  if (!Number.isFinite(num)) return 'R$ 0,00';
-  return fmtBRL.format(num);
+// ─── Cache em memoria por conjunto de empresas + janela de datas ────
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const _cacheContasPagar = {
+  data: null,    // titulos enriquecidos
+  key: null,
+  timestamp: 0,
+};
+function chaveCache(empresaIds, venctoDe, venctoAte) {
+  return `${[...empresaIds].sort().join(',')}|${venctoDe}|${venctoAte}`;
+}
+function cacheValido(key) {
+  return _cacheContasPagar.data
+    && _cacheContasPagar.key === key
+    && (Date.now() - _cacheContasPagar.timestamp) < CACHE_TTL_MS;
 }
 
-// ─── Página ─────────────────────────────────────────────────────
+// ─── Componente ─────────────────────────────────────────────────
 export default function ClienteContasPagar() {
   const session = useClienteSession();
   const asRede = session?.asRede;
   const clientesRede = useMemo(() => session?.clientesRede || [], [session]);
 
-  const [contasPorEmpresa, setContasPorEmpresa] = useState({}); // { [empresaId]: contas[] }
-  const [errosPorEmpresa, setErrosPorEmpresa] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [venctoDe, setVenctoDe] = useState(inicioMesAtual());
-  const [venctoAte, setVenctoAte] = useState(fimMesAtual());
-  const [busca, setBusca] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState('hoje');
-  const [empresasExpandidas, setEmpresasExpandidas] = useState(new Set());
-  const [datasExpandidas, setDatasExpandidas] = useState(new Set()); // chave: `${empresaId}|${dataIso}`
-
-  const redeId = asRede?.id;
-  const empresasComCodigo = useMemo(
+  // Só empresas vinculadas ao Autosystem (empresa_codigo preenchido)
+  const empresasDisponiveis = useMemo(
     () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
     [clientesRede],
   );
 
-  const carregar = useCallback(async () => {
-    if (!redeId || empresasComCodigo.length === 0) return;
+  // Multi-seleção independente da topbar — default: todas
+  const [empresasSelIds, setEmpresasSelIds] = useState(() =>
+    new Set(empresasDisponiveis.map(c => c.id))
+  );
+  // Sincroniza quando a lista de disponíveis muda (sessão recarregada)
+  useEffect(() => {
+    setEmpresasSelIds(prev => {
+      if (prev.size === 0 && empresasDisponiveis.length > 0) {
+        return new Set(empresasDisponiveis.map(c => c.id));
+      }
+      return prev;
+    });
+  }, [empresasDisponiveis]);
+
+  const empresasSel = useMemo(
+    () => empresasDisponiveis.filter(c => empresasSelIds.has(c.id)),
+    [empresasDisponiveis, empresasSelIds]
+  );
+  const podeFiltrarEmpresa = empresasDisponiveis.length > 1;
+  const multiEmpresa = empresasSel.length > 1;
+
+  const [venctoDe, setVenctoDe] = useState(inicioMesAtual());
+  const [venctoAte, setVenctoAte] = useState(fimMesAtual());
+
+  const cacheKeyInicial = chaveCache(empresasSelIds, venctoDe, venctoAte);
+  const cacheInicial = cacheValido(cacheKeyInicial) ? _cacheContasPagar.data : null;
+
+  const [loading, setLoading] = useState(!cacheInicial);
+  const [titulos, setTitulos] = useState(cacheInicial || []);
+  const [error, setError] = useState(null);
+  const [busca, setBusca] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState('hoje');
+  const [expandedDates, setExpandedDates] = useState(new Set());
+  const [empresasExpandidas, setEmpresasExpandidas] = useState(new Set());
+
+  const redeId = asRede?.id;
+
+  const carregar = useCallback(async ({ force = false } = {}) => {
+    if (!redeId) return;
+    if (empresasSel.length === 0) {
+      setError('Selecione ao menos uma empresa.');
+      setTitulos([]);
+      setLoading(false);
+      return;
+    }
+
+    const key = chaveCache(empresasSelIds, venctoDe, venctoAte);
+    if (!force && cacheValido(key)) {
+      setTitulos(_cacheContasPagar.data);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setError(null);
     try {
       const results = await Promise.allSettled(
-        empresasComCodigo.map(emp =>
+        empresasSel.map(emp =>
           autosystemService.buscarContasPagar(redeId, emp.empresa_codigo, {
             vencto_de: venctoDe || null,
             vencto_ate: venctoAte || null,
-          }).then(contas => ({ emp, contas })),
+          }).then(contas => contas.map(c => ({
+            ...c,
+            _empresaId: emp.id,
+            _empresaNome: emp.nome,
+            _empresaCnpj: emp.cnpj,
+          }))),
         ),
       );
-      const dados = {};
-      const erros = {};
+      const erros = [];
+      const todos = [];
       results.forEach((r, i) => {
-        const emp = empresasComCodigo[i];
-        if (r.status === 'fulfilled') dados[emp.id] = r.value.contas;
-        else erros[emp.id] = r.reason?.message || 'Falha ao carregar';
+        if (r.status === 'fulfilled') todos.push(...r.value);
+        else erros.push(`${empresasSel[i].nome}: ${r.reason?.message || 'falha'}`);
       });
-      setContasPorEmpresa(dados);
-      setErrosPorEmpresa(erros);
+      setTitulos(todos);
+      if (erros.length > 0 && todos.length === 0) {
+        setError(erros.join(' | '));
+      } else {
+        setError(erros.length > 0 ? `Alguns erros: ${erros.join(' | ')}` : null);
+      }
+      _cacheContasPagar.data = todos;
+      _cacheContasPagar.key = key;
+      _cacheContasPagar.timestamp = Date.now();
+    } catch (err) {
+      setError(err.message);
+      setTitulos([]);
     } finally {
       setLoading(false);
     }
-  }, [redeId, empresasComCodigo, venctoDe, venctoAte]);
+  }, [redeId, empresasSel, empresasSelIds, venctoDe, venctoAte]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const hojeIso = isoHoje();
-  // Regra: vencimentos em sábado/domingo/feriado são pagos no próximo dia útil.
-  // "Hoje efetivo" = próximo dia útil a partir de hoje (igual a hoje se hoje for útil).
-  const hojeEfetivoIso = useMemo(() => vencimentoEfetivoIso(hojeIso), [hojeIso]);
-  const hojeNaoEhDiaUtil = hojeIso !== hojeEfetivoIso;
-
-  // Aplica filtros locais (status + busca) e agrupa por empresa → data efetiva
-  const arvore = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    const passaBusca = (c) => {
-      if (!q) return true;
-      const campos = [c.pessoa_nome, c.documento, c.debito_nome, c.motivo_nome, c.obs];
-      return campos.some(v => (v || '').toString().toLowerCase().includes(q));
-    };
-    const passaStatus = (c, efetivoIso) => {
-      if (filtroStatus === 'todos') return true;
-      const vencido = efetivoIso && efetivoIso < hojeIso;
-      if (filtroStatus === 'vencido') return vencido;
-      // "Hoje" considera a data efetiva de pagamento (rolando fins de semana/feriados).
-      // Se hoje for útil: pega contas cujo dia útil de pagamento é hoje.
-      // Se hoje não for útil: pega contas que serão pagas no próximo dia útil.
-      if (filtroStatus === 'hoje') return efetivoIso === hojeEfetivoIso;
-      if (filtroStatus === 'a_vencer') return !vencido && efetivoIso !== hojeEfetivoIso;
-      return true;
-    };
-
-    return empresasComCodigo.map((emp) => {
-      // Anota cada conta com sua data efetiva de pagamento
-      const todas = (contasPorEmpresa[emp.id] || []).map(c => ({
-        ...c,
-        _efetivoIso: vencimentoEfetivoIso(dataIso(c.vencto)) || '',
-      }));
-      const contas = todas.filter(c => passaBusca(c) && passaStatus(c, c._efetivoIso));
-
-      // Agrupa por data efetiva (não pelo vencto cru)
-      const porData = new Map();
-      let totalEmpresa = 0;
-      let totalVencido = 0;
-      for (const c of contas) {
-        const efet = c._efetivoIso || 'sem_data';
-        if (!porData.has(efet)) porData.set(efet, []);
-        porData.get(efet).push(c);
-        const val = Number(c.valor) || 0;
-        totalEmpresa += val;
-        if (efet && efet < hojeIso) totalVencido += val;
-      }
-      const datas = Array.from(porData.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dataKey, lista]) => ({
-          dataKey,
-          contas: lista,
-          total: lista.reduce((acc, c) => acc + (Number(c.valor) || 0), 0),
-        }));
+  // Enriquece cada título com dados derivados
+  const enriched = useMemo(() => {
+    return (titulos || []).map(t => {
+      const venc = dataIso(t.vencto);
+      const efet = vencimentoEfetivoIso(venc) || venc;
+      const dias = diffDias(efet);
+      const valor = toNumber(t.valor);
       return {
-        emp,
-        contas,
-        qtd: contas.length,
-        total: totalEmpresa,
-        totalVencido,
-        datas,
-        erro: errosPorEmpresa[emp.id] || null,
+        raw: t,
+        valor,
+        vencimento: venc,
+        vencimentoEfetivo: efet,
+        diasAteVenc: dias,
+        vencido: dias !== null && dias < 0,
+        proximo: dias !== null && dias >= 0 && dias <= 7,
+        documento: t.documento || '',
+        historico: t.obs || '',
+        motivoNome: t.motivo_nome || '',
+        debitoNome: t.debito_nome || '',
+        debitoCodigo: t.debito_codigo || '',
+        fornecedorNome: t.pessoa_nome || 'Fornecedor',
+        empresaId: t._empresaId,
+        empresaNome: t._empresaNome,
+        empresaCnpj: t._empresaCnpj,
       };
     });
-  }, [contasPorEmpresa, errosPorEmpresa, empresasComCodigo, filtroStatus, busca, hojeIso, hojeEfetivoIso]);
+  }, [titulos]);
 
-  // Totais gerais (agregado da rede). NÃO aplica filtro de status nem busca —
-  // os cards refletem sempre o panorama completo do período selecionado.
-  const totaisGerais = useMemo(() => {
-    let total = 0, totalVencido = 0, totalHoje = 0, totalAVencer = 0;
-    let qtd = 0, qtdVencido = 0, qtdHoje = 0;
-    for (const empId in contasPorEmpresa) {
-      for (const c of contasPorEmpresa[empId]) {
-        const v = Number(c.valor) || 0;
-        const efet = vencimentoEfetivoIso(dataIso(c.vencto)) || '';
-        total += v; qtd++;
-        if (efet && efet < hojeIso) { totalVencido += v; qtdVencido++; }
-        else if (efet === hojeEfetivoIso) { totalHoje += v; qtdHoje++; }
-        else totalAVencer += v;
-      }
+  // "Hoje" considera o próximo dia útil quando hoje não é útil
+  const datasHoje = useMemo(() => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const diaAlvo = proximoDiaUtil(hoje);
+    const datas = new Set();
+    datas.add(isoDateUtil(diaAlvo));
+    const cur = new Date(diaAlvo);
+    cur.setDate(cur.getDate() - 1);
+    while (!ehDiaUtil(cur)) {
+      datas.add(isoDateUtil(cur));
+      cur.setDate(cur.getDate() - 1);
     }
-    return { total, totalVencido, totalHoje, totalAVencer, qtd, qtdVencido, qtdHoje };
-  }, [contasPorEmpresa, hojeIso, hojeEfetivoIso]);
+    return datas;
+  }, []);
 
+  const hojeAntecipado = useMemo(() => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    return !ehDiaUtil(hoje);
+  }, []);
+  const proximoUtilIso = useMemo(() => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    return isoDateUtil(proximoDiaUtil(hoje));
+  }, []);
+
+  const filtrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return enriched.filter(t => {
+      if (filtroStatus === 'hoje' && !(t.vencimento && datasHoje.has(t.vencimento))) return false;
+      if (filtroStatus === 'vencidos' && !t.vencido) return false;
+      if (filtroStatus === 'proximos' && (t.vencido || !t.proximo)) return false;
+      if (filtroStatus === 'futuros' && (t.vencido || t.proximo)) return false;
+      if (!q) return true;
+      return (
+        t.fornecedorNome.toLowerCase().includes(q) ||
+        String(t.documento).toLowerCase().includes(q) ||
+        t.debitoNome.toLowerCase().includes(q) ||
+        (t.historico || '').toLowerCase().includes(q)
+      );
+    });
+  }, [enriched, busca, filtroStatus, datasHoje]);
+
+  // Agrupa por data de vencimento
+  const grupos = useMemo(() => {
+    const mapa = new Map();
+    filtrados.forEach(t => {
+      const key = t.vencimento || 'sem-data';
+      if (!mapa.has(key)) mapa.set(key, { data: t.vencimento, itens: [], total: 0 });
+      const g = mapa.get(key);
+      g.itens.push(t);
+      g.total += t.valor;
+    });
+    const arr = Array.from(mapa.values());
+    arr.sort((a, b) => {
+      if (!a.data) return 1;
+      if (!b.data) return -1;
+      return a.data.localeCompare(b.data);
+    });
+    arr.forEach(g => {
+      const dias = diffDias(vencimentoEfetivoIso(g.data) || g.data);
+      g.diasAteVenc = dias;
+      g.vencido = dias !== null && dias < 0;
+      g.proximo = dias !== null && dias >= 0 && dias <= 7;
+      g.itens.sort((a, b) => b.valor - a.valor);
+    });
+    return arr;
+  }, [filtrados]);
+
+  // Totais (sem filtro de status/busca — cards refletem panorama completo)
+  const totais = useMemo(() => {
+    const tot = enriched.reduce((s, t) => s + t.valor, 0);
+    const vencidos = enriched.filter(t => t.vencido);
+    const proximos = enriched.filter(t => !t.vencido && t.proximo);
+    const futuros = enriched.filter(t => !t.vencido && !t.proximo);
+    const hoje = enriched.filter(t => t.vencimento && datasHoje.has(t.vencimento));
+    return {
+      total: tot,
+      qtd: enriched.length,
+      vencidos: vencidos.reduce((s, t) => s + t.valor, 0),
+      qtdVencidos: vencidos.length,
+      proximos: proximos.reduce((s, t) => s + t.valor, 0),
+      qtdProximos: proximos.length,
+      futuros: futuros.reduce((s, t) => s + t.valor, 0),
+      qtdFuturos: futuros.length,
+      hoje: hoje.reduce((s, t) => s + t.valor, 0),
+      qtdHoje: hoje.length,
+    };
+  }, [enriched, datasHoje]);
+
+  // Tree multi-empresa: empresa → data → títulos
+  const treeEmpresas = useMemo(() => {
+    if (!multiEmpresa) return [];
+    const porEmp = new Map();
+    filtrados.forEach(t => {
+      const empId = t.empresaId ?? 'sem-empresa';
+      if (!porEmp.has(empId)) {
+        porEmp.set(empId, {
+          empresaId: empId,
+          empresaNome: t.empresaNome || 'Sem empresa',
+          empresaCnpj: t.empresaCnpj || '',
+          itens: [], total: 0, qtdVencidos: 0,
+        });
+      }
+      const e = porEmp.get(empId);
+      e.itens.push(t);
+      e.total += t.valor;
+      if (t.vencido) e.qtdVencidos += 1;
+    });
+    const arr = Array.from(porEmp.values()).map(emp => {
+      const mapaData = new Map();
+      emp.itens.forEach(t => {
+        const k = t.vencimento || 'sem-data';
+        if (!mapaData.has(k)) mapaData.set(k, { data: t.vencimento, itens: [], total: 0 });
+        const g = mapaData.get(k);
+        g.itens.push(t);
+        g.total += t.valor;
+      });
+      const gruposLocal = Array.from(mapaData.values()).sort((a, b) => {
+        if (!a.data) return 1;
+        if (!b.data) return -1;
+        return a.data.localeCompare(b.data);
+      });
+      gruposLocal.forEach(g => {
+        const dias = diffDias(vencimentoEfetivoIso(g.data) || g.data);
+        g.diasAteVenc = dias;
+        g.vencido = dias !== null && dias < 0;
+        g.proximo = dias !== null && dias >= 0 && dias <= 7;
+        g.itens.sort((a, b) => b.valor - a.valor);
+      });
+      return { ...emp, grupos: gruposLocal, qtd: emp.itens.length };
+    });
+    arr.sort((a, b) => b.total - a.total);
+    return arr;
+  }, [filtrados, multiEmpresa]);
+
+  // Recolhe quando muda filtro/seleção
+  useEffect(() => {
+    setEmpresasExpandidas(new Set());
+    setExpandedDates(new Set());
+  }, [filtroStatus, multiEmpresa, treeEmpresas, grupos.length]);
+
+  const toggleDate = (key) => {
+    setExpandedDates(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
   const toggleEmpresa = (empId) => {
     setEmpresasExpandidas(prev => {
-      const n = new Set(prev);
-      if (n.has(empId)) n.delete(empId); else n.add(empId);
-      return n;
+      const next = new Set(prev);
+      if (next.has(empId)) next.delete(empId); else next.add(empId);
+      return next;
     });
   };
-  const toggleData = (empId, dataKey) => {
-    const k = `${empId}|${dataKey}`;
-    setDatasExpandidas(prev => {
-      const n = new Set(prev);
-      if (n.has(k)) n.delete(k); else n.add(k);
-      return n;
-    });
+  const expandirTodos = () => {
+    if (multiEmpresa) {
+      setEmpresasExpandidas(new Set(treeEmpresas.map(e => e.empresaId)));
+      const datas = new Set();
+      treeEmpresas.forEach(e =>
+        e.grupos.forEach(g => datas.add(`${e.empresaId}|${g.data || 'sem-data'}`))
+      );
+      setExpandedDates(datas);
+    } else {
+      setExpandedDates(new Set(grupos.map(g => g.data || 'sem-data')));
+    }
   };
-
-  const expandirTodas = () => {
-    setEmpresasExpandidas(new Set(arvore.filter(g => g.qtd > 0).map(g => g.emp.id)));
-  };
-  const recolherTodas = () => {
+  const colapsarTodos = () => {
+    setExpandedDates(new Set());
     setEmpresasExpandidas(new Set());
-    setDatasExpandidas(new Set());
   };
 
-  // Tela: nenhuma empresa importada com código
-  if (empresasComCodigo.length === 0) {
+  // Sem empresas com vínculo Autosystem
+  if (empresasDisponiveis.length === 0) {
     return (
-      <div className="p-6">
-        <div className="max-w-2xl mx-auto bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-start gap-3">
+      <div>
+        <PageHeader title="Contas a Pagar" description="Títulos pendentes de pagamento" />
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-900">
-            <p className="font-semibold mb-1">Nenhuma empresa com vínculo Autosystem</p>
-            <p className="text-xs">
-              Nenhuma das empresas desta rede tem <code className="font-mono bg-amber-100 px-1 rounded">empresa_codigo</code> preenchido.
-              Solicite ao administrador para importar as empresas em <em>/admin/clientes → Importar empresas</em>.
-            </p>
-          </div>
+          <p>
+            Sua rede ainda não tem <strong>empresas Autosystem</strong> com <code className="font-mono bg-amber-100 px-1 rounded">empresa_codigo</code> vinculado.
+            Contate o administrador para importar as empresas em <em>/admin/clientes → Importar empresas</em>.
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white">
-              <ArrowUpRight className="h-5 w-5" />
-            </div>
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Contas a Pagar</h1>
-          </div>
-          <p className="text-sm text-gray-500">
-            {asRede?.nome} · {empresasComCodigo.length} empresa(s) · vencimentos entre {formatDate(venctoDe)} e {formatDate(venctoAte)}
-          </p>
+    <div>
+      <PageHeader title="Contas a Pagar" description="Títulos pendentes de pagamento">
+        {/* Filtro de data */}
+        <div className="hidden md:flex items-center gap-2">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+            <Calendar className="h-3 w-3" /> Vencimento entre
+          </span>
+          <input type="date" value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+          <span className="text-[10px] text-gray-400">e</span>
+          <input type="date" value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
         </div>
-        <button onClick={carregar} disabled={loading}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5">
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+        {podeFiltrarEmpresa && (
+          <EmpresaMultiSelect
+            clientesRede={empresasDisponiveis}
+            selecionadas={empresasSelIds}
+            onToggle={(id) => setEmpresasSelIds(prev => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              return next;
+            })}
+            onToggleTodas={() => setEmpresasSelIds(prev =>
+              prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
+            )}
+          />
+        )}
+        <button onClick={() => carregar({ force: true })}
+          disabled={loading || empresasSel.length === 0}
+          title="Força recarga ignorando o cache"
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Atualizar
         </button>
-      </div>
+      </PageHeader>
 
-      {/* Aviso: hoje não é dia útil */}
-      {hojeNaoEhDiaUtil && (
-        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-900">
-            <p className="font-medium">Hoje não é dia útil ({formatDate(hojeIso)}).</p>
-            <p className="text-xs mt-0.5">
-              Pagamentos com vencimento em sábado, domingo ou feriado serão executados em <strong>{formatDate(hojeEfetivoIso)}</strong>.
-              O filtro <strong>"Hoje"</strong> mostra os títulos que vão ser pagos nesse próximo dia útil.
-            </p>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Hoje" valor={formatValor(totaisGerais.totalHoje)} sublabel={`${totaisGerais.qtdHoje} título(s)`} icon={Calendar} color="amber" />
-        <StatCard label="Vencido" valor={formatValor(totaisGerais.totalVencido)} sublabel={`${totaisGerais.qtdVencido} título(s)`} icon={AlertTriangle} color="red" />
-        <StatCard label="A vencer" valor={formatValor(totaisGerais.totalAVencer)} sublabel={`${totaisGerais.qtd - totaisGerais.qtdVencido - totaisGerais.qtdHoje} título(s)`} icon={CheckCircle2} color="emerald" />
-        <StatCard label="Total no período" valor={formatValor(totaisGerais.total)} sublabel={`${totaisGerais.qtd} título(s)`} icon={FileText} color="violet" />
+      {/* Resumo */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <ResumoCard icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600"
+          label={hojeAntecipado ? 'A pagar (próximo dia útil)' : 'A pagar hoje'}
+          valor={formatCurrency(totais.hoje)}
+          sub={hojeAntecipado
+            ? (totais.qtdHoje > 0
+                ? `${totais.qtdHoje} ${totais.qtdHoje === 1 ? 'titulo' : 'titulos'} em ${formatDataBR(proximoUtilIso)}`
+                : `previsto para ${formatDataBR(proximoUtilIso)}`)
+            : (totais.qtdHoje > 0
+                ? `${totais.qtdHoje} ${totais.qtdHoje === 1 ? 'titulo vence' : 'titulos vencem'} hoje`
+                : 'nenhum vencimento hoje')}
+          highlight />
+        <ResumoCard icon={AlertTriangle} iconBg="bg-red-50" iconColor="text-red-600"
+          label="Vencidos" valor={formatCurrency(totais.vencidos)}
+          sub={`${totais.qtdVencidos} ${totais.qtdVencidos === 1 ? 'titulo' : 'titulos'}`} />
+        <ResumoCard icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600"
+          label="Próximos 7 dias" valor={formatCurrency(totais.proximos)}
+          sub={`${totais.qtdProximos} ${totais.qtdProximos === 1 ? 'titulo' : 'titulos'}`} />
+        <ResumoCard icon={Calendar} iconBg="bg-emerald-50" iconColor="text-emerald-600"
+          label="A vencer" valor={formatCurrency(totais.futuros)}
+          sub={`${totais.qtdFuturos} ${totais.qtdFuturos === 1 ? 'titulo' : 'titulos'}`} />
       </div>
 
       {/* Filtros */}
-      <div className="bg-white rounded-xl border border-gray-200/60 p-3 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-gray-400" />
-          <div className="flex items-center gap-1.5">
-            <input type="date" value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
-              className="h-9 rounded-lg border border-gray-200 px-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
-            <span className="text-xs text-gray-400">até</span>
-            <input type="date" value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
-              className="h-9 rounded-lg border border-gray-200 px-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
-          </div>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por fornecedor, documento, conta ou observação..."
+            className="w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors" />
         </div>
-
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
           {[
-            { v: 'todos', l: 'Todos' },
-            { v: 'vencido', l: 'Vencido' },
-            { v: 'hoje', l: 'Hoje' },
-            { v: 'a_vencer', l: 'A vencer' },
-          ].map(opt => (
-            <button key={opt.v} onClick={() => setFiltroStatus(opt.v)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                filtroStatus === opt.v ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+            { k: 'todos', label: 'Todos' },
+            { k: 'hoje', label: 'Hoje' },
+            { k: 'vencidos', label: 'Vencidos' },
+            { k: 'proximos', label: 'Próximos 7d' },
+            { k: 'futuros', label: 'A vencer' },
+          ].map(tab => (
+            <button key={tab.k} onClick={() => setFiltroStatus(tab.k)}
+              className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
+                filtroStatus === tab.k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}>
-              {opt.l}
+              {tab.label}
             </button>
           ))}
         </div>
-
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input value={busca} onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar por fornecedor, documento, motivo, conta..."
-            className="w-full h-9 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={expandirTodas} className="text-[11px] font-medium text-violet-600 hover:text-violet-800 whitespace-nowrap">Expandir</button>
-          <span className="text-gray-300">|</span>
-          <button onClick={recolherTodas} className="text-[11px] font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Recolher</button>
-        </div>
       </div>
 
-      {/* Árvore */}
-      {loading && Object.keys(contasPorEmpresa).length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200/60 py-16 flex flex-col items-center gap-2 text-gray-500">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <p className="text-sm">Consultando {empresasComCodigo.length} empresa(s)...</p>
+      {/* Tree */}
+      {loading ? (
+        <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+          <span className="text-sm">Carregando títulos pendentes...</span>
+        </div>
+      ) : error && enriched.length === 0 ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Não foi possível carregar os títulos</p>
+            <p className="text-red-700 mt-1">{error}</p>
+          </div>
+        </div>
+      ) : grupos.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 mb-3">
+            <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+          </div>
+          <p className="text-sm font-medium text-gray-900">
+            {enriched.length === 0 ? 'Nenhum título pendente' : 'Nenhum título encontrado para o filtro atual'}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            {enriched.length === 0 ? 'Todas as contas estão em dia' : 'Tente ajustar a busca ou o filtro'}
+          </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {arvore.map(grupo => (
-            <GrupoEmpresa
-              key={grupo.emp.id}
-              grupo={grupo}
-              expandida={empresasExpandidas.has(grupo.emp.id)}
-              onToggle={() => toggleEmpresa(grupo.emp.id)}
-              datasExpandidas={datasExpandidas}
-              onToggleData={(dk) => toggleData(grupo.emp.id, dk)}
-            />
-          ))}
+        <div className="bg-white rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-blue-500" />
+            <h3 className="text-sm font-semibold text-gray-800">Títulos por vencimento</h3>
+            <span className="text-[11px] text-gray-400">
+              {multiEmpresa
+                ? `· ${treeEmpresas.length} ${treeEmpresas.length === 1 ? 'empresa' : 'empresas'} · ${filtrados.length} ${filtrados.length === 1 ? 'titulo' : 'titulos'}`
+                : `· ${grupos.length} ${grupos.length === 1 ? 'data' : 'datas'} · ${filtrados.length} ${filtrados.length === 1 ? 'titulo' : 'titulos'}`}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={expandirTodos} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium transition-colors">
+                Expandir todos
+              </button>
+              <span className="text-[11px] text-gray-300">|</span>
+              <button onClick={colapsarTodos} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium transition-colors">
+                Colapsar todos
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
+                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-2.5">{multiEmpresa ? 'Empresa / Data / Documento' : 'Vencimento / Documento'}</th>
+                  <th className="px-3 py-2.5">Status</th>
+                  <th className="px-3 py-2.5">Fornecedor</th>
+                  <th className="px-3 py-2.5">Conta (Débito)</th>
+                  <th className="px-3 py-2.5">Histórico</th>
+                  <th className="px-3 py-2.5 text-right">Qtd</th>
+                  <th className="px-3 py-2.5 text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-white/10">
+                {multiEmpresa
+                  ? treeEmpresas.map(emp => {
+                      const empAberta = empresasExpandidas.has(emp.empresaId);
+                      return (
+                        <React.Fragment key={`emp-${emp.empresaId}`}>
+                          <tr onClick={() => toggleEmpresa(emp.empresaId)}
+                            className={`cursor-pointer transition-colors ${empAberta ? 'bg-blue-50/40 dark:bg-blue-500/15' : 'hover:bg-gray-50/60 dark:hover:bg-white/5'}`}>
+                            <td className="px-4 py-2.5" colSpan={5}>
+                              <div className="flex items-center gap-2">
+                                <motion.div animate={{ rotate: empAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                  <ChevronRight className="h-4 w-4 text-gray-400" />
+                                </motion.div>
+                                <div className="h-7 w-7 rounded-lg bg-violet-50 dark:bg-violet-500/15 text-violet-600 dark:text-violet-300 flex items-center justify-center flex-shrink-0">
+                                  <Building2 className="h-3.5 w-3.5" />
+                                </div>
+                                <div>
+                                  <p className="text-[13px] font-semibold text-gray-900 truncate">{emp.empresaNome}</p>
+                                  <p className="text-[10.5px] text-gray-500">
+                                    <span className="font-mono">{emp.empresaCnpj || '—'}</span>
+                                    {' · '}{emp.grupos.length} {emp.grupos.length === 1 ? 'data' : 'datas'}
+                                    {emp.qtdVencidos > 0 && <span className="ml-1 text-red-600 dark:text-red-400">· {emp.qtdVencidos} vencido{emp.qtdVencidos === 1 ? '' : 's'}</span>}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono tabular-nums text-[12px] text-gray-700">
+                              {emp.qtd}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono tabular-nums text-[13px] font-bold text-gray-900">
+                              {formatCurrency(emp.total)}
+                            </td>
+                          </tr>
+                          {empAberta && emp.grupos.map(g => renderGrupoTree(g, emp.empresaId, multiEmpresa, expandedDates, toggleDate))}
+                        </React.Fragment>
+                      );
+                    })
+                  : grupos.map(g => renderGrupoTree(g, null, multiEmpresa, expandedDates, toggleDate))
+                }
+              </tbody>
+              <tfoot className="bg-gray-50/60 dark:bg-white/[0.03] border-t border-gray-100 dark:border-white/10">
+                <tr className="text-[12px] font-semibold">
+                  <td className="px-4 py-3" colSpan={5}>
+                    Total · {filtrados.length} {filtrados.length === 1 ? 'titulo' : 'titulos'} em {grupos.length} {grupos.length === 1 ? 'data' : 'datas'}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums text-gray-700">{filtrados.length}</td>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums text-gray-900">
+                    {formatCurrency(filtrados.reduce((s, t) => s + t.valor, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Componentes ───────────────────────────────────────────────
-function GrupoEmpresa({ grupo, expandida, onToggle, datasExpandidas, onToggleData }) {
-  const { emp, qtd, total, totalVencido, datas, erro } = grupo;
-  const empClickable = qtd > 0 && !erro;
+// ─── Render do grupo (data + títulos) ───────────────────────────
+function renderGrupoTree(g, empresaId, multiEmpresa, expandedDates, toggleDate) {
+  const dataKey = g.data || 'sem-data';
+  const key = empresaId ? `${empresaId}|${dataKey}` : dataKey;
+  const aberto = expandedDates.has(key);
+  const efet = vencimentoEfetivoIso(g.data) || g.data;
+  const rolou = g.data && efet && g.data !== efet;
+  const statusCfg = g.vencido
+    ? { bg: 'bg-red-50 dark:bg-red-500/10', text: 'text-red-700 dark:text-red-300', ring: 'ring-red-200 dark:ring-red-500/30',
+        label: g.diasAteVenc !== null ? `Vencido há ${Math.abs(g.diasAteVenc)}d` : 'Vencido',
+        bar: 'bg-red-500' }
+    : g.proximo
+    ? { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-700 dark:text-amber-300', ring: 'ring-amber-200 dark:ring-amber-500/30',
+        label: g.diasAteVenc === 0 ? 'Vence hoje' : `Vence em ${g.diasAteVenc}d`,
+        bar: 'bg-amber-500' }
+    : { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-300', ring: 'ring-emerald-200 dark:ring-emerald-500/30',
+        label: g.diasAteVenc !== null ? `Em ${g.diasAteVenc}d` : '—',
+        bar: 'bg-emerald-500' };
+  const indentDataPL = multiEmpresa ? 48 : 16;
+  const indentItemPL = multiEmpresa ? 88 : 56;
   return (
-    <div className="bg-white rounded-xl border border-gray-200/60 shadow-sm overflow-hidden">
-      <button
-        onClick={empClickable ? onToggle : undefined}
-        disabled={!empClickable}
-        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-          empClickable ? 'hover:bg-gray-50' : 'cursor-default opacity-90'
-        }`}
-      >
-        <ChevronRight className={`h-4 w-4 text-gray-400 flex-shrink-0 transition-transform ${expandida ? 'rotate-90' : ''} ${empClickable ? '' : 'opacity-30'}`} />
-        <div className="h-9 w-9 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0">
-          <Building2 className="h-4 w-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">{emp.nome}</p>
-          <p className="text-[11px] text-gray-500 truncate">
-            <span className="font-mono">{emp.cnpj || '—'}</span>
-            {qtd > 0 && (
-              <> · {qtd} título{qtd === 1 ? '' : 's'}</>
-            )}
-          </p>
-        </div>
-        <div className="text-right flex-shrink-0">
-          {erro ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 text-[10px] font-medium">
-              <AlertCircle className="h-2.5 w-2.5" /> erro
-            </span>
-          ) : qtd === 0 ? (
-            <span className="text-[11px] text-gray-400">sem títulos</span>
-          ) : (
-            <>
-              <p className="text-sm font-bold text-gray-900 tabular-nums">{formatValor(total)}</p>
-              {totalVencido > 0 && (
-                <p className="text-[10px] text-red-600 tabular-nums">{formatValor(totalVencido)} vencido</p>
-              )}
-            </>
-          )}
-        </div>
-      </button>
-
-      {erro && (
-        <div className="px-4 pb-3 -mt-1 text-[11px] text-red-600">{erro}</div>
-      )}
-
-      <AnimatePresence initial={false}>
-        {expandida && qtd > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-gray-100 bg-gray-50/40 px-2 py-2 space-y-1">
-              {datas.map(dataNode => (
-                <GrupoData
-                  key={dataNode.dataKey}
-                  empId={emp.id}
-                  data={dataNode}
-                  expandida={datasExpandidas.has(`${emp.id}|${dataNode.dataKey}`)}
-                  onToggle={() => onToggleData(dataNode.dataKey)}
-                />
-              ))}
+    <React.Fragment key={key}>
+      <tr onClick={() => toggleDate(key)}
+        className={`cursor-pointer transition-colors ${aberto ? 'bg-blue-50/30 dark:bg-blue-500/10' : 'hover:bg-gray-50/60 dark:hover:bg-white/5'}`}>
+        <td className="py-2.5" style={{ paddingLeft: indentDataPL, paddingRight: 12 }}>
+          <div className="flex items-center gap-2">
+            <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+              <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+            </motion.div>
+            <span className={`inline-block w-1 h-5 rounded-full ${statusCfg.bar} flex-shrink-0`} />
+            <div>
+              <p className="text-[12.5px] font-semibold text-gray-900 font-mono tabular-nums">
+                {g.data ? formatDataBR(g.data) : 'Sem data'}
+              </p>
+              <p className="text-[10.5px] text-gray-400">
+                {g.data ? diaSemana(g.data) : '—'}
+                {rolou && <span className="ml-1 text-amber-600">→ paga em {formatDataBR(efet)}</span>}
+              </p>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          </div>
+        </td>
+        <td className="px-3 py-2.5">
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${statusCfg.bg} ${statusCfg.text} ring-1 ${statusCfg.ring}`}>
+            {statusCfg.label}
+          </span>
+        </td>
+        <td className="px-3 py-2.5 text-[11px] text-gray-400">—</td>
+        <td className="px-3 py-2.5 text-[11px] text-gray-400">—</td>
+        <td className="px-3 py-2.5 text-[11px] text-gray-400">—</td>
+        <td className="px-3 py-2.5 text-right font-mono tabular-nums text-[12px] text-gray-700">
+          {g.itens.length}
+        </td>
+        <td className={`px-3 py-2.5 text-right font-mono tabular-nums text-[12.5px] font-semibold ${g.vencido ? 'text-red-700 dark:text-red-400' : 'text-gray-900'}`}>
+          {formatCurrency(g.total)}
+        </td>
+      </tr>
+      {aberto && g.itens.map((t, i) => (
+        <tr key={`${key}-${t.documento}-${i}`} className="bg-gray-50/30 dark:bg-white/[0.02] hover:bg-gray-50/60 dark:hover:bg-white/5">
+          <td className="py-1.5" style={{ paddingLeft: indentItemPL, paddingRight: 12 }}>
+            <span className="font-mono tabular-nums text-[11.5px] text-gray-700">
+              {t.documento || `#${i + 1}`}
+            </span>
+          </td>
+          <td className="px-3 py-1.5" />
+          <td className="px-3 py-1.5 truncate max-w-[240px]">
+            <p className="text-[11.5px] text-gray-800 truncate">{t.fornecedorNome}</p>
+          </td>
+          <td className="px-3 py-1.5">
+            <p className="text-[11px] text-gray-700 truncate max-w-[200px]">{t.debitoNome || '—'}</p>
+            {t.debitoCodigo && <p className="text-[10px] text-gray-400 font-mono">{t.debitoCodigo}</p>}
+          </td>
+          <td className="px-3 py-1.5 text-[11px] text-gray-500 truncate max-w-[260px]">{t.historico || '—'}</td>
+          <td className="px-3 py-1.5" />
+          <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[12px] font-semibold text-gray-900">
+            {formatCurrency(t.valor)}
+          </td>
+        </tr>
+      ))}
+    </React.Fragment>
   );
 }
 
-function GrupoData({ data: dataNode, expandida, onToggle }) {
-  const { dataKey, contas, total } = dataNode;
-  const dias = diffDiasAteHoje(dataKey === 'sem_data' ? null : dataKey);
-  const vencido = dias != null && dias < 0;
-  const venceHoje = dias === 0;
-  // Quantas contas tiveram o vencto rolado para a data efetiva?
-  const roladas = contas.filter(c => dataIso(c.vencto) !== c._efetivoIso).length;
+function ResumoCard({ icon: Icon, iconBg, iconColor, label, valor, sub, highlight }) {
   return (
-    <div className="rounded-lg bg-white border border-gray-100">
-      <button onClick={onToggle}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 transition-colors text-left">
-        <ChevronRight className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${expandida ? 'rotate-90' : ''}`} />
-        <Calendar className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-800 tabular-nums">
-            {dataKey === 'sem_data' ? 'Sem data' : formatDate(dataKey)}
-          </p>
-          <p className="text-[10px] text-gray-400">
-            {contas.length} título{contas.length === 1 ? '' : 's'}
-            {roladas > 0 && ` · ${roladas} rolado(s) de dia não útil`}
-          </p>
+    <div className={`bg-white rounded-xl border p-5 ${highlight ? 'border-blue-200 bg-gradient-to-br from-blue-50/50 to-white' : 'border-gray-100'}`}>
+      <div className="flex items-start gap-3">
+        <div className={`rounded-lg ${iconBg} p-2.5 flex-shrink-0`}>
+          <Icon className={`h-5 w-5 ${iconColor}`} />
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {vencido && (
-            <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-red-50 text-red-700 border border-red-200">
-              <AlertTriangle className="h-2.5 w-2.5" /> Vencido
-            </span>
-          )}
-          {venceHoje && (
-            <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200">
-              Hoje
-            </span>
-          )}
-          <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatValor(total)}</p>
-        </div>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {expandida && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-gray-100 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50/60">
-                  <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className="px-3 py-2">Vencto</th>
-                    <th className="px-3 py-2">Fornecedor</th>
-                    <th className="px-3 py-2">Documento</th>
-                    <th className="px-3 py-2">Conta (Débito)</th>
-                    <th className="px-3 py-2 text-right">Valor</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {contas.map((c, i) => {
-                    const venctoOriginal = dataIso(c.vencto);
-                    const rolou = venctoOriginal && venctoOriginal !== c._efetivoIso;
-                    return (
-                      <tr key={i} className="hover:bg-gray-50/40">
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <p className="text-xs text-gray-700 tabular-nums">{formatDate(venctoOriginal)}</p>
-                          {rolou && (
-                            <p className="text-[10px] text-amber-600">→ paga em {formatDate(c._efetivoIso)}</p>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          <p className="text-sm text-gray-800 truncate max-w-[260px]">{c.pessoa_nome || '—'}</p>
-                          {c.obs && <p className="text-[10px] text-gray-400 truncate max-w-[260px]">{c.obs}</p>}
-                        </td>
-                        <td className="px-3 py-2 text-xs font-mono text-gray-600 whitespace-nowrap">{c.documento || '—'}</td>
-                        <td className="px-3 py-2">
-                          <p className="text-xs text-gray-700 truncate max-w-[220px]">{c.debito_nome || '—'}</p>
-                          <p className="text-[10px] text-gray-400 font-mono">{c.debito_codigo}</p>
-                        </td>
-                        <td className="px-3 py-2 text-right text-sm font-semibold text-gray-900 tabular-nums">
-                          {formatValor(c.valor)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function StatCard({ label, valor, sublabel, icon: Icon, color }) {
-  const palettes = {
-    violet:  { bg: 'bg-violet-50',  text: 'text-violet-600',  border: 'border-violet-100' },
-    red:     { bg: 'bg-red-50',     text: 'text-red-600',     border: 'border-red-100' },
-    emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-100' },
-    amber:   { bg: 'bg-amber-50',   text: 'text-amber-600',   border: 'border-amber-100' },
-  };
-  const c = palettes[color] || palettes.violet;
-  return (
-    <div className={`bg-white rounded-xl border ${c.border} p-4 shadow-sm`}>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{label}</p>
-        <div className={`h-7 w-7 rounded-md flex items-center justify-center ${c.bg} ${c.text}`}>
-          <Icon className="h-3.5 w-3.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-gray-500 mb-0.5">{label}</p>
+          <p className="text-lg font-semibold text-gray-900 tracking-tight truncate">{valor}</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>
         </div>
       </div>
-      <p className="text-xl font-bold text-gray-900 tabular-nums">{valor}</p>
-      {sublabel && <p className="text-[11px] text-gray-400 mt-0.5">{sublabel}</p>}
+    </div>
+  );
+}
+
+// ─── Multi-select de empresas (dropdown com checkboxes) ─────────
+function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleTodas }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  if (clientesRede.length === 0) return null;
+
+  const todasMarcadas = selecionadas.size === clientesRede.length;
+  const label = selecionadas.size === 0
+    ? 'Nenhuma'
+    : todasMarcadas
+    ? `Todas (${clientesRede.length})`
+    : selecionadas.size === 1
+    ? clientesRede.find(c => selecionadas.has(c.id))?.nome || '1 selecionada'
+    : `${selecionadas.size} empresas`;
+
+  return (
+    <div ref={ref} className="relative">
+      <label className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+          <Building2 className="h-3 w-3" /> Empresas
+        </span>
+        <button type="button" onClick={() => setAberto(o => !o)}
+          className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[180px] max-w-[260px] ${
+            aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
+          }`}>
+          <span className="truncate">{label}</span>
+          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+        </button>
+      </label>
+
+      <AnimatePresence>
+        {aberto && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
+            <button type="button" onClick={onToggleTodas}
+              className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
+              <input type="checkbox" checked={todasMarcadas}
+                onChange={() => {}} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              <span className="text-[12.5px] font-medium text-gray-700">
+                {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
+              </span>
+            </button>
+            <div className="max-h-72 overflow-y-auto">
+              {clientesRede.map(emp => {
+                const marcada = selecionadas.has(emp.id);
+                return (
+                  <label key={emp.id}
+                    className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <input type="checkbox" checked={marcada}
+                      onChange={() => onToggle(emp.id)}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12.5px] text-gray-800 truncate">{emp.nome}</p>
+                      {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -171,6 +171,33 @@ export async function buscarContasPagar(redeId, empresaCodigo, filtros = {}) {
   return Array.isArray(data?.contas) ? data.contas : [];
 }
 
+// ─── Contas a receber (banco remoto Autosystem) ──────────────
+// Mesma assinatura/filtros de buscarContasPagar. A query usada na
+// Edge Function filtra `conta_creditar like '1.3%'`.
+export async function buscarContasReceber(redeId, empresaCodigo, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (empresaCodigo == null || empresaCodigo === '') {
+    throw new Error('Esta empresa ainda não foi vinculada ao Autosystem (empresa_codigo vazio).');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-contas-receber', {
+    body: {
+      rede_id: redeId,
+      empresa_codigo: empresaCodigo,
+      vencto_de: filtros.vencto_de || null,
+      vencto_ate: filtros.vencto_ate || null,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar contas a receber');
+  if (data?.error) throw new Error(data.detail || data.error);
+  // Diagnóstico: contagens por etapa de filtro vêm em `data.diag`.
+  // Vê no DevTools → Console qual filtro está cortando registros.
+  if (data?.diag) {
+    // eslint-disable-next-line no-console
+    console.log(`[contas-receber:${empresaCodigo}]`, data.diag);
+  }
+  return Array.isArray(data?.contas) ? data.contas : [];
+}
+
 // ─── Empresas (banco remoto Autosystem) ──────────────────────
 // Chama a Edge Function `autosystem-empresas`, que:
 //   1) busca credenciais via RPC `as_rede_get_credenciais`
