@@ -8,8 +8,10 @@ import PageHeader from '../components/ui/PageHeader';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
+import * as autosystemService from '../services/autosystemService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
 import { formatCurrency } from '../utils/format';
+import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 
 function formatDataBR(s) {
   if (!s) return '—';
@@ -116,7 +118,9 @@ function compararOfxComSistema(ofx, movsSistema, toleranciaDias = 1) {
 export default function BpoValidacaoOfx() {
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
-  const [redeId, setRedeId] = useState('');
+  const [redesAutosystem, setRedesAutosystem] = useState([]);
+  const [redeSel, setRedeSel] = useState(null);
+  const redeId = redeSel?.tipo === 'webposto' ? redeSel.id : '';
   const [clienteId, setClienteId] = useState('');
   const [contasClassificadas, setContasClassificadas] = useState([]);
   const [contasQuality, setContasQuality] = useState([]);
@@ -133,25 +137,46 @@ export default function BpoValidacaoOfx() {
   useEffect(() => {
     (async () => {
       try {
-        const [lista, chs] = await Promise.all([
+        const [lista, chs, redesAS] = await Promise.all([
           clientesService.listarClientes(),
           mapService.listarChavesApi(),
+          autosystemService.listarRedes().catch(() => []),
         ]);
-        const webposto = (lista || []).filter(c => c.usa_webposto && c.chave_api_id && c.empresa_codigo);
-        setClientes(webposto);
-        const ids = new Set(webposto.map(c => c.chave_api_id));
-        setChavesApi((chs || []).filter(ch => ch.ativo !== false && ids.has(ch.id)));
+        const clientesValidos = (lista || []).filter(c =>
+          (c.usa_webposto && c.chave_api_id && c.empresa_codigo) ||
+          (c.as_rede_id && c.empresa_codigo != null)
+        );
+        setClientes(clientesValidos);
+        const idsWb = new Set(clientesValidos.filter(c => c.chave_api_id).map(c => c.chave_api_id));
+        setChavesApi((chs || []).filter(ch => ch.ativo !== false && idsWb.has(ch.id)));
+        const idsAS = new Set(clientesValidos.filter(c => c.as_rede_id).map(c => c.as_rede_id));
+        setRedesAutosystem((redesAS || []).filter(r => idsAS.has(r.id)));
       } catch (err) { setErro(err.message); }
       finally { setLoadingInicial(false); }
     })();
   }, []);
 
+  const contagensPorRede = useMemo(() => {
+    const m = new Map();
+    clientes.forEach(c => {
+      const key = c.chave_api_id || c.as_rede_id;
+      if (!key) return;
+      m.set(key, (m.get(key) || 0) + 1);
+    });
+    return m;
+  }, [clientes]);
+
   const empresasDaRede = useMemo(() => {
-    if (!redeId) return [];
+    if (!redeSel) return [];
     return clientes
-      .filter(c => c.chave_api_id === redeId && c.status !== 'inativo')
+      .filter(c => {
+        if (c.status === 'inativo') return false;
+        if (redeSel.tipo === 'webposto') return c.chave_api_id === redeSel.id;
+        if (redeSel.tipo === 'autosystem') return c.as_rede_id === redeSel.id;
+        return false;
+      })
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-  }, [redeId, clientes]);
+  }, [redeSel, clientes]);
 
   const cliente = useMemo(() => clientes.find(c => c.id === clienteId) || null, [clientes, clienteId]);
 
@@ -309,19 +334,20 @@ export default function BpoValidacaoOfx() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">1. Rede</label>
-            <select value={redeId} onChange={(e) => setRedeId(e.target.value)}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-              <option value="">Selecione...</option>
-              {chavesApi.map(ch => (
-                <option key={ch.id} value={ch.id}>{ch.nome}</option>
-              ))}
-            </select>
+            <SeletorRedeBPO
+              chavesApi={chavesApi}
+              redesAutosystem={redesAutosystem}
+              contagensPorRede={contagensPorRede}
+              value={redeSel}
+              onChange={setRedeSel}
+              placeholder="Selecione..."
+            />
           </div>
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">2. Empresa</label>
-            <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} disabled={!redeId}
+            <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} disabled={!redeSel}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-400">
-              <option value="">{redeId ? 'Selecione...' : 'Escolha a rede primeiro'}</option>
+              <option value="">{redeSel ? 'Selecione...' : 'Escolha a rede primeiro'}</option>
               {empresasDaRede.map(c => (
                 <option key={c.id} value={c.id}>{c.nome}</option>
               ))}

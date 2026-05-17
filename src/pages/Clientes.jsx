@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Building2, Mail, Phone, MapPin, Users as UsersIcon,
@@ -32,6 +32,8 @@ export default function Clientes() {
   const [expandedRedes, setExpandedRedes] = useState(new Set());
   const [redesAutosystem, setRedesAutosystem] = useState([]);
   const [modalEmpresasAS, setModalEmpresasAS] = useState({ open: false, rede: null });
+  const [modalGruposAS, setModalGruposAS] = useState({ open: false, rede: null });
+  const [modalContasAS, setModalContasAS] = useState({ open: false, rede: null });
 
   const showToast = (type, message) => {
     setToast({ show: true, type, message });
@@ -88,16 +90,34 @@ export default function Clientes() {
     return true;
   });
 
-  // Agrupa empresas por rede (chave_api). Clientes sem chave viram grupo 'Sem rede'.
+  // Agrupa empresas por rede:
+  //   - `chave_api_id` preenchido → rede Webposto (lookup via chaves_api join)
+  //   - `as_rede_id` preenchido    → rede Autosystem (lookup via redesAutosystem)
+  //   - nenhum dos dois            → grupo "Sem rede"
   const redes = useMemo(() => {
+    const asRedeById = new Map((redesAutosystem || []).map(r => [r.id, r]));
     const map = new Map();
     filtered.forEach(c => {
-      const key = c.chave_api_id || '_sem_rede';
+      let key, tipoIntegracao, asRede = null;
+      if (c.chave_api_id) {
+        key = `wb:${c.chave_api_id}`;
+        tipoIntegracao = 'webposto';
+      } else if (c.as_rede_id) {
+        key = `as:${c.as_rede_id}`;
+        tipoIntegracao = 'autosystem';
+        asRede = asRedeById.get(c.as_rede_id) || null;
+      } else {
+        key = '_sem_rede';
+        tipoIntegracao = 'manual';
+      }
       if (!map.has(key)) {
         map.set(key, {
           id: key,
+          tipoIntegracao,
           chaveApi: c.chaves_api || null,
           chaveApiId: c.chave_api_id || null,
+          asRede,
+          asRedeId: c.as_rede_id || null,
           empresas: [],
         });
       }
@@ -106,9 +126,11 @@ export default function Clientes() {
     return Array.from(map.values()).sort((a, b) => {
       if (a.id === '_sem_rede') return 1;
       if (b.id === '_sem_rede') return -1;
-      return (a.chaveApi?.nome || '').localeCompare(b.chaveApi?.nome || '');
+      const nomeA = a.chaveApi?.nome || a.asRede?.nome || '';
+      const nomeB = b.chaveApi?.nome || b.asRede?.nome || '';
+      return nomeA.localeCompare(nomeB);
     });
-  }, [filtered]);
+  }, [filtered, redesAutosystem]);
 
   const toggleRede = (redeId) => {
     setExpandedRedes(prev => {
@@ -186,10 +208,13 @@ export default function Clientes() {
               <tbody className="divide-y divide-gray-50">
                 {redes.map((rede) => {
                   const expanded = expandedRedes.has(rede.id);
-                  const nomeRede = rede.chaveApi?.nome || 'Sem rede';
+                  const nomeRede = rede.chaveApi?.nome || rede.asRede?.nome || 'Sem rede';
                   const provedor = rede.chaveApi?.provedor || '—';
-                  const usaWebposto = rede.empresas.some(c => c.usa_webposto);
-                  const redeAtiva = rede.chaveApi?.ativo !== false && rede.id !== '_sem_rede';
+                  const redeAtiva = rede.tipoIntegracao === 'webposto'
+                    ? rede.chaveApi?.ativo !== false
+                    : rede.tipoIntegracao === 'autosystem'
+                      ? rede.asRede?.ativo !== false
+                      : null; // _sem_rede
                   return (
                     <React.Fragment key={rede.id}>
                       <tr onClick={() => toggleRede(rede.id)}
@@ -215,12 +240,20 @@ export default function Clientes() {
                             <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700 uppercase tracking-wide">
                               {provedor}
                             </span>
+                          ) : rede.tipoIntegracao === 'autosystem' ? (
+                            <span className="inline-flex items-center rounded-md bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 uppercase tracking-wide">
+                              Autosystem
+                            </span>
                           ) : '—'}
                         </td>
                         <td className="px-6 py-3 text-center">
-                          {usaWebposto ? (
+                          {rede.tipoIntegracao === 'webposto' ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] font-medium">
                               <Zap className="h-2.5 w-2.5" /> Webposto
+                            </span>
+                          ) : rede.tipoIntegracao === 'autosystem' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-medium">
+                              <Zap className="h-2.5 w-2.5" /> Autosystem
                             </span>
                           ) : (
                             <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-500 px-2 py-0.5 text-[10px] font-medium">
@@ -232,7 +265,7 @@ export default function Clientes() {
                           {rede.empresas.length}
                         </td>
                         <td className="px-6 py-3 text-center">
-                          {rede.id === '_sem_rede' ? (
+                          {redeAtiva === null ? (
                             <span className="text-[10px] text-gray-400">—</span>
                           ) : redeAtiva ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-medium">
@@ -324,6 +357,8 @@ export default function Clientes() {
         onNova={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
         onEditar={(rede) => setModalWizard({ open: true, preRede: null, editandoRede: rede })}
         onImportar={(rede) => setModalEmpresasAS({ open: true, rede })}
+        onClassificarGrupos={(rede) => setModalGruposAS({ open: true, rede })}
+        onClassificarContas={(rede) => setModalContasAS({ open: true, rede })}
         onExcluir={(rede) => setModalConfirm({
           open: true,
           message: `Excluir a rede "${rede.nome}"? Esta ação não pode ser desfeita.`,
@@ -378,6 +413,20 @@ export default function Clientes() {
         onSaved={() => { setModalEmpresasAS({ open: false, rede: null }); carregar(); }}
         showToast={showToast}
       />
+
+      <ModalGruposProdutoAutosystem
+        open={modalGruposAS.open}
+        rede={modalGruposAS.rede}
+        onClose={() => setModalGruposAS({ open: false, rede: null })}
+        showToast={showToast}
+      />
+
+      <ModalContasCategoriaAutosystem
+        open={modalContasAS.open}
+        rede={modalContasAS.rede}
+        onClose={() => setModalContasAS({ open: false, rede: null })}
+        showToast={showToast}
+      />
     </div>
   );
 }
@@ -385,7 +434,7 @@ export default function Clientes() {
 // ═══════════════════════════════════════════════════════════
 // Seção: Redes Autosystem (listagem + ações)
 // ═══════════════════════════════════════════════════════════
-function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, onExcluir }) {
+function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, onClassificarGrupos, onClassificarContas, onExcluir }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       className="bg-white dark:bg-slate-900/40 rounded-xl border border-gray-200/60 dark:border-white/10 overflow-hidden shadow-sm mt-6">
@@ -454,6 +503,14 @@ function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, on
                       <button onClick={() => onImportar(rede)} title="Importar empresas"
                         className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors">
                         <Database className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => onClassificarGrupos(rede)} title="Classificar grupos de produto"
+                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors">
+                        <Boxes className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => onClassificarContas(rede)} title="Classificar contas (formas de recebimento)"
+                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
+                        <Wallet className="h-3.5 w-3.5" />
                       </button>
                       <button onClick={() => onEditar(rede)} title="Editar credenciais"
                         className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
@@ -2087,6 +2144,609 @@ function mapearEmpresaParaCliente(emp, redeId) {
     as_rede_id: redeId,
     empresa_codigo: empresaCodigo,
   };
+}
+
+// ═══════════════════════════════════════════════════════════
+// Modal: Classificar grupos de produto Autosystem
+// ═══════════════════════════════════════════════════════════
+// Lista todos os grupos vindos do servidor Autosystem (via Edge
+// Function) e permite escolher, para cada um, a categoria interna
+// (combustivel / automotivos / conveniencia). O estado inicial é
+// hidratado de as_rede_grupo_produto (Supabase).
+const CATEGORIAS_GRUPO = [
+  { key: 'combustivel',  label: 'Combustível',  cor: 'amber'   },
+  { key: 'automotivos',  label: 'Automotivos',  cor: 'blue'    },
+  { key: 'conveniencia', label: 'Conveniência', cor: 'emerald' },
+  { key: 'outros',       label: 'Outros',       cor: 'gray'    },
+];
+const CAT_CLASSES = {
+  amber:   { ativa: 'bg-amber-100 text-amber-700 border-amber-300',     idle: 'border-gray-200 text-gray-500 hover:border-amber-300' },
+  blue:    { ativa: 'bg-blue-100 text-blue-700 border-blue-300',         idle: 'border-gray-200 text-gray-500 hover:border-blue-300' },
+  emerald: { ativa: 'bg-emerald-100 text-emerald-700 border-emerald-300', idle: 'border-gray-200 text-gray-500 hover:border-emerald-300' },
+  gray:    { ativa: 'bg-gray-200 text-gray-700 border-gray-300',         idle: 'border-gray-200 text-gray-500 hover:border-gray-400' },
+};
+
+function ModalGruposProdutoAutosystem({ open, rede, onClose, showToast }) {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [grupos, setGrupos] = useState([]); // [{ codigo, grid, nome, categoria }]
+  const [erro, setErro] = useState('');
+  const [busca, setBusca] = useState('');
+
+  useEffect(() => {
+    if (!open || !rede) return;
+    setGrupos([]);
+    setErro('');
+    setBusca('');
+    (async () => {
+      try {
+        setLoading(true);
+        // Busca em paralelo: catálogo remoto + categorias já salvas
+        const [remotos, salvos] = await Promise.all([
+          autosystemService.buscarGruposProdutoAutosystem(rede.id),
+          autosystemService.listarGruposProdutoRede(rede.id),
+        ]);
+        const porCodigo = new Map();
+        (salvos || []).forEach(s => {
+          if (s.codigo != null) porCodigo.set(Number(s.codigo), s.categoria);
+        });
+        setGrupos((remotos || []).map(g => ({
+          codigo: g.codigo != null ? Number(g.codigo) : null,
+          grid: g.grid != null ? Number(g.grid) : null,
+          nome: g.nome || '—',
+          categoria: g.codigo != null ? (porCodigo.get(Number(g.codigo)) || '') : '',
+        })));
+      } catch (err) {
+        setErro(err.message || 'Falha ao buscar grupos');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [open, rede]);
+
+  const gruposFiltrados = useMemo(() => {
+    if (!busca.trim()) return grupos;
+    const q = busca.trim().toLowerCase();
+    return grupos.filter(g =>
+      (g.nome || '').toLowerCase().includes(q)
+      || String(g.codigo).includes(busca.trim()),
+    );
+  }, [grupos, busca]);
+
+  const setCategoria = (codigo, categoria) => {
+    setGrupos(prev => prev.map(g => g.codigo === codigo
+      ? { ...g, categoria: g.categoria === categoria ? '' : categoria }
+      : g
+    ));
+  };
+
+  const contagem = useMemo(() => {
+    const total = grupos.length;
+    const classificados = grupos.filter(g => g.categoria).length;
+    return { total, classificados, pendentes: total - classificados };
+  }, [grupos]);
+
+  const salvar = async () => {
+    if (!rede) return;
+    try {
+      setSaving(true);
+      await autosystemService.salvarGruposProdutoCategoria(rede.id, grupos);
+      showToast('success', `${contagem.classificados} grupo(s) classificado(s) salvo(s)`);
+      onClose();
+    } catch (err) {
+      showToast('error', 'Erro ao salvar: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose}
+      title={`Classificar grupos de produto — ${rede?.nome || ''}`} size="xl">
+      <div className="space-y-4">
+        <p className="text-xs text-gray-600 dark:text-gray-400">
+          Para cada grupo de produto trazido do servidor Autosystem, defina a categoria interna do Portal CCI.
+          Grupos não classificados ficam sem categoria (e poderão ser ignorados em relatórios).
+        </p>
+
+        {loading ? (
+          <div className="py-12 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p className="text-sm">Buscando grupos de produto do servidor...</p>
+          </div>
+        ) : erro ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-500/10 dark:border-red-500/30 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-red-700 dark:text-red-300">
+              <p className="font-medium mb-1">Falha ao buscar grupos</p>
+              <p className="text-xs">{erro}</p>
+            </div>
+          </div>
+        ) : grupos.length === 0 ? (
+          <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+            Nenhum grupo de produto retornado pelo servidor.
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input type="text"
+                  placeholder="Buscar por nome ou código..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+                />
+              </div>
+              <p className="text-[11px] text-gray-500 whitespace-nowrap">
+                {contagem.classificados}/{contagem.total} classificados
+                {contagem.pendentes > 0 && <span className="text-amber-600 ml-1">· {contagem.pendentes} pendente(s)</span>}
+              </p>
+            </div>
+
+            <div className="border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden max-h-[40vh] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50 dark:bg-white/5 z-10">
+                  <tr className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    <th className="px-3 py-2 text-left font-medium">Grupo</th>
+                    <th className="px-3 py-2 text-center font-medium">Categoria</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {gruposFiltrados.map((g) => (
+                    <tr key={g.codigo ?? g.nome} className="hover:bg-gray-50/40 dark:hover:bg-white/5">
+                      <td className="px-3 py-2.5">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{g.nome}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">
+                          cód {g.codigo ?? '—'}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <div className="inline-flex items-center gap-1.5">
+                          {CATEGORIAS_GRUPO.map(cat => {
+                            const ativa = g.categoria === cat.key;
+                            const cls = CAT_CLASSES[cat.cor];
+                            return (
+                              <button key={cat.key} type="button"
+                                onClick={() => setCategoria(g.codigo, cat.key)}
+                                className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                                  ativa ? cls.ativa : `bg-white dark:bg-white/5 ${cls.idle}`
+                                }`}>
+                                {cat.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100 dark:border-white/10">
+              <p className="text-[11px] text-gray-500">Clique novamente em uma categoria para desmarcá-la.</p>
+              <div className="flex gap-3">
+                <button onClick={onClose} disabled={saving}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50">
+                  Cancelar
+                </button>
+                <button onClick={salvar} disabled={saving || grupos.length === 0}
+                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Salvar classificações
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Modal: Classificar contas (formas de recebimento) Autosystem
+// ═══════════════════════════════════════════════════════════
+const CATEGORIAS_CONTA = [
+  { key: 'dinheiro',    label: 'Dinheiro',        cor: 'emerald' },
+  { key: 'cartao_pix',  label: 'Cartão / PIX',    cor: 'blue'    },
+  { key: 'cheque',      label: 'Cheque',          cor: 'violet'  },
+  { key: 'a_prazo',     label: 'A prazo',         cor: 'amber'   },
+  { key: 'sobra_caixa', label: 'Sobra de caixa',  cor: 'teal'    },
+  { key: 'falta_caixa', label: 'Falta de caixa',  cor: 'rose'    },
+  { key: 'outros',      label: 'Outros',          cor: 'gray'    },
+];
+const CAT_CONTA_CLASSES = {
+  emerald: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  blue:    'bg-blue-100 text-blue-700 border-blue-300',
+  violet:  'bg-violet-100 text-violet-700 border-violet-300',
+  amber:   'bg-amber-100 text-amber-700 border-amber-300',
+  teal:    'bg-teal-100 text-teal-700 border-teal-300',
+  rose:    'bg-rose-100 text-rose-700 border-rose-300',
+  gray:    'bg-gray-200 text-gray-700 border-gray-300',
+};
+
+// Constrói uma árvore a partir dos `codigo` (separados por ponto).
+// Cada nó: { codigo, nome, filhos[], folha }.
+function montarArvoreContas(contas) {
+  const byCode = new Map();
+  contas.forEach(c => {
+    byCode.set(c.codigo, { ...c, filhos: [], folha: true });
+  });
+
+  // Garante que prefixos pais existam (mesmo se não vierem da query).
+  contas.forEach(c => {
+    const parts = String(c.codigo).split('.');
+    for (let i = 1; i < parts.length; i++) {
+      const pref = parts.slice(0, i).join('.');
+      if (!byCode.has(pref)) {
+        byCode.set(pref, { codigo: pref, nome: '—', filhos: [], folha: false, sintetico: true });
+      }
+    }
+  });
+
+  // Liga filhos
+  const raizes = [];
+  Array.from(byCode.values()).forEach(n => {
+    const parts = String(n.codigo).split('.');
+    if (parts.length === 1) {
+      raizes.push(n);
+    } else {
+      const paiCode = parts.slice(0, -1).join('.');
+      const pai = byCode.get(paiCode);
+      if (pai) {
+        pai.filhos.push(n);
+        pai.folha = false;
+      } else {
+        raizes.push(n);
+      }
+    }
+  });
+
+  // Ordena recursivamente pelo codigo "natural" (parts numéricos quando possível)
+  const sortByCode = (a, b) => {
+    const pa = String(a.codigo).split('.');
+    const pb = String(b.codigo).split('.');
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const na = Number(pa[i]); const nb = Number(pb[i]);
+      const va = Number.isFinite(na) ? na : (pa[i] || '');
+      const vb = Number.isFinite(nb) ? nb : (pb[i] || '');
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+    }
+    return 0;
+  };
+  const ord = (nos) => {
+    nos.sort(sortByCode);
+    nos.forEach(n => { if (n.filhos.length > 0) ord(n.filhos); });
+  };
+  ord(raizes);
+  return raizes;
+}
+
+// Retorna todos os códigos descendentes (recursivo) de um nó da árvore.
+function descendentesDe(node) {
+  const out = [];
+  const stack = [node];
+  while (stack.length) {
+    const n = stack.pop();
+    out.push(n.codigo);
+    n.filhos.forEach(f => stack.push(f));
+  }
+  return out;
+}
+
+function ModalContasCategoriaAutosystem({ open, rede, onClose, showToast }) {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [contas, setContas] = useState([]); // lista plana vinda do servidor
+  const [categoriaLocal, setCategoriaLocal] = useState(new Map()); // codigo → categoria (draft)
+  const [erro, setErro] = useState('');
+  const [busca, setBusca] = useState('');
+  const [selecionados, setSelecionados] = useState(new Set()); // codigos marcados
+  const [expandidos, setExpandidos] = useState(new Set());     // nós abertos
+  const [aplicarOpen, setAplicarOpen] = useState(false);
+  const aplicarRef = useRef(null);
+
+  useEffect(() => {
+    if (!open || !rede) return;
+    setContas([]);
+    setCategoriaLocal(new Map());
+    setSelecionados(new Set());
+    setExpandidos(new Set());
+    setErro('');
+    setBusca('');
+    setAplicarOpen(false);
+    (async () => {
+      try {
+        setLoading(true);
+        const [remotas, salvas] = await Promise.all([
+          autosystemService.buscarContasAutosystem(rede.id),
+          autosystemService.listarContasCategorizadasRede(rede.id),
+        ]);
+        setContas(remotas || []);
+        const m = new Map();
+        (salvas || []).forEach(s => {
+          if (s.codigo) m.set(String(s.codigo), s.categoria);
+        });
+        setCategoriaLocal(m);
+        // Abre a raiz por padrão (top-level) para o usuário não começar tudo fechado
+        const raizesInit = new Set();
+        (remotas || []).forEach(c => {
+          const parts = String(c.codigo).split('.');
+          if (parts.length === 1) raizesInit.add(c.codigo);
+        });
+        setExpandidos(raizesInit);
+      } catch (err) {
+        setErro(err.message || 'Falha ao buscar contas');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [open, rede]);
+
+  // Fecha dropdown "Aplicar" ao clicar fora
+  useEffect(() => {
+    const onClick = (e) => { if (aplicarRef.current && !aplicarRef.current.contains(e.target)) setAplicarOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  // Árvore montada (memo)
+  const arvore = useMemo(() => montarArvoreContas(contas), [contas]);
+
+  // Filtro de busca: marca quais nós devem ser visíveis (e seus ancestrais)
+  const visiveis = useMemo(() => {
+    if (!busca.trim()) return null; // null = sem filtro, mostra tudo
+    const q = busca.trim().toLowerCase();
+    const setVis = new Set();
+    const marcar = (n) => {
+      const bateu = (n.codigo || '').toLowerCase().includes(q) || (n.nome || '').toLowerCase().includes(q);
+      const filhosBateu = (n.filhos || []).map(marcar).some(Boolean);
+      if (bateu || filhosBateu) {
+        setVis.add(n.codigo);
+        return true;
+      }
+      return false;
+    };
+    arvore.forEach(marcar);
+    return setVis;
+  }, [arvore, busca]);
+
+  const toggleExpand = (codigo) => {
+    setExpandidos(prev => {
+      const next = new Set(prev);
+      if (next.has(codigo)) next.delete(codigo); else next.add(codigo);
+      return next;
+    });
+  };
+
+  // Marca/desmarca um nó e propaga para os descendentes
+  const toggleSelecionar = (node) => {
+    const codigos = descendentesDe(node);
+    setSelecionados(prev => {
+      const next = new Set(prev);
+      const todosMarcados = codigos.every(c => prev.has(c));
+      codigos.forEach(c => { if (todosMarcados) next.delete(c); else next.add(c); });
+      return next;
+    });
+  };
+
+  // Aplica uma categoria a todos os selecionados (apenas folhas — sintéticos
+  // não são salvos no Supabase, são só agrupadores). Passar `null` para remover.
+  const aplicarCategoria = (categoria) => {
+    setCategoriaLocal(prev => {
+      const next = new Map(prev);
+      selecionados.forEach(codigo => {
+        // Não permite categorizar prefixo sintético (sem nome real)
+        const conta = contas.find(c => c.codigo === codigo);
+        if (!conta) return;
+        if (categoria) next.set(codigo, categoria);
+        else next.delete(codigo);
+      });
+      return next;
+    });
+    setSelecionados(new Set());
+    setAplicarOpen(false);
+  };
+
+  const totalCategorizados = useMemo(() => {
+    let n = 0;
+    contas.forEach(c => { if (categoriaLocal.get(c.codigo)) n += 1; });
+    return n;
+  }, [contas, categoriaLocal]);
+
+  const salvar = async () => {
+    if (!rede) return;
+    try {
+      setSaving(true);
+      // Monta payload para upsert (categorias preenchidas) e delete (vazias)
+      const payload = contas.map(c => ({
+        codigo: c.codigo,
+        nome: c.nome,
+        categoria: categoriaLocal.get(c.codigo) || null,
+      }));
+      await autosystemService.salvarContasCategoria(rede.id, payload);
+      showToast('success', `${totalCategorizados} conta(s) classificada(s) salvas`);
+      onClose();
+    } catch (err) {
+      showToast('error', 'Erro ao salvar: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose}
+      title={`Classificar contas — ${rede?.nome || ''}`} size="xl">
+      <div className="space-y-4">
+        <p className="text-xs text-gray-600 dark:text-gray-400">
+          Marque as contas que pertencem a uma mesma forma de recebimento e clique em
+          <strong> "Atribuir categoria"</strong> para aplicar em lote. Você pode marcar um nó
+          intermediário e todos os filhos serão selecionados juntos.
+        </p>
+
+        {loading ? (
+          <div className="py-12 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p className="text-sm">Buscando contas do servidor...</p>
+          </div>
+        ) : erro ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-red-700">
+              <p className="font-medium mb-1">Falha ao buscar contas</p>
+              <p className="text-xs">{erro}</p>
+            </div>
+          </div>
+        ) : contas.length === 0 ? (
+          <div className="py-10 text-center text-sm text-gray-500">
+            Nenhuma conta retornada pelo servidor.
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input type="text"
+                  placeholder="Buscar por código ou nome..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400" />
+              </div>
+              <p className="text-[11px] text-gray-500 whitespace-nowrap">
+                {totalCategorizados}/{contas.length} classificadas
+                {selecionados.size > 0 && <span className="text-violet-600 ml-1">· {selecionados.size} selecionada(s)</span>}
+              </p>
+              <div ref={aplicarRef} className="relative">
+                <button onClick={() => setAplicarOpen(o => !o)}
+                  disabled={selecionados.size === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  Atribuir categoria <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                <AnimatePresence>
+                  {aplicarOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg border border-gray-200 shadow-xl z-50 overflow-hidden">
+                      {CATEGORIAS_CONTA.map(cat => (
+                        <button key={cat.key} type="button"
+                          onClick={() => aplicarCategoria(cat.key)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-gray-50">
+                          <span className={`inline-block w-3 h-3 rounded-sm border ${CAT_CONTA_CLASSES[cat.cor]}`} />
+                          <span>{cat.label}</span>
+                        </button>
+                      ))}
+                      <div className="border-t border-gray-100" />
+                      <button type="button" onClick={() => aplicarCategoria(null)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] text-red-600 hover:bg-red-50">
+                        <Trash2 className="h-3 w-3" /> Remover categoria
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg overflow-hidden max-h-[45vh] overflow-y-auto">
+              <ArvoreContas
+                nodes={arvore}
+                visiveis={visiveis}
+                expandidos={expandidos}
+                onToggleExpand={toggleExpand}
+                selecionados={selecionados}
+                onToggleSelecionar={toggleSelecionar}
+                categoriaLocal={categoriaLocal}
+                profundidade={0}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
+              <p className="text-[11px] text-gray-500">
+                Categorias: {CATEGORIAS_CONTA.map(c => c.label).join(' · ')}.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={onClose} disabled={saving}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50">
+                  Cancelar
+                </button>
+                <button onClick={salvar} disabled={saving || contas.length === 0}
+                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Salvar classificações
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ArvoreContas({ nodes, visiveis, expandidos, onToggleExpand, selecionados, onToggleSelecionar, categoriaLocal, profundidade }) {
+  return (
+    <>
+      {nodes
+        .filter(n => !visiveis || visiveis.has(n.codigo))
+        .map(n => {
+          const temFilhos = n.filhos && n.filhos.length > 0;
+          const aberta = expandidos.has(n.codigo) || !!visiveis;
+          const codigosDescendentes = descendentesDe(n);
+          const todosMarcados = codigosDescendentes.every(c => selecionados.has(c));
+          const algunsMarcados = !todosMarcados && codigosDescendentes.some(c => selecionados.has(c));
+          const categoria = categoriaLocal.get(n.codigo);
+          const cat = CATEGORIAS_CONTA.find(c => c.key === categoria);
+          return (
+            <div key={n.codigo}>
+              <div
+                className={`flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 transition-colors ${
+                  algunsMarcados ? 'bg-violet-50/40' : ''
+                }`}
+                style={{ paddingLeft: 8 + profundidade * 20 }}
+              >
+                {temFilhos ? (
+                  <button type="button" onClick={() => onToggleExpand(n.codigo)}
+                    className="flex-shrink-0 p-0.5 hover:bg-gray-100 rounded">
+                    <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${aberta ? 'rotate-90' : ''}`} />
+                  </button>
+                ) : (
+                  <span className="w-[18px] flex-shrink-0" />
+                )}
+                <input type="checkbox"
+                  checked={todosMarcados}
+                  ref={el => { if (el) el.indeterminate = algunsMarcados; }}
+                  onChange={() => onToggleSelecionar(n)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-400 flex-shrink-0" />
+                <span className="text-[11px] text-gray-400 font-mono w-[90px] flex-shrink-0 truncate">{n.codigo}</span>
+                <span className={`text-sm flex-1 truncate ${n.sintetico ? 'text-gray-400 italic' : 'text-gray-800'}`}>
+                  {n.nome || '—'}
+                </span>
+                {cat && (
+                  <span className={`text-[10px] rounded-full border px-2 py-0.5 ${CAT_CONTA_CLASSES[cat.cor]} flex-shrink-0`}>
+                    {cat.label}
+                  </span>
+                )}
+              </div>
+              {aberta && temFilhos && (
+                <ArvoreContas
+                  nodes={n.filhos}
+                  visiveis={visiveis}
+                  expandidos={expandidos}
+                  onToggleExpand={onToggleExpand}
+                  selecionados={selecionados}
+                  onToggleSelecionar={onToggleSelecionar}
+                  categoriaLocal={categoriaLocal}
+                  profundidade={profundidade + 1}
+                />
+              )}
+            </div>
+          );
+        })}
+    </>
+  );
 }
 
 // ═══════════════════════════════════════════════════════════

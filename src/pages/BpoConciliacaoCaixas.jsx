@@ -7,12 +7,15 @@ import {
   XCircle, ChevronDown, PlusCircle, MinusCircle, Printer,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
+import Modal from '../components/ui/Modal';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
+import * as autosystemService from '../services/autosystemService';
 import * as sangriasService from '../services/clienteSangriasService';
 import * as bpoConciliacaoService from '../services/bpoConciliacaoService';
 import { classificarItem } from '../services/mapeamentoVendasService';
+import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 import { formatCurrency } from '../utils/format';
 import { Lock, CheckCircle } from 'lucide-react';
 
@@ -41,6 +44,9 @@ export default function BpoConciliacaoCaixas({
 
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
+  const [redesAutosystem, setRedesAutosystem] = useState([]);
+  // Em modo admin, `redeSel` é o objeto { tipo, id }; redeId só captura tipo=webposto.
+  const [redeSel, setRedeSel] = useState(null);
   const [redeId, setRedeId] = useState('');
   const [clienteId, setClienteId] = useState('');
   const [cliente, setCliente] = useState(null);
@@ -54,6 +60,14 @@ export default function BpoConciliacaoCaixas({
   const [funcionarios, setFuncionarios] = useState([]);
   const [vendaItens, setVendaItens] = useState([]);
   const [vendasCanceladas, setVendasCanceladas] = useState([]);
+  // ─── Estado Autosystem (carregado quando rede selecionada é Autosystem)
+  const [vendasAutosystem, setVendasAutosystem] = useState([]);
+  const [recebimentosAutosystem, setRecebimentosAutosystem] = useState([]);
+  const [outrasEntradasAutosystem, setOutrasEntradasAutosystem] = useState([]);
+  const [mapaGruposAutosystem, setMapaGruposAutosystem] = useState(new Map());
+  const [mapaContasAutosystem, setMapaContasAutosystem] = useState(new Map());
+  // Mapa codigo → nome da conta (catálogo remoto do plano de contas)
+  const [mapaNomesContasAutosystem, setMapaNomesContasAutosystem] = useState(new Map());
   const [mostrarCanceladas, setMostrarCanceladas] = useState(false);
   const [produtos, setProdutos] = useState([]);
   const [grupos, setGrupos] = useState([]);
@@ -76,25 +90,52 @@ export default function BpoConciliacaoCaixas({
     }
     (async () => {
       try {
-        const [lista, chs] = await Promise.all([
+        const [lista, chs, redesAS] = await Promise.all([
           clientesService.listarClientes(),
           mapService.listarChavesApi(),
+          autosystemService.listarRedes().catch(() => []),
         ]);
-        const webposto = (lista || []).filter(c => c.usa_webposto && c.chave_api_id && c.empresa_codigo);
-        setClientes(webposto);
-        // So mostra redes (chaves_api) que realmente tem ao menos uma empresa Webposto
-        const idsComEmpresas = new Set(webposto.map(c => c.chave_api_id));
-        setChavesApi((chs || []).filter(ch => ch.ativo !== false && idsComEmpresas.has(ch.id)));
+        const clientesValidos = (lista || []).filter(c =>
+          (c.usa_webposto && c.chave_api_id && c.empresa_codigo) ||
+          (c.as_rede_id && c.empresa_codigo != null)
+        );
+        setClientes(clientesValidos);
+        const idsWb = new Set(clientesValidos.filter(c => c.chave_api_id).map(c => c.chave_api_id));
+        setChavesApi((chs || []).filter(ch => ch.ativo !== false && idsWb.has(ch.id)));
+        const idsAS = new Set(clientesValidos.filter(c => c.as_rede_id).map(c => c.as_rede_id));
+        setRedesAutosystem((redesAS || []).filter(r => idsAS.has(r.id)));
       } catch (err) { setError(err.message); }
       finally { setLoading(false); }
     })();
   }, [modoCliente, clienteFixed]);
 
+  const contagensPorRede = useMemo(() => {
+    const m = new Map();
+    clientes.forEach(c => {
+      const key = c.chave_api_id || c.as_rede_id;
+      if (!key) return;
+      m.set(key, (m.get(key) || 0) + 1);
+    });
+    return m;
+  }, [clientes]);
+
+  // Sincroniza `redeId` (string) com `redeSel` (objeto). Mantém compatibilidade
+  // com o fluxo Quality existente — `redeId` só fica preenchido para Webposto.
+  useEffect(() => {
+    setRedeId(redeSel?.tipo === 'webposto' ? redeSel.id : '');
+  }, [redeSel]);
+
   // Em modo cliente, fixa o cliente e pula a selecao de rede/empresa
   useEffect(() => {
     if (modoCliente && clienteFixed) {
       setCliente(clienteFixed);
-      setRedeId(clienteFixed.chave_api_id || '');
+      if (clienteFixed.chave_api_id) {
+        setRedeSel({ tipo: 'webposto', id: clienteFixed.chave_api_id });
+      } else if (clienteFixed.as_rede_id) {
+        setRedeSel({ tipo: 'autosystem', id: clienteFixed.as_rede_id });
+      } else {
+        setRedeSel(null);
+      }
       setClienteId(clienteFixed.id || '');
     }
   }, [modoCliente, clienteFixed]);
@@ -110,13 +151,17 @@ export default function BpoConciliacaoCaixas({
     })();
   }, [cliente?.id, data]);
 
-  // Empresas da rede selecionada
+  // Empresas da rede selecionada (Webposto OU Autosystem)
   const empresasDaRede = useMemo(() => {
-    if (!redeId) return [];
+    if (!redeSel) return [];
     return clientes
-      .filter(c => c.chave_api_id === redeId)
+      .filter(c => {
+        if (redeSel.tipo === 'webposto') return c.chave_api_id === redeSel.id;
+        if (redeSel.tipo === 'autosystem') return c.as_rede_id === redeSel.id;
+        return false;
+      })
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-  }, [redeId, clientes]);
+  }, [redeSel, clientes]);
 
   // Ao trocar de rede, limpa a empresa selecionada se nao pertencer a rede nova
   useEffect(() => {
@@ -151,6 +196,83 @@ export default function BpoConciliacaoCaixas({
 
   const carregar = useCallback(async () => {
     if (!cliente) return;
+    // ─── Caminho Autosystem ────────────────────────────────────
+    // Por enquanto só temos os itens de venda (lancto). Mostramos
+    // resumo por categoria e tabela de produtos. As demais seções
+    // (formas de pagamento, caixas/turnos, apresentado) seguem ocultas
+    // até as Edge Functions complementares estarem prontas.
+    if (cliente.as_rede_id && !cliente.chave_api_id) {
+      setLoadingDados(true);
+      setError(null);
+      try {
+        // Pré-busca as contas categorizadas pra derivar as contas de
+        // sobra de caixa (que precisam ser injetadas na query de
+        // recebimentos como filtro extra em `conta_creditar`).
+        const contasAS = await autosystemService.listarContasCategorizadasRede(cliente.as_rede_id).catch(() => []);
+        const contasSobraCodigos = (contasAS || [])
+          .filter(c => c.categoria === 'sobra_caixa')
+          .map(c => String(c.codigo));
+
+        const [vendasAS, recebAS, outrasAS, gruposAS, contasRemotas, fechSangria] = await Promise.all([
+          autosystemService.buscarVendasAutosystem(
+            cliente.as_rede_id,
+            [cliente.empresa_codigo],
+            { data_de: data, data_ate: data },
+          ),
+          autosystemService.buscarRecebimentosAutosystem(
+            cliente.as_rede_id,
+            [cliente.empresa_codigo],
+            { data_de: data, data_ate: data, contas_creditar_extras: contasSobraCodigos },
+          ),
+          autosystemService.buscarOutrasEntradasAutosystem(
+            cliente.as_rede_id,
+            [cliente.empresa_codigo],
+            { data_de: data, data_ate: data, contas_creditar_excluir: contasSobraCodigos },
+          ).catch(() => []),
+          autosystemService.listarGruposProdutoRede(cliente.as_rede_id).catch(() => []),
+          autosystemService.buscarContasAutosystem(cliente.as_rede_id).catch(() => []),
+          sangriasService.buscarFechamento(cliente.id, data).catch(() => null),
+        ]);
+        const mapaG = new Map();
+        (gruposAS || []).forEach(g => {
+          // Grupos: indexa pelo grid (produto.grupo no Autosystem é grid).
+          if (g.grid != null) mapaG.set(Number(g.grid), g.categoria);
+        });
+        const mapaC = new Map();
+        (contasAS || []).forEach(c => {
+          // Contas: indexa pelo codigo textual (m.conta_debitar é "1.1.x.y").
+          if (c.codigo) mapaC.set(String(c.codigo), c.categoria);
+        });
+        const mapaNomes = new Map();
+        (contasRemotas || []).forEach(c => {
+          if (c.codigo) mapaNomes.set(String(c.codigo), c.nome || '');
+        });
+        // Reforça com nomes vindos da categorização salva (caso o catálogo remoto falhe)
+        (contasAS || []).forEach(c => {
+          if (c.codigo && c.nome && !mapaNomes.has(String(c.codigo))) {
+            mapaNomes.set(String(c.codigo), c.nome);
+          }
+        });
+        setVendasAutosystem(vendasAS || []);
+        setRecebimentosAutosystem(recebAS || []);
+        setOutrasEntradasAutosystem(outrasAS || []);
+        setMapaGruposAutosystem(mapaG);
+        setMapaContasAutosystem(mapaC);
+        setMapaNomesContasAutosystem(mapaNomes);
+        setFechamentoSangria(fechSangria || null);
+        // Limpa estados Webposto (não usados aqui)
+        setVendas([]); setCaixas([]); setFuncionarios([]);
+        setFormasPagamento([]); setCaixasApresentados([]);
+        setVendaItens([]); setProdutos([]); setGrupos([]);
+        setVendasCanceladas([]); setClientesQuality([]);
+        setCarregado(true);
+      } catch (err) {
+        setError('Erro ao carregar dados Autosystem: ' + err.message);
+      } finally {
+        setLoadingDados(false);
+      }
+      return;
+    }
     setLoadingDados(true);
     setError(null);
     try {
@@ -235,6 +357,266 @@ export default function BpoConciliacaoCaixas({
     });
     return t;
   }, [vendaItens, produtos, grupos, vendasAprovadasSet]);
+
+  // ─── Derivados Autosystem ───────────────────────────────────
+  const isAutosystem = !!(cliente?.as_rede_id) && !cliente?.chave_api_id;
+
+  // Totais por categoria (Autosystem). Usa as_rede_grupo_produto pra classificar.
+  const totaisPorCategoriaAS = useMemo(() => {
+    const t = { combustivel: 0, automotivos: 0, conveniencia: 0, outros: 0 };
+    let semCategoriaValor = 0, semCategoriaQtd = 0;
+    if (!isAutosystem) return { ...t, semCategoriaValor, semCategoriaQtd };
+    vendasAutosystem.forEach(v => {
+      const grupoCod = v.grupo_produto_codigo != null ? Number(v.grupo_produto_codigo) : null;
+      const cat = grupoCod != null ? mapaGruposAutosystem.get(grupoCod) : null;
+      const valor = Number(v.valor) || 0;
+      if (cat === 'combustivel' || cat === 'automotivos' || cat === 'conveniencia') {
+        t[cat] += valor;
+      } else if (cat === 'outros') {
+        t.outros += valor;
+      } else {
+        // sem categoria ainda → considerar como "outros" pra fechar o total,
+        // mas também contabilizar para mostrar aviso de pendente.
+        t.outros += valor;
+        semCategoriaValor += valor;
+        semCategoriaQtd += 1;
+      }
+    });
+    return { ...t, semCategoriaValor, semCategoriaQtd };
+  }, [isAutosystem, vendasAutosystem, mapaGruposAutosystem]);
+
+  // Produtos vendidos agregados (apenas Autosystem) — usado na tabela detalhada
+  const produtosVendidosAS = useMemo(() => {
+    if (!isAutosystem) return [];
+    const m = new Map();
+    vendasAutosystem.forEach(v => {
+      const k = v.produto_codigo;
+      if (!m.has(k)) {
+        const grupoCod = v.grupo_produto_codigo != null ? Number(v.grupo_produto_codigo) : null;
+        const cat = grupoCod != null ? (mapaGruposAutosystem.get(grupoCod) || null) : null;
+        m.set(k, {
+          codigo: v.produto_codigo,
+          nome: v.produto_nome || `Produto #${v.produto_codigo}`,
+          categoria: cat,
+          quantidade: 0,
+          valor: 0,
+          itens: 0,
+        });
+      }
+      const p = m.get(k);
+      p.quantidade += Number(v.quantidade) || 0;
+      p.valor += Number(v.valor) || 0;
+      p.itens += 1;
+    });
+    return Array.from(m.values()).sort((a, b) => b.valor - a.valor);
+  }, [isAutosystem, vendasAutosystem, mapaGruposAutosystem]);
+
+  const totalCategoriaAS = totaisPorCategoriaAS.combustivel + totaisPorCategoriaAS.automotivos
+    + totaisPorCategoriaAS.conveniencia + totaisPorCategoriaAS.outros;
+
+  // Total das outras entradas (não-venda) somado globalmente.
+  const totalOutrasEntradasAS = useMemo(() => {
+    if (!isAutosystem) return 0;
+    return outrasEntradasAutosystem.reduce((s, e) => s + (Number(e.valor) || 0), 0);
+  }, [isAutosystem, outrasEntradasAutosystem]);
+
+  // Detalhamento por conta_creditar para o modal de outras entradas.
+  const outrasEntradasPorContaAS = useMemo(() => {
+    if (!isAutosystem) return [];
+    const m = new Map();
+    outrasEntradasAutosystem.forEach(e => {
+      const codigo = e.conta_creditar ? String(e.conta_creditar) : 'sem-conta';
+      const atual = m.get(codigo) || {
+        codigo,
+        nome: mapaNomesContasAutosystem.get(codigo) || '—',
+        valor: 0,
+        qtd: 0,
+      };
+      atual.valor += Number(e.valor) || 0;
+      atual.qtd += 1;
+      m.set(codigo, atual);
+    });
+    return Array.from(m.values()).sort((a, b) => b.valor - a.valor);
+  }, [isAutosystem, outrasEntradasAutosystem, mapaNomesContasAutosystem]);
+
+  // Total Entradas = vendas (totalCategoriaAS) + outras entradas
+  const totalEntradasAS = totalCategoriaAS + totalOutrasEntradasAS;
+
+  // Totais por forma de recebimento (Autosystem).
+  // Cruza `recebimento.modo_recebimento` (= movto.conta_debitar) com
+  // as_rede_conta_categoria para classificar.
+  const totaisPorFormaAS = useMemo(() => {
+    const t = {
+      dinheiro: 0, cartao_pix: 0, cheque: 0, a_prazo: 0, outros: 0,
+      sobra_caixa: 0, falta_caixa: 0,             // separados, fora do total
+      sobra_caixa_qtd: 0, falta_caixa_qtd: 0,
+    };
+    let semCategoriaValor = 0, semCategoriaQtd = 0;
+    const semCategoriaPorConta = new Map(); // codigo → { valor, qtd }
+    if (!isAutosystem) return { ...t, semCategoriaValor, semCategoriaQtd, semCategoriaPorConta };
+
+    recebimentosAutosystem.forEach(r => {
+      const valor = Number(r.valor) || 0;
+
+      // Sobra de caixa: lançamento que CREDITA uma conta classificada como sobra
+      // (recebida via filtro `contas_creditar_extras` na Edge Function).
+      const credito = r.conta_creditar ? String(r.conta_creditar) : null;
+      const catCredito = credito ? mapaContasAutosystem.get(credito) : null;
+      if (catCredito === 'sobra_caixa') {
+        t.sobra_caixa += valor;
+        t.sobra_caixa_qtd += 1;
+        return;
+      }
+
+      // Demais formas: classifica pelo conta_debitar (modo_recebimento).
+      const codigo = r.modo_recebimento ? String(r.modo_recebimento) : null;
+      const cat = codigo ? mapaContasAutosystem.get(codigo) : null;
+      if (cat === 'dinheiro' || cat === 'cartao_pix' || cat === 'cheque' || cat === 'a_prazo') {
+        t[cat] += valor;
+      } else if (cat === 'sobra_caixa') {
+        // (redundância) caso uma sobra apareça também pelo conta_debitar
+        t.sobra_caixa += valor;
+        t.sobra_caixa_qtd += 1;
+      } else if (cat === 'falta_caixa') {
+        t.falta_caixa += valor;
+        t.falta_caixa_qtd += 1;
+      } else if (cat === 'outros') {
+        t.outros += valor;
+      } else {
+        // Conta não classificada ainda → conta como "outros" e marca pendência
+        t.outros += valor;
+        semCategoriaValor += valor;
+        semCategoriaQtd += 1;
+        const chave = codigo || 'sem-conta';
+        const atual = semCategoriaPorConta.get(chave) || {
+          codigo: chave,
+          nome: mapaNomesContasAutosystem.get(chave) || '—',
+          valor: 0,
+          qtd: 0,
+        };
+        atual.valor += valor;
+        atual.qtd += 1;
+        semCategoriaPorConta.set(chave, atual);
+      }
+    });
+    return { ...t, semCategoriaValor, semCategoriaQtd, semCategoriaPorConta };
+  }, [isAutosystem, recebimentosAutosystem, mapaContasAutosystem, mapaNomesContasAutosystem]);
+
+  // Sobra / Falta de caixa NÃO entram no total de formas de recebimento —
+  // são exibidas em uma seção própria abaixo do painel.
+  const totalFormaAS = totaisPorFormaAS.dinheiro + totaisPorFormaAS.cartao_pix
+    + totaisPorFormaAS.cheque + totaisPorFormaAS.a_prazo + totaisPorFormaAS.outros;
+
+  // Agrega vendas e recebimentos por funcionário.
+  // A chave canônica é `pessoa.grid`:
+  //   - vendas:       vendedor_pessoa_id = lancto.vendedor (== pessoa.grid)
+  //   - recebimentos: usuario_pessoa_id  = usuario.pessoa  (== pessoa.grid)
+  // Quando faltar pessoa_id, cai no nome bruto como fallback.
+  const funcionariosAS = useMemo(() => {
+    if (!isAutosystem) return [];
+    const map = new Map();
+    const getOuCriar = (chave, nome) => {
+      if (!map.has(chave)) {
+        map.set(chave, {
+          chave,
+          nome: nome || '—',
+          vendas: { combustivel: 0, automotivos: 0, conveniencia: 0, outros: 0, total: 0 },
+          outras_entradas: 0,
+          entradas_total: 0,
+          recebimentos: { dinheiro: 0, cartao_pix: 0, cheque: 0, a_prazo: 0, outros: 0, total: 0 },
+          sobra_caixa: 0,
+          falta_caixa: 0,
+        });
+      } else if ((!map.get(chave).nome || map.get(chave).nome === '—') && nome) {
+        // Atualiza o nome se foi descoberto numa entrada subsequente
+        map.get(chave).nome = nome;
+      }
+      return map.get(chave);
+    };
+    const chaveDe = (pessoaId, nomeBruto) => {
+      if (pessoaId != null && pessoaId !== '') return `p:${pessoaId}`;
+      const n = (nomeBruto || '').toString().trim();
+      return n ? `n:${n.toLowerCase()}` : 'sem-id';
+    };
+
+    vendasAutosystem.forEach(v => {
+      const pessoaId = v.vendedor_pessoa_id != null ? v.vendedor_pessoa_id : null;
+      const nome = (v.vendedor_nome && v.vendedor_nome.trim())
+        || (v.vendedor || '').toString().trim()
+        || 'Sem identificação';
+      const f = getOuCriar(chaveDe(pessoaId, nome), nome);
+      const valor = Number(v.valor) || 0;
+      const grupoCod = v.grupo_produto_codigo != null ? Number(v.grupo_produto_codigo) : null;
+      const cat = grupoCod != null ? (mapaGruposAutosystem.get(grupoCod) || null) : null;
+      if (cat === 'combustivel' || cat === 'automotivos' || cat === 'conveniencia') {
+        f.vendas[cat] += valor;
+      } else {
+        f.vendas.outros += valor;
+      }
+      f.vendas.total += valor;
+      f.entradas_total += valor;
+    });
+
+    // Outras entradas (não-venda): conta_debitar 1.1.2% e conta_creditar não inicia com 4.1
+    (outrasEntradasAutosystem || []).forEach(e => {
+      const pessoaId = e.usuario_pessoa_id != null ? e.usuario_pessoa_id : null;
+      const nome = (e.usuario_nome && e.usuario_nome.trim())
+        || (e.usuario || '').toString().trim()
+        || 'Sem identificação';
+      const f = getOuCriar(chaveDe(pessoaId, nome), nome);
+      const valor = Number(e.valor) || 0;
+      f.outras_entradas += valor;
+      f.entradas_total += valor;
+    });
+
+    recebimentosAutosystem.forEach(r => {
+      const pessoaId = r.usuario_pessoa_id != null ? r.usuario_pessoa_id : null;
+      const nome = (r.usuario_nome && r.usuario_nome.trim())
+        || (r.usuario || '').toString().trim()
+        || 'Sem identificação';
+      const f = getOuCriar(chaveDe(pessoaId, nome), nome);
+      const valor = Number(r.valor) || 0;
+
+      // Sobra de caixa: lançamento que credita conta classificada como sobra
+      const credito = r.conta_creditar ? String(r.conta_creditar) : null;
+      const catCredito = credito ? mapaContasAutosystem.get(credito) : null;
+      if (catCredito === 'sobra_caixa') {
+        f.sobra_caixa += valor;
+        return;
+      }
+
+      const codigo = r.modo_recebimento ? String(r.modo_recebimento) : null;
+      const cat = codigo ? mapaContasAutosystem.get(codigo) : null;
+      if (cat === 'dinheiro' || cat === 'cartao_pix' || cat === 'cheque' || cat === 'a_prazo') {
+        f.recebimentos[cat] += valor;
+        f.recebimentos.total += valor;
+      } else if (cat === 'sobra_caixa') {
+        f.sobra_caixa += valor;
+      } else if (cat === 'falta_caixa') {
+        f.falta_caixa += valor;
+      } else {
+        f.recebimentos.outros += valor;
+        f.recebimentos.total += valor;
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.entradas_total - a.entradas_total);
+  }, [isAutosystem, vendasAutosystem, recebimentosAutosystem, outrasEntradasAutosystem, mapaGruposAutosystem, mapaContasAutosystem]);
+
+  // Ajustes (acréscimos / descontos) Autosystem.
+  // Convenção: lancto.valor_desconto > 0 => acréscimo, < 0 => desconto.
+  // Devoluções (operacao = 'DC') já são excluídas pela Edge Function de vendas.
+  const ajustesAutosystem = useMemo(() => {
+    let acrescimos = 0, descontos = 0;
+    let itensComAcrescimo = 0, itensComDesconto = 0;
+    if (!isAutosystem) return { acrescimos, descontos, itensComAcrescimo, itensComDesconto };
+    vendasAutosystem.forEach(v => {
+      const vd = Number(v.valor_desconto || 0);
+      if (vd > 0) { acrescimos += vd; itensComAcrescimo += 1; }
+      else if (vd < 0) { descontos += Math.abs(vd); itensComDesconto += 1; }
+    });
+    return { acrescimos, descontos, itensComAcrescimo, itensComDesconto };
+  }, [isAutosystem, vendasAutosystem]);
 
   // Totais de acrescimos e descontos do dia (apenas itens de vendas aprovadas)
   const ajustesItens = useMemo(() => {
@@ -510,25 +892,20 @@ export default function BpoConciliacaoCaixas({
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_180px_auto] gap-3 items-end">
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">1. Rede</label>
-            <select value={redeId} onChange={(e) => setRedeId(e.target.value)}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-              <option value="">Selecione uma rede...</option>
-              {chavesApi.map(ch => {
-                const qtd = clientes.filter(c => c.chave_api_id === ch.id).length;
-                return (
-                  <option key={ch.id} value={ch.id}>
-                    {ch.nome} · {qtd} empresa{qtd === 1 ? '' : 's'}
-                  </option>
-                );
-              })}
-            </select>
+            <SeletorRedeBPO
+              chavesApi={chavesApi}
+              redesAutosystem={redesAutosystem}
+              contagensPorRede={contagensPorRede}
+              value={redeSel}
+              onChange={setRedeSel}
+            />
           </div>
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">2. Empresa</label>
             <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}
-              disabled={!redeId}
+              disabled={!redeSel}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-400">
-              <option value="">{redeId ? 'Selecione uma empresa...' : 'Escolha a rede primeiro'}</option>
+              <option value="">{redeSel ? 'Selecione uma empresa...' : 'Escolha a rede primeiro'}</option>
               {empresasDaRede.map(c => (
                 <option key={c.id} value={c.id}>{c.nome}{c.cnpj ? ` (${c.cnpj})` : ''}</option>
               ))}
@@ -592,13 +969,30 @@ export default function BpoConciliacaoCaixas({
             <Coins className="h-7 w-7 text-white" />
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Selecione a rede, a empresa e a data</p>
-          <p className="text-xs text-gray-500 max-w-md mx-auto">Escolha primeiro a rede Webposto e em seguida a empresa dentro dela.</p>
+          <p className="text-xs text-gray-500 max-w-md mx-auto">Escolha primeiro a rede e em seguida a empresa dentro dela.</p>
         </div>
       ) : loadingDados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <Loader2 className="h-7 w-7 text-emerald-500 animate-spin mx-auto mb-3" />
           <p className="text-sm font-medium text-gray-800">Buscando caixas e vendas de {formatDataBR(data)}...</p>
         </div>
+      ) : carregado && isAutosystem ? (
+        <PainelAutosystem
+          data={data}
+          fechamentoSangria={fechamentoSangria}
+          vendas={vendasAutosystem}
+          produtos={produtosVendidosAS}
+          totais={totaisPorCategoriaAS}
+          totalGeral={totalCategoriaAS}
+          totalOutrasEntradas={totalOutrasEntradasAS}
+          totalEntradas={totalEntradasAS}
+          outrasEntradasPorConta={outrasEntradasPorContaAS}
+          recebimentos={recebimentosAutosystem}
+          totaisForma={totaisPorFormaAS}
+          totalForma={totalFormaAS}
+          ajustes={ajustesAutosystem}
+          funcionarios={funcionariosAS}
+        />
       ) : !carregado ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20">
@@ -1165,16 +1559,19 @@ function AjusteCard({ label, valor, qtd, icon: Icon, accent, prefixo }) {
   );
 }
 
-function LinhaBreakdown({ icon: Icon, iconColor, iconBg, barHex, label, valor, total }) {
+function LinhaBreakdown({ icon: Icon, iconColor, iconBg, barHex, label, valor, total, onClick }) {
   const pct = total > 0 ? (valor / total) * 100 : 0;
-  return (
-    <div className="flex items-start gap-3 px-5 py-2.5">
+  const conteudo = (
+    <>
       <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
         <Icon className={`h-4 w-4 ${iconColor}`} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2 mb-1">
-          <p className="text-sm text-gray-800 truncate pt-0.5">{label}</p>
+          <p className="text-sm text-gray-800 truncate pt-0.5 flex items-center gap-1">
+            {label}
+            {onClick && <ChevronRight className="h-3 w-3 text-gray-400" />}
+          </p>
           <div className="text-right flex-shrink-0">
             <p className="text-sm font-mono font-semibold text-gray-900 tabular-nums leading-tight">
               {formatCurrency(valor)}
@@ -1189,8 +1586,17 @@ function LinhaBreakdown({ icon: Icon, iconColor, iconBg, barHex, label, valor, t
             style={{ width: `${pct}%`, background: barHex || '#9ca3af' }} />
         </div>
       </div>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick}
+        className="w-full flex items-start gap-3 px-5 py-2.5 text-left hover:bg-gray-50/80 transition-colors">
+        {conteudo}
+      </button>
+    );
+  }
+  return <div className="flex items-start gap-3 px-5 py-2.5">{conteudo}</div>;
 }
 
 function DetalheTurno({ label, apr, apu, diff, bold }) {
@@ -1387,6 +1793,463 @@ function PrintHeader({ cliente, rede, data }) {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Painel Autosystem (subset: hoje só temos vendas detalhadas)
+// ═══════════════════════════════════════════════════════════
+function PainelAutosystem({
+  data, fechamentoSangria, vendas, produtos, totais, totalGeral,
+  totalOutrasEntradas = 0, totalEntradas = 0, outrasEntradasPorConta = [],
+  recebimentos, totaisForma, totalForma, ajustes, funcionarios = [],
+}) {
+  const { semCategoriaQtd, semCategoriaValor } = totais;
+  const formaSemCat = totaisForma?.semCategoriaQtd || 0;
+  const formaSemCatValor = totaisForma?.semCategoriaValor || 0;
+  const ajustesOk = ajustes || { acrescimos: 0, descontos: 0, itensComAcrescimo: 0, itensComDesconto: 0 };
+  const [modalOutrosOpen, setModalOutrosOpen] = useState(false);
+  const [modalOutrasEntradasOpen, setModalOutrasEntradasOpen] = useState(false);
+  const [funcExpandidos, setFuncExpandidos] = useState(new Set());
+  const contasNaoClassificadas = useMemo(() => {
+    if (!totaisForma?.semCategoriaPorConta) return [];
+    return Array.from(totaisForma.semCategoriaPorConta.values())
+      .sort((a, b) => b.valor - a.valor);
+  }, [totaisForma]);
+
+  const toggleFunc = (chave) => {
+    setFuncExpandidos(prev => {
+      const next = new Set(prev);
+      if (next.has(chave)) next.delete(chave); else next.add(chave);
+      return next;
+    });
+  };
+
+  return (
+    <>
+      {/* Status da sangria conferida pelo cliente */}
+      {fechamentoSangria ? (
+        <div className="mb-4 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/80 to-teal-50/40 p-3 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+            <CheckCircle2 className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-emerald-900">Sangria conferida pelo cliente</p>
+            <p className="text-[11px] text-emerald-700 mt-0.5">
+              Fechado em <strong>{new Date(fechamentoSangria.confirmado_em).toLocaleString('pt-BR')}</strong>
+              {fechamentoSangria.confirmado_por && <> por <strong>{fechamentoSangria.confirmado_por}</strong></>}
+              {' · '}{(fechamentoSangria.registros || []).length} funcionário(s)
+            </p>
+          </div>
+          <div className="text-right hidden sm:block">
+            <p className="text-[10px] text-emerald-600 uppercase tracking-wider">Total contado</p>
+            <p className="text-sm font-mono font-semibold text-emerald-800 tabular-nums">
+              {formatCurrency(Number(fechamentoSangria.total_apresentado || 0))}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <AlertCircle className="h-5 w-5 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-900">Sangria ainda não conferida</p>
+            <p className="text-[11px] text-amber-700 mt-0.5">
+              O responsável do cliente ainda não registrou a contagem de dinheiro deste dia.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Aviso de itens sem categoria */}
+      {semCategoriaQtd > 0 && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 flex items-start gap-2.5 text-[12px]">
+          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+          <p className="text-red-800">
+            <strong>{semCategoriaQtd}</strong> ite{semCategoriaQtd === 1 ? 'm' : 'ns'} sem categoria
+            (totalizando <strong>{formatCurrency(semCategoriaValor)}</strong>).
+            Classifique os grupos de produto em <em>/admin/clientes → Redes Autosystem → Classificar grupos</em>.
+          </p>
+        </div>
+      )}
+
+      <div className="print-section-title">Resumo do movimento</div>
+
+      {/* Breakdown por categoria + Aviso de seções pendentes */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+        {/* Entradas (vendas por categoria + outras entradas não-venda) */}
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden flex flex-col">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-blue-500" />
+              <h3 className="text-sm font-semibold text-gray-800">Entradas</h3>
+            </div>
+            <span className="text-[11px] text-gray-400">{vendas.length} itens</span>
+          </div>
+          <div className="divide-y divide-gray-100 flex-1">
+            <LinhaBreakdown icon={Fuel} iconColor="text-amber-600" iconBg="bg-amber-50" barHex="#f59e0b"
+              label="Combustíveis" valor={totais.combustivel} total={totalEntradas} />
+            <LinhaBreakdown icon={Wrench} iconColor="text-slate-600" iconBg="bg-slate-100" barHex="#64748b"
+              label="Produtos automotivos" valor={totais.automotivos} total={totalEntradas} />
+            <LinhaBreakdown icon={ShoppingBag} iconColor="text-emerald-600" iconBg="bg-emerald-50" barHex="#10b981"
+              label="Conveniência" valor={totais.conveniencia} total={totalEntradas} />
+            {totais.outros > 0 && (
+              <LinhaBreakdown icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100" barHex="#6b7280"
+                label="Outros / não classificados" valor={totais.outros} total={totalEntradas} />
+            )}
+            <LinhaBreakdown icon={PlusCircle} iconColor="text-indigo-600" iconBg="bg-indigo-50" barHex="#6366f1"
+              label="Outras entradas (não-venda)" valor={totalOutrasEntradas} total={totalEntradas}
+              onClick={outrasEntradasPorConta.length > 0 ? () => setModalOutrasEntradasOpen(true) : undefined} />
+          </div>
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Total</span>
+            <span className="text-sm font-mono font-bold text-gray-900 tabular-nums">{formatCurrency(totalEntradas)}</span>
+          </div>
+        </div>
+
+        {/* Saídas (recebido por forma de pagamento — sob a ótica do caixa) */}
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden flex flex-col">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-indigo-500" />
+              <h3 className="text-sm font-semibold text-gray-800">Saídas</h3>
+            </div>
+            <span className="text-[11px] text-gray-400">{(recebimentos || []).length} registros</span>
+          </div>
+          <div className="divide-y divide-gray-100 flex-1">
+            <LinhaBreakdown icon={Banknote} iconColor="text-emerald-600" iconBg="bg-emerald-50" barHex="#10b981"
+              label="Dinheiro" valor={totaisForma?.dinheiro || 0} total={totalForma} />
+            <LinhaBreakdown icon={CreditCard} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#3b82f6"
+              label="Cartão / PIX" valor={totaisForma?.cartao_pix || 0} total={totalForma} />
+            <LinhaBreakdown icon={FileText} iconColor="text-violet-600" iconBg="bg-violet-50" barHex="#8b5cf6"
+              label="Cheque" valor={totaisForma?.cheque || 0} total={totalForma} />
+            <LinhaBreakdown icon={Calendar} iconColor="text-amber-600" iconBg="bg-amber-50" barHex="#f59e0b"
+              label="A prazo" valor={totaisForma?.a_prazo || 0} total={totalForma} />
+            <LinhaBreakdown icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100" barHex="#6b7280"
+              label="Outros / não classificados" valor={totaisForma?.outros || 0} total={totalForma}
+              onClick={contasNaoClassificadas.length > 0 ? () => setModalOutrosOpen(true) : undefined} />
+          </div>
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Total</span>
+            <span className="text-sm font-mono font-bold text-gray-900 tabular-nums">{formatCurrency(totalForma)}</span>
+          </div>
+        </div>
+      </div>
+
+
+      {/* Sobra / Falta de caixa (fora do total de formas de recebimento) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <AjusteCard
+          label="Sobra de caixa"
+          valor={totaisForma?.sobra_caixa || 0}
+          qtd={totaisForma?.sobra_caixa_qtd || 0}
+          icon={TrendingUp}
+          accent="emerald"
+          prefixo="+"
+        />
+        <AjusteCard
+          label="Falta de caixa"
+          valor={totaisForma?.falta_caixa || 0}
+          qtd={totaisForma?.falta_caixa_qtd || 0}
+          icon={TrendingDown}
+          accent="red"
+          prefixo="-"
+        />
+      </div>
+
+      {/* Acréscimos e Descontos do dia */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+        <AjusteCard
+          label="Acréscimos aplicados"
+          valor={ajustesOk.acrescimos}
+          qtd={ajustesOk.itensComAcrescimo}
+          icon={PlusCircle}
+          accent="emerald"
+          prefixo="+"
+        />
+        <AjusteCard
+          label="Descontos concedidos"
+          valor={ajustesOk.descontos}
+          qtd={ajustesOk.itensComDesconto}
+          icon={MinusCircle}
+          accent="red"
+          prefixo="-"
+        />
+      </div>
+
+      {/* Vendas + Recebimentos por funcionário */}
+      {funcionarios.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+            <UserRound className="h-4 w-4 text-blue-500" />
+            <h3 className="text-sm font-semibold text-gray-800">Vendas e recebimentos por funcionário</h3>
+            <span className="text-[11px] text-gray-400">· {funcionarios.length} funcionário{funcionarios.length === 1 ? '' : 's'}</span>
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={() => setFuncExpandidos(new Set(funcionarios.map(f => f.chave)))}
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-medium transition-colors">Expandir todos</button>
+              <span className="text-[11px] text-gray-300">|</span>
+              <button onClick={() => setFuncExpandidos(new Set())}
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-medium transition-colors">Colapsar</button>
+            </div>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {funcionarios.map(f => {
+              const aberto = funcExpandidos.has(f.chave);
+              // Diferença pura: recebimentos vs entradas (vendas + outras entradas)
+              const diff = f.recebimentos.total - f.entradas_total;
+              const conciliado = Math.abs(diff) < 0.01;
+              return (
+                <FuncionarioRow key={f.chave}
+                  funcionario={f}
+                  aberto={aberto}
+                  onToggle={() => toggleFunc(f.chave)}
+                  diff={diff}
+                  conciliado={conciliado} />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: detalhamento das contas não classificadas */}
+      <Modal open={modalOutrosOpen} onClose={() => setModalOutrosOpen(false)}
+        title="Detalhamento de contas não classificadas" size="md">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-600">
+            As contas abaixo não foram categorizadas em <strong>Dinheiro · Cartão/PIX · Cheque · A prazo · Sobra/Falta caixa</strong>.
+            Por isso elas estão somadas em "Outros". Acesse <em>/admin/clientes → Redes Autosystem → Classificar contas</em> para classificá-las.
+          </p>
+
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50/80">
+                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2">Conta</th>
+                  <th className="px-3 py-2 text-right">Lançamentos</th>
+                  <th className="px-3 py-2 text-right">Valor total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {contasNaoClassificadas.map(c => (
+                  <tr key={c.codigo} className="hover:bg-gray-50/60">
+                    <td className="px-3 py-2">
+                      <p className="text-sm text-gray-900 truncate max-w-[380px]">{c.nome || '—'}</p>
+                      <p className="text-[10px] text-gray-400 font-mono">{c.codigo}</p>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-xs text-gray-500">
+                      {c.qtd.toLocaleString('pt-BR')}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-sm font-semibold text-gray-900">
+                      {formatCurrency(c.valor)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50/60 border-t border-gray-200">
+                <tr className="text-[12px] font-semibold">
+                  <td className="px-3 py-2.5 text-gray-700">Total</td>
+                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-gray-700">
+                    {contasNaoClassificadas.reduce((s, c) => s + c.qtd, 0)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-gray-900">
+                    {formatCurrency(contasNaoClassificadas.reduce((s, c) => s + c.valor, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+            <button onClick={() => setModalOutrosOpen(false)}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
+              Fechar
+            </button>
+            <a href="/admin/clientes" target="_blank" rel="noreferrer"
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 flex items-center gap-2">
+              Abrir Classificar contas
+              <ChevronRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: detalhamento das outras entradas (não-venda) */}
+      <Modal open={modalOutrasEntradasOpen} onClose={() => setModalOutrasEntradasOpen(false)}
+        title="Detalhamento de outras entradas (não-venda)" size="md">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-600">
+            Lançamentos com <code className="font-mono bg-gray-100 px-1 rounded">conta_debitar</code> começando com
+            <strong> 1.1.2</strong> e <code className="font-mono bg-gray-100 px-1 rounded">conta_creditar</code> diferente de
+            <strong> 4.1</strong> (receita de vendas) e das contas classificadas como Sobra de caixa. Agrupados pela conta de crédito.
+          </p>
+
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50/80">
+                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2">Conta de crédito</th>
+                  <th className="px-3 py-2 text-right">Lançamentos</th>
+                  <th className="px-3 py-2 text-right">Valor total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {outrasEntradasPorConta.map(c => (
+                  <tr key={c.codigo} className="hover:bg-gray-50/60">
+                    <td className="px-3 py-2">
+                      <p className="text-sm text-gray-900 truncate max-w-[380px]">{c.nome || '—'}</p>
+                      <p className="text-[10px] text-gray-400 font-mono">{c.codigo}</p>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-xs text-gray-500">
+                      {c.qtd.toLocaleString('pt-BR')}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-sm font-semibold text-gray-900">
+                      {formatCurrency(c.valor)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50/60 border-t border-gray-200">
+                <tr className="text-[12px] font-semibold">
+                  <td className="px-3 py-2.5 text-gray-700">Total</td>
+                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-gray-700">
+                    {outrasEntradasPorConta.reduce((s, c) => s + c.qtd, 0)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-gray-900">
+                    {formatCurrency(outrasEntradasPorConta.reduce((s, c) => s + c.valor, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-gray-100">
+            <button onClick={() => setModalOutrasEntradasOpen(false)}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
+              Fechar
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+// ─── Linha de funcionário com expand (vendas/recebimentos) ─────
+function FuncionarioRow({ funcionario, aberto, onToggle, diff, conciliado }) {
+  const f = funcionario;
+  const iniciais = (f.nome || '?').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || '?';
+  return (
+    <div>
+      <button onClick={onToggle}
+        className={`w-full grid grid-cols-[1fr_140px_140px_120px] gap-3 px-4 py-3 text-left transition-colors ${
+          aberto ? 'bg-blue-50/40' : 'hover:bg-gray-50/60'
+        }`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+            <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          </motion.div>
+          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
+            {iniciais}
+          </div>
+          <p className="text-sm font-medium text-gray-900 truncate">{f.nome}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-wider text-gray-400">Entradas</p>
+          <p className="text-sm font-mono font-semibold text-gray-900 tabular-nums">{formatCurrency(f.entradas_total)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-wider text-gray-400">Recebimentos</p>
+          <p className="text-sm font-mono font-semibold text-gray-900 tabular-nums">{formatCurrency(f.recebimentos.total)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-wider text-gray-400">Sobra/Falta</p>
+          <p className={`text-sm font-mono font-semibold tabular-nums ${
+            conciliado ? 'text-emerald-600' : diff > 0 ? 'text-emerald-600' : 'text-red-600'
+          }`}>
+            {conciliado ? '—' : (diff > 0 ? '+' : '') + formatCurrency(diff)}
+          </p>
+        </div>
+      </button>
+
+      {aberto && (
+        <div className="px-4 pb-4 pt-1 bg-gray-50/40 border-t border-gray-100">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Entradas (vendas + outras entradas não-venda) */}
+            <div className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-blue-50/40">
+                <div className="flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5 text-blue-500" />
+                  <p className="text-[11px] font-semibold text-gray-700 uppercase tracking-wider">Entradas</p>
+                </div>
+                <p className="text-xs font-mono font-bold text-gray-900 tabular-nums">{formatCurrency(f.entradas_total)}</p>
+              </div>
+              <div className="divide-y divide-gray-50">
+                <LinhaItem icon={Fuel}        iconColor="text-amber-600"   iconBg="bg-amber-50"   label="Combustíveis"  valor={f.vendas.combustivel} />
+                <LinhaItem icon={Wrench}      iconColor="text-slate-600"   iconBg="bg-slate-100"  label="Automotivos"   valor={f.vendas.automotivos} />
+                <LinhaItem icon={ShoppingBag} iconColor="text-emerald-600" iconBg="bg-emerald-50" label="Conveniência"  valor={f.vendas.conveniencia} />
+                {f.vendas.outros > 0 && (
+                  <LinhaItem icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100" label="Outros (sem categoria)" valor={f.vendas.outros} />
+                )}
+                {f.outras_entradas > 0 && (
+                  <LinhaItem icon={PlusCircle} iconColor="text-indigo-600" iconBg="bg-indigo-50" label="Outras entradas (não-venda)" valor={f.outras_entradas} />
+                )}
+              </div>
+            </div>
+
+            {/* Recebimentos por forma */}
+            <div className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-indigo-50/40">
+                <div className="flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5 text-indigo-500" />
+                  <p className="text-[11px] font-semibold text-gray-700 uppercase tracking-wider">Recebimentos</p>
+                </div>
+                <p className="text-xs font-mono font-bold text-gray-900 tabular-nums">{formatCurrency(f.recebimentos.total)}</p>
+              </div>
+              <div className="divide-y divide-gray-50">
+                <LinhaItem icon={Banknote}   iconColor="text-emerald-600" iconBg="bg-emerald-50" label="Dinheiro"       valor={f.recebimentos.dinheiro} />
+                <LinhaItem icon={CreditCard} iconColor="text-blue-600"    iconBg="bg-blue-50"    label="Cartão / PIX"   valor={f.recebimentos.cartao_pix} />
+                <LinhaItem icon={FileText}   iconColor="text-violet-600"  iconBg="bg-violet-50"  label="Cheque"         valor={f.recebimentos.cheque} />
+                <LinhaItem icon={Calendar}   iconColor="text-amber-600"   iconBg="bg-amber-50"   label="A prazo"        valor={f.recebimentos.a_prazo} />
+                {f.recebimentos.outros > 0 && (
+                  <LinhaItem icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100" label="Outros"     valor={f.recebimentos.outros} />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer com a diferença pura (receb − vendas) */}
+          <div className="mt-3">
+            <div className={`rounded-lg border px-3 py-2 flex items-center justify-between text-[11px] ${
+              conciliado ? 'border-gray-200 bg-gray-50/80' :
+              diff > 0 ? 'border-emerald-200 bg-emerald-50/60' :
+              'border-red-200 bg-red-50/60'
+            }`}>
+              <span className={`font-medium uppercase tracking-wider ${
+                conciliado ? 'text-gray-600' : diff > 0 ? 'text-emerald-700' : 'text-red-700'
+              }`}>Diferença (Receb − Vendas)</span>
+              <span className={`font-mono font-semibold tabular-nums ${
+                conciliado ? 'text-gray-700' : diff > 0 ? 'text-emerald-800' : 'text-red-800'
+              }`}>
+                {conciliado ? '—' : (diff > 0 ? '+' : '') + formatCurrency(diff)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinhaItem({ icon: Icon, iconColor, iconBg, label, valor }) {
+  return (
+    <div className="flex items-center gap-2.5 px-3 py-1.5">
+      <div className={`h-6 w-6 rounded-md flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+        <Icon className={`h-3 w-3 ${iconColor}`} />
+      </div>
+      <span className="text-[12px] text-gray-700 flex-1 truncate">{label}</span>
+      <span className="text-[12px] font-mono tabular-nums text-gray-900">{formatCurrency(valor)}</span>
     </div>
   );
 }
