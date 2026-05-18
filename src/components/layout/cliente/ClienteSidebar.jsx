@@ -6,14 +6,15 @@ import {
   LayoutDashboard, BarChart3, TrendingUp,
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
-  ArrowUpRight, ArrowDownLeft,
+  ArrowUpRight, ArrowDownLeft, Settings,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
 
 // Os hrefs são montados em runtime com prefixo `/cliente/<tipoCliente>`
 // para que webposto e autosystem reusem o mesmo menu.
-function buildNavigation(prefix) {
+function buildNavigation(prefix, tipoCliente) {
+  const ehAutosystem = tipoCliente === 'autosystem';
   return [
     {
       section: 'Principal',
@@ -60,6 +61,9 @@ function buildNavigation(prefix) {
       section: 'Administração da Rede',
       items: [
         { name: 'Usuários da Rede', href: `${prefix}/usuarios`, icon: UserCog, permissao: 'gerenciar_usuarios' },
+        ...(ehAutosystem ? [
+          { name: 'Configurações', href: `${prefix}/configuracoes`, icon: Settings },
+        ] : []),
       ],
     },
   ];
@@ -104,8 +108,8 @@ export default function ClienteSidebar({ collapsed, onToggle }) {
   const prefix = `/cliente/${tipoCliente}`;
 
   const navigation = useMemo(
-    () => filtrarNavegacao(buildNavigation(prefix), usuario?.permissoes, cliente),
-    [prefix, usuario?.permissoes, cliente],
+    () => filtrarNavegacao(buildNavigation(prefix, tipoCliente), usuario?.permissoes, cliente),
+    [prefix, tipoCliente, usuario?.permissoes, cliente],
   );
 
   const [expanded, setExpanded] = useState(() => {

@@ -422,11 +422,143 @@ export async function buscarProdutividadeAutosystem(redeId, empresaCodigos, filt
       grupos_combustivel:  Array.isArray(filtros.grupos_combustivel)  ? filtros.grupos_combustivel  : [],
       grupos_automotivos:  Array.isArray(filtros.grupos_automotivos)  ? filtros.grupos_automotivos  : [],
       grupos_conveniencia: Array.isArray(filtros.grupos_conveniencia) ? filtros.grupos_conveniencia : [],
+      produtos_aditivada:  Array.isArray(filtros.produtos_aditivada)  ? filtros.produtos_aditivada  : [],
+      produtos_comum:      Array.isArray(filtros.produtos_comum)      ? filtros.produtos_comum      : [],
     },
   });
   if (error) throw await _extrairErroFn(error, 'Falha ao buscar produtividade');
   if (data?.error) throw new Error(data.detail || data.error);
   return Array.isArray(data?.vendedores) ? data.vendedores : [];
+}
+
+// ─── Histórico de alterações em lançamentos (movto_flow) ─────
+// Retorna `{ schema, alteracoes }` no período + empresas selecionadas.
+// `schema` é a descrição das colunas da tabela `movto_flow` no banco remoto
+// (information_schema.columns) — útil para o front detectar campos
+// dinamicamente. `alteracoes` é o resultado bruto + contexto do movto
+// original (ctx_*) e nome do funcionário (usuario_nome).
+export async function buscarMovtoFlowAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-movto-flow', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de:  filtros.data_de,
+      data_ate: filtros.data_ate,
+      limit:    filtros.limit || 5000,
+      contas_excluidas: Array.isArray(filtros.contas_excluidas)
+        ? filtros.contas_excluidas
+        : [],
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar alterações em caixas');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return {
+    schema:     Array.isArray(data?.schema)     ? data.schema     : [],
+    alteracoes: Array.isArray(data?.alteracoes) ? data.alteracoes : [],
+  };
+}
+
+// Lista usuários distintos (pgd_username) que aparecem em movto_flow no
+// período + empresas selecionadas. Usado para popular o filtro de usuário
+// da UI sem precisar carregar o resultado completo.
+export async function buscarUsuariosMovtoFlowAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-movto-flow', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de:  filtros.data_de,
+      data_ate: filtros.data_ate,
+      mode: 'usuarios',
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao listar usuários');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.usuarios) ? data.usuarios : [];
+}
+
+// ─── Produtos de combustível disponíveis (para parametrizar MIX) ─────
+// Lista produtos distintos vendidos nos últimos N dias dentro dos grupos
+// classificados como combustível.
+export async function buscarCombustiveisDisponiveisAutosystem(redeId, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const { data, error } = await supabase.functions.invoke('autosystem-produtos-combustivel', {
+    body: {
+      rede_id: redeId,
+      grupos_filtro: Array.isArray(filtros.grupos_filtro) ? filtros.grupos_filtro : [],
+      dias: filtros.dias || 90,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar combustíveis');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.produtos) ? data.produtos : [];
+}
+
+// ─── Classificação de produtos para MIX (gasolina aditivada / comum) ─
+export async function listarMixProdutos(redeId) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const { data, error } = await supabase.rpc('as_rede_produto_mix_listar', { p_rede_id: redeId });
+  if (error) throw new Error('Falha ao listar classificações de MIX: ' + error.message);
+  return Array.isArray(data) ? data : [];
+}
+
+export async function salvarMixProdutos(redeId, classificacoes) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(classificacoes)) throw new Error('classificacoes deve ser array');
+  // Cada item: { produto_codigo, produto_nome, tipo: 'aditivada' | 'comum' }
+  const payload = classificacoes
+    .filter(c => c && c.produto_codigo != null && (c.tipo === 'aditivada' || c.tipo === 'comum'))
+    .map(c => ({
+      produto_codigo: Number(c.produto_codigo),
+      produto_nome:   String(c.produto_nome || ''),
+      tipo:           c.tipo,
+    }));
+  const { error } = await supabase.rpc('as_rede_produto_mix_salvar', {
+    p_rede_id: redeId,
+    p_classificacoes: payload,
+  });
+  if (error) throw new Error('Falha ao salvar classificações: ' + error.message);
+}
+
+// ─── Detalhe de produtividade por vendedor ───────────────────
+// Busca produtos vendidos por um vendedor específico no período + série
+// mensal de automotivos (12 meses). Usado pelo painel expandido.
+export async function buscarProdutividadeDetalheAutosystem(redeId, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (filtros.empresa_codigo == null)  throw new Error('empresa_codigo é obrigatório');
+  if (filtros.vendedor_codigo == null) throw new Error('vendedor_codigo é obrigatório');
+  if (!filtros.data_de || !filtros.data_ate) throw new Error('data_de e data_ate são obrigatórios.');
+  const { data, error } = await supabase.functions.invoke('autosystem-produtividade-detalhe', {
+    body: {
+      rede_id: redeId,
+      empresa_codigo:  filtros.empresa_codigo,
+      vendedor_codigo: filtros.vendedor_codigo,
+      data_de:  filtros.data_de,
+      data_ate: filtros.data_ate,
+      automotivos_data_de:  filtros.automotivos_data_de  || null,
+      automotivos_data_ate: filtros.automotivos_data_ate || null,
+      grupos_automotivos: Array.isArray(filtros.grupos_automotivos) ? filtros.grupos_automotivos : [],
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar detalhe do vendedor');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return {
+    produtos:           Array.isArray(data?.produtos)           ? data.produtos           : [],
+    automotivos_mensal: Array.isArray(data?.automotivos_mensal) ? data.automotivos_mensal : [],
+  };
 }
 
 // ─── Pares de produtos vendidos juntos (cesta de compras) ───

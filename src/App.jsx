@@ -37,6 +37,7 @@ import BpoConciliacaoBancaria from './pages/BpoConciliacaoBancaria';
 import BpoConciliacaoCaixas from './pages/BpoConciliacaoCaixas';
 import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
 import BpoValidacaoOfx from './pages/BpoValidacaoOfx';
+import BpoAlteracoesCaixas from './pages/BpoAlteracoesCaixas';
 
 // Cliente
 import ClienteLayout from './components/layout/cliente/ClienteLayout';
@@ -69,6 +70,7 @@ import AsUsuarios from './pages/cliente/autosystem/ClienteUsuarios';
 import AsComercialVendas from './pages/cliente/autosystem/ClienteComercialVendas';
 import AsComercialOperacao from './pages/cliente/autosystem/ClienteComercialOperacao';
 import AsComercialProdutividade from './pages/cliente/autosystem/ClienteComercialProdutividade';
+import AsConfiguracoes from './pages/cliente/autosystem/ClienteConfiguracoes';
 
 // Auth
 import { RequireAdmin, RequireCliente } from './components/auth/RequireAuth';
@@ -139,6 +141,7 @@ export default function App() {
           <Route path="/admin/bpo/conciliacao-caixas" element={<BpoConciliacaoCaixas />} />
           <Route path="/admin/bpo/caixa-administrativo" element={<BpoCaixaAdministrativo />} />
           <Route path="/admin/bpo/validacao-ofx" element={<BpoValidacaoOfx />} />
+          <Route path="/admin/bpo/alteracoes-caixas" element={<BpoAlteracoesCaixas />} />
 
           {/* Relatorios (kept for compatibility) */}
           <Route path="/admin/relatorios" element={<Relatorios />} />
@@ -181,6 +184,7 @@ export default function App() {
           <Route path="/cliente/autosystem/comercial/vendas" element={<AsComercialVendas />} />
           <Route path="/cliente/autosystem/comercial/operacao" element={<AsComercialOperacao />} />
           <Route path="/cliente/autosystem/comercial/produtividade" element={<AsComercialProdutividade />} />
+          <Route path="/cliente/autosystem/configuracoes" element={<AsConfiguracoes />} />
         </Route>
 
         {/* Legacy redirects: /cliente/X → /cliente/webposto/X (URL antiga) */}

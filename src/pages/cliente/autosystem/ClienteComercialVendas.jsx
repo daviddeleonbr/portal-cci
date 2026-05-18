@@ -1614,15 +1614,27 @@ export default function ClienteComercialVendas() {
       const row = idx.get(ym);
       const fat = row ? Number(row.valor) || 0 : 0;
       const custo = row ? Number(row.valor_custo) || 0 : 0;
+      const litros = row ? Number(row.quantidade) || 0 : 0;
       const lucro = fat - custo;
       const margem = fat > 0 ? lucro / fat : 0;
+      const lucroPorLitro = litros > 0 ? lucro / litros : 0;
       out.push({
         ano_mes: ym,
         rotulo: `${MESES_PT_CURTO[m.getMonth()]}/${String(m.getFullYear()).slice(2)}`,
         lucro,
         margemPct: margem * 100,
         faturamento: fat,
+        litros,
+        lucroPorLitro,
       });
+    }
+    // Variação % de litros vs mês anterior (label sobre as barras)
+    for (let i = 1; i < out.length; i++) {
+      const prev = out[i - 1];
+      const cur  = out[i];
+      cur.litrosVarMA = (prev.litros !== 0)
+        ? ((cur.litros - prev.litros) / Math.abs(prev.litros)) * 100
+        : null;
     }
     return out;
   }, [evolucao12m]);
@@ -2415,16 +2427,18 @@ function CelulaUnica({ valor, ma, aa, moeda = true, decimais = 0, sub, divisor, 
   );
 }
 
-// Gráfico de área com a evolução de Lucro bruto (eixo esquerdo em R$) e
-// Margem (eixo direito em %) dos últimos 12 meses.
+// Gráfico de barras + linha — evolução dos últimos 12 meses:
+//   - Bar: Litros vendidos (eixo esquerdo, em L)
+//   - Line com marcadores: Lucro bruto por litro (eixo direito, em R$/L)
+//   - Labels acima das barras: variação % de litros vs mês anterior
 function GraficoEvolucao12m({ serie, loading }) {
-  const temDados = (serie || []).some(p => p.faturamento > 0 || p.lucro !== 0);
+  const temDados = (serie || []).some(p => p.litros > 0 || p.faturamento > 0);
   return (
     <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
         <LineChartIcon className="h-4 w-4 text-violet-500" />
         <h3 className="text-sm font-semibold text-gray-800">Evolução · últimos 12 meses</h3>
-        <span className="text-[11px] text-gray-400">· Lucro bruto e margem</span>
+        <span className="text-[11px] text-gray-400">· Litros vendidos e lucro / litro</span>
       </div>
       {loading ? (
         <div className="h-72 flex items-center justify-center gap-2 text-sm text-gray-500">
@@ -2438,40 +2452,34 @@ function GraficoEvolucao12m({ serie, loading }) {
       ) : (
         <div className="px-2 py-3">
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={serie} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradLucro" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.45} />
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gradMargem" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <ComposedChart data={serie} margin={{ top: 24, right: 30, left: 10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1" />
-              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1"
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#e5e7eb"
                 tickFormatter={(v) => Math.abs(v) >= 1000
-                  ? `R$ ${(v / 1000).toFixed(0)}k`
-                  : `R$ ${v.toFixed(0)}`} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1"
-                tickFormatter={(v) => `${v.toFixed(0)}%`} />
+                  ? `${(v / 1000).toFixed(0)}k L`
+                  : `${v.toFixed(0)} L`} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#e5e7eb"
+                tickFormatter={(v) => `R$ ${Number(v).toFixed(2)}`} />
               <Tooltip
                 formatter={(value, name) => {
-                  if (name === 'Lucro bruto') return [formatCurrency(value), name];
-                  if (name === 'Margem')       return [`${Number(value).toFixed(1)}%`, name];
+                  if (name === 'Litros')           return [`${formatNumero(value, 2)} L`, name];
+                  if (name === 'Lucro / litro')    return [formatCurrency(value), name];
                   return [value, name];
                 }}
                 labelStyle={{ fontSize: 12, fontWeight: 600 }}
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Area yAxisId="left"  type="monotone" dataKey="lucro"     name="Lucro bruto"
-                stroke="#8b5cf6" strokeWidth={2} fill="url(#gradLucro)" />
-              <Area yAxisId="right" type="monotone" dataKey="margemPct" name="Margem"
-                stroke="#10b981" strokeWidth={2} fill="url(#gradMargem)" />
-            </AreaChart>
+              <Bar yAxisId="left" dataKey="litros" name="Litros"
+                fill="#c4b5fd" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="litrosVarMA" content={<LabelVariacaoMA />} />
+              </Bar>
+              <Line yAxisId="right" type="monotone" dataKey="lucroPorLitro" name="Lucro / litro"
+                stroke="#10b981" strokeWidth={2}
+                dot={{ r: 3, fill: '#a7f3d0', stroke: '#10b981', strokeWidth: 1 }}
+                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }} />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}

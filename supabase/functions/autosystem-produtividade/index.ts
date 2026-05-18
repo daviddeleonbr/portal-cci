@@ -47,6 +47,8 @@ serve(async (req) => {
     grupos_combustivel?:  (string | number)[];
     grupos_automotivos?:  (string | number)[];
     grupos_conveniencia?: (string | number)[];
+    produtos_aditivada?:  (string | number)[];
+    produtos_comum?:      (string | number)[];
   };
   try { body = await req.json(); } catch { return json({ error: 'Body JSON inválido' }, 400); }
 
@@ -55,6 +57,7 @@ serve(async (req) => {
     empresa_codigos: empresaCodigos,
     data_de, data_ate,
     grupos_combustivel, grupos_automotivos, grupos_conveniencia,
+    produtos_aditivada, produtos_comum,
   } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
   if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
@@ -94,6 +97,8 @@ serve(async (req) => {
   const gCombustivel  = toBigArr(grupos_combustivel);
   const gAutomotivos  = toBigArr(grupos_automotivos);
   const gConveniencia = toBigArr(grupos_conveniencia);
+  const pAditivada    = toBigArr(produtos_aditivada);
+  const pComum        = toBigArr(produtos_comum);
 
   let failedStep = 'connect';
   try {
@@ -112,6 +117,7 @@ serve(async (req) => {
             l.empresa,
             l.vendedor,
             l.mlid,
+            l.produto,
             l.quantidade,
             l.valor,
             l.valor_desconto,
@@ -163,13 +169,17 @@ serve(async (req) => {
           count(*) filter (where b.produto_grupo = any($6::bigint[]))             as vendas_conveniencia,
           sum(case when b.produto_grupo = any($6::bigint[]) then b.quantidade else 0 end) as qtd_conveniencia,
           sum(case when b.produto_grupo = any($6::bigint[]) then b.valor      else 0 end) as fat_conveniencia,
-          sum(case when b.produto_grupo = any($6::bigint[]) then b.valor_custo else 0 end) as custo_conveniencia
+          sum(case when b.produto_grupo = any($6::bigint[]) then b.valor_custo else 0 end) as custo_conveniencia,
+
+          -- Mix (gasolina aditivada / comum) — por produto
+          sum(case when b.produto = any($7::bigint[]) then b.quantidade else 0 end) as litros_aditivada,
+          sum(case when b.produto = any($8::bigint[]) then b.quantidade else 0 end) as litros_comum
         from base b
         left join pessoa pe on pe.grid = b.vendedor
         group by b.empresa, b.vendedor, pe.nome
         order by sum(b.valor) desc
       `,
-      args: [empresasNum, data_de, data_ate, gCombustivel, gAutomotivos, gConveniencia],
+      args: [empresasNum, data_de, data_ate, gCombustivel, gAutomotivos, gConveniencia, pAditivada, pComum],
     });
 
     const decoder = new TextDecoder('windows-1252');
