@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Loader2, AlertCircle, RefreshCw, Building2, ChevronDown, ChevronRight,
-  History, Search, Users, FileText, AlertTriangle,
+  History, Search, Users, FileText, AlertTriangle, Download,
   Plus, Pencil, Trash2,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -11,6 +11,7 @@ import * as autosystemService from '../services/autosystemService';
 import { useAnonimizador } from '../services/anonimizarService';
 import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 import { formatCurrency } from '../utils/format';
+import { gerarPdfHistoricoUsuarios } from '../utils/pdfHistoricoUsuarios';
 
 // ─── Helpers ───────────────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -93,6 +94,9 @@ const CAMPOS_META = new Set([
   'desconto_venda', 'seq', 'info', 'conferido', 'placa',
   // Nomes de conta/motivo vêm de JOIN — não são campos editáveis
   'conta_debitar_nome', 'conta_creditar_nome', 'motivo_movto_nome',
+  // Contas contábeis: redundantes com `motivo` (mudar motivo muda as contas).
+  // Mantidas em mf.* pra exibir no header do evento, mas não entram no diff.
+  'conta_debitar', 'conta_creditar',
 ]);
 
 // Render compacto "código · nome" pra contas contábeis
@@ -217,17 +221,12 @@ const ORDEM_TIPOS = ['INCLUSAO', 'ALTERACAO', 'AJUSTE', 'EXCLUSAO', 'INDETERMINA
 // "Forma de Pagamento" no Autosystem mapeia pra `motivo_nome` (entidade
 // motivo), não pro `conta_debitar` — esse é só o código contábil derivado.
 const CAMPOS_RELEVANTES = [
-  { key: 'data_doc',          label: 'Data do Documento',  type: 'date' },
   { key: 'data',              label: 'Data',                type: 'date' },
-  { key: 'data_vencimento',   label: 'Data do Vencimento', type: 'date' },
+  { key: 'vencto',            label: 'Vencto',              type: 'date' },
   { key: 'motivo',            label: 'Motivo',              type: 'motivo', nomeKey: 'motivo_movto_nome' },
   { key: 'motivo_nome',       label: 'Forma de Pagamento', type: 'text' },
-  { key: 'conta_debitar',     label: 'Conta Débito',       type: 'conta', nomeKey: 'conta_debitar_nome' },
-  { key: 'conta_creditar',    label: 'Conta Crédito',      type: 'conta', nomeKey: 'conta_creditar_nome' },
   { key: 'pessoa_nome',       label: 'Pessoa',              type: 'text' },
   { key: 'documento',         label: 'Documento',           type: 'text' },
-  { key: 'tipo_doc',          label: 'Tipo de Documento',  type: 'text' },
-  { key: 'turno',             label: 'Turno',               type: 'text' },
   { key: 'obs',               label: 'Observação',          type: 'text' },
   { key: 'valor',             label: 'Valor',               type: 'currency' },
 ];
@@ -252,15 +251,10 @@ function ValorFormatado({ v, field, obj }) {
       );
     }
     case 'motivo': {
-      // Para motivo, o nome canônico (vindo do JOIN com motivo_movto) é o
-      // destaque; o código FK fica em mono cinza pequeno ao lado.
+      // Mostra apenas o nome canônico (vindo do JOIN com motivo_movto).
+      // O código FK é omitido — sem valor informativo pro usuário.
       const nome = field.nomeKey ? obj?.[field.nomeKey] : null;
-      return (
-        <span className="inline-flex items-baseline gap-1.5 flex-wrap">
-          <span>{nome || String(v)}</span>
-          {nome && <span className="font-mono text-gray-400 text-[10.5px]">#{v}</span>}
-        </span>
-      );
+      return <>{nome || String(v)}</>;
     }
     default:
       return <>{String(v)}</>;
@@ -287,11 +281,15 @@ export default function BpoAlteracoesCaixas() {
   const [erro, setErro] = useState(null);
   const [expandidos, setExpandidos] = useState(new Set());
 
-  // Filtro de usuário (pgd_username): carrega lista distinta do backend
-  // pra popular o multi-select. Vazio = sem filtro.
+  // Filtro de usuário do log (pgd_username): carrega lista distinta do backend.
   const [usuariosOptions, setUsuariosOptions] = useState([]);
   const [usuariosSelSet, setUsuariosSelSet] = useState(new Set());
   const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+
+  // Filtro de usuário ORIGINAL (coluna `usuario` do lançamento).
+  const [usuariosOrigOptions, setUsuariosOrigOptions] = useState([]);
+  const [usuariosOrigSelSet, setUsuariosOrigSelSet] = useState(new Set());
+  const [loadingUsuariosOrig, setLoadingUsuariosOrig] = useState(false);
 
   // Catálogos
   useEffect(() => {
@@ -354,27 +352,39 @@ export default function BpoAlteracoesCaixas() {
   }, [empresasDaRede]);
 
   // Carrega lista distinta de usuários sempre que os filtros (rede, período,
-  // empresas) mudam. Usado pra popular o multi-select de usuário.
+  // empresas) mudam. Roda ambos os modos em paralelo: pgd_username e usuario.
   useEffect(() => {
     if (redeSel?.tipo !== 'autosystem' || empresasSel.length === 0
         || !dataDe || !dataAte || dataDe > dataAte) {
       setUsuariosOptions([]);
       setUsuariosSelSet(new Set());
+      setUsuariosOrigOptions([]);
+      setUsuariosOrigSelSet(new Set());
       return;
     }
     let cancelado = false;
     setLoadingUsuarios(true);
+    setLoadingUsuariosOrig(true);
     (async () => {
       try {
         const codigos = empresasSel.map(e => Number(e.empresa_codigo)).filter(Number.isFinite);
-        const lista = await autosystemService.buscarUsuariosMovtoFlowAutosystem(
-          redeSel.id, codigos, { data_de: dataDe, data_ate: dataAte },
-        );
-        if (!cancelado) setUsuariosOptions(lista);
-      } catch {
-        if (!cancelado) setUsuariosOptions([]);
+        const [logUsers, origUsers] = await Promise.all([
+          autosystemService.buscarUsuariosMovtoFlowAutosystem(
+            redeSel.id, codigos, { data_de: dataDe, data_ate: dataAte },
+          ).catch(() => []),
+          autosystemService.buscarUsuariosOriginaisMovtoFlowAutosystem(
+            redeSel.id, codigos, { data_de: dataDe, data_ate: dataAte },
+          ).catch(() => []),
+        ]);
+        if (!cancelado) {
+          setUsuariosOptions(logUsers);
+          setUsuariosOrigOptions(origUsers);
+        }
       } finally {
-        if (!cancelado) setLoadingUsuarios(false);
+        if (!cancelado) {
+          setLoadingUsuarios(false);
+          setLoadingUsuariosOrig(false);
+        }
       }
     })();
     return () => { cancelado = true; };
@@ -424,16 +434,47 @@ export default function BpoAlteracoesCaixas() {
     });
   }
 
-  // Filtra as linhas brutas pelo usuário selecionado ANTES de agrupar — assim
-  // KPIs, contagens e quebras refletem a seleção sem precisar de filtros
-  // espalhados pelos memos derivados.
-  const alteracoesFiltradasPorUsuario = useMemo(() => {
-    if (usuariosSelSet.size === 0) return alteracoes;
-    return alteracoes.filter(a => {
-      const pg = a.pgd_username ?? a.usuario;
-      return pg != null && usuariosSelSet.has(String(pg));
+  function exportarPdf() {
+    if (arvoreFiltrada.length === 0) return;
+    const empresaSel = empresasSel[0];
+    const empresaTxt = empresaSel ? (labelEmpresa(empresaSel) || `Empresa ${empresaSel.empresa_codigo}`) : '';
+    const redeTxt = redeSel?.nome || '';
+    const periodoTxt = dataDe === dataAte
+      ? formatDataBR(dataDe)
+      : `${formatDataBR(dataDe)} a ${formatDataBR(dataAte)}`;
+    const doc = gerarPdfHistoricoUsuarios({
+      arvore: arvoreFiltrada,
+      camposRelevantes: CAMPOS_RELEVANTES,
+      mapaEmpresas,
+      labelEmpresa,
+      contexto: {
+        periodo: periodoTxt,
+        rede: redeTxt,
+        empresa: empresaTxt,
+      },
     });
-  }, [alteracoes, usuariosSelSet]);
+    const nomeArq = `historico-caixas-${dataDe}_a_${dataAte}.pdf`;
+    doc.save(nomeArq);
+  }
+
+  // Filtra as linhas brutas pelos usuários selecionados (AND lógico entre os
+  // dois filtros) ANTES de agrupar — KPIs, contagens e quebras refletem
+  // automaticamente. `usuariosSelSet` filtra por pgd_username (log) e
+  // `usuariosOrigSelSet` filtra pela coluna `usuario` (do lançamento).
+  const alteracoesFiltradasPorUsuario = useMemo(() => {
+    if (usuariosSelSet.size === 0 && usuariosOrigSelSet.size === 0) return alteracoes;
+    return alteracoes.filter(a => {
+      if (usuariosSelSet.size > 0) {
+        const pg = a.pgd_username;
+        if (pg == null || !usuariosSelSet.has(String(pg))) return false;
+      }
+      if (usuariosOrigSelSet.size > 0) {
+        const orig = a.usuario;
+        if (orig == null || !usuariosOrigSelSet.has(String(orig))) return false;
+      }
+      return true;
+    });
+  }, [alteracoes, usuariosSelSet, usuariosOrigSelSet]);
 
   // Árvore completa: para cada lançamento (mlid ?? parent), agrupa as linhas
   // brutas da movto_flow por pgd_when e classifica cada bucket em um EVENTO
@@ -648,6 +689,7 @@ export default function BpoAlteracoesCaixas() {
                   labelEmpresa={labelEmpresa}
                 />
                 <UsuarioMultiSelect
+                  label="Usuário (log)"
                   usuarios={usuariosOptions}
                   selecionados={usuariosSelSet}
                   loading={loadingUsuarios}
@@ -657,6 +699,18 @@ export default function BpoAlteracoesCaixas() {
                     return next;
                   })}
                   onLimpar={() => setUsuariosSelSet(new Set())}
+                />
+                <UsuarioMultiSelect
+                  label="Usuário original"
+                  usuarios={usuariosOrigOptions}
+                  selecionados={usuariosOrigSelSet}
+                  loading={loadingUsuariosOrig}
+                  onToggle={(login) => setUsuariosOrigSelSet(prev => {
+                    const next = new Set(prev);
+                    if (next.has(login)) next.delete(login); else next.add(login);
+                    return next;
+                  })}
+                  onLimpar={() => setUsuariosOrigSelSet(new Set())}
                 />
                 <button onClick={carregar} disabled={loading || empresasSel.length === 0}
                   className="inline-flex items-center gap-2 rounded-lg bg-violet-600 text-white px-4 py-2 text-sm font-medium hover:bg-violet-700 transition-colors disabled:opacity-50">
@@ -716,6 +770,12 @@ export default function BpoAlteracoesCaixas() {
                 · {fmtNum(arvoreFiltrada.length)} usuário{arvoreFiltrada.length === 1 ? '' : 's'} · {fmtNum(kpis.total)} evento{kpis.total === 1 ? '' : 's'}
               </span>
               <div className="flex-1" />
+              <button onClick={exportarPdf}
+                disabled={arvoreFiltrada.length === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium border border-violet-200 text-violet-700 rounded-lg bg-white hover:bg-violet-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <Download className="h-3.5 w-3.5" />
+                Exportar PDF
+              </button>
               <div className="relative w-full sm:w-80">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                 <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
@@ -744,34 +804,6 @@ export default function BpoAlteracoesCaixas() {
             )}
           </div>
 
-          {schema.length > 0 && (
-            <details className="mt-4 bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-              <summary className="px-4 py-2.5 text-[12px] text-gray-600 cursor-pointer hover:bg-gray-50/60">
-                <span className="font-semibold">Schema da tabela movto_flow</span>
-                <span className="text-gray-400 ml-2">({schema.length} colunas)</span>
-              </summary>
-              <div className="p-3 overflow-x-auto">
-                <table className="text-[11px] font-mono">
-                  <thead>
-                    <tr className="text-gray-500">
-                      <th className="px-2 py-1 text-left">#</th>
-                      <th className="px-2 py-1 text-left">column_name</th>
-                      <th className="px-2 py-1 text-left">data_type</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {schema.map((c, i) => (
-                      <tr key={i} className="text-gray-700">
-                        <td className="px-2 py-1 text-gray-400">{c.ordinal_position}</td>
-                        <td className="px-2 py-1 font-semibold">{c.column_name}</td>
-                        <td className="px-2 py-1 text-gray-500">{c.data_type}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          )}
         </>
       )}
 
@@ -924,10 +956,6 @@ function EventoCard({ ev, mapaEmpresas, labelEmpresa }) {
   const sourceRow   = ev.depois || ev.antes || {};
   const dataLanc    = sourceRow.data;
   const documento   = sourceRow.documento;
-  const debitar     = sourceRow.conta_debitar;
-  const debitarNome = sourceRow.conta_debitar_nome;
-  const creditar    = sourceRow.conta_creditar;
-  const creditarNome= sourceRow.conta_creditar_nome;
   const valor       = Number(sourceRow.valor) || 0;
 
   return (
@@ -959,14 +987,6 @@ function EventoCard({ ev, mapaEmpresas, labelEmpresa }) {
           </span>
         )}
       </div>
-      {debitar && (
-        <div className="flex items-baseline gap-1.5 mb-2 text-[11px] text-gray-600 flex-wrap">
-          <ContaLabel codigo={debitar} nome={debitarNome} />
-          <span className="text-gray-300">→</span>
-          <ContaLabel codigo={creditar || '—'} nome={creditarNome} />
-        </div>
-      )}
-
       {/* Detalhamento conforme o tipo */}
       {ev.tipo === 'INCLUSAO' ? (
         <SnapshotEstado ev={ev.depois} titulo="Lançamento criado · estado inicial" cor="emerald" />
@@ -1132,8 +1152,9 @@ function EmpresaSingleSelect({ empresas, selecionadoId, onSelecionar, labelEmpre
   );
 }
 
-// Multi-select de usuários (pgd_username). Lista vem do backend via mode='usuarios'.
-function UsuarioMultiSelect({ usuarios, selecionados, loading, onToggle, onLimpar }) {
+// Multi-select de usuários. Lista vem do backend via mode='usuarios' ou
+// mode='usuarios_originais'. `label` customiza o cabeçalho.
+function UsuarioMultiSelect({ usuarios, selecionados, loading, onToggle, onLimpar, label: labelText = 'Usuário' }) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -1159,7 +1180,7 @@ function UsuarioMultiSelect({ usuarios, selecionados, loading, onToggle, onLimpa
   return (
     <div ref={ref} className="relative">
       <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
-        <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" /> Usuário</span>
+        <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" /> {labelText}</span>
       </label>
       <button type="button" onClick={() => setAberto(o => !o)}
         disabled={loading || usuarios.length === 0}

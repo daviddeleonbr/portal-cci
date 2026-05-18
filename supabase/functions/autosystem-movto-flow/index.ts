@@ -56,13 +56,15 @@ serve(async (req) => {
     data_de?: string;
     data_ate?: string;
     limit?: number;
-    mode?: 'eventos' | 'usuarios';
+    mode?: 'eventos' | 'usuarios' | 'usuarios_originais';
     contas_excluidas?: string[];
   };
   try { body = await req.json(); } catch { return json({ error: 'Body JSON inválido' }, 400); }
 
   const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate } = body;
-  const mode = body.mode === 'usuarios' ? 'usuarios' : 'eventos';
+  const mode = body.mode === 'usuarios' ? 'usuarios'
+             : body.mode === 'usuarios_originais' ? 'usuarios_originais'
+             : 'eventos';
   const contasExcluidas = (Array.isArray(body.contas_excluidas) ? body.contas_excluidas : [])
     .map(v => String(v ?? '').trim())
     .filter(v => v !== '');
@@ -323,6 +325,30 @@ serve(async (req) => {
         args: [empresasNum, data_de, data_ate],
       });
       const usuarios = usuariosRes.rows.map(decodeRow);
+      return json({ usuarios });
+    }
+
+    // Modo `usuarios_originais`: retorna lista distinta da coluna `usuario`
+    // (usuário original do lançamento, diferente do pgd_username do log).
+    if (mode === 'usuarios_originais') {
+      if (!has('usuario')) {
+        return json({ usuarios: [] });
+      }
+      failedStep = 'select_usuarios_originais';
+      const res = await pg.queryObject<Record<string, unknown>>({
+        text: `
+          select distinct convert_to(mf.usuario::text, 'LATIN1') as usuario
+          from movto_flow mf
+          where mf.${colEmpresa} = any($1::bigint[])
+            and mf.${colDataFiltro} >= $2::date
+            and mf.${colDataFiltro} <  ($3::date + interval '1 day')
+            and mf.usuario is not null
+            and trim(mf.usuario::text) <> ''
+          order by 1
+        `,
+        args: [empresasNum, data_de, data_ate],
+      });
+      const usuarios = res.rows.map(decodeRow);
       return json({ usuarios });
     }
 

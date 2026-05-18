@@ -490,6 +490,31 @@ export async function buscarUsuariosMovtoFlowAutosystem(redeId, empresaCodigos, 
   return Array.isArray(data?.usuarios) ? data.usuarios : [];
 }
 
+// Lista usuários ORIGINAIS distintos (coluna `usuario` em movto_flow).
+// Diferente do pgd_username (que é o login do log de auditoria) — `usuario`
+// é o usuário do próprio lançamento.
+export async function buscarUsuariosOriginaisMovtoFlowAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-movto-flow', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de:  filtros.data_de,
+      data_ate: filtros.data_ate,
+      mode: 'usuarios_originais',
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao listar usuários originais');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.usuarios) ? data.usuarios : [];
+}
+
 // ─── Produtos de combustível disponíveis (para parametrizar MIX) ─────
 // Lista produtos distintos vendidos nos últimos N dias dentro dos grupos
 // classificados como combustível.
