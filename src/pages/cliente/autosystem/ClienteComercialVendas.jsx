@@ -2,11 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingCart, Fuel, Package, Store, MoreHorizontal,
-  Loader2, AlertCircle, RefreshCw, Calendar,
+  Loader2, AlertCircle, RefreshCw, Calendar, Search,
   Building2, ChevronDown, ChevronRight, LayoutGrid,
   TrendingUp, TrendingDown, Minus, LineChart as LineChartIcon,
   Percent, Coins, CalendarDays, Droplet, CalendarRange, Construction,
-  BarChart3, Layers, Clock,
+  BarChart3, Clock,
 } from 'lucide-react';
 
 // Sub-abas exibidas dentro da aba "Combustíveis".
@@ -16,6 +16,57 @@ const SUB_ABAS_COMBUSTIVEL = [
   { key: 'doze',    label: 'Últimos 12 meses',         icone: LineChartIcon },
   { key: 'semana',  label: 'Análise semanal',          icone: CalendarRange },
 ];
+
+// Sub-abas exibidas dentro da aba "Automotivos".
+const SUB_ABAS_AUTOMOTIVOS = [
+  { key: 'dia',       label: 'Realizado dia a dia', icone: CalendarDays  },
+  { key: 'grupo',     label: 'Realizado por grupo', icone: Package       },
+  { key: 'pareto',    label: 'Análise de pareto',   icone: BarChart3     },
+  { key: 'tempo',     label: 'Linha do tempo',      icone: Clock         },
+  { key: 'carrinho',  label: 'Carrinho de compras', icone: ShoppingCart  },
+];
+// Sub-abas exibidas dentro da aba "Conveniência". Mesma estrutura de Automotivos.
+const SUB_ABAS_CONVENIENCIA = [
+  { key: 'dia',       label: 'Realizado dia a dia', icone: CalendarDays  },
+  { key: 'grupo',     label: 'Realizado por grupo', icone: Package       },
+  { key: 'pareto',    label: 'Análise de pareto',   icone: BarChart3     },
+  { key: 'tempo',     label: 'Linha do tempo',      icone: Clock         },
+  { key: 'carrinho',  label: 'Carrinho de compras', icone: ShoppingCart  },
+];
+
+// Paleta de cores por categoria. Classes Tailwind explicitas para o JIT.
+const TREE_PALETAS_CATEGORIA = {
+  blue: {
+    bgHeader: 'bg-blue-50/40', hoverHeader: 'hover:bg-blue-50/70',
+    borderTop: 'border-blue-100',
+    chevron: 'text-blue-600', icon: 'text-blue-600', iconSub: 'text-blue-500',
+    hoverLeaf: 'hover:bg-blue-50/30',
+    kpiText: 'text-blue-700', kpiRing: 'ring-blue-200',
+    kpiBg: 'bg-blue-50', kpiBorder: 'border-blue-100', kpiBorderStrong: 'border-blue-300',
+    kpiGradient: 'bg-gradient-to-br from-blue-50/60 to-violet-50/40',
+    chartIcon: 'text-blue-500', chartBar: '#bfdbfe',
+    spinner: 'text-blue-600', emptyBg: 'bg-blue-50', emptyIcon: 'text-blue-600',
+    focusBorder: 'focus:border-blue-400', focusRing: 'focus:ring-blue-100',
+    checkText: 'text-blue-600', checkRing: 'focus:ring-blue-500',
+    dropdownBorder: 'border-blue-400', dropdownRing: 'ring-blue-100',
+    btnSelectedRing: 'ring-blue-200',
+  },
+  emerald: {
+    bgHeader: 'bg-emerald-50/40', hoverHeader: 'hover:bg-emerald-50/70',
+    borderTop: 'border-emerald-100',
+    chevron: 'text-emerald-600', icon: 'text-emerald-600', iconSub: 'text-emerald-500',
+    hoverLeaf: 'hover:bg-emerald-50/30',
+    kpiText: 'text-emerald-700', kpiRing: 'ring-emerald-200',
+    kpiBg: 'bg-emerald-50', kpiBorder: 'border-emerald-100', kpiBorderStrong: 'border-emerald-300',
+    kpiGradient: 'bg-gradient-to-br from-emerald-50/60 to-teal-50/40',
+    chartIcon: 'text-emerald-500', chartBar: '#a7f3d0',
+    spinner: 'text-emerald-600', emptyBg: 'bg-emerald-50', emptyIcon: 'text-emerald-600',
+    focusBorder: 'focus:border-emerald-400', focusRing: 'focus:ring-emerald-100',
+    checkText: 'text-emerald-600', checkRing: 'focus:ring-emerald-500',
+    dropdownBorder: 'border-emerald-400', dropdownRing: 'ring-emerald-100',
+    btnSelectedRing: 'ring-emerald-200',
+  },
+};
 import {
   AreaChart, Area, ComposedChart, Bar, Line, Cell, LabelList, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
@@ -182,6 +233,8 @@ export default function ClienteComercialVendas() {
   const [erro, setErro] = useState('');
   const [aba, setAba] = useState('geral');
   const [subAbaCombustivel, setSubAbaCombustivel] = useState('dia');
+  const [subAbaAutomotivos, setSubAbaAutomotivos] = useState('dia');
+  const [subAbaConveniencia, setSubAbaConveniencia] = useState('dia');
   const [expandidos, setExpandidos] = useState(new Set());
 
   // Evolução dos últimos 12 meses (independente do período selecionado)
@@ -201,6 +254,57 @@ export default function ClienteComercialVendas() {
   const [evolucao12mPorProduto, setEvolucao12mPorProduto] = useState([]);
   const [loadingEvolProd, setLoadingEvolProd] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
+
+  // Realizado diário (Automotivos · Realizado dia a dia).
+  const [realizadoDiarioAuto, setRealizadoDiarioAuto] = useState([]);
+  const [loadingDiarioAuto, setLoadingDiarioAuto] = useState(false);
+  const [erroDiarioAuto, setErroDiarioAuto] = useState('');
+  const [expandidosAuto, setExpandidosAuto] = useState(new Set());
+
+  // Análise de pareto (Automotivos): meta % + grupos a analisar (multi-seleção).
+  // Set vazio == nenhum filtro (todos os grupos).
+  const [paretoMeta, setParetoMeta] = useState(80);
+  const [paretoGrupos, setParetoGrupos] = useState(new Set());
+
+  // Linha do tempo (Automotivos): evolução 12m + filtros multi-seleção de
+  // grupos e produtos. Set vazio = sem filtro nesse nível.
+  const [evolucao12mAuto, setEvolucao12mAuto] = useState([]);
+  const [loadingEvol12mAuto, setLoadingEvol12mAuto] = useState(false);
+  const [tempoGruposSel, setTempoGruposSel] = useState(new Set());
+  const [tempoProdutosSel, setTempoProdutosSel] = useState(new Set());
+
+  // Carrinho de compras (Automotivos): pares de produtos vendidos juntos.
+  // Tem janela própria (30/60/90/180 dias) — não obedece o filtro de data.
+  const [paresCarrinho, setParesCarrinho] = useState([]);
+  const [totalTransacoesCarrinho, setTotalTransacoesCarrinho] = useState(0);
+  const [loadingCarrinho, setLoadingCarrinho] = useState(false);
+  const [erroCarrinho, setErroCarrinho] = useState('');
+  const [carrinhoGruposSel, setCarrinhoGruposSel] = useState(new Set());
+  const [carrinhoMinTransacoes, setCarrinhoMinTransacoes] = useState(2);
+  const [carrinhoBusca, setCarrinhoBusca] = useState('');
+  const [carrinhoPeriodoDias, setCarrinhoPeriodoDias] = useState(90);
+
+  // Estado equivalente para Conveniência.
+  const [realizadoDiarioConv, setRealizadoDiarioConv] = useState([]);
+  const [loadingDiarioConv, setLoadingDiarioConv] = useState(false);
+  const [erroDiarioConv, setErroDiarioConv] = useState('');
+  const [expandidosConv, setExpandidosConv] = useState(new Set());
+  const [paretoMetaConv, setParetoMetaConv] = useState(80);
+  const [paretoGruposConv, setParetoGruposConv] = useState(new Set());
+  const [evolucao12mConv, setEvolucao12mConv] = useState([]);
+  const [loadingEvol12mConv, setLoadingEvol12mConv] = useState(false);
+  const [tempoGruposSelConv, setTempoGruposSelConv] = useState(new Set());
+  const [tempoProdutosSelConv, setTempoProdutosSelConv] = useState(new Set());
+
+  // Carrinho de compras (Conveniência) — janela própria (30/60/90/180 dias).
+  const [paresCarrinhoConv, setParesCarrinhoConv] = useState([]);
+  const [totalTransacoesCarrinhoConv, setTotalTransacoesCarrinhoConv] = useState(0);
+  const [loadingCarrinhoConv, setLoadingCarrinhoConv] = useState(false);
+  const [erroCarrinhoConv, setErroCarrinhoConv] = useState('');
+  const [carrinhoGruposSelConv, setCarrinhoGruposSelConv] = useState(new Set());
+  const [carrinhoMinTransacoesConv, setCarrinhoMinTransacoesConv] = useState(2);
+  const [carrinhoBuscaConv, setCarrinhoBuscaConv] = useState('');
+  const [carrinhoPeriodoDiasConv, setCarrinhoPeriodoDiasConv] = useState(90);
 
   // Mapas vindos de as_rede_grupo_produto: grid → categoria e grid → nome.
   const [mapaGrupos, setMapaGrupos] = useState(new Map());
@@ -308,6 +412,177 @@ export default function ClienteComercialVendas() {
       .finally(() => { if (!cancelado) setLoadingDiario(false); });
     return () => { cancelado = true; };
   }, [aba, subAbaCombustivel, redeId, empresasSel, dataDe, dataAteEfetivo, mapaGrupos]);
+
+  // Realizado dia a dia (Automotivos). Mesmo padrão do combustível, filtrando
+  // por grupos da categoria automotivos. Não estende o range (não há variação
+  // semanal neste relatório). Carrega também na sub-aba "grupo" — mesma base.
+  useEffect(() => {
+    if (aba !== 'automotivos') return;
+    if (!['dia', 'grupo', 'pareto'].includes(subAbaAutomotivos)) return;
+    if (!redeId || empresasSel.length === 0) { setRealizadoDiarioAuto([]); return; }
+    const gruposAuto = [];
+    mapaGrupos.forEach((cat, grid) => { if (cat === 'automotivos') gruposAuto.push(grid); });
+    const codigos = empresasSel.map(e => Number(e.empresa_codigo)).filter(Number.isFinite);
+    let cancelado = false;
+    setLoadingDiarioAuto(true);
+    setErroDiarioAuto('');
+    autosystemService.buscarVendasDiariasAutosystem(redeId, codigos, {
+      data_de: dataDe,
+      data_ate: dataAteEfetivo,
+      grupos_filtro: gruposAuto,
+    })
+      .then(rows => { if (!cancelado) setRealizadoDiarioAuto(rows || []); })
+      .catch(err => { if (!cancelado) { setErroDiarioAuto(err.message || 'Falha ao buscar realizado'); setRealizadoDiarioAuto([]); } })
+      .finally(() => { if (!cancelado) setLoadingDiarioAuto(false); });
+    return () => { cancelado = true; };
+  }, [aba, subAbaAutomotivos, redeId, empresasSel, dataDe, dataAteEfetivo, mapaGrupos]);
+
+  // Realizado dia a dia (Conveniência).
+  useEffect(() => {
+    if (aba !== 'conveniencia') return;
+    if (!['dia', 'grupo', 'pareto'].includes(subAbaConveniencia)) return;
+    if (!redeId || empresasSel.length === 0) { setRealizadoDiarioConv([]); return; }
+    const gruposCat = [];
+    mapaGrupos.forEach((cat, grid) => { if (cat === 'conveniencia') gruposCat.push(grid); });
+    const codigos = empresasSel.map(e => Number(e.empresa_codigo)).filter(Number.isFinite);
+    let cancelado = false;
+    setLoadingDiarioConv(true);
+    setErroDiarioConv('');
+    autosystemService.buscarVendasDiariasAutosystem(redeId, codigos, {
+      data_de: dataDe,
+      data_ate: dataAteEfetivo,
+      grupos_filtro: gruposCat,
+    })
+      .then(rows => { if (!cancelado) setRealizadoDiarioConv(rows || []); })
+      .catch(err => { if (!cancelado) { setErroDiarioConv(err.message || 'Falha ao buscar realizado'); setRealizadoDiarioConv([]); } })
+      .finally(() => { if (!cancelado) setLoadingDiarioConv(false); });
+    return () => { cancelado = true; };
+  }, [aba, subAbaConveniencia, redeId, empresasSel, dataDe, dataAteEfetivo, mapaGrupos]);
+
+  // Carrinho de compras (Conveniência): mesma lógica do automotivos.
+  useEffect(() => {
+    if (aba !== 'conveniencia' || subAbaConveniencia !== 'carrinho') return;
+    if (!redeId || empresasSel.length === 0) {
+      setParesCarrinhoConv([]); setTotalTransacoesCarrinhoConv(0); return;
+    }
+    const gruposCat = [];
+    mapaGrupos.forEach((cat, grid) => { if (cat === 'conveniencia') gruposCat.push(grid); });
+    const gruposEscolhidos = carrinhoGruposSelConv.size > 0
+      ? Array.from(carrinhoGruposSelConv).map(Number).filter(g => gruposCat.includes(g))
+      : gruposCat;
+    const codigos = empresasSel.map(e => Number(e.empresa_codigo)).filter(Number.isFinite);
+    const dataAteStr = ontemIso();
+    const dataDeStr  = subtrairDias(dataAteStr, carrinhoPeriodoDiasConv - 1);
+    let cancelado = false;
+    setLoadingCarrinhoConv(true);
+    setErroCarrinhoConv('');
+    autosystemService.buscarParesCarrinhoAutosystem(redeId, codigos, {
+      data_de: dataDeStr,
+      data_ate: dataAteStr,
+      grupos_filtro: gruposEscolhidos,
+    })
+      .then(({ pares, total_transacoes }) => {
+        if (cancelado) return;
+        setParesCarrinhoConv(pares || []);
+        setTotalTransacoesCarrinhoConv(total_transacoes || 0);
+      })
+      .catch(err => {
+        if (cancelado) return;
+        setErroCarrinhoConv(err.message || 'Falha ao buscar pares');
+        setParesCarrinhoConv([]); setTotalTransacoesCarrinhoConv(0);
+      })
+      .finally(() => { if (!cancelado) setLoadingCarrinhoConv(false); });
+    return () => { cancelado = true; };
+  }, [aba, subAbaConveniencia, redeId, empresasSel, mapaGrupos, carrinhoGruposSelConv, carrinhoPeriodoDiasConv]);
+
+  // Evolução 12m POR produto (Conveniência · Linha do tempo).
+  useEffect(() => {
+    if (aba !== 'conveniencia' || subAbaConveniencia !== 'tempo') return;
+    if (!redeId || empresasSel.length === 0) { setEvolucao12mConv([]); return; }
+    const gruposCat = [];
+    mapaGrupos.forEach((cat, grid) => { if (cat === 'conveniencia') gruposCat.push(grid); });
+    const codigos = empresasSel.map(e => Number(e.empresa_codigo)).filter(Number.isFinite);
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = hoje.getMonth();
+    const de  = new Date(ano, mes - 11, 1);
+    const ate = new Date(ano, mes + 1, 0);
+    const dataDeStr  = `${de.getFullYear()}-${pad(de.getMonth() + 1)}-01`;
+    const dataAteStr = `${ate.getFullYear()}-${pad(ate.getMonth() + 1)}-${pad(ate.getDate())}`;
+    let cancelado = false;
+    setLoadingEvol12mConv(true);
+    autosystemService.buscarVendasMensalPorProdutoAutosystem(redeId, codigos, {
+      data_de: dataDeStr, data_ate: dataAteStr, grupos_filtro: gruposCat,
+    })
+      .then(rows => { if (!cancelado) setEvolucao12mConv(rows || []); })
+      .catch(() => { if (!cancelado) setEvolucao12mConv([]); })
+      .finally(() => { if (!cancelado) setLoadingEvol12mConv(false); });
+    return () => { cancelado = true; };
+  }, [aba, subAbaConveniencia, redeId, empresasSel, mapaGrupos]);
+
+  // Carrinho de compras (Automotivos): janela própria de N dias.
+  // dataAte = ontem (sempre exclui o dia corrente em aberto). dataDe = ontem − (N−1).
+  useEffect(() => {
+    if (aba !== 'automotivos' || subAbaAutomotivos !== 'carrinho') return;
+    if (!redeId || empresasSel.length === 0) {
+      setParesCarrinho([]); setTotalTransacoesCarrinho(0); return;
+    }
+    const gruposAuto = [];
+    mapaGrupos.forEach((cat, grid) => { if (cat === 'automotivos') gruposAuto.push(grid); });
+    const gruposEscolhidos = carrinhoGruposSel.size > 0
+      ? Array.from(carrinhoGruposSel).map(Number).filter(g => gruposAuto.includes(g))
+      : gruposAuto;
+    const codigos = empresasSel.map(e => Number(e.empresa_codigo)).filter(Number.isFinite);
+    const dataAteStr = ontemIso();
+    const dataDeStr  = subtrairDias(dataAteStr, carrinhoPeriodoDias - 1);
+    let cancelado = false;
+    setLoadingCarrinho(true);
+    setErroCarrinho('');
+    autosystemService.buscarParesCarrinhoAutosystem(redeId, codigos, {
+      data_de: dataDeStr,
+      data_ate: dataAteStr,
+      grupos_filtro: gruposEscolhidos,
+    })
+      .then(({ pares, total_transacoes }) => {
+        if (cancelado) return;
+        setParesCarrinho(pares || []);
+        setTotalTransacoesCarrinho(total_transacoes || 0);
+      })
+      .catch(err => {
+        if (cancelado) return;
+        setErroCarrinho(err.message || 'Falha ao buscar pares');
+        setParesCarrinho([]); setTotalTransacoesCarrinho(0);
+      })
+      .finally(() => { if (!cancelado) setLoadingCarrinho(false); });
+    return () => { cancelado = true; };
+  }, [aba, subAbaAutomotivos, redeId, empresasSel, mapaGrupos, carrinhoGruposSel, carrinhoPeriodoDias]);
+
+  // Evolução 12m POR produto (Automotivos · Linha do tempo).
+  // Filtra grupos de automotivos via `grupos_filtro`. Independente do
+  // filtro de período (sempre últimos 12 meses).
+  useEffect(() => {
+    if (aba !== 'automotivos' || subAbaAutomotivos !== 'tempo') return;
+    if (!redeId || empresasSel.length === 0) { setEvolucao12mAuto([]); return; }
+    const gruposAuto = [];
+    mapaGrupos.forEach((cat, grid) => { if (cat === 'automotivos') gruposAuto.push(grid); });
+    const codigos = empresasSel.map(e => Number(e.empresa_codigo)).filter(Number.isFinite);
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = hoje.getMonth();
+    const de  = new Date(ano, mes - 11, 1);
+    const ate = new Date(ano, mes + 1, 0);
+    const dataDeStr  = `${de.getFullYear()}-${pad(de.getMonth() + 1)}-01`;
+    const dataAteStr = `${ate.getFullYear()}-${pad(ate.getMonth() + 1)}-${pad(ate.getDate())}`;
+    let cancelado = false;
+    setLoadingEvol12mAuto(true);
+    autosystemService.buscarVendasMensalPorProdutoAutosystem(redeId, codigos, {
+      data_de: dataDeStr, data_ate: dataAteStr, grupos_filtro: gruposAuto,
+    })
+      .then(rows => { if (!cancelado) setEvolucao12mAuto(rows || []); })
+      .catch(() => { if (!cancelado) setEvolucao12mAuto([]); })
+      .finally(() => { if (!cancelado) setLoadingEvol12mAuto(false); });
+    return () => { cancelado = true; };
+  }, [aba, subAbaAutomotivos, redeId, empresasSel, mapaGrupos]);
 
   // Evolução 12m POR combustível (sub-aba "Últimos 12 meses" em Combustíveis).
   // Independente do filtro de período — sempre busca os últimos 12 meses.
@@ -560,6 +835,20 @@ export default function ClienteComercialVendas() {
       return next;
     });
   }
+  function toggleAuto(key) {
+    setExpandidosAuto(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+  function toggleConv(key) {
+    setExpandidosConv(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   // Constrói árvore Data → Produto (somente combustíveis) com totais por dia
   // e variação semanal (qtd_atual vs qtd_7_dias_atrás) por produto e por dia.
@@ -727,6 +1016,506 @@ export default function ClienteComercialVendas() {
     }
     return { porDia: counts, total };
   }, [dataDe, dataAteEfetivo]);
+
+  // Árvore Automotivos · Realizado dia a dia: Data → Grupo → Produto.
+  // Linhas vindas de `realizadoDiarioAuto` (já filtradas para grupos automotivos).
+  const arvoreAutoDia = useMemo(() => {
+    const dias = new Map();
+    (realizadoDiarioAuto || []).forEach(r => {
+      const dia = String(r.data || '').slice(0, 10);
+      const grupoCod = r.grupo_produto_codigo;
+      const grupoN = grupoCod != null ? Number(grupoCod) : null;
+      const gKey = grupoN != null ? String(grupoN) : 'sem_grupo';
+      const pKey = String(r.produto_codigo);
+
+      if (!dias.has(dia)) {
+        dias.set(dia, {
+          dia,
+          stats: { qtd: 0, valor: 0, custo: 0 },
+          grupos: new Map(),
+        });
+      }
+      const dNode = dias.get(dia);
+
+      if (!dNode.grupos.has(gKey)) {
+        dNode.grupos.set(gKey, {
+          codigo: grupoN,
+          nome: grupoN != null ? (mapaNomeGrupos.get(grupoN) || `Grupo ${grupoN}`) : 'Sem grupo',
+          stats: { qtd: 0, valor: 0, custo: 0 },
+          produtos: new Map(),
+        });
+      }
+      const gNode = dNode.grupos.get(gKey);
+
+      if (!gNode.produtos.has(pKey)) {
+        gNode.produtos.set(pKey, {
+          codigo: r.produto_codigo,
+          nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          qtd: 0, valor: 0, custo: 0,
+        });
+      }
+      const pNode = gNode.produtos.get(pKey);
+
+      const qtd = Number(r.quantidade) || 0;
+      const valor = Number(r.valor) || 0;
+      const custo = Number(r.valor_custo) || 0;
+      pNode.qtd += qtd; pNode.valor += valor; pNode.custo += custo;
+      gNode.stats.qtd += qtd; gNode.stats.valor += valor; gNode.stats.custo += custo;
+      dNode.stats.qtd += qtd; dNode.stats.valor += valor; dNode.stats.custo += custo;
+      if (r.produto_nome && /^Produto #/.test(pNode.nome)) pNode.nome = r.produto_nome;
+    });
+
+    const result = Array.from(dias.values()).sort((a, b) => b.dia.localeCompare(a.dia));
+    result.forEach(d => {
+      d.grupos = Array.from(d.grupos.values()).sort((a, b) => b.stats.valor - a.stats.valor);
+      d.grupos.forEach(g => {
+        g.produtos = Array.from(g.produtos.values()).sort((a, b) => b.valor - a.valor);
+      });
+    });
+    return result;
+  }, [realizadoDiarioAuto, mapaNomeGrupos]);
+
+  // Árvore Automotivos · Realizado por grupo: Grupo → Data → Produto.
+  // Mesma base de `realizadoDiarioAuto`, hierarquia invertida em relação à
+  // árvore "dia a dia".
+  const arvoreAutoGrupo = useMemo(() => {
+    const grupos = new Map();
+    (realizadoDiarioAuto || []).forEach(r => {
+      const dia = String(r.data || '').slice(0, 10);
+      const grupoCod = r.grupo_produto_codigo;
+      const grupoN = grupoCod != null ? Number(grupoCod) : null;
+      const gKey = grupoN != null ? String(grupoN) : 'sem_grupo';
+      const pKey = String(r.produto_codigo);
+
+      if (!grupos.has(gKey)) {
+        grupos.set(gKey, {
+          codigo: grupoN,
+          nome: grupoN != null ? (mapaNomeGrupos.get(grupoN) || `Grupo ${grupoN}`) : 'Sem grupo',
+          stats: { qtd: 0, valor: 0, custo: 0 },
+          dias: new Map(),
+        });
+      }
+      const gNode = grupos.get(gKey);
+
+      if (!gNode.dias.has(dia)) {
+        gNode.dias.set(dia, {
+          dia,
+          stats: { qtd: 0, valor: 0, custo: 0 },
+          produtos: new Map(),
+        });
+      }
+      const dNode = gNode.dias.get(dia);
+
+      if (!dNode.produtos.has(pKey)) {
+        dNode.produtos.set(pKey, {
+          codigo: r.produto_codigo,
+          nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          qtd: 0, valor: 0, custo: 0,
+        });
+      }
+      const pNode = dNode.produtos.get(pKey);
+
+      const qtd = Number(r.quantidade) || 0;
+      const valor = Number(r.valor) || 0;
+      const custo = Number(r.valor_custo) || 0;
+      pNode.qtd += qtd; pNode.valor += valor; pNode.custo += custo;
+      dNode.stats.qtd += qtd; dNode.stats.valor += valor; dNode.stats.custo += custo;
+      gNode.stats.qtd += qtd; gNode.stats.valor += valor; gNode.stats.custo += custo;
+      if (r.produto_nome && /^Produto #/.test(pNode.nome)) pNode.nome = r.produto_nome;
+    });
+
+    const result = Array.from(grupos.values()).sort((a, b) => b.stats.valor - a.stats.valor);
+    result.forEach(g => {
+      g.dias = Array.from(g.dias.values()).sort((a, b) => b.dia.localeCompare(a.dia));
+      g.dias.forEach(d => {
+        d.produtos = Array.from(d.produtos.values()).sort((a, b) => b.valor - a.valor);
+      });
+    });
+    return result;
+  }, [realizadoDiarioAuto, mapaNomeGrupos]);
+
+  // Pares de carrinho filtrados (busca por nome + min de transações).
+  const paresCarrinhoFiltrados = useMemo(() => {
+    const q = carrinhoBusca.trim().toLowerCase();
+    return (paresCarrinho || []).filter(p => {
+      if (Number(p.transacoes_juntas) < carrinhoMinTransacoes) return false;
+      if (!q) return true;
+      return (p.produto_a_nome || '').toLowerCase().includes(q)
+          || (p.produto_b_nome || '').toLowerCase().includes(q);
+    });
+  }, [paresCarrinho, carrinhoBusca, carrinhoMinTransacoes]);
+
+  // Lista de grupos de automotivos disponíveis para o filtro do carrinho.
+  // Vem direto do `mapaGrupos` (classificação salva), independente do período.
+  const gruposCarrinhoDisponiveis = useMemo(() => {
+    const result = [];
+    mapaGrupos.forEach((cat, grid) => {
+      if (cat === 'automotivos') {
+        result.push({
+          codigo: String(grid),
+          nome: mapaNomeGrupos.get(grid) || `Grupo ${grid}`,
+        });
+      }
+    });
+    return result.sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [mapaGrupos, mapaNomeGrupos]);
+
+  // Carrinho Conveniência: pares filtrados e grupos disponíveis.
+  const paresCarrinhoConvFiltrados = useMemo(() => {
+    const q = carrinhoBuscaConv.trim().toLowerCase();
+    return (paresCarrinhoConv || []).filter(p => {
+      if (Number(p.transacoes_juntas) < carrinhoMinTransacoesConv) return false;
+      if (!q) return true;
+      return (p.produto_a_nome || '').toLowerCase().includes(q)
+          || (p.produto_b_nome || '').toLowerCase().includes(q);
+    });
+  }, [paresCarrinhoConv, carrinhoBuscaConv, carrinhoMinTransacoesConv]);
+
+  const gruposCarrinhoConvDisponiveis = useMemo(() => {
+    const result = [];
+    mapaGrupos.forEach((cat, grid) => {
+      if (cat === 'conveniencia') {
+        result.push({
+          codigo: String(grid),
+          nome: mapaNomeGrupos.get(grid) || `Grupo ${grid}`,
+        });
+      }
+    });
+    return result.sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [mapaGrupos, mapaNomeGrupos]);
+
+// Conveniência · Realizado dia a dia: Data → Grupo → Produto.
+  const arvoreConvDia = useMemo(() => {
+    const dias = new Map();
+    (realizadoDiarioConv || []).forEach(r => {
+      const dia = String(r.data || '').slice(0, 10);
+      const grupoCod = r.grupo_produto_codigo;
+      const grupoN = grupoCod != null ? Number(grupoCod) : null;
+      const gKey = grupoN != null ? String(grupoN) : 'sem_grupo';
+      const pKey = String(r.produto_codigo);
+      if (!dias.has(dia)) dias.set(dia, { dia, stats: { qtd: 0, valor: 0, custo: 0 }, grupos: new Map() });
+      const dNode = dias.get(dia);
+      if (!dNode.grupos.has(gKey)) {
+        dNode.grupos.set(gKey, {
+          codigo: grupoN,
+          nome: grupoN != null ? (mapaNomeGrupos.get(grupoN) || `Grupo ${grupoN}`) : 'Sem grupo',
+          stats: { qtd: 0, valor: 0, custo: 0 }, produtos: new Map(),
+        });
+      }
+      const gNode = dNode.grupos.get(gKey);
+      if (!gNode.produtos.has(pKey)) {
+        gNode.produtos.set(pKey, {
+          codigo: r.produto_codigo, nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          qtd: 0, valor: 0, custo: 0,
+        });
+      }
+      const pNode = gNode.produtos.get(pKey);
+      const qtd = Number(r.quantidade) || 0;
+      const valor = Number(r.valor) || 0;
+      const custo = Number(r.valor_custo) || 0;
+      pNode.qtd += qtd; pNode.valor += valor; pNode.custo += custo;
+      gNode.stats.qtd += qtd; gNode.stats.valor += valor; gNode.stats.custo += custo;
+      dNode.stats.qtd += qtd; dNode.stats.valor += valor; dNode.stats.custo += custo;
+      if (r.produto_nome && /^Produto #/.test(pNode.nome)) pNode.nome = r.produto_nome;
+    });
+    const result = Array.from(dias.values()).sort((a, b) => b.dia.localeCompare(a.dia));
+    result.forEach(d => {
+      d.grupos = Array.from(d.grupos.values()).sort((a, b) => b.stats.valor - a.stats.valor);
+      d.grupos.forEach(g => { g.produtos = Array.from(g.produtos.values()).sort((a, b) => b.valor - a.valor); });
+    });
+    return result;
+  }, [realizadoDiarioConv, mapaNomeGrupos]);
+
+  // Conveniência · Realizado por grupo: Grupo → Data → Produto.
+  const arvoreConvGrupo = useMemo(() => {
+    const grupos = new Map();
+    (realizadoDiarioConv || []).forEach(r => {
+      const dia = String(r.data || '').slice(0, 10);
+      const grupoCod = r.grupo_produto_codigo;
+      const grupoN = grupoCod != null ? Number(grupoCod) : null;
+      const gKey = grupoN != null ? String(grupoN) : 'sem_grupo';
+      const pKey = String(r.produto_codigo);
+      if (!grupos.has(gKey)) {
+        grupos.set(gKey, {
+          codigo: grupoN,
+          nome: grupoN != null ? (mapaNomeGrupos.get(grupoN) || `Grupo ${grupoN}`) : 'Sem grupo',
+          stats: { qtd: 0, valor: 0, custo: 0 }, dias: new Map(),
+        });
+      }
+      const gNode = grupos.get(gKey);
+      if (!gNode.dias.has(dia)) gNode.dias.set(dia, { dia, stats: { qtd: 0, valor: 0, custo: 0 }, produtos: new Map() });
+      const dNode = gNode.dias.get(dia);
+      if (!dNode.produtos.has(pKey)) {
+        dNode.produtos.set(pKey, {
+          codigo: r.produto_codigo, nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          qtd: 0, valor: 0, custo: 0,
+        });
+      }
+      const pNode = dNode.produtos.get(pKey);
+      const qtd = Number(r.quantidade) || 0;
+      const valor = Number(r.valor) || 0;
+      const custo = Number(r.valor_custo) || 0;
+      pNode.qtd += qtd; pNode.valor += valor; pNode.custo += custo;
+      dNode.stats.qtd += qtd; dNode.stats.valor += valor; dNode.stats.custo += custo;
+      gNode.stats.qtd += qtd; gNode.stats.valor += valor; gNode.stats.custo += custo;
+      if (r.produto_nome && /^Produto #/.test(pNode.nome)) pNode.nome = r.produto_nome;
+    });
+    const result = Array.from(grupos.values()).sort((a, b) => b.stats.valor - a.stats.valor);
+    result.forEach(g => {
+      g.dias = Array.from(g.dias.values()).sort((a, b) => b.dia.localeCompare(a.dia));
+      g.dias.forEach(d => { d.produtos = Array.from(d.produtos.values()).sort((a, b) => b.valor - a.valor); });
+    });
+    return result;
+  }, [realizadoDiarioConv, mapaNomeGrupos]);
+
+  // Pareto Conveniência: grupos disponíveis + dados ordenados.
+  const gruposConvDisponiveis = useMemo(() => {
+    const m = new Map();
+    (realizadoDiarioConv || []).forEach(r => {
+      const cod = r.grupo_produto_codigo;
+      if (cod == null) return;
+      const k = String(cod);
+      if (!m.has(k)) {
+        const grupoN = Number(cod);
+        m.set(k, { codigo: k, nome: mapaNomeGrupos.get(grupoN) || `Grupo ${cod}`, total: 0 });
+      }
+      m.get(k).total += Number(r.valor) || 0;
+    });
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  }, [realizadoDiarioConv, mapaNomeGrupos]);
+
+  const dadosParetoConv = useMemo(() => {
+    const m = new Map();
+    (realizadoDiarioConv || []).forEach(r => {
+      if (paretoGruposConv.size > 0 && !paretoGruposConv.has(String(r.grupo_produto_codigo))) return;
+      const k = String(r.produto_codigo);
+      if (!m.has(k)) {
+        m.set(k, {
+          codigo: r.produto_codigo, nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          grupoCod: r.grupo_produto_codigo,
+          grupoNome: r.grupo_produto_codigo != null
+            ? (mapaNomeGrupos.get(Number(r.grupo_produto_codigo)) || '')
+            : '',
+          qtd: 0, valor: 0, custo: 0,
+        });
+      }
+      const p = m.get(k);
+      p.qtd += Number(r.quantidade) || 0;
+      p.valor += Number(r.valor) || 0;
+      p.custo += Number(r.valor_custo) || 0;
+      if (r.produto_nome && /^Produto #/.test(p.nome)) p.nome = r.produto_nome;
+    });
+    const list = Array.from(m.values()).sort((a, b) => b.valor - a.valor);
+    const total = list.reduce((s, p) => s + p.valor, 0);
+    let acc = 0;
+    list.forEach(p => {
+      p.pct = total > 0 ? (p.valor / total) * 100 : 0;
+      acc += p.pct; p.pctAcum = acc;
+    });
+    return { list, total };
+  }, [realizadoDiarioConv, paretoGruposConv, mapaNomeGrupos]);
+
+  // Linha do tempo Conveniência: grupos / produtos disponíveis + série 12m.
+  const gruposEvol12mConv = useMemo(() => {
+    const m = new Map();
+    (evolucao12mConv || []).forEach(r => {
+      const cod = r.grupo_produto_codigo;
+      if (cod == null) return;
+      const k = String(cod);
+      if (!m.has(k)) {
+        const grupoN = Number(cod);
+        m.set(k, { codigo: k, nome: mapaNomeGrupos.get(grupoN) || `Grupo ${cod}`, total: 0 });
+      }
+      m.get(k).total += Number(r.valor) || 0;
+    });
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  }, [evolucao12mConv, mapaNomeGrupos]);
+
+  const produtosEvol12mConv = useMemo(() => {
+    const m = new Map();
+    (evolucao12mConv || []).forEach(r => {
+      if (tempoGruposSelConv.size > 0 && !tempoGruposSelConv.has(String(r.grupo_produto_codigo))) return;
+      const k = String(r.produto_codigo);
+      if (!m.has(k)) {
+        m.set(k, { codigo: k, nome: r.produto_nome || `Produto #${r.produto_codigo}`, total: 0 });
+      }
+      const p = m.get(k);
+      p.total += Number(r.valor) || 0;
+      if (r.produto_nome && /^Produto #/.test(p.nome)) p.nome = r.produto_nome;
+    });
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  }, [evolucao12mConv, tempoGruposSelConv]);
+
+  const serieTempoConv = useMemo(() => {
+    const idx = new Map();
+    (evolucao12mConv || []).forEach(r => {
+      if (tempoGruposSelConv.size > 0 && !tempoGruposSelConv.has(String(r.grupo_produto_codigo))) return;
+      if (tempoProdutosSelConv.size > 0 && !tempoProdutosSelConv.has(String(r.produto_codigo))) return;
+      const ym = String(r.ano_mes);
+      if (!idx.has(ym)) idx.set(ym, { valor: 0, custo: 0, qtd: 0 });
+      const cur = idx.get(ym);
+      cur.valor += Number(r.valor) || 0;
+      cur.custo += Number(r.valor_custo) || 0;
+      cur.qtd   += Number(r.quantidade) || 0;
+    });
+    const hoje = new Date();
+    const out = [];
+    for (let i = 11; i >= 0; i--) {
+      const m = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const ym = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
+      const row = idx.get(ym) || { valor: 0, custo: 0, qtd: 0 };
+      const lucro = row.valor - row.custo;
+      const margemPct = row.valor > 0 ? (lucro / row.valor) * 100 : 0;
+      out.push({
+        ano_mes: ym,
+        rotulo: `${MESES_PT_CURTO[m.getMonth()]}/${String(m.getFullYear()).slice(2)}`,
+        faturamento: row.valor, lucro, margemPct,
+      });
+    }
+    for (let i = 1; i < out.length; i++) {
+      const prev = out[i - 1];
+      const cur  = out[i];
+      cur.fatVarMA = (prev.faturamento !== 0)
+        ? ((cur.faturamento - prev.faturamento) / Math.abs(prev.faturamento)) * 100
+        : null;
+    }
+    return out;
+  }, [evolucao12mConv, tempoGruposSelConv, tempoProdutosSelConv]);
+
+  // Linha do tempo (Automotivos): grupos disponíveis nos dados, produtos
+  // disponíveis (filtrados pelos grupos selecionados) e a série de 12 buckets
+  // já agregada conforme grupos+produtos selecionados.
+  const gruposEvol12mAuto = useMemo(() => {
+    const m = new Map();
+    (evolucao12mAuto || []).forEach(r => {
+      const cod = r.grupo_produto_codigo;
+      if (cod == null) return;
+      const k = String(cod);
+      if (!m.has(k)) {
+        const grupoN = Number(cod);
+        m.set(k, {
+          codigo: k,
+          nome: mapaNomeGrupos.get(grupoN) || `Grupo ${cod}`,
+          total: 0,
+        });
+      }
+      m.get(k).total += Number(r.valor) || 0;
+    });
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  }, [evolucao12mAuto, mapaNomeGrupos]);
+
+  const produtosEvol12mAuto = useMemo(() => {
+    const m = new Map();
+    (evolucao12mAuto || []).forEach(r => {
+      if (tempoGruposSel.size > 0 && !tempoGruposSel.has(String(r.grupo_produto_codigo))) return;
+      const k = String(r.produto_codigo);
+      if (!m.has(k)) {
+        m.set(k, {
+          codigo: k,
+          nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          total: 0,
+        });
+      }
+      const p = m.get(k);
+      p.total += Number(r.valor) || 0;
+      if (r.produto_nome && /^Produto #/.test(p.nome)) p.nome = r.produto_nome;
+    });
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  }, [evolucao12mAuto, tempoGruposSel]);
+
+  const serieTempoAuto = useMemo(() => {
+    const idx = new Map();
+    (evolucao12mAuto || []).forEach(r => {
+      if (tempoGruposSel.size > 0 && !tempoGruposSel.has(String(r.grupo_produto_codigo))) return;
+      if (tempoProdutosSel.size > 0 && !tempoProdutosSel.has(String(r.produto_codigo))) return;
+      const ym = String(r.ano_mes);
+      if (!idx.has(ym)) idx.set(ym, { valor: 0, custo: 0, qtd: 0 });
+      const cur = idx.get(ym);
+      cur.valor += Number(r.valor) || 0;
+      cur.custo += Number(r.valor_custo) || 0;
+      cur.qtd   += Number(r.quantidade) || 0;
+    });
+    const hoje = new Date();
+    const out = [];
+    for (let i = 11; i >= 0; i--) {
+      const m = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const ym = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
+      const row = idx.get(ym) || { valor: 0, custo: 0, qtd: 0 };
+      const lucro = row.valor - row.custo;
+      const margemPct = row.valor > 0 ? (lucro / row.valor) * 100 : 0;
+      out.push({
+        ano_mes: ym,
+        rotulo: `${MESES_PT_CURTO[m.getMonth()]}/${String(m.getFullYear()).slice(2)}`,
+        faturamento: row.valor,
+        lucro,
+        margemPct,
+      });
+    }
+    // Variação % vs mês anterior (apenas para o faturamento, mostrado na barra)
+    for (let i = 1; i < out.length; i++) {
+      const prev = out[i - 1];
+      const cur  = out[i];
+      cur.fatVarMA = (prev.faturamento !== 0)
+        ? ((cur.faturamento - prev.faturamento) / Math.abs(prev.faturamento)) * 100
+        : null;
+    }
+    return out;
+  }, [evolucao12mAuto, tempoGruposSel, tempoProdutosSel]);
+
+  // Lista de grupos de automotivos disponíveis nos dados (para o seletor do pareto).
+  const gruposAutoDisponiveis = useMemo(() => {
+    const m = new Map();
+    (realizadoDiarioAuto || []).forEach(r => {
+      const cod = r.grupo_produto_codigo;
+      if (cod == null) return;
+      const k = String(cod);
+      if (!m.has(k)) {
+        const grupoN = Number(cod);
+        m.set(k, {
+          codigo: k,
+          nome: mapaNomeGrupos.get(grupoN) || `Grupo ${cod}`,
+          total: 0,
+        });
+      }
+      m.get(k).total += Number(r.valor) || 0;
+    });
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  }, [realizadoDiarioAuto, mapaNomeGrupos]);
+
+  // Dados do pareto: agrega por produto (com filtro multi-grupo opcional),
+  // ordena por faturamento desc e calcula % e % acumulado. Set vazio = sem filtro.
+  const dadosPareto = useMemo(() => {
+    const m = new Map();
+    (realizadoDiarioAuto || []).forEach(r => {
+      if (paretoGrupos.size > 0 && !paretoGrupos.has(String(r.grupo_produto_codigo))) return;
+      const k = String(r.produto_codigo);
+      if (!m.has(k)) {
+        m.set(k, {
+          codigo: r.produto_codigo,
+          nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          grupoCod: r.grupo_produto_codigo,
+          grupoNome: r.grupo_produto_codigo != null
+            ? (mapaNomeGrupos.get(Number(r.grupo_produto_codigo)) || '')
+            : '',
+          qtd: 0, valor: 0, custo: 0,
+        });
+      }
+      const p = m.get(k);
+      p.qtd += Number(r.quantidade) || 0;
+      p.valor += Number(r.valor) || 0;
+      p.custo += Number(r.valor_custo) || 0;
+      if (r.produto_nome && /^Produto #/.test(p.nome)) p.nome = r.produto_nome;
+    });
+    const list = Array.from(m.values()).sort((a, b) => b.valor - a.valor);
+    const total = list.reduce((s, p) => s + p.valor, 0);
+    let acc = 0;
+    list.forEach(p => {
+      p.pct = total > 0 ? (p.valor / total) * 100 : 0;
+      acc += p.pct;
+      p.pctAcum = acc;
+    });
+    return { list, total };
+  }, [realizadoDiarioAuto, paretoGrupos, mapaNomeGrupos]);
 
   // Heatmap semanal: produto × dia da semana → soma de litros (apenas linhas
   // dentro do período exibido). Linhas ordenadas por total descendente.
@@ -1011,6 +1800,363 @@ export default function ClienteComercialVendas() {
           </div>
         );
       })()}
+
+      {/* Cards específicos da aba Conveniência */}
+      {aba === 'conveniencia' && (() => {
+        const d   = totaisGerais.porCat.conveniencia       || { valor: 0, lucro: 0, itens: 0 };
+        const aa  = totaisAnoAnterior.porCat.conveniencia  || { valor: 0, lucro: 0, itens: 0 };
+        const ma  = totaisMesAnterior.porCat.conveniencia  || { valor: 0, lucro: 0, itens: 0 };
+        const margem    = d.valor   > 0 ? d.lucro  / d.valor   : 0;
+        const margemAA  = aa.valor  > 0 ? aa.lucro / aa.valor  : 0;
+        const ticket    = d.itens   > 0 ? d.valor  / d.itens   : 0;
+        const ticketAA  = aa.itens  > 0 ? aa.valor / aa.itens  : 0;
+        const projetar  = (v, dias) => projParams.dec > 0 ? v * (dias / projParams.dec) : v;
+        const projAtual = projetar(d.valor,  projParams.diasAtual);
+        const projMA    = projetar(ma.valor, projParams.diasMA);
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+            <KpiComAA cor="emerald" icone={ShoppingCart} label="Faturamento"
+              valor={formatCurrency(d.valor)} valorBase={formatCurrency(aa.valor)}
+              prefixoBase="Ano anterior" rotuloBase="AA"
+              atual={d.valor} base={aa.valor} />
+            <KpiComAA cor="emerald" icone={TrendingUp} label="Lucro bruto"
+              valor={formatCurrency(d.lucro)} valorBase={formatCurrency(aa.lucro)}
+              prefixoBase="Ano anterior" rotuloBase="AA"
+              negativo={d.lucro < 0}
+              atual={d.lucro} base={aa.lucro} />
+            <KpiComAA cor="emerald" icone={Percent} label="Margem"
+              valor={`${(margem * 100).toFixed(1)}%`}
+              valorBase={`${(margemAA * 100).toFixed(1)}%`}
+              prefixoBase="Ano anterior" rotuloBase="AA"
+              atual={margem} base={margemAA} />
+            <KpiComAA cor="emerald" icone={Coins} label="Ticket médio"
+              valor={formatCurrency(ticket)} valorBase={formatCurrency(ticketAA)}
+              prefixoBase="Ano anterior" rotuloBase="AA"
+              atual={ticket} base={ticketAA} />
+            <KpiComAA cor="emerald" icone={LineChartIcon} label="Projeção faturamento"
+              valor={formatCurrency(projAtual)} valorBase={formatCurrency(projMA)}
+              prefixoBase="Mês anterior" rotuloBase="MA"
+              atual={projAtual} base={projMA} />
+          </div>
+        );
+      })()}
+
+      {/* Sub-abas da aba Conveniência (mesma estrutura de Automotivos, paleta emerald) */}
+      {aba === 'conveniencia' && (
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm mb-4 overflow-visible">
+          <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto rounded-t-2xl">
+            {SUB_ABAS_CONVENIENCIA.map(sa => {
+              const Icon = sa.icone;
+              const ativo = subAbaConveniencia === sa.key;
+              return (
+                <button key={sa.key} onClick={() => setSubAbaConveniencia(sa.key)}
+                  className={`flex items-center gap-2 px-4 py-2.5 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    ativo
+                      ? 'border-emerald-600 text-emerald-700'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
+                  }`}>
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <span>{sa.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div>
+            {(subAbaConveniencia === 'dia' || subAbaConveniencia === 'grupo') ? (
+              loadingDiarioConv ? (
+                <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
+                  <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+                  <span className="text-sm">Carregando realizado...</span>
+                </div>
+              ) : erroDiarioConv ? (
+                <div className="m-4 bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Não foi possível carregar o realizado</p>
+                    <p className="text-red-700 mt-1">{erroDiarioConv}</p>
+                  </div>
+                </div>
+              ) : (subAbaConveniencia === 'dia' ? arvoreConvDia : arvoreConvGrupo).length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 mb-3">
+                    <Store className="h-6 w-6 text-emerald-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">Nenhuma venda de conveniência no período</p>
+                  <p className="text-xs text-gray-500 mt-1">Verifique se os grupos de conveniência estão classificados.</p>
+                </div>
+              ) : subAbaConveniencia === 'dia' ? (
+                <TreeRealizadoAutoDia
+                  arvore={arvoreConvDia}
+                  expandidos={expandidosConv}
+                  onToggle={toggleConv}
+                  cor="emerald"
+                />
+              ) : (
+                <TreeRealizadoAutoGrupo
+                  arvore={arvoreConvGrupo}
+                  expandidos={expandidosConv}
+                  onToggle={toggleConv}
+                  cor="emerald"
+                />
+              )
+            ) : subAbaConveniencia === 'pareto' ? (
+              loadingDiarioConv ? (
+                <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
+                  <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+                  <span className="text-sm">Carregando análise de pareto...</span>
+                </div>
+              ) : erroDiarioConv ? (
+                <div className="m-4 bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Não foi possível carregar os dados</p>
+                    <p className="text-red-700 mt-1">{erroDiarioConv}</p>
+                  </div>
+                </div>
+              ) : (
+                <AnalisePareto
+                  dados={dadosParetoConv}
+                  grupos={gruposConvDisponiveis}
+                  meta={paretoMetaConv}
+                  onChangeMeta={setParetoMetaConv}
+                  gruposSel={paretoGruposConv}
+                  onToggleGrupo={(codigo) => setParetoGruposConv(prev => {
+                    const next = new Set(prev);
+                    if (next.has(codigo)) next.delete(codigo); else next.add(codigo);
+                    return next;
+                  })}
+                  onToggleTodos={() => setParetoGruposConv(prev =>
+                    prev.size === gruposConvDisponiveis.length
+                      ? new Set()
+                      : new Set(gruposConvDisponiveis.map(g => g.codigo))
+                  )}
+                  onLimpar={() => setParetoGruposConv(new Set())}
+                  cor="emerald"
+                />
+              )
+            ) : subAbaConveniencia === 'carrinho' ? (
+              <CarrinhoCompras
+                cor="emerald"
+                loading={loadingCarrinhoConv}
+                erro={erroCarrinhoConv}
+                pares={paresCarrinhoConvFiltrados}
+                totalPares={paresCarrinhoConv.length}
+                totalTransacoes={totalTransacoesCarrinhoConv}
+                grupos={gruposCarrinhoConvDisponiveis}
+                gruposSel={carrinhoGruposSelConv}
+                onToggleGrupo={(c) => setCarrinhoGruposSelConv(prev => {
+                  const next = new Set(prev);
+                  if (next.has(c)) next.delete(c); else next.add(c);
+                  return next;
+                })}
+                onToggleTodos={() => setCarrinhoGruposSelConv(prev =>
+                  prev.size === gruposCarrinhoConvDisponiveis.length
+                    ? new Set()
+                    : new Set(gruposCarrinhoConvDisponiveis.map(g => g.codigo))
+                )}
+                onLimparGrupos={() => setCarrinhoGruposSelConv(new Set())}
+                minTransacoes={carrinhoMinTransacoesConv}
+                onChangeMin={setCarrinhoMinTransacoesConv}
+                busca={carrinhoBuscaConv}
+                onChangeBusca={setCarrinhoBuscaConv}
+                periodoDias={carrinhoPeriodoDiasConv}
+                onChangePeriodoDias={setCarrinhoPeriodoDiasConv}
+              />
+            ) : subAbaConveniencia === 'tempo' ? (
+              <LinhaDoTempoAuto
+                cor="emerald"
+                loading={loadingEvol12mConv}
+                serie={serieTempoConv}
+                grupos={gruposEvol12mConv}
+                produtos={produtosEvol12mConv}
+                gruposSel={tempoGruposSelConv}
+                onToggleGrupo={(c) => setTempoGruposSelConv(prev => {
+                  const next = new Set(prev);
+                  if (next.has(c)) next.delete(c); else next.add(c);
+                  return next;
+                })}
+                onToggleTodosGrupos={() => setTempoGruposSelConv(prev =>
+                  prev.size === gruposEvol12mConv.length ? new Set() : new Set(gruposEvol12mConv.map(g => g.codigo))
+                )}
+                onLimparGrupos={() => { setTempoGruposSelConv(new Set()); setTempoProdutosSelConv(new Set()); }}
+                produtosSel={tempoProdutosSelConv}
+                onToggleProduto={(c) => setTempoProdutosSelConv(prev => {
+                  const next = new Set(prev);
+                  if (next.has(c)) next.delete(c); else next.add(c);
+                  return next;
+                })}
+                onToggleTodosProdutos={() => setTempoProdutosSelConv(prev =>
+                  prev.size === produtosEvol12mConv.length ? new Set() : new Set(produtosEvol12mConv.map(p => p.codigo))
+                )}
+                onLimparProdutos={() => setTempoProdutosSelConv(new Set())}
+              />
+            ) : (
+              <div className="p-6">
+                <PlaceholderEmConstrucao
+                  titulo={SUB_ABAS_CONVENIENCIA.find(s => s.key === subAbaConveniencia)?.label || ''}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sub-abas da aba Automotivos
+          (overflow-visible para permitir que dropdowns absolutos escapem do
+          contêiner — multi-selects de grupo/produto seriam clipados sem isso) */}
+      {aba === 'automotivos' && (
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm mb-4 overflow-visible">
+          <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto rounded-t-2xl">
+            {SUB_ABAS_AUTOMOTIVOS.map(sa => {
+              const Icon = sa.icone;
+              const ativo = subAbaAutomotivos === sa.key;
+              return (
+                <button key={sa.key} onClick={() => setSubAbaAutomotivos(sa.key)}
+                  className={`flex items-center gap-2 px-4 py-2.5 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    ativo
+                      ? 'border-blue-600 text-blue-700'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
+                  }`}>
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <span>{sa.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div>
+            {(subAbaAutomotivos === 'dia' || subAbaAutomotivos === 'grupo') ? (
+              loadingDiarioAuto ? (
+                <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                  <span className="text-sm">Carregando realizado...</span>
+                </div>
+              ) : erroDiarioAuto ? (
+                <div className="m-4 bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Não foi possível carregar o realizado</p>
+                    <p className="text-red-700 mt-1">{erroDiarioAuto}</p>
+                  </div>
+                </div>
+              ) : (subAbaAutomotivos === 'dia' ? arvoreAutoDia : arvoreAutoGrupo).length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
+                    <Package className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">Nenhuma venda de automotivos no período</p>
+                  <p className="text-xs text-gray-500 mt-1">Verifique se os grupos de automotivos estão classificados.</p>
+                </div>
+              ) : subAbaAutomotivos === 'dia' ? (
+                <TreeRealizadoAutoDia
+                  arvore={arvoreAutoDia}
+                  expandidos={expandidosAuto}
+                  onToggle={toggleAuto}
+                />
+              ) : (
+                <TreeRealizadoAutoGrupo
+                  arvore={arvoreAutoGrupo}
+                  expandidos={expandidosAuto}
+                  onToggle={toggleAuto}
+                />
+              )
+            ) : subAbaAutomotivos === 'pareto' ? (
+              loadingDiarioAuto ? (
+                <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                  <span className="text-sm">Carregando análise de pareto...</span>
+                </div>
+              ) : erroDiarioAuto ? (
+                <div className="m-4 bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Não foi possível carregar os dados</p>
+                    <p className="text-red-700 mt-1">{erroDiarioAuto}</p>
+                  </div>
+                </div>
+              ) : (
+                <AnalisePareto
+                  dados={dadosPareto}
+                  grupos={gruposAutoDisponiveis}
+                  meta={paretoMeta}
+                  onChangeMeta={setParetoMeta}
+                  gruposSel={paretoGrupos}
+                  onToggleGrupo={(codigo) => setParetoGrupos(prev => {
+                    const next = new Set(prev);
+                    if (next.has(codigo)) next.delete(codigo); else next.add(codigo);
+                    return next;
+                  })}
+                  onToggleTodos={() => setParetoGrupos(prev =>
+                    prev.size === gruposAutoDisponiveis.length
+                      ? new Set()
+                      : new Set(gruposAutoDisponiveis.map(g => g.codigo))
+                  )}
+                  onLimpar={() => setParetoGrupos(new Set())}
+                />
+              )
+            ) : subAbaAutomotivos === 'carrinho' ? (
+              <CarrinhoCompras
+                loading={loadingCarrinho}
+                erro={erroCarrinho}
+                pares={paresCarrinhoFiltrados}
+                totalPares={paresCarrinho.length}
+                totalTransacoes={totalTransacoesCarrinho}
+                grupos={gruposCarrinhoDisponiveis}
+                gruposSel={carrinhoGruposSel}
+                onToggleGrupo={(c) => setCarrinhoGruposSel(prev => {
+                  const next = new Set(prev);
+                  if (next.has(c)) next.delete(c); else next.add(c);
+                  return next;
+                })}
+                onToggleTodos={() => setCarrinhoGruposSel(prev =>
+                  prev.size === gruposCarrinhoDisponiveis.length
+                    ? new Set()
+                    : new Set(gruposCarrinhoDisponiveis.map(g => g.codigo))
+                )}
+                onLimparGrupos={() => setCarrinhoGruposSel(new Set())}
+                minTransacoes={carrinhoMinTransacoes}
+                onChangeMin={setCarrinhoMinTransacoes}
+                busca={carrinhoBusca}
+                onChangeBusca={setCarrinhoBusca}
+                periodoDias={carrinhoPeriodoDias}
+                onChangePeriodoDias={setCarrinhoPeriodoDias}
+              />
+            ) : subAbaAutomotivos === 'tempo' ? (
+              <LinhaDoTempoAuto
+                loading={loadingEvol12mAuto}
+                serie={serieTempoAuto}
+                grupos={gruposEvol12mAuto}
+                produtos={produtosEvol12mAuto}
+                gruposSel={tempoGruposSel}
+                onToggleGrupo={(c) => setTempoGruposSel(prev => {
+                  const next = new Set(prev);
+                  if (next.has(c)) next.delete(c); else next.add(c);
+                  return next;
+                })}
+                onToggleTodosGrupos={() => setTempoGruposSel(prev =>
+                  prev.size === gruposEvol12mAuto.length ? new Set() : new Set(gruposEvol12mAuto.map(g => g.codigo))
+                )}
+                onLimparGrupos={() => { setTempoGruposSel(new Set()); setTempoProdutosSel(new Set()); }}
+                produtosSel={tempoProdutosSel}
+                onToggleProduto={(c) => setTempoProdutosSel(prev => {
+                  const next = new Set(prev);
+                  if (next.has(c)) next.delete(c); else next.add(c);
+                  return next;
+                })}
+                onToggleTodosProdutos={() => setTempoProdutosSel(prev =>
+                  prev.size === produtosEvol12mAuto.length ? new Set() : new Set(produtosEvol12mAuto.map(p => p.codigo))
+                )}
+                onLimparProdutos={() => setTempoProdutosSel(new Set())}
+              />
+            ) : (
+              <div className="p-6">
+                <PlaceholderEmConstrucao
+                  titulo={SUB_ABAS_AUTOMOTIVOS.find(s => s.key === subAbaAutomotivos)?.label || ''}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Sub-abas da aba Combustíveis */}
       {aba === 'combustivel' && (
@@ -1720,6 +2866,747 @@ function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
                       <CelulaNumero valor={auxP.custoMed} divisor="leve" />
                       <CelulaNumero valor={auxP.lucroL} divisor="leve" />
                     </tr>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Tree "Realizado dia a dia" (Automotivos/Conveniência) — Data → Grupo → Produto.
+// Colunas: Qtd, Faturamento, Custo, Lucro bruto, Margem, Preço méd., Custo méd., Lucro méd.
+function TreeRealizadoAutoDia({ arvore, expandidos, onToggle, cor = 'blue' }) {
+  const Pal = TREE_PALETAS_CATEGORIA[cor];
+  function calc(s) {
+    const lucro    = s.valor - s.custo;
+    const margem   = s.valor > 0 ? lucro / s.valor : 0;
+    const precoMed = s.qtd   > 0 ? s.valor / s.qtd : 0;
+    const custoMed = s.qtd   > 0 ? s.custo / s.qtd : 0;
+    const lucroMed = s.qtd   > 0 ? lucro  / s.qtd : 0;
+    return { lucro, margem, precoMed, custoMed, lucroMed };
+  }
+
+  function LinhaStats({ s }) {
+    const c = calc(s);
+    return (
+      <>
+        <CelulaNumero valor={s.qtd}        moeda={false} decimais={2} divisor="forte" />
+        <CelulaNumero valor={s.valor}      divisor="forte" />
+        <CelulaNumero valor={s.custo}      divisor="leve" />
+        <CelulaNumero valor={c.lucro}      divisor="forte" />
+        <CelulaNumero valor={c.margem*100} moeda={false} decimais={1} sufixo="%" divisor="forte" negativoBg={false} />
+        <CelulaNumero valor={c.precoMed}   divisor="forte" />
+        <CelulaNumero valor={c.custoMed}   divisor="leve" />
+        <CelulaNumero valor={c.lucroMed}   divisor="leve" />
+      </>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-y border-gray-200 sticky top-0 z-10">
+          <tr className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-2 text-left">Data / Grupo / Produto</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Qtd</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Faturamento</th>
+            <th className="px-2.5 py-2 text-right border-l border-gray-200">Custo</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Lucro bruto</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Margem</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Preço méd.</th>
+            <th className="px-2.5 py-2 text-right border-l border-gray-200">Custo méd.</th>
+            <th className="px-2.5 py-2 text-right border-l border-gray-200">Lucro méd.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {arvore.map(dNode => {
+            const dKey = `aD:${dNode.dia}`;
+            const dAberto = expandidos.has(dKey);
+            return (
+              <React.Fragment key={dKey}>
+                <tr className={`cursor-pointer ${Pal.bgHeader} ${Pal.hoverHeader} transition-colors border-t ${Pal.borderTop}`}
+                  onClick={() => onToggle(dKey)}>
+                  <td className="pl-4 pr-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      {dAberto
+                        ? <ChevronDown className={`h-3.5 w-3.5 ${Pal.chevron} flex-shrink-0`} />
+                        : <ChevronRight className={`h-3.5 w-3.5 ${Pal.chevron} flex-shrink-0`} />}
+                      <span className="text-[12.5px] font-semibold text-gray-900">{formatDataBR(dNode.dia)}</span>
+                      <span className="text-[10px] text-gray-500">{diaSemanaCurto(dNode.dia)}</span>
+                    </div>
+                  </td>
+                  <LinhaStats s={dNode.stats} />
+                </tr>
+                {dAberto && dNode.grupos.map(gNode => {
+                  const gKey = `${dKey}/g:${gNode.codigo ?? 'none'}`;
+                  const gAberto = expandidos.has(gKey);
+                  return (
+                    <React.Fragment key={gKey}>
+                      <tr className="cursor-pointer bg-gray-50/50 hover:bg-gray-100/70 transition-colors"
+                        onClick={() => onToggle(gKey)}>
+                        <td className="pl-10 pr-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {gAberto
+                              ? <ChevronDown className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                              : <ChevronRight className="h-3 w-3 text-gray-500 flex-shrink-0" />}
+                            <Package className={`h-3.5 w-3.5 ${Pal.iconSub} flex-shrink-0`} />
+                            <span className="text-[12px] font-medium text-gray-800 truncate">{gNode.nome}</span>
+                          </div>
+                        </td>
+                        <LinhaStats s={gNode.stats} />
+                      </tr>
+                      {gAberto && gNode.produtos.map((p, idx) => (
+                        <tr key={`${gKey}/p:${p.codigo}`}
+                          className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} ${Pal.hoverLeaf} transition-colors`}>
+                          <td className="pl-16 pr-3 py-1.5">
+                            <p className="text-[11.5px] text-gray-700 truncate max-w-[360px]">{p.nome}</p>
+                            <p className="text-[9.5px] text-gray-400 font-mono">cód {p.codigo}</p>
+                          </td>
+                          <LinhaStats s={{ qtd: p.qtd, valor: p.valor, custo: p.custo }} />
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Linha do tempo (Automotivos): ComposedChart de 12 meses com Bar = faturamento
+// e Line = margem. Multi-select de grupos + multi-select opcional de produtos.
+// Labels acima das barras mostram a variação MoM do faturamento.
+function LinhaDoTempoAuto({
+  loading, serie, grupos, produtos,
+  gruposSel, onToggleGrupo, onToggleTodosGrupos, onLimparGrupos,
+  produtosSel, onToggleProduto, onToggleTodosProdutos, onLimparProdutos,
+  cor = 'blue',
+}) {
+  const Pal = TREE_PALETAS_CATEGORIA[cor];
+  const temDados = (serie || []).some(p => p.faturamento > 0);
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Filtros */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider flex items-center gap-1">
+            <Package className="h-3 w-3" /> Grupo
+          </span>
+          <GrupoMultiSelect
+            grupos={grupos} selecionadas={gruposSel}
+            onToggle={onToggleGrupo} onToggleTodos={onToggleTodosGrupos}
+            tipo="grupo" minWidth={220}
+          />
+          {gruposSel.size > 0 && (
+            <button type="button" onClick={onLimparGrupos}
+              className="text-[11px] font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-50 px-2 py-1 rounded-md transition-colors whitespace-nowrap">
+              Limpar
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider flex items-center gap-1">
+            <ShoppingCart className="h-3 w-3" /> Produto
+          </span>
+          <GrupoMultiSelect
+            grupos={produtos} selecionadas={produtosSel}
+            onToggle={onToggleProduto} onToggleTodos={onToggleTodosProdutos}
+            tipo="produto" minWidth={240}
+          />
+          {produtosSel.size > 0 && (
+            <button type="button" onClick={onLimparProdutos}
+              className="text-[11px] font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-50 px-2 py-1 rounded-md transition-colors whitespace-nowrap">
+              Limpar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="h-72 flex items-center justify-center gap-3 text-gray-500">
+          <Loader2 className={`h-5 w-5 animate-spin ${Pal.spinner}`} />
+          <span className="text-sm">Carregando linha do tempo...</span>
+        </div>
+      ) : !temDados ? (
+        <div className="h-72 flex flex-col items-center justify-center text-center text-gray-500">
+          <div className={`inline-flex h-12 w-12 items-center justify-center rounded-full ${Pal.emptyBg} mb-3`}>
+            <Package className={`h-6 w-6 ${Pal.emptyIcon}`} />
+          </div>
+          <p className="text-sm">Sem dados no período / filtros selecionados.</p>
+        </div>
+      ) : (
+        <div className="border border-gray-100 rounded-xl p-3">
+          <div className="flex items-center gap-2 px-2 pb-2">
+            <LineChartIcon className={`h-4 w-4 ${Pal.chartIcon}`} />
+            <h4 className="text-[13px] font-semibold text-gray-800">Faturamento & Margem · últimos 12 meses</h4>
+          </div>
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={serie} margin={{ top: 24, right: 30, left: 10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: '#64748b' }} stroke="#e5e7eb" />
+              <YAxis yAxisId="left"
+                tickFormatter={(v) => Math.abs(v) >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`}
+                tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#e5e7eb" />
+              <YAxis yAxisId="right" orientation="right"
+                tickFormatter={(v) => `${v.toFixed(0)}%`}
+                tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#e5e7eb" />
+              <Tooltip
+                formatter={(value, name) => {
+                  if (name === 'Faturamento') return [formatCurrency(value), name];
+                  if (name === 'Margem')      return [`${Number(value).toFixed(1)}%`, name];
+                  return [value, name];
+                }}
+                labelStyle={{ fontSize: 12, fontWeight: 600 }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar yAxisId="left" dataKey="faturamento" name="Faturamento"
+                fill={Pal.chartBar} radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="fatVarMA" content={<LabelVariacaoMA />} />
+              </Bar>
+              <Line yAxisId="right" type="monotone" dataKey="margemPct" name="Margem"
+                stroke="#a78bfa" strokeWidth={2}
+                dot={{ r: 3, fill: '#c4b5fd', stroke: '#a78bfa', strokeWidth: 1 }}
+                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Análise de cesta de compras (market basket) — Automotivos.
+// Mostra pares de produtos vendidos juntos no mesmo mlid, ordenados pela
+// frequência (transacoes_juntas).
+const CARRINHO_MIN_OPTS = [2, 5, 10, 20, 50];
+const CARRINHO_PERIODO_OPTS = [30, 60, 90, 180];
+function CarrinhoCompras({
+  loading, erro, pares, totalPares, totalTransacoes,
+  grupos, gruposSel, onToggleGrupo, onToggleTodos, onLimparGrupos,
+  minTransacoes, onChangeMin, busca, onChangeBusca,
+  periodoDias, onChangePeriodoDias,
+  cor = 'blue',
+}) {
+  const Pal = TREE_PALETAS_CATEGORIA[cor];
+  if (loading) {
+    return (
+      <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
+        <Loader2 className={`h-5 w-5 animate-spin ${Pal.spinner}`} />
+        <span className="text-sm">Analisando cesta de compras...</span>
+      </div>
+    );
+  }
+  if (erro) {
+    return (
+      <div className="m-4 bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
+        <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium">Não foi possível carregar a análise</p>
+          <p className="text-red-700 mt-1">{erro}</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="p-4 space-y-4">
+      {/* Filtros */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+            <Calendar className="h-3 w-3" /> Período
+          </span>
+          <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
+            {CARRINHO_PERIODO_OPTS.map(n => {
+              const ativo = periodoDias === n;
+              return (
+                <button key={n} onClick={() => onChangePeriodoDias(n)}
+                  className={`px-2.5 py-1 text-[11.5px] font-medium rounded-md transition-colors ${
+                    ativo
+                      ? `bg-white ${Pal.kpiText} shadow-sm ring-1 ${Pal.kpiRing}`
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}>{n}d</button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider flex items-center gap-1">
+            <Package className="h-3 w-3" /> Grupo
+          </span>
+          <GrupoMultiSelect
+            grupos={grupos} selecionadas={gruposSel}
+            onToggle={onToggleGrupo} onToggleTodos={onToggleTodos}
+            tipo="grupo" minWidth={220}
+          />
+          {gruposSel.size > 0 && (
+            <button type="button" onClick={onLimparGrupos}
+              className="text-[11px] font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-50 px-2 py-1 rounded-md transition-colors whitespace-nowrap">
+              Limpar
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Mínimo</span>
+          <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
+            {CARRINHO_MIN_OPTS.map(n => {
+              const ativo = minTransacoes === n;
+              return (
+                <button key={n} onClick={() => onChangeMin(n)}
+                  className={`px-2.5 py-1 text-[11.5px] font-medium rounded-md transition-colors ${
+                    ativo
+                      ? `bg-white ${Pal.kpiText} shadow-sm ring-1 ${Pal.kpiRing}`
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}>≥ {n}</button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            <input type="text" value={busca} onChange={e => onChangeBusca(e.target.value)}
+              placeholder="Buscar por produto..."
+              className={`w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white ${Pal.focusBorder} focus:outline-none focus:ring-2 ${Pal.focusRing}`} />
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Resumo */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={`rounded-xl ${Pal.kpiGradient} border ${Pal.kpiBorder} p-4`}>
+          <p className="text-[11px] text-gray-500 uppercase tracking-wider">Transações no período</p>
+          <p className={`text-[22px] font-bold ${Pal.kpiText} leading-tight mt-1`}>{formatNumero(totalTransacoes, 0)}</p>
+          <p className="text-[10.5px] text-gray-500 mt-0.5">notas fiscais distintas</p>
+        </div>
+        <div className="rounded-xl bg-white border border-gray-200 p-4">
+          <p className="text-[11px] text-gray-500 uppercase tracking-wider">Pares analisados</p>
+          <p className="text-[22px] font-bold text-gray-900 leading-tight mt-1">{formatNumero(totalPares, 0)}</p>
+          <p className="text-[10.5px] text-gray-500 mt-0.5">
+            {pares.length === totalPares ? 'todos visíveis' : `${formatNumero(pares.length, 0)} visíveis após filtros`}
+          </p>
+        </div>
+        <div className="rounded-xl bg-white border border-gray-200 p-4">
+          <p className="text-[11px] text-gray-500 uppercase tracking-wider">Par mais frequente</p>
+          {pares.length > 0 ? (
+            <>
+              <p className="text-[12px] font-semibold text-gray-900 leading-tight mt-1 truncate">
+                {pares[0].produto_a_nome} + {pares[0].produto_b_nome}
+              </p>
+              <p className="text-[10.5px] text-gray-500 mt-0.5">
+                {formatNumero(Number(pares[0].transacoes_juntas), 0)} transações juntas
+              </p>
+            </>
+          ) : (
+            <p className="text-[12px] text-gray-400 mt-2">—</p>
+          )}
+        </div>
+      </div>
+
+      {/* Tabela de pares */}
+      {pares.length === 0 ? (
+        <div className="p-12 text-center bg-white border border-gray-100 rounded-xl">
+          <div className={`inline-flex h-12 w-12 items-center justify-center rounded-full ${Pal.emptyBg} mb-3`}>
+            <ShoppingCart className={`h-6 w-6 ${Pal.emptyIcon}`} />
+          </div>
+          <p className="text-sm font-medium text-gray-900">
+            Nenhum par de produtos atende aos filtros
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Tente reduzir o mínimo de transações ou ajustar os grupos selecionados.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+              <tr className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-center w-10">#</th>
+                <th className="px-4 py-2 text-left">Produto A</th>
+                <th className="px-4 py-2 text-left border-l border-gray-200">Produto B</th>
+                <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Transações juntas</th>
+                <th className="px-2.5 py-2 text-right border-l border-gray-200">% das transações</th>
+                <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Valor das vendas</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {pares.map((p, i) => {
+                const transacoes = Number(p.transacoes_juntas) || 0;
+                const valor = Number(p.valor_juntas) || 0;
+                const supportPct = totalTransacoes > 0 ? (transacoes / totalTransacoes) * 100 : 0;
+                return (
+                  <tr key={`${p.produto_a}-${p.produto_b}`} className={`${Pal.hoverLeaf} transition-colors`}>
+                    <td className={`px-3 py-1.5 text-center font-mono text-[11px] ${Pal.kpiText} font-semibold`}>
+                      {i + 1}
+                    </td>
+                    <td className="px-4 py-1.5">
+                      <p className="text-[12px] text-gray-800 truncate max-w-[300px]">{p.produto_a_nome}</p>
+                      <p className="text-[9.5px] text-gray-400 font-mono">cód {p.produto_a}</p>
+                    </td>
+                    <td className="px-4 py-1.5 border-l border-gray-100">
+                      <p className="text-[12px] text-gray-800 truncate max-w-[300px]">{p.produto_b_nome}</p>
+                      <p className="text-[9.5px] text-gray-400 font-mono">cód {p.produto_b}</p>
+                    </td>
+                    <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[12.5px] font-bold text-gray-900 border-l-2 border-gray-300">
+                      {formatNumero(transacoes, 0)}
+                    </td>
+                    <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11.5px] text-gray-600 border-l border-gray-100">
+                      {supportPct.toFixed(2)}%
+                    </td>
+                    <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[12px] font-semibold text-gray-900 border-l-2 border-gray-300">
+                      {formatCurrency(valor)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Análise de Pareto (80/20) para Automotivos. Lista produtos ordenados por
+// faturamento descendente, com % e % acumulado. A meta selecionada (60/70/80/90%)
+// destaca os produtos que juntos formam essa fatia.
+const PARETO_METAS = [60, 70, 80, 90];
+
+// Dropdown multi-select genérico (multi-checkbox). Set vazio = nenhum filtro.
+// `tipo` controla o label (ex: "Todos os grupos", "Todos os produtos").
+function GrupoMultiSelect({ grupos, selecionadas, onToggle, onToggleTodos, tipo = 'grupo', minWidth = 240 }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [busca, setBusca] = React.useState('');
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+  // Limpa a busca quando o dropdown é fechado.
+  React.useEffect(() => { if (!aberto) setBusca(''); }, [aberto]);
+  const gruposFiltrados = React.useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return grupos;
+    return grupos.filter(g => (g.nome || '').toLowerCase().includes(q));
+  }, [grupos, busca]);
+  const todosMarcados = selecionadas.size > 0 && selecionadas.size === grupos.length;
+  const plural = `${tipo}s`;
+  const label = selecionadas.size === 0
+    ? `Todos os ${plural} (${grupos.length})`
+    : todosMarcados
+    ? `Todos (${grupos.length})`
+    : selecionadas.size === 1
+    ? grupos.find(g => selecionadas.has(g.codigo))?.nome || `1 ${tipo}`
+    : `${selecionadas.size} ${plural}`;
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setAberto(o => !o)}
+        style={{ minWidth }}
+        className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-[12px] transition-colors ${
+          aberto
+            ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800 bg-white'
+            : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
+        }`}>
+        <span className="truncate">{label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {aberto && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-0 top-full mt-1 w-80 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
+            {/* Input de busca */}
+            <div className="relative border-b border-gray-100">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
+                placeholder={`Buscar ${tipo}...`}
+                autoFocus
+                className="w-full pl-8 pr-3 py-2 text-[12px] bg-transparent outline-none focus:bg-gray-50/60 transition-colors" />
+            </div>
+            <button type="button" onClick={onToggleTodos}
+              className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
+              <input type="checkbox" checked={todosMarcados}
+                onChange={() => {}} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              <span className="text-[12.5px] font-medium text-gray-700">
+                {todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}
+              </span>
+            </button>
+            <div className="max-h-72 overflow-y-auto">
+              {gruposFiltrados.length === 0 ? (
+                <p className="px-3 py-4 text-center text-[12px] text-gray-400">
+                  Nenhum {tipo} encontrado
+                </p>
+              ) : gruposFiltrados.map(g => {
+                const marcada = selecionadas.has(g.codigo);
+                return (
+                  <label key={g.codigo}
+                    className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <input type="checkbox" checked={marcada}
+                      onChange={() => onToggle(g.codigo)}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] text-gray-800 truncate">{g.nome}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function AnalisePareto({ dados, grupos, meta, onChangeMeta, gruposSel, onToggleGrupo, onToggleTodos, onLimpar, cor = 'blue' }) {
+  const Pal = TREE_PALETAS_CATEGORIA[cor];
+  const cutoffIdx = React.useMemo(() => {
+    if (!dados.list.length) return -1;
+    const i = dados.list.findIndex(p => p.pctAcum >= meta);
+    return i === -1 ? dados.list.length - 1 : i;
+  }, [dados.list, meta]);
+  const dentroDaMeta = cutoffIdx >= 0 ? cutoffIdx + 1 : 0;
+  const valorDentroMeta = dados.list
+    .slice(0, dentroDaMeta)
+    .reduce((s, p) => s + p.valor, 0);
+  const pctDentroDaMeta = dados.total > 0 ? (valorDentroMeta / dados.total) * 100 : 0;
+  const restanteCount   = Math.max(0, dados.list.length - dentroDaMeta);
+  const restanteValor   = Math.max(0, dados.total - valorDentroMeta);
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Controles */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Meta</span>
+          <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
+            {PARETO_METAS.map(m => {
+              const ativo = meta === m;
+              return (
+                <button key={m} onClick={() => onChangeMeta(m)}
+                  className={`px-3 py-1 text-[11.5px] font-medium rounded-md transition-colors ${
+                    ativo
+                      ? `bg-white ${Pal.kpiText} shadow-sm ring-1 ${Pal.kpiRing}`
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}>{m}%</button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider flex items-center gap-1">
+            <Package className="h-3 w-3" /> Grupo
+          </span>
+          <GrupoMultiSelect
+            grupos={grupos}
+            selecionadas={gruposSel}
+            onToggle={onToggleGrupo}
+            onToggleTodos={onToggleTodos}
+          />
+          {gruposSel.size > 0 && (
+            <button type="button" onClick={onLimpar}
+              className="text-[11px] font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-50 px-2 py-1 rounded-md transition-colors whitespace-nowrap">
+              Limpar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* KPI Resumo */}
+      {dados.list.length === 0 ? (
+        <div className="p-12 text-center bg-white border border-gray-100 rounded-xl">
+          <div className={`inline-flex h-12 w-12 items-center justify-center rounded-full ${Pal.emptyBg} mb-3`}>
+            <Package className={`h-6 w-6 ${Pal.emptyIcon}`} />
+          </div>
+          <p className="text-sm font-medium text-gray-900">
+            Nenhum produto encontrado{gruposSel.size > 0 ? ' nos grupos selecionados' : ''}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className={`rounded-xl ${Pal.kpiGradient} border ${Pal.kpiBorder} p-4`}>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className={`text-[28px] font-bold ${Pal.kpiText} leading-none`}>{dentroDaMeta}</span>
+              <span className="text-[13px] text-gray-700">produto{dentroDaMeta === 1 ? '' : 's'} formam</span>
+              <span className={`text-[20px] font-bold ${Pal.kpiText} leading-none`}>{pctDentroDaMeta.toFixed(1)}%</span>
+              <span className="text-[13px] text-gray-700">do faturamento</span>
+              <span className="text-[13px] font-semibold text-gray-900">({formatCurrency(valorDentroMeta)})</span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              De um total de <strong className="text-gray-700">{dados.list.length}</strong> produtos · faturamento total{' '}
+              <strong className="text-gray-700">{formatCurrency(dados.total)}</strong> · restante:{' '}
+              <strong className="text-gray-700">{restanteCount}</strong> produto{restanteCount === 1 ? '' : 's'}{' '}
+              ({formatCurrency(restanteValor)})
+            </p>
+          </div>
+
+          {/* Tabela */}
+          <div className="overflow-x-auto border border-gray-100 rounded-xl bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                <tr className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-center w-10">#</th>
+                  <th className="px-4 py-2 text-left">Produto</th>
+                  <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Qtd</th>
+                  <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Faturamento</th>
+                  <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">% do total</th>
+                  <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">% acumulado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {dados.list.map((p, i) => {
+                  const dentro = i <= cutoffIdx;
+                  return (
+                    <React.Fragment key={p.codigo}>
+                      <tr className={dentro
+                        ? `bg-white ${Pal.hoverLeaf} transition-colors`
+                        : 'bg-gray-50/40 text-gray-400 hover:bg-gray-100/60 transition-colors'}>
+                        <td className={`px-3 py-1.5 text-center font-mono text-[11px] ${dentro ? `${Pal.kpiText} font-semibold` : 'text-gray-400'}`}>
+                          {i + 1}
+                        </td>
+                        <td className="px-4 py-1.5">
+                          <p className={`text-[12px] truncate max-w-[400px] ${dentro ? 'text-gray-800' : 'text-gray-500'}`}>
+                            {p.nome}
+                          </p>
+                          <p className="text-[9.5px] text-gray-400 font-mono">
+                            cód {p.codigo}{p.grupoNome ? ` · ${p.grupoNome}` : ''}
+                          </p>
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[12px] border-l border-gray-100">
+                          {formatNumero(p.qtd, 2)}
+                        </td>
+                        <td className={`px-2.5 py-1.5 text-right font-mono tabular-nums text-[12px] font-semibold border-l border-gray-100 ${dentro ? 'text-gray-900' : ''}`}>
+                          {formatCurrency(p.valor)}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[12px] border-l border-gray-100">
+                          {p.pct.toFixed(2)}%
+                        </td>
+                        <td className={`px-2.5 py-1.5 text-right font-mono tabular-nums text-[12px] font-semibold border-l border-gray-100 ${dentro ? Pal.kpiText : 'text-gray-500'}`}>
+                          {p.pctAcum.toFixed(2)}%
+                        </td>
+                      </tr>
+                      {i === cutoffIdx && (i + 1) < dados.list.length && (
+                        <tr className={`${Pal.kpiBg} border-y-2 ${Pal.kpiBorderStrong}`}>
+                          <td colSpan={6} className={`px-4 py-1.5 text-center text-[11px] font-semibold ${Pal.kpiText}`}>
+                            ↑ Top {dentroDaMeta} produto{dentroDaMeta === 1 ? '' : 's'} = {pctDentroDaMeta.toFixed(1)}% do faturamento
+                            <span className="text-gray-500 font-normal mx-2">·</span>
+                            ↓ Restantes {restanteCount} = {(100 - pctDentroDaMeta).toFixed(1)}%
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Tree "Realizado por grupo" (Automotivos/Conveniência) — Grupo → Data → Produto.
+function TreeRealizadoAutoGrupo({ arvore, expandidos, onToggle, cor = 'blue' }) {
+  const Pal = TREE_PALETAS_CATEGORIA[cor];
+  function calc(s) {
+    const lucro    = s.valor - s.custo;
+    const margem   = s.valor > 0 ? lucro / s.valor : 0;
+    const precoMed = s.qtd   > 0 ? s.valor / s.qtd : 0;
+    const custoMed = s.qtd   > 0 ? s.custo / s.qtd : 0;
+    const lucroMed = s.qtd   > 0 ? lucro  / s.qtd : 0;
+    return { lucro, margem, precoMed, custoMed, lucroMed };
+  }
+  function LinhaStats({ s }) {
+    const c = calc(s);
+    return (
+      <>
+        <CelulaNumero valor={s.qtd}        moeda={false} decimais={2} divisor="forte" />
+        <CelulaNumero valor={s.valor}      divisor="forte" />
+        <CelulaNumero valor={s.custo}      divisor="leve" />
+        <CelulaNumero valor={c.lucro}      divisor="forte" />
+        <CelulaNumero valor={c.margem*100} moeda={false} decimais={1} sufixo="%" divisor="forte" negativoBg={false} />
+        <CelulaNumero valor={c.precoMed}   divisor="forte" />
+        <CelulaNumero valor={c.custoMed}   divisor="leve" />
+        <CelulaNumero valor={c.lucroMed}   divisor="leve" />
+      </>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-y border-gray-200 sticky top-0 z-10">
+          <tr className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-2 text-left">Grupo / Data / Produto</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Qtd</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Faturamento</th>
+            <th className="px-2.5 py-2 text-right border-l border-gray-200">Custo</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Lucro bruto</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Margem</th>
+            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Preço méd.</th>
+            <th className="px-2.5 py-2 text-right border-l border-gray-200">Custo méd.</th>
+            <th className="px-2.5 py-2 text-right border-l border-gray-200">Lucro méd.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {arvore.map(gNode => {
+            const gKey = `aG:${gNode.codigo ?? 'none'}`;
+            const gAberto = expandidos.has(gKey);
+            return (
+              <React.Fragment key={gKey}>
+                <tr className={`cursor-pointer ${Pal.bgHeader} ${Pal.hoverHeader} transition-colors border-t ${Pal.borderTop}`}
+                  onClick={() => onToggle(gKey)}>
+                  <td className="pl-4 pr-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      {gAberto
+                        ? <ChevronDown className={`h-3.5 w-3.5 ${Pal.chevron} flex-shrink-0`} />
+                        : <ChevronRight className={`h-3.5 w-3.5 ${Pal.chevron} flex-shrink-0`} />}
+                      <Package className={`h-3.5 w-3.5 ${Pal.icon} flex-shrink-0`} />
+                      <span className="text-[12.5px] font-semibold text-gray-900 truncate">{gNode.nome}</span>
+                    </div>
+                  </td>
+                  <LinhaStats s={gNode.stats} />
+                </tr>
+                {gAberto && gNode.dias.map(dNode => {
+                  const dKey = `${gKey}/d:${dNode.dia}`;
+                  const dAberto = expandidos.has(dKey);
+                  return (
+                    <React.Fragment key={dKey}>
+                      <tr className="cursor-pointer bg-gray-50/50 hover:bg-gray-100/70 transition-colors"
+                        onClick={() => onToggle(dKey)}>
+                        <td className="pl-10 pr-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {dAberto
+                              ? <ChevronDown className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                              : <ChevronRight className="h-3 w-3 text-gray-500 flex-shrink-0" />}
+                            <span className="text-[12px] font-medium text-gray-800">{formatDataBR(dNode.dia)}</span>
+                            <span className="text-[10px] text-gray-500">{diaSemanaCurto(dNode.dia)}</span>
+                          </div>
+                        </td>
+                        <LinhaStats s={dNode.stats} />
+                      </tr>
+                      {dAberto && dNode.produtos.map((p, idx) => (
+                        <tr key={`${dKey}/p:${p.codigo}`}
+                          className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} ${Pal.hoverLeaf} transition-colors`}>
+                          <td className="pl-16 pr-3 py-1.5">
+                            <p className="text-[11.5px] text-gray-700 truncate max-w-[360px]">{p.nome}</p>
+                            <p className="text-[9.5px] text-gray-400 font-mono">cód {p.codigo}</p>
+                          </td>
+                          <LinhaStats s={{ qtd: p.qtd, valor: p.valor, custo: p.custo }} />
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   );
                 })}
               </React.Fragment>

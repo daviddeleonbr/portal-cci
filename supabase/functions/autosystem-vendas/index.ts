@@ -75,12 +75,16 @@ serve(async (req) => {
     // Quando true, agrega por (ano_mes, produto) — usado pela evolução
     // mensal por combustível na tela ComercialVendas.
     por_mes_produto?: boolean;
+    // Quando true, retorna pares de produtos comprados juntos (mesmo mlid),
+    // ordenados pelo número de transações em que apareceram juntos.
+    // Usado pela análise de cesta de compras na ComercialVendas.
+    pares_carrinho?: boolean;
     // Filtro opcional por `produto.grupo` (lista de grids). Vazio = sem filtro.
     grupos_filtro?: (string | number)[];
   };
   try { body = await req.json(); } catch { return json({ error: 'Body JSON inválido' }, 400); }
 
-  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, agregado, por_mes, por_dia, por_mes_produto, grupos_filtro } = body;
+  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, agregado, por_mes, por_dia, por_mes_produto, pares_carrinho, grupos_filtro } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
   if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
     return json({ error: 'empresa_codigos[] é obrigatório (ao menos uma empresa)' }, 400);
@@ -140,6 +144,86 @@ serve(async (req) => {
     const gruposNum = Array.isArray(grupos_filtro)
       ? grupos_filtro.map(v => Number(v)).filter(n => Number.isFinite(n))
       : [];
+
+    // ─── Modo: análise de cesta (pares de produtos comprados juntos) ───
+    // Agrupa por `documento` (nº da nota fiscal, text). Ignora documentos
+    // nulos/vazios. Devoluções (DC) ainda são filtradas pelo `mlid` que casa
+    // venda original ↔ devolução para o mesmo produto.
+    if (pares_carrinho) {
+      failedStep = 'select_pares_carrinho';
+      const decoder = new TextDecoder('windows-1252');
+      // Total de notas (documentos distintos) no período — base do % support.
+      const totRes = await pg.queryObject<{ total: bigint | number }>({
+        text: `
+          select count(distinct documento::text) as total
+          from lancto
+          where operacao = 'V'
+            and empresa = any($1::bigint[])
+            and data between $2 and $3
+            and documento is not null
+            and trim(documento::text) <> ''
+        `,
+        args: [empresasNum, data_de, data_ate],
+      });
+      const total_transacoes = Number(totRes.rows[0]?.total) || 0;
+
+      // Pares (a < b) — junta lancto consigo mesmo pelo `documento` (mesma nota),
+      // restrita à mesma empresa e à mesma data (notas não compartilham dia entre empresas).
+      const paresRes = await pg.queryObject<Record<string, unknown>>({
+        text: `
+          select
+            la.produto                                                as produto_a,
+            convert_to(coalesce(pa.nome::text, ''), 'LATIN1')         as produto_a_nome,
+            pa.grupo                                                  as grupo_a,
+            lb.produto                                                as produto_b,
+            convert_to(coalesce(pb.nome::text, ''), 'LATIN1')         as produto_b_nome,
+            pb.grupo                                                  as grupo_b,
+            count(distinct la.documento::text)                        as transacoes_juntas,
+            sum(la.valor + lb.valor)                                  as valor_juntas,
+            sum(la.quantidade + lb.quantidade)                        as quantidade_juntas
+          from lancto la
+          join lancto lb on lb.documento::text = la.documento::text
+                        and lb.empresa = la.empresa
+                        and lb.data    = la.data
+                        and lb.produto > la.produto
+                        and lb.operacao = 'V'
+          left join produto pa on pa.grid = la.produto
+          left join produto pb on pb.grid = lb.produto
+          where la.operacao = 'V'
+            and la.empresa = any($1::bigint[])
+            and la.data between $2 and $3
+            and la.documento is not null
+            and trim(la.documento::text) <> ''
+            and (cardinality($4::bigint[]) = 0
+                 or (pa.grupo = any($4::bigint[]) and pb.grupo = any($4::bigint[])))
+            and not exists (
+              select 1 from lancto d
+               where d.mlid = la.mlid and d.produto = la.produto and d.operacao = 'DC'
+            )
+            and not exists (
+              select 1 from lancto d
+               where d.mlid = lb.mlid and d.produto = lb.produto and d.operacao = 'DC'
+            )
+          group by la.produto, pa.nome, pa.grupo, lb.produto, pb.nome, pb.grupo
+          order by count(distinct la.documento::text) desc
+          limit 500
+        `,
+        args: [empresasNum, data_de, data_ate, gruposNum],
+      });
+
+      const TEXT_PAIR = new Set(['produto_a_nome', 'produto_b_nome']);
+      const pares = paresRes.rows.map((row) => {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (TEXT_PAIR.has(k) && v instanceof Uint8Array) out[k] = decoder.decode(v);
+          else out[k] = v;
+        }
+        return out;
+      });
+
+      return json({ pares, total_transacoes });
+    }
+
     const sql = por_mes_produto
       ? `
       select

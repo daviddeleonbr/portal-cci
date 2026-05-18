@@ -370,6 +370,95 @@ export async function buscarVendasMensalPorProdutoAutosystem(redeId, empresaCodi
   return Array.isArray(data?.mensal_produto) ? data.mensal_produto : [];
 }
 
+// ─── Bombas + bicos (operação) ───────────────────────────────
+// Retorna `{ bombas, bicos, uso_bicos }` para as empresas selecionadas.
+// `bombas`: cada linha com grid, codigo, empresa, nr_serie, fabricante,
+//   fabricante_nome (vindo do JOIN com pessoa), tipo, modelo.
+// `bicos`: linhas brutas da tabela `bico` + deposito_* (JOIN com deposito).
+// `uso_bicos`: quando `data_de`/`data_ate` são informados, agrega lancto
+//   por (empresa, bico) com vendas_count, quantidade_total e valor_total.
+export async function buscarBombasAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-bombas', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de:  filtros.data_de  || null,
+      data_ate: filtros.data_ate || null,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar bombas');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return {
+    bombas:            Array.isArray(data?.bombas)            ? data.bombas            : [],
+    bicos:             Array.isArray(data?.bicos)             ? data.bicos             : [],
+    uso_bicos:         Array.isArray(data?.uso_bicos)         ? data.uso_bicos         : [],
+    litros_dia_semana: Array.isArray(data?.litros_dia_semana) ? data.litros_dia_semana : [],
+    afericoes:         Array.isArray(data?.afericoes)         ? data.afericoes         : [],
+  };
+}
+
+// ─── Produtividade por vendedor ──────────────────────────────
+// Agrega vendas por vendedor + quebra por categoria (combustível, automotivos,
+// conveniência). Os arrays `grupos_*` são as grids dos grupos de produto
+// classificados naquela categoria via `as_rede_grupo_produto`.
+export async function buscarProdutividadeAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-produtividade', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de:  filtros.data_de,
+      data_ate: filtros.data_ate,
+      grupos_combustivel:  Array.isArray(filtros.grupos_combustivel)  ? filtros.grupos_combustivel  : [],
+      grupos_automotivos:  Array.isArray(filtros.grupos_automotivos)  ? filtros.grupos_automotivos  : [],
+      grupos_conveniencia: Array.isArray(filtros.grupos_conveniencia) ? filtros.grupos_conveniencia : [],
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar produtividade');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.vendedores) ? data.vendedores : [];
+}
+
+// ─── Pares de produtos vendidos juntos (cesta de compras) ───
+// Retorna pares { produto_a, produto_b } com count de transações em que
+// apareceram juntos (mesmo mlid), valor somado e quantidade somada.
+// Inclui também `total_transacoes` (mlids distintos no período) para support%.
+export async function buscarParesCarrinhoAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-vendas', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de: filtros.data_de,
+      data_ate: filtros.data_ate,
+      pares_carrinho: true,
+      grupos_filtro: Array.isArray(filtros.grupos_filtro) ? filtros.grupos_filtro : [],
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar pares de cesta');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return {
+    pares: Array.isArray(data?.pares) ? data.pares : [],
+    total_transacoes: Number(data?.total_transacoes) || 0,
+  };
+}
+
 // ─── Vendas agregadas por mês ────────────────────────────────
 // Retorna 1 linha por mês (ano_mes='YYYY-MM') com sum(valor), sum(valor_custo)
 // e sum(quantidade). Usado pelo gráfico de evolução dos últimos 12 meses.
