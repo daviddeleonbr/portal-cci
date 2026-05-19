@@ -1,17 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Menu, LogOut, Moon, Sun, Building2, ChevronDown, Check } from 'lucide-react';
-import { clienteNotificacoes } from '../../../data/clienteMockData';
+import { Menu, LogOut, Moon, Sun, Building2, ChevronDown, Check } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
+import NotificacoesBell from '../../ui/NotificacoesBell';
 import { logoutCliente, trocarEmpresaAtiva } from '../../../lib/auth';
 import { useTheme } from '../../../hooks/useTheme';
 
 export default function ClienteHeader({ onMenuClick }) {
-  const [showNotifs, setShowNotifs] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [empresaMenuOpen, setEmpresaMenuOpen] = useState(false);
-  const notifRef = useRef(null);
   const userRef = useRef(null);
   const empresaRef = useRef(null);
   const navigate = useNavigate();
@@ -27,7 +25,6 @@ export default function ClienteHeader({ onMenuClick }) {
     && clientesRede.length > 1;
   const { tema, alternar } = useTheme();
   const escuro = tema === 'dark';
-  const unread = clienteNotificacoes.filter(n => !n.lida).length;
   const nomeCliente = cliente?.nome || 'Cliente';
   const cnpjCliente = cliente?.cnpj || '';
   const regimeCliente = cliente?.regime_tributario || '';
@@ -45,7 +42,6 @@ export default function ClienteHeader({ onMenuClick }) {
 
   useEffect(() => {
     const handler = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifs(false);
       if (userRef.current && !userRef.current.contains(e.target)) setUserMenuOpen(false);
       if (empresaRef.current && !empresaRef.current.contains(e.target)) setEmpresaMenuOpen(false);
     };
@@ -94,7 +90,7 @@ export default function ClienteHeader({ onMenuClick }) {
                         <button key={emp.id} onClick={() => handleTrocarEmpresa(emp.id)}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${ativa ? 'bg-blue-50/60' : ''}`}>
                           <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            ativa ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm'
+                            ativa ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-sm'
                                   : 'bg-gray-100 text-gray-500'
                           }`}>
                             <Building2 className="h-4 w-4" />
@@ -116,7 +112,7 @@ export default function ClienteHeader({ onMenuClick }) {
           </div>
         ) : tipoCliente === 'autosystem' ? (
           <div className="hidden sm:flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
               <Building2 className="h-4 w-4" />
             </div>
             <div>
@@ -140,58 +136,13 @@ export default function ClienteHeader({ onMenuClick }) {
           {escuro ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5" />}
         </button>
 
-        {/* Notifications */}
-        <div ref={notifRef} className="relative">
-          <button
-            onClick={() => setShowNotifs(!showNotifs)}
-            className="relative rounded p-2 text-gray-500 hover:bg-gray-100 transition-colors"
-          >
-            <Bell className="h-5 w-5" />
-            {unread > 0 && (
-              <span className="absolute top-1 right-1 h-4 w-4 rounded-full bg-blue-600 text-[10px] font-bold text-white flex items-center justify-center">
-                {unread}
-              </span>
-            )}
-          </button>
-
-          <AnimatePresence>
-            {showNotifs && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl border border-gray-100 shadow-xl overflow-hidden z-50"
-              >
-                <div className="px-4 py-3 border-b border-gray-50">
-                  <p className="text-sm font-semibold text-gray-900">Notificações</p>
-                </div>
-                <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
-                  {clienteNotificacoes.map(n => (
-                    <div key={n.id} className={`px-4 py-3 hover:bg-gray-50/50 transition-colors ${!n.lida ? 'bg-blue-50/30' : ''}`}>
-                      <div className="flex items-start gap-2">
-                        <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${
-                          n.tipo === 'alerta' ? 'bg-amber-500' : n.tipo === 'sucesso' ? 'bg-emerald-500' : 'bg-blue-500'
-                        }`} />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{n.titulo}</p>
-                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.mensagem}</p>
-                          <p className="text-[10px] text-gray-400 mt-1">{n.data}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        <NotificacoesBell usuarioId={usuario?.id} tema="cliente" />
 
         {/* User menu */}
         <div ref={userRef} className="relative">
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-sm font-semibold shadow-sm hover:shadow-md transition-shadow"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-sm font-semibold shadow-sm hover:shadow-md transition-shadow"
           >
             {initials}
           </button>

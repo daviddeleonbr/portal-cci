@@ -5,17 +5,26 @@
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
 import {
   ArrowRight, ArrowUpRight, Check, Fuel, ShieldCheck, Sparkles, Zap, BarChart3,
   Wallet, Briefcase, FileBarChart, Database, Bot, LineChart, TrendingUp,
   TrendingDown, AlertTriangle, Clock, Users2, Target,
   Phone, Mail, ChevronRight, Star, PieChart, Activity,
+  MessageCircle, X, Loader2,
 } from 'lucide-react';
+import * as cciContatoService from '../services/cciContatoService';
+
+// Custom event para abrir o modal de "Agendar diagnóstico" de qualquer
+// botão na landing sem prop drilling.
+const EV_ABRIR_AGENDAR = 'cci:abrir-agendar';
+function dispararAgendar() {
+  window.dispatchEvent(new CustomEvent(EV_ABRIR_AGENDAR));
+}
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#070912] text-slate-100 antialiased overflow-x-hidden selection:bg-violet-500/30 selection:text-white">
+    <div className="min-h-screen bg-[#070912] text-slate-100 antialiased overflow-x-hidden selection:bg-blue-500/30 selection:text-white">
       <BackgroundFx />
       <Navbar />
       <Hero />
@@ -27,6 +36,7 @@ export default function LandingPage() {
       <Testimonials />
       <FinalCTA />
       <Footer />
+      <ModalAgendar />
     </div>
   );
 }
@@ -36,9 +46,9 @@ function BackgroundFx() {
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
       {/* Aurora superior */}
-      <div className="absolute -top-40 left-1/2 h-[640px] w-[1200px] -translate-x-1/2 rounded-full bg-violet-600/30 blur-[140px]" />
-      <div className="absolute top-[20%] -right-40 h-[500px] w-[700px] rounded-full bg-cyan-500/20 blur-[140px]" />
-      <div className="absolute top-[55%] -left-40 h-[500px] w-[700px] rounded-full bg-fuchsia-500/15 blur-[140px]" />
+      <div className="absolute -top-40 left-1/2 h-[640px] w-[1200px] -translate-x-1/2 rounded-full bg-blue-600/30 blur-[140px]" />
+      <div className="absolute top-[20%] -right-40 h-[500px] w-[700px] rounded-full bg-blue-500/20 blur-[140px]" />
+      <div className="absolute top-[55%] -left-40 h-[500px] w-[700px] rounded-full bg-blue-500/15 blur-[140px]" />
       {/* Vinheta */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_0%,_rgba(7,9,18,0.6)_70%,_#070912_100%)]" />
     </div>
@@ -72,9 +82,9 @@ function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         <a href="#top" className="flex items-center gap-2.5 group">
-          <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white font-bold text-sm shadow-lg shadow-violet-500/30">
+          <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-sm shadow-lg shadow-blue-500/30">
             <span className="relative z-10">C</span>
-            <span className="absolute inset-0 rounded-xl bg-violet-500 opacity-0 group-hover:opacity-100 transition-opacity blur-md" />
+            <span className="absolute inset-0 rounded-xl bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity blur-md" />
           </span>
           <div className="leading-none">
             <p className="text-[15px] font-semibold tracking-tight">CCI</p>
@@ -87,7 +97,7 @@ function Navbar() {
             <a key={l.href} href={l.href}
               className="text-[13px] text-slate-300 hover:text-white transition-colors relative group">
               {l.label}
-              <span className="absolute -bottom-1 left-0 right-0 h-px bg-violet-500 scale-x-0 group-hover:scale-x-100 origin-left transition-transform" />
+              <span className="absolute -bottom-1 left-0 right-0 h-px bg-blue-500 scale-x-0 group-hover:scale-x-100 origin-left transition-transform" />
             </a>
           ))}
         </nav>
@@ -97,12 +107,12 @@ function Navbar() {
             className="hidden sm:inline-flex text-[13px] text-slate-300 hover:text-white transition-colors px-3 py-2">
             Acessar portal
           </Link>
-          <a href="#cta"
-            className="group relative inline-flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-2 text-[13px] font-semibold text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all hover:scale-[1.02]">
-            <span className="absolute inset-0 rounded-full bg-violet-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
+          <button type="button" onClick={dispararAgendar}
+            className="group relative inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-[13px] font-semibold text-white shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:scale-[1.02]">
+            <span className="absolute inset-0 rounded-full bg-blue-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
             Agendar diagnóstico
             <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-          </a>
+          </button>
         </div>
       </div>
     </header>
@@ -135,7 +145,7 @@ function Hero() {
           className="text-center text-[44px] sm:text-6xl md:text-7xl font-semibold tracking-tight leading-[1.05] max-w-5xl mx-auto"
         >
           O lucro que o seu posto{' '}
-          <span className="text-violet-300">
+          <span className="text-blue-300">
             esquece de mostrar
           </span>{' '}
           agora visível.
@@ -155,12 +165,12 @@ function Hero() {
           transition={{ duration: 0.7, delay: 0.25 }}
           className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3"
         >
-          <a href="#cta"
-            className="group relative inline-flex items-center gap-2 rounded-full bg-violet-600 px-6 py-3.5 text-[14px] font-semibold text-white shadow-xl shadow-violet-500/30 hover:shadow-violet-500/50 transition-all hover:scale-[1.02]">
-            <span className="absolute inset-0 rounded-full bg-violet-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
+          <button type="button" onClick={dispararAgendar}
+            className="group relative inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3.5 text-[14px] font-semibold text-white shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:scale-[1.02]">
+            <span className="absolute inset-0 rounded-full bg-blue-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
             Agendar diagnóstico gratuito
             <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-          </a>
+          </button>
           <a href="#serviços"
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-6 py-3.5 text-[14px] font-medium text-slate-200 hover:bg-white/[0.06] hover:border-white/20 transition-all">
             Ver como funciona
@@ -225,7 +235,7 @@ function HeroDashboardMock() {
   return (
     <div className="relative">
       {/* Glow base */}
-      <div className="absolute -inset-x-20 -inset-y-10 -z-10 bg-violet-500/20 blur-3xl rounded-[50%] opacity-70" />
+      <div className="absolute -inset-x-20 -inset-y-10 -z-10 bg-blue-500/20 blur-3xl rounded-[50%] opacity-70" />
       {/* Frame */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-1.5 shadow-2xl shadow-black/40 backdrop-blur-sm">
         <div className="rounded-xl overflow-hidden bg-[#0b0f1c] border border-white/[0.06]">
@@ -260,11 +270,11 @@ function HeroDashboardMock() {
       <motion.div
         initial={{ opacity: 0, x: 20, y: 20 }} animate={{ opacity: 1, x: 0, y: 0 }}
         transition={{ delay: 1.1, duration: 0.6 }}
-        className="hidden md:block absolute -right-8 top-1/2 -translate-y-1/2 w-64 rounded-xl border border-white/10 bg-[#0b0f1c] p-4 shadow-2xl shadow-violet-500/10 backdrop-blur-md"
+        className="hidden md:block absolute -right-8 top-1/2 -translate-y-1/2 w-64 rounded-xl border border-white/10 bg-[#0b0f1c] p-4 shadow-2xl shadow-blue-500/10 backdrop-blur-md"
       >
         <div className="flex items-center gap-2 mb-3">
-          <div className="h-7 w-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
-            <Bot className="h-3.5 w-3.5 text-violet-300" />
+          <div className="h-7 w-7 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <Bot className="h-3.5 w-3.5 text-blue-300" />
           </div>
           <p className="text-[11px] font-semibold text-slate-200">IA — Insight de hoje</p>
         </div>
@@ -273,7 +283,7 @@ function HeroDashboardMock() {
           <span className="text-emerald-300 font-mono"> +R$ 0,07/L</span>.
         </p>
         <div className="mt-3 flex items-center justify-between text-[10px] text-slate-500">
-          <span className="inline-flex items-center gap-1"><Sparkles className="h-3 w-3 text-violet-300" /> Claude Opus</span>
+          <span className="inline-flex items-center gap-1"><Sparkles className="h-3 w-3 text-blue-300" /> Claude Opus</span>
           <span>Confiança 94%</span>
         </div>
       </motion.div>
@@ -283,7 +293,7 @@ function HeroDashboardMock() {
 
 function MockKPI({ label, value, delta, up, icon: Icon, accent = 'violet' }) {
   const accentMap = {
-    violet: 'text-violet-300 bg-violet-500/15',
+    violet: 'text-blue-300 bg-blue-500/15',
     emerald: 'text-emerald-300 bg-emerald-500/15',
     amber: 'text-amber-300 bg-amber-500/15',
   };
@@ -314,7 +324,7 @@ function MockChart() {
           <p className="text-[10.5px] text-slate-500">Tendência consolidada</p>
         </div>
         <div className="flex items-center gap-3 text-[10px]">
-          <span className="inline-flex items-center gap-1.5 text-slate-400"><span className="h-1.5 w-3 rounded-full bg-violet-400" /> Atual</span>
+          <span className="inline-flex items-center gap-1.5 text-slate-400"><span className="h-1.5 w-3 rounded-full bg-blue-400" /> Atual</span>
           <span className="inline-flex items-center gap-1.5 text-slate-500"><span className="h-1.5 w-3 rounded-full bg-slate-600" /> YoY</span>
         </div>
       </div>
@@ -323,7 +333,7 @@ function MockChart() {
           <div key={i} className="flex-1 flex flex-col gap-0.5 items-stretch">
             <div className="flex-1 flex items-end">
               <div
-                className="w-full rounded-t bg-violet-500/70"
+                className="w-full rounded-t bg-blue-500/70"
                 style={{ height: `${h}%` }}
               />
             </div>
@@ -339,8 +349,8 @@ function MockChart() {
 
 function MockMini({ title, pct, accent }) {
   const accentMap = {
-    violet: { bar: 'bg-violet-500', text: 'text-violet-300' },
-    cyan: { bar: 'bg-cyan-500', text: 'text-cyan-300' },
+    violet: { bar: 'bg-blue-500', text: 'text-blue-300' },
+    cyan: { bar: 'bg-blue-500', text: 'text-blue-300' },
     emerald: { bar: 'bg-emerald-500', text: 'text-emerald-300' },
   };
   const a = accentMap[accent];
@@ -389,7 +399,7 @@ function Problems() {
           viewport={{ once: true, margin: '-50px' }} transition={{ duration: 0.6 }}
           className="max-w-2xl mb-14"
         >
-          <p className="text-[11px] uppercase tracking-[0.2em] text-violet-300 mb-3">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">
             Quase todo posto sofre disso
           </p>
           <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
@@ -408,7 +418,7 @@ function Problems() {
               initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-30px' }}
               transition={{ duration: 0.5, delay: i * 0.08 }}
-              className="group rounded-2xl border border-white/10 bg-white/[0.02] p-6 hover:border-violet-400/30 hover:bg-white/[0.04] transition-all"
+              className="group rounded-2xl border border-white/10 bg-white/[0.02] p-6 hover:border-blue-400/30 hover:bg-white/[0.04] transition-all"
             >
               <div className="h-10 w-10 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <it.icon className="h-4.5 w-4.5 text-red-300" />
@@ -437,8 +447,8 @@ function Services() {
         'Treinamento da equipe em sistema de gestão',
         'Implantação de KPIs operacionais e financeiros',
       ],
-      accent: 'bg-violet-600',
-      glow: 'shadow-violet-500/20',
+      accent: 'bg-blue-600',
+      glow: 'shadow-blue-500/20',
     },
     {
       icon: Database,
@@ -451,8 +461,8 @@ function Services() {
         'Contas a pagar e receber em dia',
         'Validação e classificação de OFX',
       ],
-      accent: 'bg-cyan-600',
-      glow: 'shadow-cyan-500/20',
+      accent: 'bg-blue-600',
+      glow: 'shadow-blue-500/20',
     },
     {
       icon: Sparkles,
@@ -478,12 +488,12 @@ function Services() {
           viewport={{ once: true }} transition={{ duration: 0.6 }}
           className="max-w-2xl mb-16"
         >
-          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300 mb-3">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">
             Como entregamos resultado
           </p>
           <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Três frentes, uma só missão:{' '}
-            <span className="text-violet-300">
+            <span className="text-blue-300">
               colocar seu posto no lucro real.
             </span>
           </h2>
@@ -547,7 +557,7 @@ function Differentials() {
           viewport={{ once: true }} transition={{ duration: 0.6 }}
           className="text-center mb-16 max-w-3xl mx-auto"
         >
-          <p className="text-[11px] uppercase tracking-[0.2em] text-fuchsia-300 mb-3">Por que CCI</p>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">Por que CCI</p>
           <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Construído por quem vive postos.{' '}
             <span className="text-slate-400">Não por consultoria genérica.</span>
@@ -563,7 +573,7 @@ function Differentials() {
               className="bg-[#0a0d18] p-7 hover:bg-[#0d111e] transition-colors"
             >
               <div className="h-9 w-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-                <it.icon className="h-4 w-4 text-violet-300" />
+                <it.icon className="h-4 w-4 text-blue-300" />
               </div>
               <h3 className="text-[15px] font-semibold text-white mb-1.5">{it.title}</h3>
               <p className="text-[13px] text-slate-400 leading-relaxed">{it.desc}</p>
@@ -587,8 +597,8 @@ function Results() {
     <section id="resultados" className="px-6 py-24 relative">
       <div className="max-w-6xl mx-auto">
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-10 sm:p-14 relative overflow-hidden">
-          <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-violet-500/20 blur-3xl" />
-          <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-cyan-500/20 blur-3xl" />
+          <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl" />
+          <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl" />
 
           <div className="relative">
             <motion.div
@@ -647,7 +657,7 @@ function DashboardShowcase() {
           viewport={{ once: true }} transition={{ duration: 0.6 }}
           className="max-w-2xl mb-14"
         >
-          <p className="text-[11px] uppercase tracking-[0.2em] text-violet-300 mb-3">A plataforma</p>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">A plataforma</p>
           <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Um portal. Toda a saúde financeira do seu posto{' '}
             <span className="text-slate-400">em tempo real.</span>
@@ -660,7 +670,7 @@ function DashboardShowcase() {
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }} whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true, margin: '-80px' }} transition={{ duration: 0.7 }}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] p-1.5 shadow-2xl shadow-violet-500/10"
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-1.5 shadow-2xl shadow-blue-500/10"
             >
               <div className="rounded-xl overflow-hidden bg-[#0b0f1c]">
                 {/* Cabeçalho fake */}
@@ -682,7 +692,7 @@ function DashboardShowcase() {
                     { label: 'Despesas operacionais', val: 'R$ 412.118', pct: '+3,2%', up: false },
                     { label: 'Lucro líquido', val: 'R$ 326.842', pct: '+44,1%', up: true, hi: true },
                   ].map((row) => (
-                    <div key={row.label} className={`flex items-center justify-between py-2 px-3 rounded-lg ${row.hi ? 'bg-violet-500/10 border border-violet-500/20' : 'border border-white/[0.04]'}`}>
+                    <div key={row.label} className={`flex items-center justify-between py-2 px-3 rounded-lg ${row.hi ? 'bg-blue-500/10 border border-blue-500/20' : 'border border-white/[0.04]'}`}>
                       <span className={`text-[12.5px] ${row.hi ? 'font-semibold text-white' : 'text-slate-300'}`}>{row.label}</span>
                       <div className="flex items-center gap-3">
                         <span className={`text-[13px] font-mono tabular-nums ${row.hi ? 'text-white' : 'text-slate-200'}`}>{row.val}</span>
@@ -706,8 +716,8 @@ function DashboardShowcase() {
                 viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.06 }}
                 className="rounded-xl border border-white/10 bg-white/[0.03] p-4 hover:bg-white/[0.05] transition-colors"
               >
-                <div className="h-8 w-8 rounded-lg bg-violet-500/15 flex items-center justify-center mb-3">
-                  <f.icon className="h-4 w-4 text-violet-300" />
+                <div className="h-8 w-8 rounded-lg bg-blue-500/15 flex items-center justify-center mb-3">
+                  <f.icon className="h-4 w-4 text-blue-300" />
                 </div>
                 <p className="text-[13px] font-semibold text-white mb-1">{f.title}</p>
                 <p className="text-[11.5px] text-slate-400 leading-snug">{f.desc}</p>
@@ -747,7 +757,7 @@ function Testimonials() {
           viewport={{ once: true }} transition={{ duration: 0.6 }}
           className="max-w-2xl mb-14"
         >
-          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300 mb-3">Quem já usa</p>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">Quem já usa</p>
           <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Empresários de postos que decidiram <span className="text-slate-400">parar de adivinhar.</span>
           </h2>
@@ -768,7 +778,7 @@ function Testimonials() {
                 "{d.texto}"
               </blockquote>
               <figcaption className="mt-5 pt-5 border-t border-white/[0.06] flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-violet-600 flex items-center justify-center text-white text-[12px] font-semibold">
+                <div className="h-9 w-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-[12px] font-semibold">
                   {d.autor.charAt(0)}
                 </div>
                 <div className="leading-tight">
@@ -792,12 +802,12 @@ function FinalCTA() {
         <motion.div
           initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }} transition={{ duration: 0.7 }}
-          className="relative rounded-3xl overflow-hidden border border-white/10 bg-violet-700/25 p-12 sm:p-16 text-center"
+          className="relative rounded-3xl overflow-hidden border border-white/10 bg-blue-700/25 p-12 sm:p-16 text-center"
         >
           {/* Glow */}
           <div className="absolute inset-0 -z-10">
-            <div className="absolute -top-20 left-1/2 -translate-x-1/2 h-80 w-[800px] rounded-full bg-violet-500/30 blur-3xl" />
-            <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 h-80 w-[800px] rounded-full bg-cyan-500/20 blur-3xl" />
+            <div className="absolute -top-20 left-1/2 -translate-x-1/2 h-80 w-[800px] rounded-full bg-blue-500/30 blur-3xl" />
+            <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 h-80 w-[800px] rounded-full bg-blue-500/20 blur-3xl" />
           </div>
           {/* Pattern de fundo */}
           <div
@@ -810,7 +820,7 @@ function FinalCTA() {
           />
 
           <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3.5 py-1.5 text-[11px] font-medium text-slate-100 backdrop-blur mb-6">
-            <Sparkles className="h-3 w-3 text-cyan-300" />
+            <Sparkles className="h-3 w-3 text-blue-300" />
             Diagnóstico financeiro gratuito · Setor postos
           </span>
 
@@ -823,17 +833,17 @@ function FinalCTA() {
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <a href="#"
-              className="group relative inline-flex items-center gap-2 rounded-full bg-violet-600 px-7 py-4 text-[14.5px] font-semibold text-white shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all hover:scale-[1.02]">
-              <span className="absolute inset-0 rounded-full bg-violet-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
+            <button type="button" onClick={dispararAgendar}
+              className="group relative inline-flex items-center gap-2 rounded-full bg-blue-600 px-7 py-4 text-[14.5px] font-semibold text-white shadow-2xl shadow-blue-500/40 hover:shadow-blue-500/60 transition-all hover:scale-[1.02]">
+              <span className="absolute inset-0 rounded-full bg-blue-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
               Agendar diagnóstico gratuito
               <ArrowUpRight className="h-4 w-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-            </a>
-            <a href="https://wa.me/5500000000000" target="_blank" rel="noreferrer"
+            </button>
+            <button type="button" onClick={dispararAgendar}
               className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-7 py-4 text-[14.5px] font-medium text-white hover:bg-white/10 transition-all backdrop-blur">
               Falar no WhatsApp
               <Phone className="h-4 w-4" />
-            </a>
+            </button>
           </div>
 
           <p className="mt-8 text-[12px] text-slate-400">
@@ -853,7 +863,7 @@ function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 mb-12">
           <div className="md:col-span-5">
             <div className="flex items-center gap-2.5 mb-4">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white font-bold text-sm shadow-lg shadow-violet-500/30">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-sm shadow-lg shadow-blue-500/30">
                 C
               </span>
               <div className="leading-none">
@@ -866,10 +876,10 @@ function Footer() {
               de combustível. Tecnologia, dados e gente para colocar o seu negócio no lucro real.
             </p>
             <div className="mt-5 flex items-center gap-4 text-[12px] text-slate-500">
-              <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> contato@cci-consultoria.com.br</span>
+              <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> contato@cci.app.br</span>
             </div>
             <div className="mt-2 flex items-center gap-4 text-[12px] text-slate-500">
-              <span className="inline-flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> (00) 0000-0000</span>
+              <span className="inline-flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> (27) 99925-0088</span>
             </div>
           </div>
 
@@ -929,6 +939,147 @@ function FooterCol({ titulo, links }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// ─── Modal Agendar (Email / WhatsApp) ──────────────────────────────────
+function ModalAgendar() {
+  const [open, setOpen] = useState(false);
+  const [contato, setContato] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener(EV_ABRIR_AGENDAR, handler);
+    return () => window.removeEventListener(EV_ABRIR_AGENDAR, handler);
+  }, []);
+
+  // Carrega contato sob demanda (1x por sessão de modal aberto)
+  useEffect(() => {
+    if (!open || contato) return;
+    let cancelado = false;
+    setLoading(true);
+    cciContatoService.obterContato()
+      .then(c => { if (!cancelado) setContato(c); })
+      .catch(() => { if (!cancelado) setContato({}); })
+      .finally(() => { if (!cancelado) setLoading(false); });
+    return () => { cancelado = true; };
+  }, [open, contato]);
+
+  const close = () => setOpen(false);
+  const email = contato?.email_contato;
+  const whatsapp = contato?.whatsapp_numero;
+  const msgWa = contato?.whatsapp_mensagem || 'Olá! Gostaria de agendar um diagnóstico gratuito do meu posto.';
+  const linkEmail = cciContatoService.urlMailto(
+    email,
+    'Diagnóstico gratuito — CCI Consultoria',
+    'Olá! Gostaria de agendar um diagnóstico gratuito do meu posto.\n\nNome:\nEmpresa:\nTelefone:\nMelhor horário para contato:'
+  );
+  const linkWa = cciContatoService.urlWhatsApp(whatsapp, msgWa);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={close}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur"
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.98 }}
+            transition={{ duration: 0.22 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-3xl border border-white/10 bg-gradient-to-br from-[#0f1126] via-[#0c0e1f] to-[#0a0c1a] backdrop-blur shadow-2xl overflow-hidden"
+          >
+            {/* Header */}
+            <div className="relative px-6 pt-6 pb-4">
+              <button onClick={close}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+              <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-[11px] font-medium text-blue-200 mb-3">
+                <Sparkles className="h-3 w-3" />
+                Diagnóstico gratuito · CCI
+              </div>
+              <h3 className="text-2xl font-semibold tracking-tight text-white leading-tight">
+                Como você prefere ser atendido?
+              </h3>
+              <p className="text-[13.5px] text-slate-400 mt-2 leading-relaxed">
+                Em até 24h úteis nosso time entra em contato pra entender seu posto
+                e mostrar o quanto a CCI pode ajudar.
+              </p>
+            </div>
+
+            {/* Opções */}
+            {loading ? (
+              <div className="px-6 pb-7 flex items-center justify-center gap-2 text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Carregando opções...</span>
+              </div>
+            ) : (
+              <div className="px-6 pb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* WhatsApp */}
+                {linkWa ? (
+                  <a href={linkWa} target="_blank" rel="noreferrer" onClick={close}
+                    className="group flex flex-col items-start p-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 hover:bg-emerald-500/15 hover:border-emerald-400/50 transition-all">
+                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 border border-emerald-400/30 mb-3">
+                      <MessageCircle className="h-5 w-5 text-emerald-300" />
+                    </div>
+                    <p className="text-[14px] font-semibold text-white mb-1">WhatsApp</p>
+                    <p className="text-[12px] text-emerald-200/80 leading-snug">
+                      Resposta rápida em horário comercial
+                    </p>
+                    <p className="text-[10.5px] text-emerald-300/70 font-mono mt-2">
+                      {cciContatoService.formatarTelefoneBr(whatsapp)}
+                    </p>
+                  </a>
+                ) : (
+                  <OpcaoIndisponivel label="WhatsApp não configurado" />
+                )}
+
+                {/* Email */}
+                {linkEmail ? (
+                  <a href={linkEmail} onClick={close}
+                    className="group flex flex-col items-start p-4 rounded-2xl border border-blue-400/30 bg-blue-500/10 hover:bg-blue-500/15 hover:border-blue-400/50 transition-all">
+                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/20 border border-blue-400/30 mb-3">
+                      <Mail className="h-5 w-5 text-blue-300" />
+                    </div>
+                    <p className="text-[14px] font-semibold text-white mb-1">E-mail</p>
+                    <p className="text-[12px] text-blue-200/80 leading-snug">
+                      Detalhe sua necessidade com calma
+                    </p>
+                    <p className="text-[10.5px] text-blue-300/70 font-mono mt-2 truncate w-full">
+                      {email}
+                    </p>
+                  </a>
+                ) : (
+                  <OpcaoIndisponivel label="E-mail não configurado" />
+                )}
+              </div>
+            )}
+
+            <div className="px-6 pb-6 pt-2 border-t border-white/5">
+              <p className="text-[11.5px] text-slate-500 text-center">
+                Sigilo total · Sem custo · Sem compromisso
+              </p>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function OpcaoIndisponivel({ label }) {
+  return (
+    <div className="flex flex-col items-start p-4 rounded-2xl border border-white/10 bg-white/[0.02] opacity-60">
+      <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 mb-3">
+        <AlertTriangle className="h-5 w-5 text-slate-500" />
+      </div>
+      <p className="text-[13px] font-medium text-slate-400">{label}</p>
     </div>
   );
 }

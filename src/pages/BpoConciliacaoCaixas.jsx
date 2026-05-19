@@ -1079,7 +1079,7 @@ export default function BpoConciliacaoCaixas({
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden flex flex-col">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-indigo-500" />
+                  <CreditCard className="h-4 w-4 text-blue-500" />
                   <h3 className="text-sm font-semibold text-gray-800">Recebido por forma de pagamento</h3>
                 </div>
                 <span className="text-[11px] text-gray-400">{(formasPagamento || []).length} registros</span>
@@ -1089,7 +1089,7 @@ export default function BpoConciliacaoCaixas({
                   label="Dinheiro" valor={totaisPorForma.dinheiro} total={totalForma} />
                 <LinhaBreakdown icon={CreditCard} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#3b82f6"
                   label="Cartão / PIX" valor={totaisPorForma.cartao} total={totalForma} />
-                <LinhaBreakdown icon={FileText} iconColor="text-violet-600" iconBg="bg-violet-50" barHex="#8b5cf6"
+                <LinhaBreakdown icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#8b5cf6"
                   label="Cheque" valor={totaisPorForma.cheque} total={totalForma} />
                 {totaisPorForma.outros > 0 && (
                   <LinhaBreakdown icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100 dark:bg-gray-500/25" barHex="#6b7280"
@@ -1190,7 +1190,7 @@ export default function BpoConciliacaoCaixas({
                           </td>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2">
-                              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0">
+                              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0">
                                 {(c.funcionarioNome || '?').charAt(0)}
                               </div>
                               <div>
@@ -1293,7 +1293,7 @@ export default function BpoConciliacaoCaixas({
                                           <td className="text-right py-1.5 pr-2 font-mono text-gray-900 tabular-nums">{formatCurrency(v.totalVendas)}</td>
                                           <td className="text-right py-1.5 pr-2 font-mono tabular-nums text-emerald-700">{formatCurrency(v.apurDinheiro)}</td>
                                           <td className="text-right py-1.5 pr-2 font-mono tabular-nums text-blue-700">{formatCurrency(v.apurCartao)}</td>
-                                          <td className="text-right py-1.5 pr-2 font-mono tabular-nums text-violet-700">{formatCurrency(v.apurCheque)}</td>
+                                          <td className="text-right py-1.5 pr-2 font-mono tabular-nums text-blue-700">{formatCurrency(v.apurCheque)}</td>
                                           <td className="text-right py-1.5 pr-2 font-mono tabular-nums text-gray-600">{formatCurrency(v.apurOutros)}</td>
                                           <td className="text-right py-1.5 pr-2 font-mono tabular-nums text-emerald-700">
                                             {temApr ? formatCurrency(aprNum) : <span className="text-gray-300">—</span>}
@@ -1899,7 +1899,7 @@ function PainelAutosystem({
               <LinhaBreakdown icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100" barHex="#6b7280"
                 label="Outros / não classificados" valor={totais.outros} total={totalEntradas} />
             )}
-            <LinhaBreakdown icon={PlusCircle} iconColor="text-indigo-600" iconBg="bg-indigo-50" barHex="#6366f1"
+            <LinhaBreakdown icon={PlusCircle} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#6366f1"
               label="Outras entradas (não-venda)" valor={totalOutrasEntradas} total={totalEntradas}
               onClick={outrasEntradasPorConta.length > 0 ? () => setModalOutrasEntradasOpen(true) : undefined} />
           </div>
@@ -1913,7 +1913,7 @@ function PainelAutosystem({
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden flex flex-col">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-indigo-500" />
+              <CreditCard className="h-4 w-4 text-blue-500" />
               <h3 className="text-sm font-semibold text-gray-800">Saídas</h3>
             </div>
             <span className="text-[11px] text-gray-400">{(recebimentos || []).length} registros</span>
@@ -1923,7 +1923,7 @@ function PainelAutosystem({
               label="Dinheiro" valor={totaisForma?.dinheiro || 0} total={totalForma} />
             <LinhaBreakdown icon={CreditCard} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#3b82f6"
               label="Cartão / PIX" valor={totaisForma?.cartao_pix || 0} total={totalForma} />
-            <LinhaBreakdown icon={FileText} iconColor="text-violet-600" iconBg="bg-violet-50" barHex="#8b5cf6"
+            <LinhaBreakdown icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#8b5cf6"
               label="Cheque" valor={totaisForma?.cheque || 0} total={totalForma} />
             <LinhaBreakdown icon={Calendar} iconColor="text-amber-600" iconBg="bg-amber-50" barHex="#f59e0b"
               label="A prazo" valor={totaisForma?.a_prazo || 0} total={totalForma} />
@@ -2067,7 +2067,7 @@ function PainelAutosystem({
               Fechar
             </button>
             <a href="/admin/clientes" target="_blank" rel="noreferrer"
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 flex items-center gap-2">
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 flex items-center gap-2">
               Abrir Classificar contas
               <ChevronRight className="h-3.5 w-3.5" />
             </a>
@@ -2150,7 +2150,7 @@ function FuncionarioRow({ funcionario, aberto, onToggle, diff, conciliado }) {
           <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
             <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
           </motion.div>
-          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
+          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
             {iniciais}
           </div>
           <p className="text-sm font-medium text-gray-900 truncate">{f.nome}</p>
@@ -2193,16 +2193,16 @@ function FuncionarioRow({ funcionario, aberto, onToggle, diff, conciliado }) {
                   <LinhaItem icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100" label="Outros (sem categoria)" valor={f.vendas.outros} />
                 )}
                 {f.outras_entradas > 0 && (
-                  <LinhaItem icon={PlusCircle} iconColor="text-indigo-600" iconBg="bg-indigo-50" label="Outras entradas (não-venda)" valor={f.outras_entradas} />
+                  <LinhaItem icon={PlusCircle} iconColor="text-blue-600" iconBg="bg-blue-50" label="Outras entradas (não-venda)" valor={f.outras_entradas} />
                 )}
               </div>
             </div>
 
             {/* Recebimentos por forma */}
             <div className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
-              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-indigo-50/40">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-blue-50/40">
                 <div className="flex items-center gap-1.5">
-                  <CreditCard className="h-3.5 w-3.5 text-indigo-500" />
+                  <CreditCard className="h-3.5 w-3.5 text-blue-500" />
                   <p className="text-[11px] font-semibold text-gray-700 uppercase tracking-wider">Recebimentos</p>
                 </div>
                 <p className="text-xs font-mono font-bold text-gray-900 tabular-nums">{formatCurrency(f.recebimentos.total)}</p>
@@ -2210,7 +2210,7 @@ function FuncionarioRow({ funcionario, aberto, onToggle, diff, conciliado }) {
               <div className="divide-y divide-gray-50">
                 <LinhaItem icon={Banknote}   iconColor="text-emerald-600" iconBg="bg-emerald-50" label="Dinheiro"       valor={f.recebimentos.dinheiro} />
                 <LinhaItem icon={CreditCard} iconColor="text-blue-600"    iconBg="bg-blue-50"    label="Cartão / PIX"   valor={f.recebimentos.cartao_pix} />
-                <LinhaItem icon={FileText}   iconColor="text-violet-600"  iconBg="bg-violet-50"  label="Cheque"         valor={f.recebimentos.cheque} />
+                <LinhaItem icon={FileText}   iconColor="text-blue-600"  iconBg="bg-blue-50"  label="Cheque"         valor={f.recebimentos.cheque} />
                 <LinhaItem icon={Calendar}   iconColor="text-amber-600"   iconBg="bg-amber-50"   label="A prazo"        valor={f.recebimentos.a_prazo} />
                 {f.recebimentos.outros > 0 && (
                   <LinhaItem icon={MoreHorizontal} iconColor="text-gray-500" iconBg="bg-gray-100" label="Outros"     valor={f.recebimentos.outros} />

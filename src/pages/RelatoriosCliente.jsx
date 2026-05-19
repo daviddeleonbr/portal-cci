@@ -193,7 +193,7 @@ export default function RelatoriosCliente() {
                   <motion.div animate={{ rotate: expanded ? 90 : 0 }} transition={{ duration: 0.15 }}>
                     <ChevronRight className="h-4 w-4 text-gray-400" />
                   </motion.div>
-                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white flex-shrink-0">
+                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
                     <Network className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -232,7 +232,7 @@ export default function RelatoriosCliente() {
                         to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/analise-lancamentos`}
                         onClick={(e) => e.stopPropagation()}
                         title="Análise de lançamentos consolidada de todas as empresas da rede"
-                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-colors shadow-sm"
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-colors shadow-sm"
                       >
                         <FlaskConical className="h-3 w-3" />
                         Lanc. da Rede
@@ -242,7 +242,7 @@ export default function RelatoriosCliente() {
                           to={`/admin/relatorios-cliente/rede/${rede.chaveApiId}/analise-ia`}
                           onClick={(e) => e.stopPropagation()}
                           title="Análise de vendas da rede com IA"
-                          className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all shadow-sm"
+                          className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-br from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all shadow-sm"
                         >
                           <Sparkles className="h-3 w-3" />
                           Análise IA da Rede
@@ -260,7 +260,7 @@ export default function RelatoriosCliente() {
                         <Link key={c.id} to={`/admin/relatorios-cliente/${c.id}`}
                           className="block bg-white rounded-lg border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all group">
                           <div className="flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-md bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-700 font-semibold text-sm flex items-center justify-center flex-shrink-0">
+                            <div className="h-9 w-9 rounded-md bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700 font-semibold text-sm flex items-center justify-center flex-shrink-0">
                               {(labelEmpresa(c) || '?').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -329,7 +329,7 @@ export function ClienteRelatoriosHub() {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="flex items-center gap-3 min-w-0">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
             {(labelEmpresa(cliente) || '?').charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -360,11 +360,11 @@ export function ClienteRelatoriosHub() {
         {relatoriosVisiveis.map((r, i) => {
           const Icon = r.icon;
           const colors = {
-            blue: 'from-blue-500 to-indigo-600',
+            blue: 'from-blue-500 to-blue-600',
             emerald: 'from-emerald-500 to-teal-600',
             amber: 'from-amber-500 to-orange-600',
-            violet: 'from-violet-500 to-purple-600',
-            cyan: 'from-cyan-500 to-blue-500',
+            violet: 'from-blue-500 to-blue-600',
+            cyan: 'from-blue-500 to-blue-500',
           };
 
           const card = (

@@ -656,7 +656,7 @@ export default function BpoAlteracoesCaixas() {
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4 mb-4">
         {loadingMeta ? (
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+            <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
             Carregando redes...
           </div>
         ) : (
@@ -675,12 +675,12 @@ export default function BpoAlteracoesCaixas() {
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data inicial</label>
                   <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)} max={dataAte}
-                    className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+                    className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data final</label>
                   <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)} min={dataDe}
-                    className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+                    className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                 </div>
                 <EmpresaSingleSelect
                   empresas={empresasDaRede}
@@ -713,7 +713,7 @@ export default function BpoAlteracoesCaixas() {
                   onLimpar={() => setUsuariosOrigSelSet(new Set())}
                 />
                 <button onClick={carregar} disabled={loading || empresasSel.length === 0}
-                  className="inline-flex items-center gap-2 rounded-lg bg-violet-600 text-white px-4 py-2 text-sm font-medium hover:bg-violet-700 transition-colors disabled:opacity-50">
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Buscar
                 </button>
@@ -732,8 +732,8 @@ export default function BpoAlteracoesCaixas() {
 
       {redeSel?.tipo === 'autosystem' && !erro && !loading && alteracoes.length === 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 mb-3">
-            <History className="h-6 w-6 text-violet-600" />
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
+            <History className="h-6 w-6 text-blue-600" />
           </div>
           <p className="text-sm font-medium text-gray-900">Selecione período e empresas e clique em "Buscar"</p>
           <p className="text-xs text-gray-500 mt-1">As alterações em lançamentos aparecerão aqui.</p>
@@ -764,7 +764,7 @@ export default function BpoAlteracoesCaixas() {
 
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-              <History className="h-4 w-4 text-violet-500" />
+              <History className="h-4 w-4 text-blue-500" />
               <h3 className="text-[13px] font-semibold text-gray-800">Histórico por usuário</h3>
               <span className="text-[11px] text-gray-400">
                 · {fmtNum(arvoreFiltrada.length)} usuário{arvoreFiltrada.length === 1 ? '' : 's'} · {fmtNum(kpis.total)} evento{kpis.total === 1 ? '' : 's'}
@@ -772,7 +772,7 @@ export default function BpoAlteracoesCaixas() {
               <div className="flex-1" />
               <button onClick={exportarPdf}
                 disabled={arvoreFiltrada.length === 0}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium border border-violet-200 text-violet-700 rounded-lg bg-white hover:bg-violet-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium border border-blue-200 text-blue-700 rounded-lg bg-white hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 <Download className="h-3.5 w-3.5" />
                 Exportar PDF
               </button>
@@ -780,7 +780,7 @@ export default function BpoAlteracoesCaixas() {
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                 <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
                   placeholder="Buscar por funcionário, documento, campo..."
-                  className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+                  className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
             </div>
 
@@ -809,7 +809,7 @@ export default function BpoAlteracoesCaixas() {
 
       {loading && (
         <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500 flex items-center justify-center gap-2">
-          <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           Buscando alterações...
         </div>
       )}
@@ -820,7 +820,7 @@ export default function BpoAlteracoesCaixas() {
 // ─── Componentes ─────────────────────────────────────────────
 function Kpi({ icone: Icone, cor, label, valor, sub }) {
   const palette = {
-    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600'  },
+    violet:  { bg: 'bg-blue-50',  icon: 'text-blue-600'  },
     blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600'    },
     amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600'   },
     emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600' },
@@ -862,14 +862,14 @@ function NodeUsuario({ userNode, expandidos, onToggle, mapaEmpresas, labelEmpres
   return (
     <div>
       <button type="button" onClick={() => onToggle(key)}
-        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-violet-50/40 transition-colors ${aberto ? 'bg-violet-50/40' : ''}`}>
+        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-blue-50/40 transition-colors ${aberto ? 'bg-blue-50/40' : ''}`}>
         <div className="pt-0.5">
           {aberto
-            ? <ChevronDown className="h-4 w-4 text-violet-600" />
+            ? <ChevronDown className="h-4 w-4 text-blue-600" />
             : <ChevronRight className="h-4 w-4 text-gray-400" />}
         </div>
-        <div className="rounded-lg bg-violet-50 p-2 flex-shrink-0">
-          <Users className="h-4 w-4 text-violet-600" />
+        <div className="rounded-lg bg-blue-50 p-2 flex-shrink-0">
+          <Users className="h-4 w-4 text-blue-600" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[13.5px] font-semibold text-gray-900 truncate" title={userNode.usuarioNome}>
@@ -917,7 +917,7 @@ function NodeTipo({ userKey, tipoNode, expandidos, onToggle, mapaEmpresas, label
         className={`w-full flex items-center gap-3 px-6 py-2.5 text-left hover:bg-white transition-colors ${aberto ? 'bg-white' : ''}`}>
         <div>
           {aberto
-            ? <ChevronDown className="h-3.5 w-3.5 text-violet-600" />
+            ? <ChevronDown className="h-3.5 w-3.5 text-blue-600" />
             : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
         </div>
         {cor && (
@@ -959,7 +959,7 @@ function EventoCard({ ev, mapaEmpresas, labelEmpresa }) {
   const valor       = Number(sourceRow.valor) || 0;
 
   return (
-    <div className="px-8 py-3 hover:bg-violet-50/20 transition-colors">
+    <div className="px-8 py-3 hover:bg-blue-50/20 transition-colors">
       {/* Cabeçalho com contexto do lançamento + horário do evento */}
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <span className="text-[11.5px] font-mono tabular-nums text-gray-700">
@@ -1108,7 +1108,7 @@ function EmpresaSingleSelect({ empresas, selecionadoId, onSelecionar, labelEmpre
       </label>
       <button type="button" onClick={() => setAberto(o => !o)}
         className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[200px] max-w-[280px] ${
-          aberto ? 'border-violet-400 ring-2 ring-violet-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+          aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
         }`}>
         <span className="truncate">{label}</span>
         <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
@@ -1126,12 +1126,12 @@ function EmpresaSingleSelect({ empresas, selecionadoId, onSelecionar, labelEmpre
                   <button type="button" key={emp.id}
                     onClick={() => { onSelecionar(emp.id); setAberto(false); }}
                     className={`w-full flex items-start gap-2 px-3 py-2 transition-colors text-left ${
-                      marcada ? 'bg-violet-50' : 'hover:bg-gray-50'
+                      marcada ? 'bg-blue-50' : 'hover:bg-gray-50'
                     }`}>
                     <input type="radio" checked={marcada} onChange={() => {}}
-                      className="h-4 w-4 text-violet-600 focus:ring-violet-500 mt-0.5" />
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-[12.5px] truncate ${marcada ? 'text-violet-900 font-medium' : 'text-gray-800'}`}>
+                      <p className={`text-[12.5px] truncate ${marcada ? 'text-blue-900 font-medium' : 'text-gray-800'}`}>
                         {labelEmpresa(emp)}
                       </p>
                       <div className="flex items-baseline gap-2">
@@ -1185,7 +1185,7 @@ function UsuarioMultiSelect({ usuarios, selecionados, loading, onToggle, onLimpa
       <button type="button" onClick={() => setAberto(o => !o)}
         disabled={loading || usuarios.length === 0}
         className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[200px] max-w-[280px] disabled:opacity-50 disabled:cursor-not-allowed ${
-          aberto ? 'border-violet-400 ring-2 ring-violet-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+          aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
         }`}>
         <span className="truncate">{label}</span>
         <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
@@ -1211,7 +1211,7 @@ function UsuarioMultiSelect({ usuarios, selecionados, loading, onToggle, onLimpa
                     className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
                     <input type="checkbox" checked={marcado}
                       onChange={() => onToggle(login)}
-                      className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 mt-0.5" />
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12.5px] text-gray-800 truncate" title={u.usuario_nome || login}>
                         {u.usuario_nome || login}

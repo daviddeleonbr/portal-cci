@@ -31,7 +31,7 @@ export default function BarraProgressoTopo({ loading }) {
           />
           {/* Pulso 2 — entra defasado pra dar continuidade visual */}
           <motion.span
-            className="absolute inset-y-0 w-1/4 rounded-full bg-gradient-to-r from-transparent via-indigo-500 to-transparent"
+            className="absolute inset-y-0 w-1/4 rounded-full bg-gradient-to-r from-transparent via-blue-500 to-transparent"
             initial={{ left: '-30%' }}
             animate={{ left: '110%' }}
             transition={{ duration: 1.8, ease: 'easeInOut', repeat: Infinity, delay: 0.8 }}

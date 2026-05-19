@@ -409,10 +409,10 @@ export default function ClienteContasPagar() {
             <Calendar className="h-3 w-3" /> Vencimento entre
           </span>
           <input type="date" value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           <span className="text-[10px] text-gray-400">e</span>
           <input type="date" value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
         {podeFiltrarEmpresa && (
           <EmpresaMultiSelect
@@ -559,7 +559,7 @@ export default function ClienteContasPagar() {
                                 <motion.div animate={{ rotate: empAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
                                   <ChevronRight className="h-4 w-4 text-gray-400" />
                                 </motion.div>
-                                <div className="h-7 w-7 rounded-lg bg-violet-50 dark:bg-violet-500/15 text-violet-600 dark:text-violet-300 flex items-center justify-center flex-shrink-0">
+                                <div className="h-7 w-7 rounded-lg bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-300 flex items-center justify-center flex-shrink-0">
                                   <Building2 className="h-3.5 w-3.5" />
                                 </div>
                                 <div>

@@ -23,7 +23,7 @@ import * as dreService from '../services/mascaraDreService';
 // ─── Tipos de linha na DRE ────────────────────────────────
 const TIPO_LINHA = {
   grupo:     { label: 'Grupo',     icon: FolderOpen, color: 'text-gray-900', bg: 'bg-slate-100 text-slate-700',   desc: 'Agrupa contas (ex: RECEITA BRUTA)' },
-  subtotal:  { label: 'Subtotal',  icon: Equal, color: 'text-blue-700 font-semibold', bg: 'bg-purple-50 text-purple-700', desc: 'Cálculo (ex: = RECEITA OPERACIONAL LIQUIDA)' },
+  subtotal:  { label: 'Subtotal',  icon: Equal, color: 'text-blue-700 font-semibold', bg: 'bg-blue-50 text-blue-700', desc: 'Cálculo (ex: = RECEITA OPERACIONAL LIQUIDA)' },
   resultado: { label: 'Resultado', icon: Equal, color: 'text-emerald-700 font-bold', bg: 'bg-emerald-50 text-emerald-700', desc: 'Resultado final (ex: = RESULTADO GERENCIAL)' },
 };
 
@@ -308,7 +308,7 @@ function DreTreeBuilder({ mascara, grupos, saving, onBack, onAddLinha, onUpdateL
         {/* Toolbar */}
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Layers className="h-3.5 w-3.5 text-white" />
             </div>
             <span className="text-sm font-semibold text-gray-800">Estrutura da DRE</span>

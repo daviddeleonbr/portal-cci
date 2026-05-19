@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Menu, LogOut, Moon, Sun, EyeOff, Eye } from 'lucide-react';
+import { Menu, LogOut, Moon, Sun, EyeOff, Eye } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { logoutAdmin } from '../../lib/auth';
 import { useTheme } from '../../hooks/useTheme';
 import { useAnonimizador } from '../../services/anonimizarService';
+import NotificacoesBell from '../ui/NotificacoesBell';
 
 export default function Header({ onMenuClick }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -63,15 +64,12 @@ export default function Header({ onMenuClick }) {
           {escuro ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5" />}
         </button>
 
-        <button className="relative rounded p-2 text-gray-500 hover:bg-gray-100 transition-colors">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-blue-600" />
-        </button>
+        <NotificacoesBell usuarioId={usuario?.id} tema="admin" />
 
         <div ref={userRef} className="relative">
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-sm font-semibold shadow-sm hover:shadow-md transition-shadow"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-sm font-semibold shadow-sm hover:shadow-md transition-shadow"
           >
             {initials}
           </button>

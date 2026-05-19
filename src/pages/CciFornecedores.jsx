@@ -94,7 +94,7 @@ export default function CciFornecedores() {
           {filtrados.map(f => (
             <div key={f.id} className="bg-white rounded-xl border border-gray-200/60 p-4 hover:border-blue-200 hover:shadow-sm transition-all group">
               <div className="flex items-start justify-between mb-2">
-                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
                   <UserRound className="h-4 w-4 text-white" />
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

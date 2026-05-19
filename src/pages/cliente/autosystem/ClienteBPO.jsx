@@ -92,12 +92,12 @@ export default function ClienteBPO() {
       </PageHeader>
 
       {/* Empresa ativa */}
-      <div className="mb-4 rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50/80 to-purple-50/40 p-3 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+      <div className="mb-4 rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-blue-50/40 p-3 flex items-center gap-3">
+        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
           <Building2 className="h-5 w-5 text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold text-violet-700 uppercase tracking-wider">Empresa selecionada</p>
+          <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Empresa selecionada</p>
           <p className="text-sm font-semibold text-gray-900 truncate">{empresa?.nome}</p>
           <div className="flex items-center gap-3 mt-0.5">
             {empresa?.cnpj && <p className="text-[11px] text-gray-500 font-mono">{empresa.cnpj}</p>}
@@ -116,7 +116,7 @@ export default function ClienteBPO() {
               <button key={a.key} onClick={() => setAba(a.key)}
                 className={`flex items-start gap-2 px-4 py-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap ${
                   ativo
-                    ? 'border-violet-600 text-violet-700'
+                    ? 'border-blue-600 text-blue-700'
                     : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
                 }`}>
                 <Icon className="h-4 w-4 flex-shrink-0 mt-0.5" />
@@ -219,12 +219,12 @@ function AbaConciliacaoCaixa({ empresa, usuario }) {
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data inicial</label>
             <input type="date" value={dataInicial} onChange={e => setDataInicial(e.target.value)}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data final</label>
             <input type="date" value={dataFinal} onChange={e => setDataFinal(e.target.value)}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
           <div className="flex items-center gap-2">
             <AtalhoPeriodo label="Mês atual" onClick={() => {
@@ -250,7 +250,7 @@ function AbaConciliacaoCaixa({ empresa, usuario }) {
           label="Relatórios concluídos" valor={concluidas.length}
           sub={diasNoPeriodo > 0 ? `em ${diasNoPeriodo} ${diasNoPeriodo === 1 ? 'dia' : 'dias'} do período` : ''}
           highlight />
-        <ResumoCard icon={Calendar} iconBg="bg-violet-50" iconColor="text-violet-600"
+        <ResumoCard icon={Calendar} iconBg="bg-blue-50" iconColor="text-blue-600"
           label="Período"
           valor={`${formatDataBR(dataInicial)} → ${formatDataBR(dataFinal)}`}
           valorClassName="text-[13px]" />
@@ -263,7 +263,7 @@ function AbaConciliacaoCaixa({ empresa, usuario }) {
       {/* Lista */}
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           <span className="text-sm">Carregando relatórios...</span>
         </div>
       ) : error ? (
@@ -305,8 +305,8 @@ function AbaConciliacaoCaixa({ empresa, usuario }) {
 function AbaConciliacaoExtratos({ empresa }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
-      <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 mb-3">
-        <Landmark className="h-6 w-6 text-violet-600" />
+      <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
+        <Landmark className="h-6 w-6 text-blue-600" />
       </div>
       <p className="text-sm font-medium text-gray-900 mb-1">
         Conciliação de extratos bancários — {empresa?.nome}
@@ -407,9 +407,9 @@ function SeletorEmpresa({ empresas, empresaId, onChange }) {
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setAberto(o => !o)}
         className={`h-10 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-sm transition-colors min-w-[220px] max-w-[320px] font-medium ${
-          aberto ? 'border-violet-400 ring-2 ring-violet-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+          aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
         }`}>
-        <Building2 className="h-4 w-4 text-violet-500 flex-shrink-0" />
+        <Building2 className="h-4 w-4 text-blue-500 flex-shrink-0" />
         <span className="truncate flex-1 text-left">{label}</span>
         <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
       </button>
@@ -427,18 +427,18 @@ function SeletorEmpresa({ empresas, empresaId, onChange }) {
                   <button key={emp.id} type="button"
                     onClick={() => { onChange(emp.id); setAberto(false); }}
                     className={`w-full flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors text-left ${
-                      ativa ? 'bg-violet-50/60' : ''
+                      ativa ? 'bg-blue-50/60' : ''
                     }`}>
                     <div className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      ativa ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white' : 'bg-gray-100 text-gray-500'
+                      ativa ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' : 'bg-gray-100 text-gray-500'
                     }`}>
                       <Building2 className="h-3.5 w-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-[12.5px] truncate ${ativa ? 'text-violet-900 font-semibold' : 'text-gray-800'}`}>{emp.nome}</p>
+                      <p className={`text-[12.5px] truncate ${ativa ? 'text-blue-900 font-semibold' : 'text-gray-800'}`}>{emp.nome}</p>
                       {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
                     </div>
-                    {ativa && <CheckCircle2 className="h-4 w-4 text-violet-600 flex-shrink-0" />}
+                    {ativa && <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />}
                   </button>
                 );
               })}

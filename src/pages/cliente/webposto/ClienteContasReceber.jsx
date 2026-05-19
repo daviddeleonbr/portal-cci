@@ -115,26 +115,26 @@ const FONTE_CFG = {
   titulo: {
     label: 'Título',
     icon: ScrollText,
-    chipBg: 'bg-indigo-50',
-    chipColor: 'text-indigo-700',
-    chipRing: 'ring-indigo-200',
-    iconBg: 'bg-indigo-50 text-indigo-600',
+    chipBg: 'bg-blue-50',
+    chipColor: 'text-blue-700',
+    chipRing: 'ring-blue-200',
+    iconBg: 'bg-blue-50 text-blue-600',
   },
   duplicata: {
     label: 'Duplicata',
     icon: Landmark,
-    chipBg: 'bg-violet-50',
-    chipColor: 'text-violet-700',
-    chipRing: 'ring-violet-200',
-    iconBg: 'bg-violet-50 text-violet-600',
+    chipBg: 'bg-blue-50',
+    chipColor: 'text-blue-700',
+    chipRing: 'ring-blue-200',
+    iconBg: 'bg-blue-50 text-blue-600',
   },
   cartao: {
     label: 'Cartão',
     icon: CreditCard,
-    chipBg: 'bg-cyan-50',
-    chipColor: 'text-cyan-700',
-    chipRing: 'ring-cyan-200',
-    iconBg: 'bg-cyan-50 text-cyan-600',
+    chipBg: 'bg-blue-50',
+    chipColor: 'text-blue-700',
+    chipRing: 'ring-blue-200',
+    iconBg: 'bg-blue-50 text-blue-600',
   },
   cheque: {
     label: 'Cheque',
@@ -643,16 +643,16 @@ export default function ClienteContasReceber() {
             const ativo = filtroFonte === a.k;
             const corClasses = {
               emerald: ativo ? 'border-emerald-600 text-emerald-700' : '',
-              indigo:  ativo ? 'border-indigo-600 text-indigo-700' : '',
-              violet:  ativo ? 'border-violet-600 text-violet-700' : '',
-              cyan:    ativo ? 'border-cyan-600 text-cyan-700' : '',
+              indigo:  ativo ? 'border-blue-600 text-blue-700' : '',
+              violet:  ativo ? 'border-blue-600 text-blue-700' : '',
+              cyan:    ativo ? 'border-blue-600 text-blue-700' : '',
               teal:    ativo ? 'border-teal-600 text-teal-700' : '',
             }[a.cor];
             const badgeClasses = {
               emerald: ativo ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
-              indigo:  ativo ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
-              violet:  ativo ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
-              cyan:    ativo ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+              indigo:  ativo ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+              violet:  ativo ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
+              cyan:    ativo ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
               teal:    ativo ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
             }[a.cor];
             return (
@@ -935,7 +935,7 @@ function LancamentoRow({ t, multiEmpresa }) {
             {cfg.label}
           </span>
           {t.administradoraNome && (
-            <span className="text-[10px] text-cyan-700 bg-cyan-50 rounded px-1.5 py-0.5 flex-shrink-0">
+            <span className="text-[10px] text-blue-700 bg-blue-50 rounded px-1.5 py-0.5 flex-shrink-0">
               {t.administradoraNome}
             </span>
           )}

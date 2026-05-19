@@ -325,8 +325,8 @@ function CardCategoriaAnalise({ a, titulo, icone: Icone = Package, cor = 'blue' 
         )}
       </div>
       {a.mix_recomendado && (
-        <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/50 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-700 mb-1">Mix recomendado</p>
+        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-700 mb-1">Mix recomendado</p>
           <p className="text-[12px] text-gray-700 leading-relaxed">{a.mix_recomendado}</p>
         </div>
       )}
@@ -355,7 +355,7 @@ function CardVolumesPrecos({ v }) {
         <ul className="space-y-1 mt-3">
           {v.observacoes.map((o, i) => (
             <li key={i} className="text-[12px] text-gray-700 flex items-start gap-1.5">
-              <span className="h-1 w-1 rounded-full bg-indigo-500 flex-shrink-0 mt-2" />
+              <span className="h-1 w-1 rounded-full bg-blue-500 flex-shrink-0 mt-2" />
               <span>{o}</span>
             </li>
           ))}
@@ -955,7 +955,7 @@ function CardFormasPagamento({ f }) {
           <ul className="space-y-1">
             {f.recomendacoes.map((r, i) => (
               <li key={i} className="text-[12px] text-gray-700 flex items-start gap-1.5">
-                <span className="h-1 w-1 rounded-full bg-indigo-500 flex-shrink-0 mt-2" />
+                <span className="h-1 w-1 rounded-full bg-blue-500 flex-shrink-0 mt-2" />
                 <span>{r}</span>
               </li>
             ))}
@@ -1007,9 +1007,9 @@ function Card({ icon: Icon, color, titulo, children }) {
     emerald: 'text-emerald-600 bg-emerald-50',
     amber: 'text-amber-600 bg-amber-50',
     red: 'text-red-600 bg-red-50',
-    indigo: 'text-indigo-600 bg-indigo-50',
-    cyan: 'text-cyan-600 bg-cyan-50',
-    violet: 'text-violet-600 bg-violet-50',
+    indigo: 'text-blue-600 bg-blue-50',
+    cyan: 'text-blue-600 bg-blue-50',
+    violet: 'text-blue-600 bg-blue-50',
     gray: 'text-gray-600 bg-gray-50',
   };
   return (

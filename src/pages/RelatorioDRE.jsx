@@ -1028,7 +1028,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             className="flex items-center justify-center h-9 w-9 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all flex-shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
             <FileBarChart className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
@@ -1203,7 +1203,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         {!dreSolicitado ? (
           <motion.div key="aguardando" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center no-print">
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
               <FileBarChart className="h-7 w-7 text-white" />
             </div>
             <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o período e clique em "Montar DRE"</p>
@@ -1242,7 +1242,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
               <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap no-print">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                  <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                     <Building2 className="h-3.5 w-3.5 text-white" />
                   </div>
                   <div className="min-w-0">
@@ -1379,7 +1379,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             {/* Header (no-print) */}
             <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between no-print">
               <div className="flex items-center gap-2.5">
-                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
                   <Layers className="h-3.5 w-3.5 text-white" />
                 </div>
                 <div>
@@ -1485,7 +1485,7 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
         {/* Background decorative gradient */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-1/2 left-1/2 -translate-x-1/2 w-[400px] h-[400px] rounded-full bg-blue-100/40 blur-[80px]" />
-          <div className="absolute -bottom-1/2 right-1/4 w-[300px] h-[300px] rounded-full bg-indigo-100/30 blur-[60px]" />
+          <div className="absolute -bottom-1/2 right-1/4 w-[300px] h-[300px] rounded-full bg-blue-100/30 blur-[60px]" />
         </div>
 
         <div className="relative flex flex-col items-center text-center max-w-md mx-auto">
@@ -1494,12 +1494,12 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-              className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500 opacity-20 blur-xl"
+              className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-500 opacity-20 blur-xl"
             />
             <motion.div
               animate={{ scale: [1, 1.05, 1] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="relative h-20 w-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30"
+              className="relative h-20 w-20 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30"
             >
               <FileBarChart className="h-9 w-9 text-white" />
               <motion.div
@@ -1524,7 +1524,7 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
             </div>
             <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-gradient-to-r from-blue-500 to-indigo-600"
+                className="h-full bg-gradient-to-r from-blue-500 to-blue-600"
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
                 transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -1694,7 +1694,7 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
         const totalCols = 1 + (meses.length * 2) + 2 + (showAH ? 1 : 0);
         return (
           <>
-            <tr key={conta.id} className="conta-row border-b border-gray-50 hover:bg-indigo-50/30 transition-colors">
+            <tr key={conta.id} className="conta-row border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
               <td className="px-4 py-1.5 overflow-hidden" style={{ paddingLeft: 12 + indent + 24 }}>
                 <div className="flex items-center gap-2 min-w-0">
                   {temLancs ? (
@@ -1705,7 +1705,7 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
                       </motion.div>
                     </button>
                   ) : (
-                    <div className="h-1 w-1 rounded-full bg-indigo-300 flex-shrink-0" />
+                    <div className="h-1 w-1 rounded-full bg-blue-300 flex-shrink-0" />
                   )}
                   <span title={conta.descricao} className="text-[11px] text-gray-600 truncate min-w-0 flex-1">{conta.descricao}</span>
                   {temLancs && (

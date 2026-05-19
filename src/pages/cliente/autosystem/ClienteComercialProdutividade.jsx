@@ -398,10 +398,10 @@ export default function ClienteComercialProdutividade() {
             <Calendar className="h-3 w-3" /> Período
           </span>
           <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)} max={dataAte}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           <span className="text-[10px] text-gray-400">e</span>
           <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)} min={dataDe}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
         {empresasDisponiveis.length > 1 && (
           <EmpresaMultiSelect
@@ -426,7 +426,7 @@ export default function ClienteComercialProdutividade() {
 
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           <span className="text-sm">Carregando produtividade...</span>
         </div>
       ) : erro ? (
@@ -439,8 +439,8 @@ export default function ClienteComercialProdutividade() {
         </div>
       ) : vendedoresEnriquecidos.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 mb-3">
-            <Users className="h-6 w-6 text-violet-600" />
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
+            <Users className="h-6 w-6 text-blue-600" />
           </div>
           <p className="text-sm font-medium text-gray-900">Nenhum vendedor encontrado no período</p>
         </div>
@@ -496,7 +496,7 @@ export default function ClienteComercialProdutividade() {
           {escopo === 'pista' && tabelaVendedores.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
               <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
-                <Gauge className="h-4 w-4 text-violet-500" />
+                <Gauge className="h-4 w-4 text-blue-500" />
                 <h3 className="text-[13px] font-semibold text-gray-800">Análise comparativa</h3>
                 <span className="text-[11px] text-gray-400">
                   por vendedor · clique no cabeçalho para ordenar
@@ -515,12 +515,12 @@ export default function ClienteComercialProdutividade() {
                         return (
                           <th key={c.campo} className="px-2.5 py-2 border-l border-gray-100 select-none">
                             <button type="button" onClick={() => clickHeader(c.campo)}
-                              className={`w-full inline-flex items-center justify-end gap-1.5 hover:text-gray-800 transition-colors ${ativo ? 'text-violet-700' : ''}`}>
+                              className={`w-full inline-flex items-center justify-end gap-1.5 hover:text-gray-800 transition-colors ${ativo ? 'text-blue-700' : ''}`}>
                               <Icone className={`h-3 w-3 ${COR_ICONE[c.cor]}`} />
                               <span className="whitespace-nowrap">{c.titulo}</span>
                               <span className="inline-flex flex-col items-center -my-0.5 leading-none">
-                                <span className={`text-[8px] ${setaUp ? 'text-violet-700' : 'text-gray-300'}`}>▲</span>
-                                <span className={`text-[8px] -mt-0.5 ${setaDown ? 'text-violet-700' : 'text-gray-300'}`}>▼</span>
+                                <span className={`text-[8px] ${setaUp ? 'text-blue-700' : 'text-gray-300'}`}>▲</span>
+                                <span className={`text-[8px] -mt-0.5 ${setaDown ? 'text-blue-700' : 'text-gray-300'}`}>▼</span>
                               </span>
                             </button>
                           </th>
@@ -530,7 +530,7 @@ export default function ClienteComercialProdutividade() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {tabelaVendedores.map(v => (
-                      <tr key={`an-${v.empresa}-${v.vendedor_codigo}`} className="hover:bg-violet-50/30 transition-colors">
+                      <tr key={`an-${v.empresa}-${v.vendedor_codigo}`} className="hover:bg-blue-50/30 transition-colors">
                         <td className="px-3 py-1.5">
                           <p className="text-[12px] font-medium text-gray-900 truncate max-w-[240px]">
                             {v.vendedor_nome || <span className="italic text-gray-400">sem nome</span>}
@@ -564,7 +564,7 @@ export default function ClienteComercialProdutividade() {
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-violet-500" />
+                <Users className="h-4 w-4 text-blue-500" />
                 <h3 className="text-[13px] font-semibold text-gray-800">Detalhamento por vendedor</h3>
                 <span className="text-[11px] text-gray-400">
                   · {fmtNum(vendedoresFiltrados.length)} / {fmtNum(vendedoresEnriquecidos.length)} · últimos {periodoDias} dias
@@ -575,7 +575,7 @@ export default function ClienteComercialProdutividade() {
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                 <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
                   placeholder="Buscar por vendedor..."
-                  className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+                  className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -615,14 +615,14 @@ export default function ClienteComercialProdutividade() {
                     const totalCols = 1 + 1 + (multiEmpresa ? 1 : 0) + 5 + (escopo === 'pista' ? 2 : 0);
                     return (
                       <React.Fragment key={key}>
-                        <tr className={`cursor-pointer transition-colors ${aberto ? 'bg-violet-50/60' : 'hover:bg-violet-50/30'}`}
+                        <tr className={`cursor-pointer transition-colors ${aberto ? 'bg-blue-50/60' : 'hover:bg-blue-50/30'}`}
                           onClick={() => toggleVendedor(v)}>
                           <td className="px-3 py-1.5 text-center">
                             <div className="flex items-center justify-center gap-1">
                               {aberto
-                                ? <ChevronDown className="h-3.5 w-3.5 text-violet-600" />
+                                ? <ChevronDown className="h-3.5 w-3.5 text-blue-600" />
                                 : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
-                              <span className="font-mono text-[11px] text-violet-700 font-semibold">{i + 1}</span>
+                              <span className="font-mono text-[11px] text-blue-700 font-semibold">{i + 1}</span>
                             </div>
                           </td>
                           <td className="px-3 py-1.5">
@@ -672,8 +672,8 @@ export default function ClienteComercialProdutividade() {
                           )}
                         </tr>
                         {aberto && (
-                          <tr className="bg-gradient-to-b from-violet-50/40 to-white">
-                            <td colSpan={totalCols} className="px-4 py-4 border-b-2 border-violet-100">
+                          <tr className="bg-gradient-to-b from-blue-50/40 to-white">
+                            <td colSpan={totalCols} className="px-4 py-4 border-b-2 border-blue-100">
                               <DetalheVendedor
                                 vendedor={v}
                                 detalhe={det}
@@ -699,14 +699,14 @@ export default function ClienteComercialProdutividade() {
 
 // Ícones coloridos no header da tabela de análise.
 const COR_ICONE = {
-  violet:  'text-violet-600',
+  violet:  'text-blue-600',
   blue:    'text-blue-600',
   amber:   'text-amber-600',
   emerald: 'text-emerald-600',
 };
 // RGB das paletas (sem opacity) — usado para gerar o heatmap por coluna.
 const COR_RGB = {
-  violet:  '139, 92, 246',   // violet-500
+  violet:  '139, 92, 246',   // blue-500
   blue:    '96, 165, 250',   // blue-400
   amber:   '251, 191, 36',   // amber-400
   emerald: '52, 211, 153',   // emerald-400
@@ -727,7 +727,7 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos, map
   if (!detalhe || detalhe.loading) {
     return (
       <div className="flex items-center justify-center gap-2 py-8 text-gray-500">
-        <Loader2 className="h-4 w-4 animate-spin text-violet-600" />
+        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
         <span className="text-[12px]">Carregando detalhes...</span>
       </div>
     );
@@ -830,24 +830,24 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos, map
         </div>
         {/* Mix de gasolina */}
         {temClassif ? (
-          <div className="px-3 py-2 border-b border-amber-50 bg-gradient-to-r from-violet-50/50 to-transparent">
+          <div className="px-3 py-2 border-b border-amber-50 bg-gradient-to-r from-blue-50/50 to-transparent">
             <div className="flex items-baseline justify-between gap-2">
               <div className="flex items-baseline gap-1.5">
-                <span className="text-[10px] font-semibold text-violet-700 uppercase tracking-wider">Mix aditivada</span>
-                <span className="text-[18px] font-bold text-violet-700 leading-none tabular-nums">{mixPct.toFixed(1)}%</span>
+                <span className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Mix aditivada</span>
+                <span className="text-[18px] font-bold text-blue-700 leading-none tabular-nums">{mixPct.toFixed(1)}%</span>
               </div>
               <span className="text-[10px] text-gray-500 tabular-nums">
                 {fmtNum(litrosAditivada, 0)} / {fmtNum(baseMix, 0)} L
               </span>
             </div>
             <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mt-1.5">
-              <div className="h-full bg-gradient-to-r from-violet-400 to-violet-600 rounded-full"
+              <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"
                 style={{ width: `${Math.max(2, mixPct)}%` }} />
             </div>
           </div>
         ) : (
           <div className="px-3 py-2 border-b border-amber-50 text-[10px] text-gray-400 italic">
-            Mix não calculável — classifique os produtos em <strong className="text-violet-600 not-italic">Configurações</strong>.
+            Mix não calculável — classifique os produtos em <strong className="text-blue-600 not-italic">Configurações</strong>.
           </div>
         )}
         <div className="p-3 max-h-[260px] overflow-y-auto">
@@ -987,7 +987,7 @@ function TreeGrupos({ arvore }) {
 // KPI card
 function Kpi({ icone: Icone, cor, label, valor, sub, negativo }) {
   const palette = {
-    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600' },
+    violet:  { bg: 'bg-blue-50',  icon: 'text-blue-600' },
     blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600' },
     amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600' },
     emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600' },
@@ -1035,7 +1035,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
         </span>
         <button type="button" onClick={() => setAberto(o => !o)}
           className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[180px] max-w-[260px] ${
-            aberto ? 'border-violet-400 ring-2 ring-violet-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+            aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
           }`}>
           <span className="truncate">{label}</span>
           <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
@@ -1050,7 +1050,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
             <button type="button" onClick={onToggleTodas}
               className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
               <input type="checkbox" checked={todasMarcadas} onChange={() => {}}
-                className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span className="text-[12.5px] font-medium text-gray-700">
                 {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
               </span>
@@ -1063,7 +1063,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
                     className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
                     <input type="checkbox" checked={marcada}
                       onChange={() => onToggle(emp.id)}
-                      className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 mt-0.5" />
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12.5px] text-gray-800 truncate">{emp.nome}</p>
                       {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}

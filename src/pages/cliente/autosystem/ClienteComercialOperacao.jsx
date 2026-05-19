@@ -424,7 +424,7 @@ export default function ClienteComercialOperacao() {
                 <button key={n} onClick={() => setPeriodoUsoDias(n)}
                   className={`px-2.5 py-1 text-[11.5px] font-medium rounded-md transition-colors ${
                     ativo
-                      ? 'bg-white text-violet-700 shadow-sm ring-1 ring-violet-200'
+                      ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-200'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}>{n}d</button>
               );
@@ -450,7 +450,7 @@ export default function ClienteComercialOperacao() {
 
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           <span className="text-sm">Carregando bombas e bicos...</span>
         </div>
       ) : erro ? (
@@ -463,8 +463,8 @@ export default function ClienteComercialOperacao() {
         </div>
       ) : bombasEnriquecidas.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 mb-3">
-            <Gauge className="h-6 w-6 text-violet-600" />
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
+            <Gauge className="h-6 w-6 text-blue-600" />
           </div>
           <p className="text-sm font-medium text-gray-900">Nenhuma bomba cadastrada</p>
           <p className="text-xs text-gray-500 mt-1">Verifique no Autosystem se há bombas para as empresas selecionadas.</p>
@@ -544,7 +544,7 @@ export default function ClienteComercialOperacao() {
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mt-5">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <Gauge className="h-4 w-4 text-violet-500" />
+                <Gauge className="h-4 w-4 text-blue-500" />
                 <h3 className="text-[13px] font-semibold text-gray-800">Bombas cadastradas</h3>
                 <span className="text-[11px] text-gray-400">
                   · {formatNumero(bombasFiltradas.length)} / {formatNumero(bombasEnriquecidas.length)}
@@ -555,7 +555,7 @@ export default function ClienteComercialOperacao() {
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                 <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
                   placeholder="Buscar por código, série, modelo, fabricante..."
-                  className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+                  className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -578,18 +578,18 @@ export default function ClienteComercialOperacao() {
                     const bicosBomba = b.bicos || [];
                     return (
                       <React.Fragment key={b.grid}>
-                        <tr className={`cursor-pointer hover:bg-violet-50/30 transition-colors ${aberto ? 'bg-violet-50/30' : ''}`}
+                        <tr className={`cursor-pointer hover:bg-blue-50/30 transition-colors ${aberto ? 'bg-blue-50/30' : ''}`}
                           onClick={() => toggleBomba(b.grid)}>
                           <td className="px-3 py-2">
                             {bicosBomba.length > 0 ? (aberto
-                              ? <ChevronDown className="h-3.5 w-3.5 text-violet-600" />
+                              ? <ChevronDown className="h-3.5 w-3.5 text-blue-600" />
                               : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />)
                               : <span className="inline-block w-3.5" />}
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
-                              <div className="h-6 w-6 rounded-lg bg-violet-100 flex items-center justify-center">
-                                <Gauge className="h-3 w-3 text-violet-700" />
+                              <div className="h-6 w-6 rounded-lg bg-blue-100 flex items-center justify-center">
+                                <Gauge className="h-3 w-3 text-blue-700" />
                               </div>
                               <span className="text-[12.5px] font-semibold text-gray-900">#{b.codigo}</span>
                             </div>
@@ -615,7 +615,7 @@ export default function ClienteComercialOperacao() {
                                 {b.usoVolume > 0 && (
                                   <>
                                     <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
-                                      <div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-violet-600 transition-all"
+                                      <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all"
                                         style={{ width: `${Math.max(2, maxVolumeBomba > 0 ? (b.usoVolume / maxVolumeBomba) * 100 : 0)}%` }} />
                                     </div>
                                     <div className="flex items-center gap-2 text-[10px] font-mono tabular-nums">
@@ -662,7 +662,7 @@ export default function ClienteComercialOperacao() {
           {dadosHeatmapBicos.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mt-5">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
-                <Droplet className="h-4 w-4 text-violet-500" />
+                <Droplet className="h-4 w-4 text-blue-500" />
                 <h3 className="text-[13px] font-semibold text-gray-800">
                   Vendas por bico × dia da semana
                 </h3>
@@ -811,7 +811,7 @@ function AfericoesTree({ arvore, expandidos, onToggle }) {
                           </td>
                           <td className="px-3 py-1.5 border-l border-gray-100">
                             <span className="inline-flex items-center gap-1 text-[11.5px] text-gray-700">
-                              <Droplet className="h-3 w-3 text-violet-500" />
+                              <Droplet className="h-3 w-3 text-blue-500" />
                               {a.bico || '—'}
                             </span>
                           </td>
@@ -843,12 +843,12 @@ const DIAS_SEMANA_HEAT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 function corHeatmap(valor, maxValor) {
   if (!valor || valor <= 0 || maxValor === 0) return { bg: '#f9fafb', text: '#9ca3af' };
   const r = valor / maxValor;
-  if (r < 0.15) return { bg: '#ede9fe', text: '#4c1d95' }; // violet-100
-  if (r < 0.30) return { bg: '#ddd6fe', text: '#4c1d95' }; // violet-200
-  if (r < 0.50) return { bg: '#c4b5fd', text: '#4c1d95' }; // violet-300
-  if (r < 0.70) return { bg: '#a78bfa', text: '#2e1065' }; // violet-400
-  if (r < 0.90) return { bg: '#8b5cf6', text: '#ffffff' }; // violet-500
-  return                 { bg: '#7c3aed', text: '#ffffff' }; // violet-600
+  if (r < 0.15) return { bg: '#ede9fe', text: '#4c1d95' }; // blue-100
+  if (r < 0.30) return { bg: '#ddd6fe', text: '#4c1d95' }; // blue-200
+  if (r < 0.50) return { bg: '#c4b5fd', text: '#4c1d95' }; // blue-300
+  if (r < 0.70) return { bg: '#a78bfa', text: '#2e1065' }; // blue-400
+  if (r < 0.90) return { bg: '#8b5cf6', text: '#ffffff' }; // blue-500
+  return                 { bg: '#7c3aed', text: '#ffffff' }; // blue-600
 }
 function HeatmapBicosDia({ dados, contagemDias }) {
   const max = useMemo(() => {
@@ -890,7 +890,7 @@ function HeatmapBicosDia({ dados, contagemDias }) {
               <tr key={p.chave}>
                 <td className="px-3 py-1.5 text-[12px] text-gray-800 pr-4">
                   <div className="flex items-center gap-1.5">
-                    <Droplet className="h-3 w-3 text-violet-600 flex-shrink-0" />
+                    <Droplet className="h-3 w-3 text-blue-600 flex-shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium truncate">{p.nome}</p>
                       {p.bombaCodigo != null && (
@@ -906,7 +906,7 @@ function HeatmapBicosDia({ dados, contagemDias }) {
                   const cnt = porDiaCount[idx];
                   return (
                     <td key={idx}
-                      className="rounded-md text-center px-2 py-1.5 font-mono tabular-nums transition-transform hover:scale-105 hover:ring-1 hover:ring-violet-500"
+                      className="rounded-md text-center px-2 py-1.5 font-mono tabular-nums transition-transform hover:scale-105 hover:ring-1 hover:ring-blue-500"
                       style={{ background: c.bg, color: c.text }}>
                       <div className="text-[11px] font-semibold leading-tight">
                         {v > 0 ? fmt(v) : '—'}
@@ -944,10 +944,10 @@ function HeatmapBicosDia({ dados, contagemDias }) {
                   </td>
                 );
               })}
-              <td className="rounded-md text-center px-2 py-1.5 font-mono tabular-nums bg-violet-100 text-violet-900">
+              <td className="rounded-md text-center px-2 py-1.5 font-mono tabular-nums bg-blue-100 text-blue-900">
                 <div className="text-[11.5px] font-bold leading-tight">{fmt(totalGeral)}</div>
                 {totalDias > 0 && (
-                  <div className="text-[9px] text-violet-700 leading-tight mt-0.5">
+                  <div className="text-[9px] text-blue-700 leading-tight mt-0.5">
                     média {fmt(media(totalGeral, totalDias))}/dia
                   </div>
                 )}
@@ -967,7 +967,7 @@ function HeatmapBicosDia({ dados, contagemDias }) {
 // ─── Componentes ─────────────────────────────────────────────
 function Kpi({ icone: Icone, cor, label, valor, sub }) {
   const palette = {
-    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600' },
+    violet:  { bg: 'bg-blue-50',  icon: 'text-blue-600' },
     blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600' },
     amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600' },
     emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600' },
@@ -993,7 +993,7 @@ function Kpi({ icone: Icone, cor, label, valor, sub }) {
 // KPI compacto usado dentro de seções (sem card de fundo branco grande).
 function KpiSecao({ icone: Icone, label, valor, cor }) {
   const palette = {
-    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600',  text: 'text-violet-900' },
+    violet:  { bg: 'bg-blue-50',  icon: 'text-blue-600',  text: 'text-blue-900' },
     blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600',    text: 'text-blue-900' },
     amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   text: 'text-amber-900' },
     emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', text: 'text-emerald-900' },
@@ -1018,7 +1018,7 @@ function CardGrafico({ titulo, subtitulo, children }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
       <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
-        <BarChart3 className="h-4 w-4 text-violet-500" />
+        <BarChart3 className="h-4 w-4 text-blue-500" />
         <h3 className="text-[13px] font-semibold text-gray-800">{titulo}</h3>
         {subtitulo && <span className="text-[11px] text-gray-400">· {subtitulo}</span>}
       </div>
@@ -1129,7 +1129,7 @@ function BicosBomba({ bicos, getUso, periodoDias = 90 }) {
                         {volume > 0 && (
                           <>
                             <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
-                              <div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-violet-600 transition-all"
+                              <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all"
                                 style={{ width: `${Math.max(2, pct)}%` }} />
                             </div>
                             <div className="flex items-center gap-2 text-[10px] font-mono tabular-nums">
@@ -1192,7 +1192,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
         </span>
         <button type="button" onClick={() => setAberto(o => !o)}
           className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[180px] max-w-[260px] ${
-            aberto ? 'border-violet-400 ring-2 ring-violet-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+            aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
           }`}>
           <span className="truncate">{label}</span>
           <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
@@ -1207,7 +1207,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
             <button type="button" onClick={onToggleTodas}
               className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
               <input type="checkbox" checked={todasMarcadas} onChange={() => {}}
-                className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span className="text-[12.5px] font-medium text-gray-700">
                 {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
               </span>
@@ -1220,7 +1220,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
                     className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
                     <input type="checkbox" checked={marcada}
                       onChange={() => onToggle(emp.id)}
-                      className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 mt-0.5" />
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12.5px] text-gray-800 truncate">{emp.nome}</p>
                       {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}

@@ -38,10 +38,14 @@ import BpoConciliacaoCaixas from './pages/BpoConciliacaoCaixas';
 import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
 import BpoValidacaoOfx from './pages/BpoValidacaoOfx';
 import BpoAlteracoesCaixas from './pages/BpoAlteracoesCaixas';
+import CciRelatoriosBi from './pages/CciRelatoriosBi';
+import CciContato from './pages/CciContato';
+import CciNotificacoes from './pages/CciNotificacoes';
 
 // Cliente
 import ClienteLayout from './components/layout/cliente/ClienteLayout';
 import ClienteLogin from './pages/cliente/ClienteLogin';
+import ClienteRedefinirSenha from './pages/cliente/ClienteRedefinirSenha';
 // Cliente Webposto
 import WpDashboard from './pages/cliente/webposto/ClienteDashboard';
 import WpDRE from './pages/cliente/webposto/ClienteDRE';
@@ -56,6 +60,7 @@ import WpUsuarios from './pages/cliente/webposto/ClienteUsuarios';
 import WpComercialVendas from './pages/cliente/webposto/ClienteComercialVendas';
 import WpComercialOperacao from './pages/cliente/webposto/ClienteComercialOperacao';
 import WpComercialProdutividade from './pages/cliente/webposto/ClienteComercialProdutividade';
+import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
 // Cliente Autosystem (esqueletos — implementados página a página)
 import AsDashboard from './pages/cliente/autosystem/ClienteDashboard';
 import AsDRE from './pages/cliente/autosystem/ClienteDRE';
@@ -143,12 +148,19 @@ export default function App() {
           <Route path="/admin/bpo/validacao-ofx" element={<BpoValidacaoOfx />} />
           <Route path="/admin/bpo/alteracoes-caixas" element={<BpoAlteracoesCaixas />} />
 
+          {/* Relatórios de BI (Power BI) */}
+          <Route path="/admin/relatorios-bi" element={<CciRelatoriosBi />} />
+          <Route path="/admin/contato" element={<CciContato />} />
+          <Route path="/admin/notificacoes" element={<CciNotificacoes />} />
+
           {/* Relatorios (kept for compatibility) */}
           <Route path="/admin/relatorios" element={<Relatorios />} />
         </Route>
 
         {/* Cliente Portal */}
         <Route path="/cliente/login" element={<ClienteLogin />} />
+        <Route path="/redefinir-senha" element={<ClienteRedefinirSenha />} />
+        <Route path="/cliente/redefinir-senha" element={<ClienteRedefinirSenha />} />
 
         {/* Cliente Webposto */}
         <Route element={<RequireCliente><ClienteLayout /></RequireCliente>}>
@@ -167,6 +179,7 @@ export default function App() {
           <Route path="/cliente/webposto/comercial/vendas" element={<WpComercialVendas />} />
           <Route path="/cliente/webposto/comercial/operacao" element={<WpComercialOperacao />} />
           <Route path="/cliente/webposto/comercial/produtividade" element={<WpComercialProdutividade />} />
+          <Route path="/cliente/webposto/relatorios-bi" element={<ClienteRelatoriosBi />} />
 
           {/* Cliente Autosystem */}
           <Route path="/cliente/autosystem/dashboard" element={<AsDashboard />} />
@@ -184,6 +197,7 @@ export default function App() {
           <Route path="/cliente/autosystem/comercial/vendas" element={<AsComercialVendas />} />
           <Route path="/cliente/autosystem/comercial/operacao" element={<AsComercialOperacao />} />
           <Route path="/cliente/autosystem/comercial/produtividade" element={<AsComercialProdutividade />} />
+          <Route path="/cliente/autosystem/relatorios-bi" element={<ClienteRelatoriosBi />} />
           <Route path="/cliente/autosystem/configuracoes" element={<AsConfiguracoes />} />
         </Route>
 

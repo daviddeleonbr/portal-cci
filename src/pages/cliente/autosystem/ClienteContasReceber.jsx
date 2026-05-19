@@ -82,9 +82,9 @@ const TAB_CLASSES = {
     borda: 'border-emerald-600 text-emerald-700',
     badgeAtivo: 'bg-emerald-100 text-emerald-700',
   },
-  cyan:    { borda: 'border-cyan-600 text-cyan-700',       badgeAtivo: 'bg-cyan-100 text-cyan-700'       },
-  violet:  { borda: 'border-violet-600 text-violet-700',   badgeAtivo: 'bg-violet-100 text-violet-700'   },
-  indigo:  { borda: 'border-indigo-600 text-indigo-700',   badgeAtivo: 'bg-indigo-100 text-indigo-700'   },
+  cyan:    { borda: 'border-blue-600 text-blue-700',       badgeAtivo: 'bg-blue-100 text-blue-700'       },
+  violet:  { borda: 'border-blue-600 text-blue-700',   badgeAtivo: 'bg-blue-100 text-blue-700'   },
+  indigo:  { borda: 'border-blue-600 text-blue-700',   badgeAtivo: 'bg-blue-100 text-blue-700'   },
   teal:    { borda: 'border-teal-600 text-teal-700',       badgeAtivo: 'bg-teal-100 text-teal-700'       },
   gray:    { borda: 'border-gray-600 text-gray-700',       badgeAtivo: 'bg-gray-200 text-gray-700'       },
 };
@@ -769,9 +769,9 @@ function renderCategoriaTree(cat, prefix, empresaIndent, ctx) {
   const aberta = ctx.expandedCats.has(key);
   const Icone = cat.icone;
   const corBg = {
-    cyan:    'bg-cyan-50    text-cyan-600',
-    violet:  'bg-violet-50  text-violet-600',
-    indigo:  'bg-indigo-50  text-indigo-600',
+    cyan:    'bg-blue-50    text-blue-600',
+    violet:  'bg-blue-50  text-blue-600',
+    indigo:  'bg-blue-50  text-blue-600',
     teal:    'bg-teal-50    text-teal-600',
     gray:    'bg-gray-100   text-gray-600',
     emerald: 'bg-emerald-50 text-emerald-600',

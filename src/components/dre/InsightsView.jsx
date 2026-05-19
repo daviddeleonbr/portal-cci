@@ -92,7 +92,7 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
         className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Sparkles className="h-4 w-4 text-white" />
             </div>
             <div>
@@ -100,7 +100,7 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
               <p className="text-[11px] text-gray-400">Especializada no setor de postos de combustíveis</p>
             </div>
             {insightsSource === 'ia' && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-medium">
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[10px] font-medium">
                 <Sparkles className="h-2.5 w-2.5" /> IA
               </span>
             )}
@@ -122,7 +122,7 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
               <Activity className="h-4 w-4" /> Análise basica
             </button>
             <button onClick={gerarInsights} disabled={loading}
-              className="flex items-center gap-2 rounded-lg bg-gradient-to-br from-violet-600 to-purple-700 px-4 py-2 text-sm font-medium text-white hover:from-violet-700 hover:to-purple-800 transition-all shadow-sm disabled:opacity-50">
+              className="flex items-center gap-2 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 px-4 py-2 text-sm font-medium text-white hover:from-blue-700 hover:to-blue-800 transition-all shadow-sm disabled:opacity-50">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {insights && insightsSource === 'ia' ? 'Nova análise IA' : 'Análise com IA'}
             </button>
@@ -148,13 +148,13 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
                   </button>
                   {errorCode === 'NO_CREDITS' && (
                     <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer"
-                      className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 transition-colors">
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors">
                       Adicionar creditos
                     </a>
                   )}
                   {errorCode === 'INVALID_KEY' && (
                     <button onClick={() => setModalKey(true)}
-                      className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 transition-colors">
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors">
                       Trocar chave
                     </button>
                   )}
@@ -165,8 +165,8 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
 
           {!insights && !loading && !error && (
             <div className="text-center py-12">
-              <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center mb-3">
-                <Sparkles className="h-7 w-7 text-violet-600" />
+              <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-blue-100 to-blue-100 flex items-center justify-center mb-3">
+                <Sparkles className="h-7 w-7 text-blue-600" />
               </div>
               <p className="text-sm font-semibold text-gray-800 mb-1">Gere uma análise inteligente</p>
               <p className="text-xs text-gray-500 max-w-md mx-auto mb-4">
@@ -182,7 +182,7 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
 
           {loading && (
             <div className="text-center py-12">
-              <Loader2 className="h-7 w-7 text-violet-500 animate-spin mx-auto mb-3" />
+              <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
               <p className="text-sm font-medium text-gray-800 mb-1">Analisando seus números...</p>
               <p className="text-xs text-gray-400">Isso pode levar 10-20 segundos</p>
             </div>
@@ -318,8 +318,8 @@ function InsightsContent({ insights, kpis }) {
       <Section title="Insights Estrategicos" icon={Target} color="violet">
         <div className="space-y-2">
           {(insights.estrategicos || []).map((item, i) => (
-            <div key={i} className="flex items-start gap-3 rounded-xl bg-violet-50/50 border border-violet-100 p-3">
-              <div className="h-6 w-6 rounded-md bg-violet-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+            <div key={i} className="flex items-start gap-3 rounded-xl bg-blue-50/50 border border-blue-100 p-3">
+              <div className="h-6 w-6 rounded-md bg-blue-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
                 {i + 1}
               </div>
               <p className="text-sm text-gray-800 leading-relaxed">{item}</p>
@@ -351,7 +351,7 @@ function Section({ title, icon: Icon, color, children }) {
     orange: 'bg-orange-100 text-orange-600',
     red: 'bg-red-100 text-red-600',
     amber: 'bg-amber-100 text-amber-600',
-    violet: 'bg-violet-100 text-violet-600',
+    violet: 'bg-blue-100 text-blue-600',
   };
   return (
     <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}>
@@ -408,9 +408,9 @@ function ModalApiKey({ open, apiKey, onClose, onSave }) {
   return (
     <Modal open={open} onClose={onClose} title="Chave da API Anthropic" size="sm">
       <div className="space-y-4">
-        <div className="rounded-lg bg-violet-50/60 border border-violet-200 p-3 flex gap-2">
-          <Key className="h-4 w-4 text-violet-600 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-violet-900 leading-relaxed">
+        <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 flex gap-2">
+          <Key className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-blue-900 leading-relaxed">
             Para gerar análises com IA, e necessária uma chave da API Anthropic. Obtenha em{' '}
             <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer"
               className="font-medium underline">console.anthropic.com</a>.
@@ -422,7 +422,7 @@ function ModalApiKey({ open, apiKey, onClose, onSave }) {
           <label className="block text-xs font-medium text-gray-700 mb-1">Chave (sk-ant-...)</label>
           <input type="password" value={value} onChange={e => setValue(e.target.value)}
             placeholder="sk-ant-..."
-            className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+            className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
@@ -431,7 +431,7 @@ function ModalApiKey({ open, apiKey, onClose, onSave }) {
             Cancelar
           </button>
           <button onClick={() => onSave(value.trim())} disabled={!value.trim()}
-            className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50">
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
             Salvar e gerar análise
           </button>
         </div>

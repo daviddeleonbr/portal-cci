@@ -274,7 +274,7 @@ export default function RelatorioEvolucaoMensal() {
   const periodoLabel = `${meses[0]?.label} → ${meses[meses.length - 1]?.label}`;
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-cyan-500" /></div>;
+    return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }
   if (!cliente) {
     return <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">Cliente não encontrado</div>;
@@ -290,7 +290,7 @@ export default function RelatorioEvolucaoMensal() {
             className="flex items-center justify-center h-9 w-9 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all flex-shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
             <BarChart3 className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
@@ -352,7 +352,7 @@ export default function RelatorioEvolucaoMensal() {
             </div>
           </div>
           <button onClick={handleGerar} disabled={loadingDados}
-            className="flex items-center gap-2 h-10 rounded-lg bg-cyan-600 hover:bg-cyan-700 px-5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            className="flex items-center gap-2 h-10 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Gerar análise
           </button>
@@ -372,7 +372,7 @@ export default function RelatorioEvolucaoMensal() {
 
       {!reportSolicitado ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center no-print">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-cyan-500/20">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <BarChart3 className="h-7 w-7 text-white" />
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Escolha o período e clique em "Gerar análise"</p>
@@ -382,7 +382,7 @@ export default function RelatorioEvolucaoMensal() {
         </div>
       ) : loadingDados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center no-print">
-          <Loader2 className="h-7 w-7 text-cyan-500 animate-spin mx-auto mb-3" />
+          <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
           <p className="text-sm font-medium text-gray-800 mb-1">{loadingProgress.mensagem}</p>
           <p className="text-xs text-gray-400">{loadingProgress.atual} de {loadingProgress.total}</p>
         </div>
@@ -543,9 +543,9 @@ export default function RelatorioEvolucaoMensal() {
 // ─── KPI Card ────────────────────────────────────────────────
 function KpiCard({ label, valor, sub, color = 'cyan', trend }) {
   const bgMap = {
-    cyan: 'from-cyan-500/15 to-blue-500/5 text-cyan-700',
+    cyan: 'from-blue-500/15 to-blue-500/5 text-blue-700',
     emerald: 'from-emerald-500/15 to-teal-500/5 text-emerald-700',
-    violet: 'from-violet-500/15 to-fuchsia-500/5 text-violet-700',
+    violet: 'from-blue-500/15 to-blue-500/5 text-blue-700',
     amber: 'from-amber-500/15 to-orange-500/5 text-amber-700',
   };
   const TrendIcon = trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus;
@@ -994,7 +994,7 @@ function InsightsConsultor({ insights, totais }) {
         </div>
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-            <Target className="h-4 w-4 text-violet-600" />
+            <Target className="h-4 w-4 text-blue-600" />
             <h3 className="text-sm font-semibold text-gray-800">Mix de receita</h3>
           </div>
           <div className="p-4 space-y-3">
@@ -1083,27 +1083,27 @@ function InsightsConsultor({ insights, totais }) {
           <span className="text-[11px] text-gray-500">· leitura cruzada por bloco</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-          <BlocoDetalhe icon={ShoppingBag} titulo="Vendas" cor="text-cyan-700" itens={insights.analiseDetalhada.vendas} />
-          <BlocoDetalhe icon={Target} titulo="DRE" cor="text-violet-700" itens={insights.analiseDetalhada.dre} />
+          <BlocoDetalhe icon={ShoppingBag} titulo="Vendas" cor="text-blue-700" itens={insights.analiseDetalhada.vendas} />
+          <BlocoDetalhe icon={Target} titulo="DRE" cor="text-blue-700" itens={insights.analiseDetalhada.dre} />
           <BlocoDetalhe icon={Wallet} titulo="Fluxo de Caixa" cor="text-emerald-700" itens={insights.analiseDetalhada.caixa} />
         </div>
       </div>
 
       {/* 5. RECOMENDACOES ESTRATEGICAS */}
-      <div className="bg-white rounded-2xl border border-violet-200/60 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-violet-100 bg-violet-50/40 flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-violet-600" />
-          <h3 className="text-sm font-bold text-violet-900 uppercase tracking-wider">5. Recomendacoes estrategicas</h3>
-          <span className="text-[11px] text-violet-600/70">· ações priorizadas para os próximos 30-90 dias</span>
+      <div className="bg-white rounded-2xl border border-blue-200/60 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-blue-100 bg-blue-50/40 flex items-center gap-2">
+          <Lightbulb className="h-4 w-4 text-blue-600" />
+          <h3 className="text-sm font-bold text-blue-900 uppercase tracking-wider">5. Recomendacoes estrategicas</h3>
+          <span className="text-[11px] text-blue-600/70">· ações priorizadas para os próximos 30-90 dias</span>
         </div>
         <div className="p-4 space-y-2.5">
           {insights.recomendacoes.map((r, i) => (
-            <div key={i} className="flex items-start gap-3 rounded-lg border border-violet-100 bg-violet-50/30 p-3">
-              <span className="h-6 w-6 rounded-full bg-violet-600 text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">
+            <div key={i} className="flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/30 p-3">
+              <span className="h-6 w-6 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">
                 {i + 1}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-[12.5px] font-semibold text-violet-900 leading-snug">{r.acao}</p>
+                <p className="text-[12.5px] font-semibold text-blue-900 leading-snug">{r.acao}</p>
                 <p className="text-[11.5px] text-gray-700 mt-1 leading-relaxed">
                   <span className="font-semibold text-gray-600">Por que: </span>
                   {r.justificativa}

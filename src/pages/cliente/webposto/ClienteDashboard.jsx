@@ -648,7 +648,7 @@ function VendasChart({ stats, loading }) {
 function ProximasContasCard({ titulo, icon: Icon, cor, itens, loading, link, campoNome }) {
   const cores = {
     amber: { bgGrad: 'from-amber-400 to-orange-500', linkBg: 'bg-amber-600 hover:bg-amber-700' },
-    blue:  { bgGrad: 'from-blue-500 to-indigo-600',  linkBg: 'bg-blue-600 hover:bg-blue-700' },
+    blue:  { bgGrad: 'from-blue-500 to-blue-600',  linkBg: 'bg-blue-600 hover:bg-blue-700' },
   };
   const c = cores[cor] || cores.blue;
 
@@ -729,9 +729,9 @@ function ProximasContasCard({ titulo, icon: Icon, cor, itens, loading, link, cam
 // ─── Agrupamento "A receber" por fonte ───────────────────────────
 function AgrupamentoReceberCard({ porFonte, qtdPorFonte, total, loading, link }) {
   const fontes = [
-    { k: 'titulo',    label: 'Títulos',    icon: ScrollText,      iconBg: 'bg-indigo-50', iconColor: 'text-indigo-600', barCor: 'bg-indigo-500' },
-    { k: 'duplicata', label: 'Duplicatas', icon: Landmark,        iconBg: 'bg-violet-50', iconColor: 'text-violet-600', barCor: 'bg-violet-500' },
-    { k: 'cartao',    label: 'Cartões',    icon: CreditCard,      iconBg: 'bg-cyan-50',   iconColor: 'text-cyan-600',   barCor: 'bg-cyan-500'   },
+    { k: 'titulo',    label: 'Títulos',    icon: ScrollText,      iconBg: 'bg-blue-50', iconColor: 'text-blue-600', barCor: 'bg-blue-500' },
+    { k: 'duplicata', label: 'Duplicatas', icon: Landmark,        iconBg: 'bg-blue-50', iconColor: 'text-blue-600', barCor: 'bg-blue-500' },
+    { k: 'cartao',    label: 'Cartões',    icon: CreditCard,      iconBg: 'bg-blue-50',   iconColor: 'text-blue-600',   barCor: 'bg-blue-500'   },
     { k: 'cheque',    label: 'Cheques',    icon: FileCheck,       iconBg: 'bg-teal-50',   iconColor: 'text-teal-600',   barCor: 'bg-teal-500'   },
     { k: 'outros',    label: 'Outros',     icon: MoreHorizontal,  iconBg: 'bg-gray-50',   iconColor: 'text-gray-500',   barCor: 'bg-gray-400'   },
   ];
@@ -740,7 +740,7 @@ function AgrupamentoReceberCard({ porFonte, qtdPorFonte, total, loading, link })
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
       className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden flex flex-col">
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
-        <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm flex-shrink-0">
+        <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
           <ArrowDownLeft className="h-4 w-4 text-white" />
         </div>
         <div className="flex-1 min-w-0">
@@ -814,7 +814,7 @@ function ResumoCard({ icon: Icon, cor, label, valor, sub }) {
   const cores = {
     amber: { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-700', border: 'border-amber-200' },
     blue:  { bg: 'bg-blue-50 dark:bg-blue-500/10',   text: 'text-blue-700',  border: 'border-blue-200' },
-    indigo:{ bg: 'bg-indigo-50 dark:bg-indigo-500/10', text: 'text-indigo-700', border: 'border-indigo-200' },
+    indigo:{ bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-700', border: 'border-blue-200' },
   };
   const c = cores[cor] || cores.blue;
   return (
@@ -836,7 +836,7 @@ function ResumoCard({ icon: Icon, cor, label, valor, sub }) {
 function DiasPendentesCard({ titulo, icon: Icon, cor, dias, linkLabel, link }) {
   const cores = {
     amber: { bg: 'from-amber-400 to-orange-500', chip: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 border-amber-200' },
-    blue:  { bg: 'from-blue-500 to-indigo-600',   chip: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 border-blue-200' },
+    blue:  { bg: 'from-blue-500 to-blue-600',   chip: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 border-blue-200' },
   };
   const c = cores[cor] || cores.blue;
 

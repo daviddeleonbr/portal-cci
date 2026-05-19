@@ -7,7 +7,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
-  BarChart3, Eye, Loader2, ArrowLeft, ExternalLink, AlertCircle, Maximize2,
+  BarChart3, Eye, Loader2, ArrowLeft, ExternalLink, Maximize2,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import { useClienteSession } from '../../../hooks/useAuth';
@@ -15,8 +15,9 @@ import * as relatoriosBiService from '../../../services/relatoriosBiService';
 
 export default function ClienteRelatoriosBi() {
   const session = useClienteSession();
-  const cliente = session?.cliente;
+  const usuario  = session?.usuario;
   const chaveApi = session?.chaveApi;
+  const asRede   = session?.asRede;
 
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -24,12 +25,13 @@ export default function ClienteRelatoriosBi() {
   const [selecionado, setSelecionado] = useState(null);
 
   const carregar = useCallback(async () => {
-    if (!chaveApi?.id) { setLoading(false); return; }
+    if (!chaveApi?.id && !asRede?.id) { setLoading(false); return; }
     try {
       setLoading(true); setErro(null);
       const lista = await relatoriosBiService.listarParaCliente({
-        chave_api_id: chaveApi.id,
-        cliente_id: cliente?.id || null,
+        chave_api_id: chaveApi?.id || null,
+        as_rede_id:   asRede?.id   || null,
+        usuario_id:   usuario?.id  || null,
       });
       setRelatorios(lista);
     } catch (e) {
@@ -37,7 +39,7 @@ export default function ClienteRelatoriosBi() {
     } finally {
       setLoading(false);
     }
-  }, [chaveApi?.id, cliente?.id]);
+  }, [chaveApi?.id, asRede?.id, usuario?.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -91,15 +93,6 @@ export default function ClienteRelatoriosBi() {
         description="Painel de Business Intelligence cadastrados pela CCI Consultoria"
       />
 
-      {/* Aviso de transicao */}
-      <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 mb-5 flex items-start gap-3">
-        <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-        <div className="text-[12.5px] text-amber-900 leading-relaxed">
-          <p className="font-semibold">Em transicao</p>
-          <p>Estes relatórios continuarao disponíveis enquanto migramos para a plataforma proprietaria. Para duvidas, fale com a CCI no menu Suporte.</p>
-        </div>
-      </div>
-
       {loading ? (
         <div className="flex items-center gap-2 py-12 justify-center text-gray-500">
           <Loader2 className="h-5 w-5 animate-spin" />
@@ -128,7 +121,7 @@ export default function ClienteRelatoriosBi() {
             >
               <div className="p-5">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 text-white flex items-center justify-center shadow-sm flex-shrink-0">
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center shadow-sm flex-shrink-0">
                     <BarChart3 className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">

@@ -229,7 +229,7 @@ export default function RelatorioAnaliseLancamentosRede() {
             className="flex items-center justify-center h-9 w-9 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all flex-shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
             <FlaskConical className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
@@ -326,7 +326,7 @@ export default function RelatorioAnaliseLancamentosRede() {
 
       {!analiseSolicitada ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center no-print">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <FlaskConical className="h-7 w-7 text-white" />
           </div>
           {qtdFlags === 0 ? (

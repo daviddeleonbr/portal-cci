@@ -1402,7 +1402,7 @@ function AbaProdutos({ dados, categoriaFiltro = null }) {
                         return (
                           <React.Fragment key={gKey}>
                             <tr onClick={() => toggleGrupoDia(gKey)}
-                              className={`cursor-pointer transition-colors ${gAberto ? 'bg-indigo-50/40' : 'bg-gray-50/30 hover:bg-gray-50/60'}`}>
+                              className={`cursor-pointer transition-colors ${gAberto ? 'bg-blue-50/40' : 'bg-gray-50/30 hover:bg-gray-50/60'}`}>
                               <td className="px-3 py-1.5" style={{ paddingLeft: 32 }}>
                                 <div className="flex items-center gap-1.5">
                                   <motion.div animate={{ rotate: gAberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
@@ -1459,7 +1459,7 @@ function AbaProdutos({ dados, categoriaFiltro = null }) {
       {subTab === 'grupo' && (
         <>
         <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-          <Package className="h-4 w-4 text-violet-500" />
+          <Package className="h-4 w-4 text-blue-500" />
           <h3 className="text-sm font-semibold text-gray-800">Vendas por grupo &gt; produto</h3>
           <span className="text-[11px] text-gray-400">
             · {treeRanking.grupos.length} grupo{treeRanking.grupos.length === 1 ? '' : 's'} · sem combustíveis · vs mesmo período do ano anterior
@@ -1468,7 +1468,7 @@ function AbaProdutos({ dados, categoriaFiltro = null }) {
             onClick={() => setRankingExpandido(rankingExpandido.size === treeRanking.grupos.length
               ? new Set()
               : new Set(treeRanking.grupos.map(g => g.grupoCodigo ?? 'sem-grupo')))}
-            className="ml-auto text-[11px] text-violet-600 hover:text-violet-800 font-medium">
+            className="ml-auto text-[11px] text-blue-600 hover:text-blue-800 font-medium">
             {rankingExpandido.size > 0 ? 'Recolher todos' : 'Expandir todos'}
           </button>
         </div>
@@ -1496,7 +1496,7 @@ function AbaProdutos({ dados, categoriaFiltro = null }) {
                   return (
                     <React.Fragment key={gKey}>
                       <tr onClick={() => toggleGrupoRanking(gKey)}
-                        className={`cursor-pointer transition-colors ${aberto ? 'bg-violet-50/30' : 'hover:bg-gray-50/60'}`}>
+                        className={`cursor-pointer transition-colors ${aberto ? 'bg-blue-50/30' : 'hover:bg-gray-50/60'}`}>
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-1.5">
                             <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
@@ -1516,7 +1516,7 @@ function AbaProdutos({ dados, categoriaFiltro = null }) {
                           <div className="flex items-center gap-2 justify-end">
                             <span className="font-mono text-[11px] tabular-nums text-gray-600">{g.participacao.toFixed(1)}%</span>
                             <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden flex-shrink-0">
-                              <div className="h-full bg-violet-400" style={{ width: `${g.participacao}%` }} />
+                              <div className="h-full bg-blue-400" style={{ width: `${g.participacao}%` }} />
                             </div>
                           </div>
                         </td>
@@ -1585,7 +1585,7 @@ function PaneCurvaABC({ curvaABC }) {
   return (
     <>
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-        <BarChart3 className="h-4 w-4 text-violet-500" />
+        <BarChart3 className="h-4 w-4 text-blue-500" />
         <h3 className="text-sm font-semibold text-gray-800">Curva ABC</h3>
         <span className="text-[11px] text-gray-400">· {itens.length} produto{itens.length === 1 ? '' : 's'} · classificação por % cumulativo de receita</span>
       </div>
@@ -1799,7 +1799,7 @@ function KpiComparativo({ label, icon: Icon, color, atual, mesAnt, anoAnt, forma
     blue:    'bg-blue-50 text-blue-600',
     amber:   'bg-amber-50 text-amber-600',
     emerald: 'bg-emerald-50 text-emerald-600',
-    indigo:  'bg-indigo-50 text-indigo-600',
+    indigo:  'bg-blue-50 text-blue-600',
     red:     'bg-red-50 text-red-600',
   };
   const fmt = formatter || formatCurrency;
@@ -1831,7 +1831,7 @@ function KpiMargemPct({ label, icon: Icon, color, atualPct, mesAntPct, anoAntPct
     blue: 'bg-blue-50 text-blue-600',
     amber: 'bg-amber-50 text-amber-600',
     emerald: 'bg-emerald-50 text-emerald-600',
-    indigo: 'bg-indigo-50 text-indigo-600',
+    indigo: 'bg-blue-50 text-blue-600',
     red: 'bg-red-50 text-red-600',
   };
   const fmtPct = (v) => v == null ? '—' : `${v.toFixed(1)}%`;
@@ -1967,7 +1967,7 @@ function Kpi({ label, valor, icon: Icon, color, raw, hint }) {
     emerald: 'bg-emerald-50 text-emerald-600',
     red:     'bg-red-50 text-red-600',
     amber:   'bg-amber-50 text-amber-600',
-    indigo:  'bg-indigo-50 text-indigo-600',
+    indigo:  'bg-blue-50 text-blue-600',
   };
   return (
     <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}

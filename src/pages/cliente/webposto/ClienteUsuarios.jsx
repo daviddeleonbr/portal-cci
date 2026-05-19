@@ -165,7 +165,7 @@ export default function ClienteUsuarios() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200">
                           <ShieldCheck className="h-3 w-3" /> {(u.permissoes || []).length}
                         </span>
                       </td>

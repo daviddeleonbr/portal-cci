@@ -818,8 +818,8 @@ function GrupoMapeamentoRow({ grupo, depth, children, mapeamentos, expandedGrupo
             <div style={{ paddingLeft: 12 + indent + 24 }} className="py-0.5">
               {mapeamentos.map(m => (
                 <div key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded group/mp hover:bg-red-50/50 transition-colors">
-                  <div className="h-1 w-1 rounded-full bg-indigo-300 flex-shrink-0" />
-                  <span className="font-mono text-[9px] text-indigo-400 bg-indigo-50 rounded px-1 py-0.5 flex-shrink-0">
+                  <div className="h-1 w-1 rounded-full bg-blue-300 flex-shrink-0" />
+                  <span className="font-mono text-[9px] text-blue-400 bg-blue-50 rounded px-1 py-0.5 flex-shrink-0">
                     {m.plano_conta_hierarquia}
                   </span>
                   <span className="text-[11px] text-gray-500 truncate">{m.plano_conta_descricao}</span>
@@ -916,7 +916,7 @@ function ClientesManualList({ clientes, loading, onSelect }) {
           onClick={() => onSelect(c)}
           className="text-left bg-white rounded-xl border border-gray-100 p-5 hover:border-blue-200 hover:shadow-sm transition-all group">
           <div className="flex items-start gap-3 mb-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
               {(c.nome || '?').charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
@@ -1188,10 +1188,10 @@ function GrupoManualRow({ grupo, depth, children, contas, expandedGrupos, onTogg
           {contas.length > 0 && (
             <div style={{ paddingLeft: 16 + indent + 28 }} className="py-1">
               {contas.map(c => (
-                <div key={c.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md group/c hover:bg-indigo-50/40 transition-colors">
+                <div key={c.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md group/c hover:bg-blue-50/40 transition-colors">
                   <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${c.conta_natureza === 'C' ? 'bg-emerald-400' : 'bg-orange-400'}`} />
                   {c.conta_codigo && (
-                    <span className="font-mono text-[10px] text-indigo-400 bg-indigo-50 rounded px-1.5 py-0.5 flex-shrink-0">{c.conta_codigo}</span>
+                    <span className="font-mono text-[10px] text-blue-400 bg-blue-50 rounded px-1.5 py-0.5 flex-shrink-0">{c.conta_codigo}</span>
                   )}
                   <span className="text-[12px] text-gray-700 flex-1 truncate">{c.conta_descricao}</span>
                   <span className={`text-[9px] font-mono rounded px-1 py-0.5 flex-shrink-0 ${

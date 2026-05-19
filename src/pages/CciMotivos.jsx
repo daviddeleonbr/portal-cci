@@ -11,9 +11,9 @@ import * as cciService from '../services/cciFinanceiroService';
 const TIPO_OPERACAO = {
   lancamento_pagar:   { label: 'Lançamento de Conta a Pagar', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   pagamento_pagar:    { label: 'Pagamento de Conta a Pagar',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  lancamento_receber: { label: 'Lançamento de Conta a Receber', color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+  lancamento_receber: { label: 'Lançamento de Conta a Receber', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   recebimento:        { label: 'Recebimento',                 color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  transferencia:      { label: 'Transferência',               color: 'bg-violet-50 text-violet-700 border-violet-200' },
+  transferencia:      { label: 'Transferência',               color: 'bg-blue-50 text-blue-700 border-blue-200' },
   ajuste:             { label: 'Ajuste',                      color: 'bg-slate-100 text-slate-700 border-slate-200' },
   outro:              { label: 'Outro',                       color: 'bg-gray-100 text-gray-600 border-gray-200' },
 };
@@ -128,7 +128,7 @@ export default function CciMotivos() {
               <div key={m.id} className="bg-white rounded-xl border border-gray-200/60 p-4 hover:border-blue-200 hover:shadow-sm transition-all group">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                       <Repeat className="h-4 w-4 text-white" />
                     </div>
                     <div className="min-w-0">

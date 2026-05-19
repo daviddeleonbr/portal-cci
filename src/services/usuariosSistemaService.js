@@ -17,16 +17,19 @@ export const PERMISSOES_ADMIN = [
   { key: 'fiscal', label: 'Notas Fiscais e Agendamento', grupo: 'Fiscal' },
   { key: 'parametros', label: 'Parâmetros', grupo: 'Consultoria' },
   { key: 'relatorios_cliente', label: 'Relatórios por Cliente', grupo: 'Consultoria' },
+  { key: 'relatorios_bi', label: 'Relatórios de BI (Power BI)', grupo: 'Consultoria' },
   { key: 'analise_ia', label: 'Análise com IA (Claude)', grupo: 'Consultoria' },
   { key: 'conciliacao_bancaria', label: 'Conciliação Bancária', grupo: 'BPO' },
   { key: 'conciliacao_caixas', label: 'Conciliação de Caixas', grupo: 'BPO' },
   { key: 'caixa_administrativo', label: 'Caixa Administrativo', grupo: 'BPO' },
+  { key: 'notificacoes', label: 'Notificações (enviar)', grupo: 'Comunicação' },
 ];
 
 export const PERMISSOES_CLIENTE = [
   { key: 'dashboard', label: 'Visão Geral', grupo: 'Principal' },
   { key: 'dre', label: 'DRE', grupo: 'Relatórios' },
   { key: 'fluxo_caixa', label: 'Fluxo de Caixa', grupo: 'Relatórios' },
+  { key: 'relatorios_bi', label: 'Relatórios de BI (Power BI)', grupo: 'Relatórios' },
   { key: 'sangrias', label: 'Sangrias', grupo: 'Operacional' },
   { key: 'bpo', label: 'Serviços BPO', grupo: 'Operacional' },
   { key: 'documentos', label: 'Documentos', grupo: 'Operacional' },

@@ -172,7 +172,7 @@ export default function CciUsuarios() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className={`h-9 w-9 rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0 bg-gradient-to-br ${
-                          u.tipo === 'admin' ? 'from-indigo-500 to-blue-600' : 'from-emerald-500 to-teal-600'
+                          u.tipo === 'admin' ? 'from-blue-500 to-blue-600' : 'from-emerald-500 to-teal-600'
                         }`}>
                           {u.nome.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
                         </div>
@@ -186,7 +186,7 @@ export default function CciUsuarios() {
                     </td>
                     <td className="px-4 py-3">
                       {u.tipo === 'admin' ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200">
                           <Shield className="h-3 w-3" /> Admin CCI
                         </span>
                       ) : (
@@ -208,7 +208,7 @@ export default function CciUsuarios() {
                         </div>
                       ) : u.as_rede ? (
                         <div className="flex items-center gap-2">
-                          <Network className="h-3.5 w-3.5 text-violet-500 flex-shrink-0" />
+                          <Network className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
                           <div>
                             <p className="text-sm text-gray-800 truncate max-w-[220px]">{u.as_rede.nome}</p>
                             <p className="text-[10px] text-gray-400">
@@ -278,7 +278,7 @@ export default function CciUsuarios() {
 function StatCard({ label, valor, icon: Icon, color }) {
   const colors = {
     blue:    'bg-blue-50 text-blue-600',
-    indigo:  'bg-indigo-50 text-indigo-600',
+    indigo:  'bg-blue-50 text-blue-600',
     emerald: 'bg-emerald-50 text-emerald-600',
     gray:    'bg-gray-100 text-gray-500',
   };
@@ -486,10 +486,10 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
                 <button type="button" onClick={() => trocarTipo('admin')}
                   className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
                     form.tipo === 'admin'
-                      ? 'border-indigo-400 bg-indigo-50/60'
+                      ? 'border-blue-400 bg-blue-50/60'
                       : 'border-gray-200 hover:border-gray-300 bg-white'
                   }`}>
-                  <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                  <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                     <Shield className="h-4 w-4 text-white" />
                   </div>
                   <div>
@@ -551,10 +551,10 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
                     <button type="button" onClick={() => trocarRedeTipo('autosystem')}
                       className={`flex items-center gap-2.5 p-2.5 rounded-lg border-2 text-left transition-all ${
                         form.rede_tipo === 'autosystem'
-                          ? 'border-violet-400 bg-violet-50/60'
+                          ? 'border-blue-400 bg-blue-50/60'
                           : 'border-gray-200 hover:border-gray-300 bg-white'
                       }`}>
-                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                         <Network className="h-3.5 w-3.5 text-white" />
                       </div>
                       <div>
@@ -570,7 +570,7 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
                   {form.rede_tipo === 'autosystem' ? (
                     <select value={form.as_rede_id || ''}
                       onChange={e => setForm(f => ({ ...f, as_rede_id: e.target.value || null, empresas_permitidas: null }))}
-                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100">
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
                       <option value="">Selecione uma rede Autosystem</option>
                       {(redesAutosystem || []).map(r => {
                         const qtd = (empresasPorRede?.get(r.id)) || 0;

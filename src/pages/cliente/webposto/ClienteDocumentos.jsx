@@ -16,10 +16,10 @@ const tipoIcons = {
 
 const tipoCores = {
   Contabil: 'bg-blue-50 text-blue-700',
-  Fiscal: 'bg-purple-50 text-purple-700',
+  Fiscal: 'bg-blue-50 text-blue-700',
   DP: 'bg-amber-50 text-amber-700',
   Societario: 'bg-emerald-50 text-emerald-700',
-  Certidoes: 'bg-cyan-50 text-cyan-700',
+  Certidoes: 'bg-blue-50 text-blue-700',
 };
 
 export default function ClienteDocumentos() {

@@ -168,7 +168,7 @@ export default function CciPlanoContas() {
 const GRUPO_CFG = {
   ativo:      { label: 'Ativo',      color: 'bg-blue-50 text-blue-700' },
   passivo:    { label: 'Passivo',    color: 'bg-orange-50 text-orange-600' },
-  patrimonio: { label: 'Patrimônio', color: 'bg-violet-50 text-violet-700' },
+  patrimonio: { label: 'Patrimônio', color: 'bg-blue-50 text-blue-700' },
   receita:    { label: 'Receita',    color: 'bg-emerald-50 text-emerald-700' },
   custo:      { label: 'Custo',      color: 'bg-amber-50 text-amber-700' },
   despesa:    { label: 'Despesa',    color: 'bg-red-50 text-red-600' },
@@ -409,7 +409,7 @@ function ModalConta({ open, data, contas, onClose, onSave }) {
               const colors = {
                 blue:    active ? 'bg-blue-100 border-blue-400 text-blue-800'          : 'bg-gray-50 text-gray-500',
                 orange:  active ? 'bg-orange-100 border-orange-400 text-orange-800'    : 'bg-gray-50 text-gray-500',
-                violet:  active ? 'bg-violet-100 border-violet-400 text-violet-800'    : 'bg-gray-50 text-gray-500',
+                violet:  active ? 'bg-blue-100 border-blue-400 text-blue-800'    : 'bg-gray-50 text-gray-500',
                 emerald: active ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-gray-50 text-gray-500',
                 amber:   active ? 'bg-amber-100 border-amber-400 text-amber-800'       : 'bg-gray-50 text-gray-500',
                 red:     active ? 'bg-red-100 border-red-400 text-red-800'             : 'bg-gray-50 text-gray-500',

@@ -189,7 +189,7 @@ export default function ContasAnalise() {
                 <button key={c.id} onClick={() => selecionarChave(c)}
                   className="group bg-white rounded-xl border border-gray-200/60 p-4 text-left hover:border-blue-300 hover:shadow-sm transition-all">
                   <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                       <Key className="h-4 w-4 text-white" />
                     </div>
                     <span className="inline-flex items-center gap-1 text-[10px] text-gray-600 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
@@ -225,7 +225,7 @@ export default function ContasAnalise() {
             className="flex items-center justify-center h-9 w-9 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all flex-shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
             <FlaskConical className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
@@ -380,8 +380,8 @@ function TreeNode({ node, depth, flags, expandidos, onToggleExpand, onToggleCont
             title={recorrente ? 'Recorrência mensal obrigatoria (clique para desmarcar)' : 'Marcar como recorrência mensal obrigatoria'}
             className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-all flex-shrink-0 ${
               recorrente
-                ? 'bg-purple-100 text-purple-700 border-purple-300 hover:bg-purple-200'
-                : 'bg-white text-gray-400 border-gray-200 hover:text-purple-600 hover:border-purple-200'
+                ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                : 'bg-white text-gray-400 border-gray-200 hover:text-blue-600 hover:border-blue-200'
             }`}>
             <Repeat className="h-2.5 w-2.5" />
             Mensal

@@ -43,7 +43,7 @@ const TREE_PALETAS_CATEGORIA = {
     hoverLeaf: 'hover:bg-blue-50/30',
     kpiText: 'text-blue-700', kpiRing: 'ring-blue-200',
     kpiBg: 'bg-blue-50', kpiBorder: 'border-blue-100', kpiBorderStrong: 'border-blue-300',
-    kpiGradient: 'bg-gradient-to-br from-blue-50/60 to-violet-50/40',
+    kpiGradient: 'bg-gradient-to-br from-blue-50/60 to-blue-50/40',
     chartIcon: 'text-blue-500', chartBar: '#bfdbfe',
     spinner: 'text-blue-600', emptyBg: 'bg-blue-50', emptyIcon: 'text-blue-600',
     focusBorder: 'focus:border-blue-400', focusRing: 'focus:ring-blue-100',
@@ -1664,17 +1664,17 @@ export default function ClienteComercialVendas() {
             <Calendar className="h-3 w-3" /> Período
           </span>
           <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           <span className="text-[10px] text-gray-400">e</span>
           <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)}
             max={apenasFechados ? ontemIso() : undefined}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
         <label className="hidden md:inline-flex items-center gap-1.5 h-9 px-2 cursor-pointer select-none"
           title="Limita o período a ontem (exclui o dia corrente, ainda em aberto)">
           <input type="checkbox" checked={apenasFechados}
             onChange={e => handleApenasFechadosChange(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
           <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Apenas dias fechados</span>
         </label>
         {empresasDisponiveis.length > 1 && (
@@ -1707,12 +1707,12 @@ export default function ClienteComercialVendas() {
               <button key={a.key} onClick={() => setAba(a.key)}
                 className={`flex items-center gap-2 px-4 py-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap ${
                   ativo
-                    ? 'border-violet-600 text-violet-700'
+                    ? 'border-blue-600 text-blue-700'
                     : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
                 }`}>
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span>{a.label}</span>
-                <span className={`text-[10.5px] tabular-nums ${ativo ? 'text-violet-500' : 'text-gray-400'}`}>· {formatNumero(qtd)}</span>
+                <span className={`text-[10.5px] tabular-nums ${ativo ? 'text-blue-500' : 'text-gray-400'}`}>· {formatNumero(qtd)}</span>
               </button>
             );
           })}
@@ -2291,7 +2291,7 @@ export default function ClienteComercialVendas() {
           dar feedback ao usuário sobre o carregamento dos dados. */}
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           <span className="text-sm">Carregando vendas...</span>
         </div>
       ) : erro ? (
@@ -2304,8 +2304,8 @@ export default function ClienteComercialVendas() {
         </div>
       ) : aba !== 'geral' ? null : arvoreVisivel.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 mb-3">
-            <ShoppingCart className="h-6 w-6 text-violet-600" />
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
+            <ShoppingCart className="h-6 w-6 text-blue-600" />
           </div>
           <p className="text-sm font-medium text-gray-900">Nenhuma venda no período selecionado</p>
           <p className="text-xs text-gray-500 mt-1">
@@ -2409,7 +2409,7 @@ function CelulaUnica({ valor, ma, aa, moeda = true, decimais = 0, sub, divisor, 
     'px-2.5 py-2 text-right align-top',
     divisor === 'forte' ? 'border-l-2 border-gray-300' : '',
     divisor === 'leve'  ? 'border-l border-gray-200'   : '',
-    tomProj ? 'bg-violet-50/30' : '',
+    tomProj ? 'bg-blue-50/30' : '',
   ].filter(Boolean).join(' ');
   return (
     <td className={cls}>
@@ -2436,13 +2436,13 @@ function GraficoEvolucao12m({ serie, loading }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-        <LineChartIcon className="h-4 w-4 text-violet-500" />
+        <LineChartIcon className="h-4 w-4 text-blue-500" />
         <h3 className="text-sm font-semibold text-gray-800">Evolução · últimos 12 meses</h3>
         <span className="text-[11px] text-gray-400">· Litros vendidos e lucro / litro</span>
       </div>
       {loading ? (
         <div className="h-72 flex items-center justify-center gap-2 text-sm text-gray-500">
-          <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
           Carregando evolução...
         </div>
       ) : !temDados ? (
@@ -2617,7 +2617,7 @@ function TreeVendas({ arvore, multiEmpresa, expandidos, setExpandidos, onToggle,
                 </tr>
                 {gAberto && grupoNode.produtos.map((p, idx) => (
                   <tr key={`${gKey}/p:${p.codigo}`}
-                    className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} hover:bg-violet-50/30 transition-colors`}>
+                    className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} hover:bg-blue-50/30 transition-colors`}>
                     <td className={`py-1.5 pr-3 ${padPrd}`}>
                       <p className="text-[12px] text-gray-700 truncate max-w-[420px]">{p.nome}</p>
                       <p className="text-[9.5px] text-gray-400 font-mono">cód {p.codigo}</p>
@@ -2640,12 +2640,12 @@ function TreeVendas({ arvore, multiEmpresa, expandidos, setExpandidos, onToggle,
       {/* Toolbar */}
       <div className="px-4 py-2.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 bg-gradient-to-b from-white to-gray-50/40">
         <h3 className="text-[13px] font-semibold text-gray-800 flex items-center gap-2">
-          <LayoutGrid className="h-4 w-4 text-violet-500" />
+          <LayoutGrid className="h-4 w-4 text-blue-500" />
           Análise de vendas
         </h3>
         <div className="flex items-center gap-1">
           <button onClick={expandirTudo}
-            className="text-[11px] font-medium text-violet-700 hover:text-violet-900 hover:bg-violet-50 px-2 py-1 rounded-md transition-colors whitespace-nowrap">
+            className="text-[11px] font-medium text-blue-700 hover:text-blue-900 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors whitespace-nowrap">
             Expandir tudo
           </button>
           <span className="text-gray-300">·</span>
@@ -2667,11 +2667,11 @@ function TreeVendas({ arvore, multiEmpresa, expandidos, setExpandidos, onToggle,
             </tr>
             <tr className="text-[8px] font-medium text-gray-400 uppercase tracking-wider">
               <th className="px-2.5 py-1 text-right border-l-2 border-gray-300">Atual</th>
-              <th className="px-2.5 py-1 text-right border-l border-gray-200 bg-violet-50/30">Proj. mês</th>
+              <th className="px-2.5 py-1 text-right border-l border-gray-200 bg-blue-50/30">Proj. mês</th>
               <th className="px-2.5 py-1 text-right border-l-2 border-gray-300">Atual</th>
-              <th className="px-2.5 py-1 text-right border-l border-gray-200 bg-violet-50/30">Proj. mês</th>
+              <th className="px-2.5 py-1 text-right border-l border-gray-200 bg-blue-50/30">Proj. mês</th>
               <th className="px-2.5 py-1 text-right border-l-2 border-gray-300">Atual</th>
-              <th className="px-2.5 py-1 text-right border-l border-gray-200 bg-violet-50/30">Proj. mês</th>
+              <th className="px-2.5 py-1 text-right border-l border-gray-200 bg-blue-50/30">Proj. mês</th>
             </tr>
           </thead>
           <tbody>
@@ -2689,12 +2689,12 @@ function TreeVendas({ arvore, multiEmpresa, expandidos, setExpandidos, onToggle,
               const es = empNode.stats;
               return (
                 <React.Fragment key={empKey}>
-                  <tr className="cursor-pointer bg-gradient-to-r from-violet-100/70 to-violet-50/40 hover:from-violet-100 hover:to-violet-50/70 border-t-2 border-violet-200 transition-colors"
+                  <tr className="cursor-pointer bg-gradient-to-r from-blue-100/70 to-blue-50/40 hover:from-blue-100 hover:to-blue-50/70 border-t-2 border-blue-200 transition-colors"
                     onClick={() => onToggle(empKey)}>
                     <td className={`py-3 pr-3 ${padEmp}`}>
                       <div className="flex items-center gap-2">
-                        <Chev aberto={empAberto} classes="h-4 w-4 text-violet-600" />
-                        <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
+                        <Chev aberto={empAberto} classes="h-4 w-4 text-blue-600" />
+                        <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
                           <Building2 className="h-3.5 w-3.5 text-white" />
                         </div>
                         <div className="min-w-0">
@@ -3730,8 +3730,8 @@ function TreeRealizadoPorCombustivel({ arvore, expandidos, onToggle }) {
 // Paleta suave (pastéis) + cores fortes para destacar melhor/pior mês.
 const COR_BAR_LITROS  = '#fde68a'; // amber-200
 const COR_BAR_LUCROL  = '#a7f3d0'; // emerald-200
-const COR_LINHA       = '#a78bfa'; // violet-400 (lucro / margem)
-const COR_LINHA_DOT   = '#c4b5fd'; // violet-300 (dot padrão)
+const COR_LINHA       = '#a78bfa'; // blue-400 (lucro / margem)
+const COR_LINHA_DOT   = '#c4b5fd'; // blue-300 (dot padrão)
 const COR_MELHOR      = '#10b981'; // emerald-500
 const COR_PIOR        = '#f43f5e'; // rose-500
 
@@ -3982,7 +3982,7 @@ function Evolucao12mCombustivel({ loading, serie, produtos, produtoSelecionado, 
           <div className="border border-gray-100 rounded-xl p-3">
             <div className="flex items-center justify-between px-2 pb-2">
               <div className="flex items-center gap-2">
-                <LineChartIcon className="h-4 w-4 text-violet-500" />
+                <LineChartIcon className="h-4 w-4 text-blue-500" />
                 <h4 className="text-[13px] font-semibold text-gray-800">Litros & Lucro bruto</h4>
               </div>
               <LegendaMelhorPior
@@ -4147,13 +4147,13 @@ function KpiComAA({ cor = 'blue', icone: Icone, label, valor, valorBase, prefixo
 
 function KpiLucroGlobal({ lucro, margem, lucroAnoAnterior }) {
   return (
-    <div className="bg-white rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50/60 to-white p-4 shadow-sm">
+    <div className="bg-white rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/60 to-white p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-violet-50 p-2.5 flex-shrink-0">
-          <ShoppingCart className="h-5 w-5 text-violet-600" />
+        <div className="rounded-lg bg-blue-50 p-2.5 flex-shrink-0">
+          <ShoppingCart className="h-5 w-5 text-blue-600" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-violet-700 font-semibold mb-0.5">Lucro bruto · Global</p>
+          <p className="text-xs text-blue-700 font-semibold mb-0.5">Lucro bruto · Global</p>
           <p className={`text-lg font-semibold tracking-tight truncate ${lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}>
             {formatCurrency(lucro)}
           </p>
@@ -4197,7 +4197,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
         </span>
         <button type="button" onClick={() => setAberto(o => !o)}
           className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[180px] max-w-[260px] ${
-            aberto ? 'border-violet-400 ring-2 ring-violet-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+            aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
           }`}>
           <span className="truncate">{label}</span>
           <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
@@ -4213,7 +4213,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
             <button type="button" onClick={onToggleTodas}
               className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
               <input type="checkbox" checked={todasMarcadas}
-                onChange={() => {}} className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                onChange={() => {}} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span className="text-[12.5px] font-medium text-gray-700">
                 {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
               </span>
@@ -4226,7 +4226,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
                     className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
                     <input type="checkbox" checked={marcada}
                       onChange={() => onToggle(emp.id)}
-                      className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 mt-0.5" />
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12.5px] text-gray-800 truncate">{emp.nome}</p>
                       {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}

@@ -363,7 +363,7 @@ function LancamentosTree({ resultado, lancamentosPorConta, meses }) {
                   <span className="text-[11px] font-mono text-gray-400 flex-shrink-0">{conta.codigo}</span>
                   <span className="text-sm font-medium text-gray-800 truncate flex-1">{conta.descricao}</span>
                   {conta.isRecorrente && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 text-[9px] font-semibold flex-shrink-0"
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200 px-1.5 py-0.5 text-[9px] font-semibold flex-shrink-0"
                       title="Conta marcada como recorrência mensal obrigatoria">
                       <Repeat className="h-2.5 w-2.5" /> Mensal
                     </span>
@@ -487,7 +487,7 @@ function FilterChip({ ativo, onClick, tipo, children }) {
     dup:      'bg-amber-100 text-amber-800 border-amber-300',
     pico:     'bg-red-100 text-red-800 border-red-300',
     queda:    'bg-orange-100 text-orange-800 border-orange-300',
-    ausencia: 'bg-purple-100 text-purple-800 border-purple-300',
+    ausencia: 'bg-blue-100 text-blue-800 border-blue-300',
     normal:   'bg-gray-200 text-gray-800 border-gray-300',
   };
   return (
@@ -505,7 +505,7 @@ function Badge({ tipo, children, small }) {
     dup:      'bg-amber-100 text-amber-800 border-amber-200',
     pico:     'bg-red-100 text-red-800 border-red-200',
     queda:    'bg-orange-100 text-orange-800 border-orange-200',
-    ausencia: 'bg-purple-100 text-purple-800 border-purple-200',
+    ausencia: 'bg-blue-100 text-blue-800 border-blue-200',
   };
   return (
     <span className={`inline-flex items-center rounded-full border px-1.5 ${small ? 'text-[9px]' : 'text-[10px] py-0.5'} font-semibold ${map[tipo]}`}>

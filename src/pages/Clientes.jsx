@@ -224,7 +224,7 @@ export default function Clientes() {
                             <motion.div animate={{ rotate: expanded ? 90 : 0 }} transition={{ duration: 0.15 }}>
                               <ChevronRight className="h-4 w-4 text-gray-400" />
                             </motion.div>
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex-shrink-0">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white flex-shrink-0">
                               <Network className="h-4 w-4" />
                             </div>
                             <div className="min-w-0">
@@ -241,7 +241,7 @@ export default function Clientes() {
                               {provedor}
                             </span>
                           ) : rede.tipoIntegracao === 'autosystem' ? (
-                            <span className="inline-flex items-center rounded-md bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 uppercase tracking-wide">
+                            <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 uppercase tracking-wide">
                               Autosystem
                             </span>
                           ) : '—'}
@@ -252,7 +252,7 @@ export default function Clientes() {
                               <Zap className="h-2.5 w-2.5" /> Webposto
                             </span>
                           ) : rede.tipoIntegracao === 'autosystem' ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-medium">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[10px] font-medium">
                               <Zap className="h-2.5 w-2.5" /> Autosystem
                             </span>
                           ) : (
@@ -440,7 +440,7 @@ function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, on
       className="bg-white dark:bg-slate-900/40 rounded-xl border border-gray-200/60 dark:border-white/10 overflow-hidden shadow-sm mt-6">
       <div className="px-6 py-4 border-b border-gray-100 dark:border-white/10 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white">
+          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
             <Network className="h-4 w-4" />
           </div>
           <div>
@@ -451,7 +451,7 @@ function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, on
           </div>
         </div>
         <button onClick={onNova}
-          className="flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-700 transition-colors">
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition-colors">
           <Plus className="h-3.5 w-3.5" /> Nova rede
         </button>
       </div>
@@ -482,7 +482,7 @@ function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, on
                 <tr key={rede.id} className="hover:bg-gray-50/60 dark:hover:bg-white/5 transition-colors">
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/15 text-violet-600 dark:text-violet-300 flex-shrink-0">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-300 flex-shrink-0">
                         <Network className="h-3.5 w-3.5" />
                       </div>
                       <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{rede.nome}</p>
@@ -513,7 +513,7 @@ function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, on
                         <Wallet className="h-3.5 w-3.5" />
                       </button>
                       <button onClick={() => onEditar(rede)} title="Editar credenciais"
-                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
+                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button onClick={() => onExcluir(rede)} title="Excluir rede"
@@ -811,23 +811,23 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
             </button>
 
             <button onClick={() => escolherMetodo('rede')}
-              className="w-full text-left rounded-xl border-2 border-violet-200 bg-violet-50/40 dark:border-violet-500/30 dark:bg-violet-500/10 p-4 hover:border-violet-300 hover:bg-violet-50 dark:hover:border-violet-500/50 dark:hover:bg-violet-500/15 transition-all group">
+              className="w-full text-left rounded-xl border-2 border-blue-200 bg-blue-50/40 dark:border-blue-500/30 dark:bg-blue-500/10 p-4 hover:border-blue-300 hover:bg-blue-50 dark:hover:border-blue-500/50 dark:hover:bg-blue-500/15 transition-all group">
               <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                   <Zap className="h-5 w-5 text-white" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-0.5">Integrar com Autosystem</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Cadastra apenas a rede de empresas que utiliza Autosystem, sem dados individuais.</p>
                 </div>
-                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-violet-600 dark:group-hover:text-violet-300 transition-colors mt-3" />
+                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-300 transition-colors mt-3" />
               </div>
             </button>
 
             <button onClick={() => escolherMetodo('manual')}
               className="w-full text-left rounded-xl border-2 border-gray-200 dark:border-white/10 p-4 hover:border-blue-300 hover:bg-blue-50/40 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 transition-all group">
               <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                   <Pencil className="h-5 w-5 text-white" />
                 </div>
                 <div className="flex-1">
@@ -989,9 +989,9 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               <PassoIndicador atual={1} total={2} />
             </div>
 
-            <div className="rounded-xl bg-violet-50/60 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 p-3 flex gap-2">
-              <Network className="h-4 w-4 text-violet-600 dark:text-violet-300 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-violet-900 dark:text-violet-200 leading-relaxed">
+            <div className="rounded-xl bg-blue-50/60 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 p-3 flex gap-2">
+              <Network className="h-4 w-4 text-blue-600 dark:text-blue-300 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
                 {editandoRede ? (
                   <>Editando a rede <strong>{editandoRede.nome}</strong>. Atualize o nome/slug abaixo ou avance para alterar as credenciais.</>
                 ) : (
@@ -1005,7 +1005,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               <input type="text" required autoFocus value={redeNome}
                 onChange={(e) => setRedeNome(e.target.value)}
                 placeholder="Ex: Rede Trivela"
-                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
             </div>
 
             <div>
@@ -1015,7 +1015,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               <input type="text" required value={redeSlug}
                 onChange={(e) => { setRedeSlug(e.target.value); setRedeSlugEdited(true); }}
                 placeholder="rede-trivela"
-                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Gerado automaticamente a partir do nome. Pode ser editado.</p>
             </div>
 
@@ -1025,7 +1025,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 Cancelar
               </button>
               <button type="submit" disabled={!redeNome.trim() || !redeSlug.trim()}
-                className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50">
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
                 Próximo <ChevronRight className="h-4 w-4" />
               </button>
             </div>
@@ -1045,10 +1045,10 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               <PassoIndicador atual={2} total={2} />
             </div>
 
-            <div className="rounded-xl bg-violet-50/60 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 p-3 flex gap-2">
-              <Server className="h-4 w-4 text-violet-600 dark:text-violet-300 flex-shrink-0 mt-0.5" />
+            <div className="rounded-xl bg-blue-50/60 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 p-3 flex gap-2">
+              <Server className="h-4 w-4 text-blue-600 dark:text-blue-300 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-violet-900 dark:text-violet-200 leading-relaxed">
+                <p className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
                   Credenciais de conexão ao servidor <strong>{redeNome}</strong>.
                   {editandoRede
                     ? ' Todos os campos são criptografados antes de serem armazenados. Deixe a senha em branco para manter a atual.'
@@ -1065,14 +1065,14 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 <input type="text" autoFocus value={redeIp}
                   onChange={(e) => setRedeIp(e.target.value)}
                   placeholder="187.45.123.45 ou hostname"
-                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Porta</label>
                 <input type="number" min="1" max="65535" value={redePorta}
                   onChange={(e) => setRedePorta(e.target.value)}
                   placeholder="5432"
-                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               </div>
             </div>
 
@@ -1083,7 +1083,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               <input type="text" value={redeBanco}
                 onChange={(e) => setRedeBanco(e.target.value)}
                 placeholder="autosystem_prod"
-                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+                className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1092,7 +1092,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 <input type="text" value={redeUsuario} autoComplete="off"
                   onChange={(e) => setRedeUsuario(e.target.value)}
                   placeholder="usuario_db"
-                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1102,7 +1102,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                   <input type={mostrarSenha ? 'text' : 'password'} value={redeSenha} autoComplete="new-password"
                     onChange={(e) => setRedeSenha(e.target.value)}
                     placeholder={editandoRede ? 'Deixe em branco para manter' : '••••••••'}
-                    className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 pr-10 text-sm font-mono focus:border-violet-400 dark:focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-500/20" />
+                    className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 pr-10 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
                   <button type="button" onClick={() => setMostrarSenha(o => !o)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 p-1.5">
                     {mostrarSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1117,7 +1117,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 Cancelar
               </button>
               <button type="submit" disabled={saving}
-                className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50">
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 <Network className="h-4 w-4" />
                 {editandoRede ? 'Atualizar rede' : 'Cadastrar rede'}
@@ -1151,14 +1151,14 @@ function PassoIndicador({ atual, total }) {
         return (
           <div key={i} className="flex items-center gap-1.5">
             <div className={`flex items-center justify-center h-6 w-6 rounded-full text-[10px] font-bold transition-colors ${
-              ativo ? 'bg-violet-600 text-white' :
-              concluido ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200' :
+              ativo ? 'bg-blue-600 text-white' :
+              concluido ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' :
               'bg-gray-100 text-gray-400 dark:bg-white/10 dark:text-gray-500'
             }`}>
               {concluido ? <Check className="h-3 w-3" /> : passo}
             </div>
             {passo < total && (
-              <div className={`h-px w-6 ${concluido ? 'bg-violet-300 dark:bg-violet-500/40' : 'bg-gray-200 dark:bg-white/10'}`} />
+              <div className={`h-px w-6 ${concluido ? 'bg-blue-300 dark:bg-blue-500/40' : 'bg-gray-200 dark:bg-white/10'}`} />
             )}
           </div>
         );
@@ -1469,7 +1469,7 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
       <Modal open={open} onClose={onClose} title="Editar Cliente" size="sm">
         <div className="space-y-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-700 font-semibold flex-shrink-0">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700 font-semibold flex-shrink-0">
               {(cliente.nome || '?').charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
@@ -1604,7 +1604,7 @@ function ModalDetail({ open, cliente, onClose, onClassificarContas }) {
     <Modal open={open} onClose={onClose} title="Detalhes do Cliente" size="md">
       <div className="space-y-5">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-700 font-bold text-xl">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700 font-bold text-xl">
             {(cliente.nome || '?').charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -1977,11 +1977,11 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
                   placeholder="Buscar por nome ou CNPJ..."
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 />
               </div>
               <button onClick={toggleTodas}
-                className="text-xs font-medium text-violet-600 dark:text-violet-300 hover:underline whitespace-nowrap">
+                className="text-xs font-medium text-blue-600 dark:text-blue-300 hover:underline whitespace-nowrap">
                 {selecionadas.size > 0 ? 'Limpar seleção' : 'Selecionar todas'}
               </button>
             </div>
@@ -2006,7 +2006,7 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
                     const isChecked = selecionadas.has(key);
                     return (
                       <tr key={key}
-                        className={`${jaImportada ? 'bg-gray-50 dark:bg-white/5 opacity-60' : 'hover:bg-violet-50/40 dark:hover:bg-violet-500/5 cursor-pointer'} transition-colors`}
+                        className={`${jaImportada ? 'bg-gray-50 dark:bg-white/5 opacity-60' : 'hover:bg-blue-50/40 dark:hover:bg-blue-500/5 cursor-pointer'} transition-colors`}
                         onClick={() => !jaImportada && toggleEmpresa(key)}>
                         <td className="px-3 py-2 text-center">
                           <input
@@ -2015,7 +2015,7 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
                             disabled={jaImportada}
                             onChange={() => toggleEmpresa(key)}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                           />
                         </td>
                         <td className="px-3 py-2">
@@ -2053,7 +2053,7 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
                   Cancelar
                 </button>
                 <button onClick={salvar} disabled={selecionadas.size === 0 || saving}
-                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
                   {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Importar {selecionadas.size > 0 && `(${selecionadas.size})`}
                 </button>
@@ -2275,7 +2275,7 @@ function ModalGruposProdutoAutosystem({ open, rede, onClose, showToast }) {
                   placeholder="Buscar por nome ou código..."
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 />
               </div>
               <p className="text-[11px] text-gray-500 whitespace-nowrap">
@@ -2332,7 +2332,7 @@ function ModalGruposProdutoAutosystem({ open, rede, onClose, showToast }) {
                   Cancelar
                 </button>
                 <button onClick={salvar} disabled={saving || grupos.length === 0}
-                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
                   {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Salvar classificações
                 </button>
@@ -2360,7 +2360,7 @@ const CATEGORIAS_CONTA = [
 const CAT_CONTA_CLASSES = {
   emerald: 'bg-emerald-100 text-emerald-700 border-emerald-300',
   blue:    'bg-blue-100 text-blue-700 border-blue-300',
-  violet:  'bg-violet-100 text-violet-700 border-violet-300',
+  violet:  'bg-blue-100 text-blue-700 border-blue-300',
   amber:   'bg-amber-100 text-amber-700 border-amber-300',
   teal:    'bg-teal-100 text-teal-700 border-teal-300',
   rose:    'bg-rose-100 text-rose-700 border-rose-300',
@@ -2613,16 +2613,16 @@ function ModalContasCategoriaAutosystem({ open, rede, onClose, showToast }) {
                   placeholder="Buscar por código ou nome..."
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400" />
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
               </div>
               <p className="text-[11px] text-gray-500 whitespace-nowrap">
                 {totalCategorizados}/{contas.length} classificadas
-                {selecionados.size > 0 && <span className="text-violet-600 ml-1">· {selecionados.size} selecionada(s)</span>}
+                {selecionados.size > 0 && <span className="text-blue-600 ml-1">· {selecionados.size} selecionada(s)</span>}
               </p>
               <div ref={aplicarRef} className="relative">
                 <button onClick={() => setAplicarOpen(o => !o)}
                   disabled={selecionados.size === 0}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                   Atribuir categoria <ChevronDown className="h-3.5 w-3.5" />
                 </button>
                 <AnimatePresence>
@@ -2673,7 +2673,7 @@ function ModalContasCategoriaAutosystem({ open, rede, onClose, showToast }) {
                   Cancelar
                 </button>
                 <button onClick={salvar} disabled={saving || contas.length === 0}
-                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                   {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Salvar classificações
                 </button>
@@ -2703,7 +2703,7 @@ function ArvoreContas({ nodes, visiveis, expandidos, onToggleExpand, selecionado
             <div key={n.codigo}>
               <div
                 className={`flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 transition-colors ${
-                  algunsMarcados ? 'bg-violet-50/40' : ''
+                  algunsMarcados ? 'bg-blue-50/40' : ''
                 }`}
                 style={{ paddingLeft: 8 + profundidade * 20 }}
               >
@@ -2719,7 +2719,7 @@ function ArvoreContas({ nodes, visiveis, expandidos, onToggleExpand, selecionado
                   checked={todosMarcados}
                   ref={el => { if (el) el.indeterminate = algunsMarcados; }}
                   onChange={() => onToggleSelecionar(n)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-400 flex-shrink-0" />
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400 flex-shrink-0" />
                 <span className="text-[11px] text-gray-400 font-mono w-[90px] flex-shrink-0 truncate">{n.codigo}</span>
                 <span className={`text-sm flex-1 truncate ${n.sintetico ? 'text-gray-400 italic' : 'text-gray-800'}`}>
                   {n.nome || '—'}

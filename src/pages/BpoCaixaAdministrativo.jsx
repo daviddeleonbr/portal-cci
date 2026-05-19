@@ -571,7 +571,7 @@ export default function BpoCaixaAdministrativo() {
 
       {!redeId ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <Wallet className="h-7 w-7 text-white" />
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Selecione a rede e o período</p>
@@ -587,7 +587,7 @@ export default function BpoCaixaAdministrativo() {
         </div>
       ) : !carregado ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <Calendar className="h-7 w-7 text-white" />
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Clique em "Carregar" para buscar os movimentos</p>
@@ -813,7 +813,7 @@ export default function BpoCaixaAdministrativo() {
                                           <motion.div animate={{ rotate: mesAberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
                                             <ChevronRight className="h-3 w-3 text-gray-400" />
                                           </motion.div>
-                                          <Calendar className="h-3 w-3 text-indigo-400" />
+                                          <Calendar className="h-3 w-3 text-blue-400" />
                                           <span className="text-[11px] font-medium text-gray-700">{formatMesAno(mes.mesKey)}</span>
                                           <span className="text-[10px] text-gray-400">{mes.qtdLancs} lanc. · {mes.dias.length} dia{mes.dias.length === 1 ? '' : 's'}</span>
                                         </div>

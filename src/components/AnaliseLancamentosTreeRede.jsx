@@ -586,7 +586,7 @@ function CardResumo({ icon: Icon, cor, label, valor, hint }) {
     blue: 'bg-blue-50 border-blue-200 text-blue-700',
     amber: 'bg-amber-50 border-amber-200 text-amber-700',
     gray: 'bg-gray-50 border-gray-200 text-gray-600',
-    violet: 'bg-violet-50 border-violet-200 text-violet-700',
+    violet: 'bg-blue-50 border-blue-200 text-blue-700',
   };
   return (
     <div className={`rounded-lg border p-2.5 ${bgMap[cor] || bgMap.gray}`}>
@@ -603,7 +603,7 @@ function CardResumo({ icon: Icon, cor, label, valor, hint }) {
 function ChipFiltro({ label, icon: Icon, cor, count, ativo, onClick }) {
   const corMap = {
     emerald: 'text-emerald-700', red: 'text-red-700', blue: 'text-blue-700',
-    amber: 'text-amber-700', gray: 'text-gray-600', violet: 'text-violet-700',
+    amber: 'text-amber-700', gray: 'text-gray-600', violet: 'text-blue-700',
   };
   return (
     <button onClick={onClick}

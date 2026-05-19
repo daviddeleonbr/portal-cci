@@ -149,7 +149,7 @@ export default function SeletorRedeBPO({
 function BadgeIntegracao({ tipo }) {
   if (tipo === 'autosystem') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 text-[9px] font-medium flex-shrink-0 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 text-[9px] font-medium flex-shrink-0 whitespace-nowrap">
         <Zap className="h-2 w-2" /> Autosystem
       </span>
     );

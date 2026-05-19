@@ -638,7 +638,7 @@ export default function BpoValidacaoOfx() {
 
       {!ofx && !erro && (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <FileSearch className="h-7 w-7 text-white" />
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Envie um arquivo OFX para validar</p>

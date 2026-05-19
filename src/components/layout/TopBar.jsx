@@ -81,7 +81,7 @@ export default function TopBar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-gradient-to-r from-blue-600 to-indigo-700 shadow-sm">
+    <header className="sticky top-0 z-40 bg-gradient-to-r from-blue-600 to-blue-700 shadow-sm">
       <div className="flex h-16 items-center gap-6 px-5 lg:px-8">
         {/* Logo */}
         <Link to="/admin/dashboard" className="flex items-center gap-2.5 flex-shrink-0">

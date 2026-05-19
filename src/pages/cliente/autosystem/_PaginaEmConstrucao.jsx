@@ -18,7 +18,7 @@ export default function PaginaEmConstrucao({ titulo, descricao }) {
         className="max-w-3xl mx-auto"
       >
         <div className="flex items-start gap-4 mb-6">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
             <Construction className="h-6 w-6" />
           </div>
           <div>

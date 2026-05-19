@@ -633,7 +633,7 @@ function TabelaTurnos({ turnos, empresaId, turnosExpandidos, onToggleTurno }) {
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(t.totalVendas)}</td>
                   <td className="px-3 py-2 text-right">
                     {t.afericoes.length > 0 ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30 px-2 py-0.5 text-[11px] font-medium">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30 px-2 py-0.5 text-[11px] font-medium">
                         <Gauge className="h-3 w-3" /> {t.afericoes.length}
                       </span>
                     ) : (
@@ -784,7 +784,7 @@ function DetalheTurno({ turno }) {
                         <div className="flex items-center gap-2 justify-end">
                           <span className="font-mono text-[11px] tabular-nums text-gray-600">{pct.toFixed(1)}%</span>
                           <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden flex-shrink-0">
-                            <div className="h-full bg-indigo-400" style={{ width: `${pct}%` }} />
+                            <div className="h-full bg-blue-400" style={{ width: `${pct}%` }} />
                           </div>
                         </div>
                       </td>
@@ -815,7 +815,7 @@ function DetalheTurno({ turno }) {
             turno.afericoes.length === 0
               ? 'border-gray-100 bg-white cursor-default'
               : afericoesAberto
-              ? 'border-violet-200 bg-violet-50/40 dark:border-violet-500/30 dark:bg-violet-500/10 cursor-pointer'
+              ? 'border-blue-200 bg-blue-50/40 dark:border-blue-500/30 dark:bg-blue-500/10 cursor-pointer'
               : 'border-gray-100 bg-white hover:bg-gray-50/60 dark:hover:bg-white/5 cursor-pointer'
           }`}
         >
@@ -826,14 +826,14 @@ function DetalheTurno({ turno }) {
           )}
           <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
             turno.afericoes.length > 0
-              ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300'
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300'
               : 'bg-gray-100 text-gray-400 dark:bg-white/5 dark:text-gray-500'
           }`}>
             <Gauge className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0 text-left">
             <p className={`text-[10px] font-semibold uppercase tracking-wider ${
-              turno.afericoes.length > 0 ? 'text-violet-700 dark:text-violet-300' : 'text-gray-500 dark:text-gray-400'
+              turno.afericoes.length > 0 ? 'text-blue-700 dark:text-blue-300' : 'text-gray-500 dark:text-gray-400'
             }`}>
               Aferições realizadas
             </p>
@@ -844,7 +844,7 @@ function DetalheTurno({ turno }) {
             </p>
           </div>
           {turno.afericoes.length > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[2rem] h-7 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-200 text-[12px] font-bold tabular-nums px-2.5">
+            <span className="inline-flex items-center justify-center min-w-[2rem] h-7 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-200 text-[12px] font-bold tabular-nums px-2.5">
               {turno.afericoes.length}
             </span>
           )}
@@ -962,7 +962,7 @@ function KpiCard({ icon: Icon, cor, label, valor, sub, raw }) {
     blue:    { bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200' },
     amber:   { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200' },
     emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-    indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-700',  border: 'border-indigo-200' },
+    indigo:  { bg: 'bg-blue-50',  text: 'text-blue-700',  border: 'border-blue-200' },
   };
   const c = cores[cor] || cores.blue;
   return (

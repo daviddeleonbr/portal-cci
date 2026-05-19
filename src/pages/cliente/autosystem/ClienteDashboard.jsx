@@ -296,7 +296,7 @@ export default function ClienteDashboard() {
 
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           <span className="text-sm">Carregando indicadores...</span>
         </div>
       ) : erro ? (
@@ -373,7 +373,7 @@ export default function ClienteDashboard() {
             {/* Gráfico 12 meses */}
             <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                <LineChartIcon className="h-4 w-4 text-violet-500" />
+                <LineChartIcon className="h-4 w-4 text-blue-500" />
                 <h3 className="text-[13px] font-semibold text-gray-800">Evolução · últimos 12 meses</h3>
                 <span className="text-[11px] text-gray-400">· Litros e lucro por litro</span>
               </div>
@@ -413,7 +413,7 @@ export default function ClienteDashboard() {
             {/* Donut por categoria */}
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-violet-500" />
+                <BarChart3 className="h-4 w-4 text-blue-500" />
                 <h3 className="text-[13px] font-semibold text-gray-800">Por categoria · mês</h3>
               </div>
               <div className="p-3">
@@ -456,10 +456,10 @@ export default function ClienteDashboard() {
           {/* Top 5 vendedores */}
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-              <Users className="h-4 w-4 text-violet-500" />
+              <Users className="h-4 w-4 text-blue-500" />
               <h3 className="text-[13px] font-semibold text-gray-800">Top vendedores · mês</h3>
               <Link to="/cliente/autosystem/comercial/produtividade"
-                className="ml-auto inline-flex items-center gap-1 text-[11px] text-violet-700 hover:text-violet-900 font-medium">
+                className="ml-auto inline-flex items-center gap-1 text-[11px] text-blue-700 hover:text-blue-900 font-medium">
                 Ver detalhamento <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
@@ -488,8 +488,8 @@ export default function ClienteDashboard() {
                       const margem   = fatTot > 0 ? (lucroTot / fatTot) * 100 : 0;
                       const transac  = Number(v.transacoes_count) || 0;
                       return (
-                        <tr key={`${v.empresa}-${v.vendedor_codigo}`} className="hover:bg-violet-50/30 transition-colors">
-                          <td className="px-3 py-1.5 text-center font-mono text-[11px] text-violet-700 font-semibold">
+                        <tr key={`${v.empresa}-${v.vendedor_codigo}`} className="hover:bg-blue-50/30 transition-colors">
+                          <td className="px-3 py-1.5 text-center font-mono text-[11px] text-blue-700 font-semibold">
                             {i + 1}
                           </td>
                           <td className="px-3 py-1.5">
@@ -527,7 +527,7 @@ export default function ClienteDashboard() {
 // ─── Componentes ─────────────────────────────────────────────
 function Kpi({ icone: Icone, cor, label, valor, sub, negativo }) {
   const palette = {
-    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600' },
+    violet:  { bg: 'bg-blue-50',  icon: 'text-blue-600' },
     blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600' },
     amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600' },
     emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600' },
@@ -577,7 +577,7 @@ function BucketContas({ icone: Icone, cor, label, total, qtd, ehAlerta }) {
 
 function QuickLink({ to, icone: Icone, cor, titulo, desc }) {
   const palette = {
-    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600',  ring: 'hover:ring-violet-200',  text: 'text-violet-700' },
+    violet:  { bg: 'bg-blue-50',  icon: 'text-blue-600',  ring: 'hover:ring-blue-200',  text: 'text-blue-700' },
     blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600',    ring: 'hover:ring-blue-200',    text: 'text-blue-700' },
     amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   ring: 'hover:ring-amber-200',   text: 'text-amber-700' },
   };
@@ -623,7 +623,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
         </span>
         <button type="button" onClick={() => setAberto(o => !o)}
           className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[180px] max-w-[260px] ${
-            aberto ? 'border-violet-400 ring-2 ring-violet-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+            aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
           }`}>
           <span className="truncate">{label}</span>
           <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
@@ -638,7 +638,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
             <button type="button" onClick={onToggleTodas}
               className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
               <input type="checkbox" checked={todasMarcadas} onChange={() => {}}
-                className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span className="text-[12.5px] font-medium text-gray-700">
                 {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
               </span>
@@ -651,7 +651,7 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
                     className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
                     <input type="checkbox" checked={marcada}
                       onChange={() => onToggle(emp.id)}
-                      className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 mt-0.5" />
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12.5px] text-gray-800 truncate">{emp.nome}</p>
                       {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}

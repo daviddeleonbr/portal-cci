@@ -279,12 +279,12 @@ export default function ClienteSangrias() {
       </PageHeader>
 
       {/* Empresa ativa */}
-      <div className="mb-4 rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50/80 to-purple-50/40 p-3 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+      <div className="mb-4 rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-blue-50/40 p-3 flex items-center gap-3">
+        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
           <Building2 className="h-5 w-5 text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold text-violet-700 uppercase tracking-wider">Empresa selecionada</p>
+          <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Empresa selecionada</p>
           <p className="text-sm font-semibold text-gray-900 truncate">{empresa?.nome}</p>
           <div className="flex items-center gap-3 mt-0.5">
             {empresa?.cnpj && <p className="text-[11px] text-gray-500 font-mono">{empresa.cnpj}</p>}
@@ -292,7 +292,7 @@ export default function ClienteSangrias() {
           </div>
         </div>
         {asRede?.nome && (
-          <p className="text-[11px] text-violet-600 italic hidden sm:block">
+          <p className="text-[11px] text-blue-600 italic hidden sm:block">
             {asRede.nome}
           </p>
         )}
@@ -308,7 +308,7 @@ export default function ClienteSangrias() {
               className={`w-full h-10 rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 disabled:opacity-50 ${
                 dataInvalida
                   ? 'border-red-300 focus:border-red-400 focus:ring-red-100 bg-red-50/40 text-red-700'
-                  : 'border-gray-200 focus:border-violet-400 focus:ring-violet-100'
+                  : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'
               }`} />
             {dataInvalida && (
               <p className="mt-1 text-[11px] text-red-600">Somente dias anteriores são permitidos.</p>
@@ -319,7 +319,7 @@ export default function ClienteSangrias() {
             <input type="text" value={responsavel} onChange={(e) => setResponsavel(e.target.value)}
               disabled={travado}
               placeholder="Nome completo"
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50 disabled:text-gray-600" />
+              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-600" />
           </div>
           <button onClick={carregarDia} disabled={loadingDados || !empresa}
             className="flex items-center gap-2 h-10 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
@@ -352,12 +352,12 @@ export default function ClienteSangrias() {
 
       {loadingDados ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
-          <Loader2 className="h-7 w-7 text-violet-500 animate-spin mx-auto mb-3" />
+          <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
           <p className="text-sm font-medium text-gray-800">Buscando vendas e apuração de {formatDataBR(data)}...</p>
         </div>
       ) : registros.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-500/20">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <Coins className="h-7 w-7 text-white" />
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Sem registros para {formatDataBR(data)}</p>
@@ -380,7 +380,7 @@ export default function ClienteSangrias() {
           {/* Tabela */}
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-violet-500" />
+              <Calendar className="h-4 w-4 text-blue-500" />
               <h3 className="text-sm font-semibold text-gray-800">Fechamento de {formatDataBR(data)}</h3>
               <span className="text-[11px] text-gray-400">· {registros.length} funcionários</span>
             </div>
@@ -405,7 +405,7 @@ export default function ClienteSangrias() {
                       <tr key={r.funcionarioCodigo} className="hover:bg-gray-50/60">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
                               {(r.nome || '?').charAt(0)}
                             </div>
                             <div>
@@ -423,7 +423,7 @@ export default function ClienteSangrias() {
                             onChange={(e) => atualizarApresentado(r.funcionarioCodigo, e.target.value)}
                             disabled={travado}
                             placeholder="0,00"
-                            className="w-32 h-9 rounded-lg border border-gray-200 px-3 text-sm font-mono text-right focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50 disabled:text-gray-600" />
+                            className="w-32 h-9 rounded-lg border border-gray-200 px-3 text-sm font-mono text-right focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-600" />
                         </td>
                         <td className={`px-4 py-3 text-right font-mono text-sm tabular-nums font-semibold ${
                           !temApr ? 'text-gray-300'
@@ -478,7 +478,7 @@ export default function ClienteSangrias() {
                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Observações (opcional)</label>
                 <textarea rows={2} value={observacoes} onChange={(e) => setObservacoes(e.target.value)}
                   placeholder="Alguma nota sobre o fechamento deste dia"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
 
               <label className={`flex items-start gap-3 rounded-lg border-2 p-3 cursor-pointer transition-all ${
@@ -512,7 +512,7 @@ export default function ClienteSangrias() {
                 </div>
                 <button onClick={abrirConfirmacao}
                   disabled={salvando || !responsavel.trim() || !cienciaConfirmada}
-                  className="flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title={!cienciaConfirmada ? 'Marque a declaração de ciência para habilitar' : undefined}>
                   {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Confirmar e salvar
@@ -534,7 +534,7 @@ export default function ClienteSangrias() {
       {mostrarHistorico && (
         <div className="mt-6 bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-            <History className="h-4 w-4 text-violet-500" />
+            <History className="h-4 w-4 text-blue-500" />
             <h3 className="text-sm font-semibold text-gray-800">Histórico de fechamentos</h3>
             <span className="text-[11px] text-gray-400">· {historico.length} registros</span>
           </div>
@@ -549,7 +549,7 @@ export default function ClienteSangrias() {
                 return (
                   <button key={h.id} onClick={() => setData(h.data)}
                     className="w-full flex items-center gap-4 px-5 py-3 hover:bg-gray-50/60 transition-colors text-left">
-                    <Calendar className="h-4 w-4 text-violet-500 flex-shrink-0" />
+                    <Calendar className="h-4 w-4 text-blue-500 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900">{formatDataBR(h.data)}</p>
                       <p className="text-[11px] text-gray-400">
@@ -653,7 +653,7 @@ export default function ClienteSangrias() {
 
 function Kpi({ label, valor, icon: Icon, color }) {
   const colors = {
-    violet:  'bg-violet-50 text-violet-600',
+    violet:  'bg-blue-50 text-blue-600',
     emerald: 'bg-emerald-50 text-emerald-600',
     amber:   'bg-amber-50 text-amber-600',
     red:     'bg-red-50 text-red-600',
@@ -690,9 +690,9 @@ function SeletorEmpresa({ empresas, empresaId, onChange }) {
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setAberto(o => !o)}
         className={`h-10 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-sm transition-colors min-w-[220px] max-w-[320px] font-medium ${
-          aberto ? 'border-violet-400 ring-2 ring-violet-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+          aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
         }`}>
-        <Building2 className="h-4 w-4 text-violet-500 flex-shrink-0" />
+        <Building2 className="h-4 w-4 text-blue-500 flex-shrink-0" />
         <span className="truncate flex-1 text-left">{label}</span>
         <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
       </button>
@@ -710,18 +710,18 @@ function SeletorEmpresa({ empresas, empresaId, onChange }) {
                   <button key={emp.id} type="button"
                     onClick={() => { onChange(emp.id); setAberto(false); }}
                     className={`w-full flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors text-left ${
-                      ativa ? 'bg-violet-50/60' : ''
+                      ativa ? 'bg-blue-50/60' : ''
                     }`}>
                     <div className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      ativa ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white' : 'bg-gray-100 text-gray-500'
+                      ativa ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' : 'bg-gray-100 text-gray-500'
                     }`}>
                       <Building2 className="h-3.5 w-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-[12.5px] truncate ${ativa ? 'text-violet-900 font-semibold' : 'text-gray-800'}`}>{emp.nome}</p>
+                      <p className={`text-[12.5px] truncate ${ativa ? 'text-blue-900 font-semibold' : 'text-gray-800'}`}>{emp.nome}</p>
                       {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
                     </div>
-                    {ativa && <CheckCircle2 className="h-4 w-4 text-violet-600 flex-shrink-0" />}
+                    {ativa && <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />}
                   </button>
                 );
               })}

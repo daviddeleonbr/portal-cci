@@ -274,8 +274,8 @@ export default function ClienteSangrias() {
       </PageHeader>
 
       {/* Empresa ativa */}
-      <div className="mb-4 rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-indigo-50/40 p-3 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+      <div className="mb-4 rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-blue-50/40 p-3 flex items-center gap-3">
+        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
           <Building2 className="h-5 w-5 text-white" />
         </div>
         <div className="flex-1 min-w-0">
@@ -352,7 +352,7 @@ export default function ClienteSangrias() {
         </div>
       ) : registros.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <Coins className="h-7 w-7 text-white" />
           </div>
           <p className="text-sm font-semibold text-gray-900 mb-1">Sem registros para {formatDataBR(data)}</p>
@@ -400,7 +400,7 @@ export default function ClienteSangrias() {
                       <tr key={r.funcionarioCodigo} className="hover:bg-gray-50/60">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
                               {(r.nome || '?').charAt(0)}
                             </div>
                             <div>

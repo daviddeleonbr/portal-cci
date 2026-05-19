@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
-  Landmark, Coins, WalletCards, FileSearch, History,
+  Landmark, Coins, WalletCards, FileSearch, History, PieChart, Phone, Bell,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { logoutAdmin } from '../../lib/auth';
@@ -54,6 +54,14 @@ const navigationAll = [
     items: [
       { name: 'Parâmetros', href: '/admin/parametros', icon: Settings2, permissao: 'parametros' },
       { name: 'Relatórios Cliente', href: '/admin/relatorios-cliente', icon: BarChart3, permissao: 'relatorios_cliente' },
+      { name: 'Relatórios BI', href: '/admin/relatorios-bi', icon: PieChart, permissao: 'relatorios_bi' },
+    ],
+  },
+  {
+    section: 'Configurações',
+    items: [
+      { name: 'Contato (Landing)', href: '/admin/contato', icon: Phone, permissao: 'parametros' },
+      { name: 'Notificações', href: '/admin/notificacoes', icon: Bell, permissao: 'notificacoes' },
     ],
   },
   {
@@ -181,7 +189,7 @@ export default function Sidebar({ collapsed, onToggle }) {
       {/* Logo */}
       <div className="flex h-16 items-center px-5 flex-shrink-0 border-b border-gray-100">
         <Link to="/admin/dashboard" className={`flex items-center gap-3 ${collapsed ? 'mx-auto' : ''}`}>
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-[15px] shadow-md shadow-blue-500/30 flex-shrink-0">
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-[15px] shadow-md shadow-blue-500/30 flex-shrink-0">
             C
             <div className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-white" />
           </div>
@@ -378,7 +386,7 @@ export default function Sidebar({ collapsed, onToggle }) {
       <div className="flex-shrink-0 border-t border-gray-100 p-3">
         {!collapsed ? (
           <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-2.5 border border-gray-100">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 flex-shrink-0">
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 flex-shrink-0">
               {initials}
               <div className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-50" />
             </div>

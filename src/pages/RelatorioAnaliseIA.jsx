@@ -262,7 +262,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
             className="flex items-center justify-center h-9 w-9 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all flex-shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center flex-shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
             <Sparkles className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
@@ -341,7 +341,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
             return (
               <button key={a.id} onClick={() => setTab(a.id)}
                 className={`flex items-center gap-2 px-4 py-3 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  active ? 'border-violet-600 text-violet-700'
+                  active ? 'border-blue-600 text-blue-700'
                     : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
                 }`}>
                 <Icon className="h-4 w-4" />
@@ -457,7 +457,7 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
     <div>
       <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm mb-5 no-print">
         <div className="flex items-start gap-3 flex-wrap">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center flex-shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
             <Wand2 className="h-5 w-5 text-white" />
           </div>
           <div className="flex-1 min-w-0">
@@ -474,7 +474,7 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
           )}
           <button onClick={onGerar} disabled={carregando || !!aviso}
             title={aviso || undefined}
-            className="flex items-center gap-2 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+            className="flex items-center gap-2 rounded-lg bg-gradient-to-br from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
             {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
             {resultado ? 'Gerar novamente' : 'Gerar com IA'}
           </button>
@@ -489,7 +489,7 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
 
       {carregando && (
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-12 text-center shadow-sm no-print">
-          <Loader2 className="h-7 w-7 text-violet-500 animate-spin mx-auto mb-3" />
+          <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
           <p className="text-sm font-medium text-gray-800">{progresso || 'Processando...'}</p>
           <p className="text-[11px] text-gray-400 mt-1">Claude Opus 4.7 · adaptive thinking</p>
         </div>

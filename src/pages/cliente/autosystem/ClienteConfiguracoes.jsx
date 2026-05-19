@@ -160,13 +160,13 @@ export default function ClienteConfiguracoes() {
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-start gap-3 flex-wrap">
           <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm flex-shrink-0">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
               <Droplet className="h-5 w-5 text-white" />
             </div>
             <div className="min-w-0">
               <h2 className="text-[15px] font-semibold text-gray-900">Mix de gasolina</h2>
               <p className="text-[12px] text-gray-500 mt-0.5 max-w-xl">
-                Classifique cada gasolina vendida como <strong className="text-violet-700">Aditivada</strong> ou{' '}
+                Classifique cada gasolina vendida como <strong className="text-blue-700">Aditivada</strong> ou{' '}
                 <strong className="text-amber-700">Comum</strong>. O Mix é calculado por{' '}
                 <em>(litros aditivada) ÷ (litros aditivada + litros comum)</em>.
               </p>
@@ -174,8 +174,8 @@ export default function ClienteConfiguracoes() {
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-[11.5px]">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 ring-1 ring-blue-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                 Aditivada {contagem.aditivada}
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200">
@@ -193,7 +193,7 @@ export default function ClienteConfiguracoes() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
             <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
               placeholder="Buscar produto..."
-              className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
+              className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
           <div className="flex-1" />
           {sucesso && (
@@ -209,7 +209,7 @@ export default function ClienteConfiguracoes() {
           <button onClick={salvar} disabled={!isDirty || salvando}
             className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               isDirty
-                ? 'bg-violet-600 text-white hover:bg-violet-700'
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             }`}>
             {salvando
@@ -222,7 +222,7 @@ export default function ClienteConfiguracoes() {
         {/* Lista */}
         {loading ? (
           <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
-            <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
             <span className="text-sm">Carregando combustíveis...</span>
           </div>
         ) : combustiveis.length === 0 ? (
@@ -262,7 +262,7 @@ export default function ClienteConfiguracoes() {
                     {TIPO_OPTS.map(opt => {
                       const ativo = tipoAtual === opt.value;
                       const corClasses = ativo
-                        ? opt.cor === 'violet' ? 'bg-white text-violet-700 shadow-sm ring-1 ring-violet-200'
+                        ? opt.cor === 'violet' ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-200'
                         : opt.cor === 'amber'  ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200'
                                                : 'bg-white text-gray-600 shadow-sm ring-1 ring-gray-200'
                         : 'text-gray-500 hover:text-gray-800';

@@ -3,7 +3,7 @@ import { useLocation, NavLink, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
-  LayoutDashboard, BarChart3, TrendingUp,
+  LayoutDashboard, BarChart3, TrendingUp, PieChart,
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
   ArrowUpRight, ArrowDownLeft, Settings,
@@ -27,6 +27,7 @@ function buildNavigation(prefix, tipoCliente) {
       items: [
         { name: 'DRE', href: `${prefix}/dre`, icon: BarChart3, permissao: 'dre', requerFlag: 'exibir_dre' },
         { name: 'Fluxo de Caixa', href: `${prefix}/fluxo-caixa`, icon: TrendingUp, permissao: 'fluxo_caixa', requerFlag: 'exibir_fluxo_caixa' },
+        { name: 'Relatórios BI', href: `${prefix}/relatorios-bi`, icon: PieChart, permissao: 'relatorios_bi' },
       ],
     },
     {
@@ -164,7 +165,7 @@ export default function ClienteSidebar({ collapsed, onToggle }) {
       {/* Logo */}
       <div className="flex h-16 items-center px-5 flex-shrink-0 border-b border-gray-100">
         <Link to={`${prefix}/dashboard`} className={`flex items-center gap-3 ${collapsed ? 'mx-auto' : ''}`}>
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-[15px] shadow-md shadow-blue-500/30 flex-shrink-0">
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-[15px] shadow-md shadow-blue-500/30 flex-shrink-0">
             C
             <div className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-white" />
           </div>
@@ -305,7 +306,7 @@ export default function ClienteSidebar({ collapsed, onToggle }) {
       <div className="flex-shrink-0 border-t border-gray-100 p-3">
         {!collapsed ? (
           <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-2.5 border border-gray-100">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 flex-shrink-0">
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 flex-shrink-0">
               {initials}
               <div className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-50" />
             </div>
