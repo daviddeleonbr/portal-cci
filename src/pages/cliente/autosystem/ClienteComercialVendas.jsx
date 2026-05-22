@@ -44,7 +44,7 @@ const TREE_PALETAS_CATEGORIA = {
     kpiText: 'text-blue-700', kpiRing: 'ring-blue-200',
     kpiBg: 'bg-blue-50', kpiBorder: 'border-blue-100', kpiBorderStrong: 'border-blue-300',
     kpiGradient: 'bg-gradient-to-br from-blue-50/60 to-blue-50/40',
-    chartIcon: 'text-blue-500', chartBar: '#bfdbfe',
+    chartIcon: 'text-blue-500', chartBar: '#99f6e4',
     spinner: 'text-blue-600', emptyBg: 'bg-blue-50', emptyIcon: 'text-blue-600',
     focusBorder: 'focus:border-blue-400', focusRing: 'focus:ring-blue-100',
     checkText: 'text-blue-600', checkRing: 'focus:ring-blue-500',
@@ -2276,7 +2276,7 @@ export default function ClienteComercialVendas() {
           <p className="text-red-800">
             <strong>{totaisGerais.porCat.sem_categoria.itens}</strong> ite{totaisGerais.porCat.sem_categoria.itens === 1 ? 'm' : 'ns'} sem categoria
             (totalizando <strong>{formatCurrency(totaisGerais.porCat.sem_categoria.valor)}</strong>).
-            Classifique os grupos de produto correspondentes em <em>/admin/clientes → Redes Autosystem → Classificar grupos</em>.
+            Classifique os grupos de produto correspondentes em <em>Configurações → Classificação de grupos</em>.
           </p>
         </div>
       )}

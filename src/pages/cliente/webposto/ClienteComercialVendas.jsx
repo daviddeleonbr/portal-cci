@@ -1674,7 +1674,7 @@ function PaneCurvaABC({ curvaABC }) {
 // ────────────────────────────────────────────────────────────────────
 // Graficos analiticos: receita diaria, top 10, donut por grupo, margem por grupo
 // ────────────────────────────────────────────────────────────────────
-const CORES_GRAFICO = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#94a3b8'];
+const CORES_GRAFICO = ['#14b8a6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#94a3b8'];
 
 function PaneGraficosAnaliticos({ dadosGraficos }) {
   const { linhaReceita, top10, donut, barrasMargem } = dadosGraficos;
@@ -1706,7 +1706,7 @@ function PaneGraficosAnaliticos({ dadosGraficos }) {
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
                   formatter={(v, n) => [formatCurrency(v), n === 'receita' ? 'Receita' : 'Margem']} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="receita" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} name="Receita" />
+                <Line type="monotone" dataKey="receita" stroke="#14b8a6" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} name="Receita" />
                 <Line type="monotone" dataKey="margem" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} name="Margem" />
               </LineChart>
             </ResponsiveContainer>

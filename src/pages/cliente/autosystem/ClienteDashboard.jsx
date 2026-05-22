@@ -251,7 +251,7 @@ export default function ClienteDashboard() {
   // Distribuição por categoria (donut)
   const categoriaDonut = useMemo(() => [
     { nome: 'Combustível',  valor: totais.cats.combustivel.fat,  cor: '#fcd34d' },
-    { nome: 'Automotivos',  valor: totais.cats.automotivos.fat,  cor: '#93c5fd' },
+    { nome: 'Automotivos',  valor: totais.cats.automotivos.fat,  cor: '#5eead4' },
     { nome: 'Conveniência', valor: totais.cats.conveniencia.fat, cor: '#86efac' },
   ].filter(c => c.valor > 0), [totais]);
 

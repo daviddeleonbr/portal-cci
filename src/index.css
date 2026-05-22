@@ -22,16 +22,29 @@
 @theme {
   --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, monospace;
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
+  /* Cor de destaque (brand) — teal. As classes utilitárias `*-blue-*` são
+     remapeadas para teal para manter consistência visual em toda a app
+     sem precisar tocar nos 1200+ usos das utilitárias. */
+  --color-primary-50:  #f0fdfa;
+  --color-primary-100: #ccfbf1;
+  --color-primary-200: #99f6e4;
+  --color-primary-300: #5eead4;
+  --color-primary-400: #2dd4bf;
+  --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488;
+  --color-primary-700: #0f766e;
+  --color-primary-800: #115e59;
+  --color-primary-900: #134e4a;
+  --color-blue-50:  #f0fdfa;
+  --color-blue-100: #ccfbf1;
+  --color-blue-200: #99f6e4;
+  --color-blue-300: #5eead4;
+  --color-blue-400: #2dd4bf;
+  --color-blue-500: #14b8a6;
+  --color-blue-600: #0d9488;
+  --color-blue-700: #0f766e;
+  --color-blue-800: #115e59;
+  --color-blue-900: #134e4a;
   --color-success-50: #f0fdf4;
   --color-success-100: #dcfce7;
   --color-success-500: #22c55e;
@@ -157,7 +170,7 @@ html.dark .hover\:bg-gray-50:hover, html.dark .hover\:bg-gray-50\/50:hover, html
 html.dark .hover\:bg-gray-100:hover, html.dark .hover\:bg-gray-100\/60:hover { background-color: rgba(51, 65, 85, 0.5) !important; }
 
 /* Cores sutis (blue-50, emerald-50, etc.) ficam com opacidade menor para nao ofuscar */
-html.dark .bg-blue-50,     html.dark .bg-blue-50\/30,     html.dark .bg-blue-50\/50,     html.dark .bg-blue-50\/60     { background-color: rgba(59, 130, 246, 0.12) !important; color: #93c5fd !important; }
+html.dark .bg-blue-50,     html.dark .bg-blue-50\/30,     html.dark .bg-blue-50\/50,     html.dark .bg-blue-50\/60     { background-color: rgba(20, 184, 166, 0.12) !important; color: #5eead4 !important; }
 html.dark .bg-emerald-50,  html.dark .bg-emerald-50\/30,  html.dark .bg-emerald-50\/40,  html.dark .bg-emerald-50\/50  { background-color: rgba(16, 185, 129, 0.13) !important; color: #6ee7b7 !important; }
 html.dark .bg-red-50,      html.dark .bg-red-50\/30,      html.dark .bg-red-50\/40,      html.dark .bg-red-50\/50      { background-color: rgba(239, 68, 68, 0.13) !important; color: #fca5a5 !important; }
 html.dark .bg-amber-50,    html.dark .bg-amber-50\/30,    html.dark .bg-amber-50\/40,    html.dark .bg-amber-50\/50    { background-color: rgba(245, 158, 11, 0.13) !important; color: #fcd34d !important; }
@@ -176,9 +189,9 @@ html.dark .border-gray-100\/60 { border-color: rgba(38, 50, 68, 0.6) !important;
 html.dark .divide-gray-50 > * + *, html.dark .divide-gray-100 > * + * { border-color: #263244 !important; }
 html.dark .divide-gray-200 > * + * { border-color: #334155 !important; }
 
-html.dark .border-blue-100    { border-color: rgba(59, 130, 246, 0.3) !important; }
-html.dark .border-blue-200, html.dark .border-blue-200\/60 { border-color: rgba(59, 130, 246, 0.45) !important; }
-html.dark .border-blue-500    { border-color: #3b82f6 !important; }
+html.dark .border-blue-100    { border-color: rgba(20, 184, 166, 0.3) !important; }
+html.dark .border-blue-200, html.dark .border-blue-200\/60 { border-color: rgba(20, 184, 166, 0.45) !important; }
+html.dark .border-blue-500    { border-color: #14b8a6 !important; }
 html.dark .border-emerald-100 { border-color: rgba(16, 185, 129, 0.3) !important; }
 html.dark .border-emerald-200, html.dark .border-emerald-200\/60 { border-color: rgba(16, 185, 129, 0.45) !important; }
 html.dark .border-red-100     { border-color: rgba(239, 68, 68, 0.3) !important; }
@@ -206,7 +219,7 @@ html.dark .text-slate-500 { color: #94a3b8 !important; }
 html.dark .text-black { color: #e2e8f0 !important; }
 
 /* Textos coloridos ficam um pouco mais claros (legibilidade em fundo escuro) */
-html.dark .text-blue-600, html.dark .text-blue-700 { color: #93c5fd !important; }
+html.dark .text-blue-600, html.dark .text-blue-700 { color: #5eead4 !important; }
 html.dark .text-emerald-600, html.dark .text-emerald-700, html.dark .text-emerald-800 { color: #6ee7b7 !important; }
 html.dark .text-red-500, html.dark .text-red-600, html.dark .text-red-700 { color: #fca5a5 !important; }
 html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-800 { color: #fcd34d !important; }
@@ -241,14 +254,14 @@ html.dark .from-white { --tw-gradient-from: rgba(11, 18, 32, 0) !important; }
 html.dark .to-white\/40 { --tw-gradient-to: rgba(11, 18, 32, 0.55) !important; }
 
 /* ─── Ring / outline (foco de inputs) ──────────────── */
-html.dark .ring-blue-100 { --tw-ring-color: rgba(59, 130, 246, 0.3) !important; }
+html.dark .ring-blue-100 { --tw-ring-color: rgba(20, 184, 166, 0.3) !important; }
 html.dark .ring-emerald-100 { --tw-ring-color: rgba(16, 185, 129, 0.3) !important; }
 html.dark .ring-red-100 { --tw-ring-color: rgba(239, 68, 68, 0.3) !important; }
 html.dark .ring-amber-100, html.dark .ring-orange-100 { --tw-ring-color: rgba(245, 158, 11, 0.3) !important; }
 html.dark .ring-gray-100 { --tw-ring-color: rgba(71, 85, 105, 0.4) !important; }
 
 /* ─── Selection / highlight ─────────────────────── */
-html.dark ::selection { background-color: rgba(59, 130, 246, 0.35); color: #f1f5f9; }
+html.dark ::selection { background-color: rgba(20, 184, 166, 0.35); color: #f1f5f9; }
 
 /* ─── Degrade sutil em rounded-md / rounded tambem ── */
 html.dark .bg-white.rounded,

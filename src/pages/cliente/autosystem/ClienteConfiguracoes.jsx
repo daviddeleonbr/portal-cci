@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Loader2, AlertCircle, Settings, Fuel, Search, Save, Droplet, CheckCircle2,
+  Loader2, AlertCircle, Fuel, Search, Save, Droplet, CheckCircle2, Tags,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import { useClienteSession } from '../../../hooks/useAuth';
@@ -18,11 +18,82 @@ const TIPO_OPTS = [
   { value: null,        label: '—',         cor: 'gray' },
 ];
 
+// Categorias internas usadas pelo Portal CCI para grupos de produto.
+// Espelha o que existe na tabela `as_rede_grupo_produto`.
+const CATEGORIAS_GRUPO = [
+  { key: 'combustivel',  label: 'Combustível',  cor: 'amber'   },
+  { key: 'automotivos',  label: 'Automotivos',  cor: 'blue'    },
+  { key: 'conveniencia', label: 'Conveniência', cor: 'emerald' },
+  { key: 'outros',       label: 'Outros',       cor: 'gray'    },
+];
+const CAT_CLASSES = {
+  amber:   { ativa: 'bg-amber-100 text-amber-700 border-amber-300',       idle: 'border-gray-200 text-gray-500 hover:border-amber-300' },
+  blue:    { ativa: 'bg-blue-100 text-blue-700 border-blue-300',           idle: 'border-gray-200 text-gray-500 hover:border-blue-300' },
+  emerald: { ativa: 'bg-emerald-100 text-emerald-700 border-emerald-300', idle: 'border-gray-200 text-gray-500 hover:border-emerald-300' },
+  gray:    { ativa: 'bg-gray-200 text-gray-700 border-gray-300',           idle: 'border-gray-200 text-gray-500 hover:border-gray-400' },
+};
+
+const ABAS = [
+  { key: 'gasolina', label: 'Classificação de gasolina', icon: Droplet, descricao: 'Aditivada / Comum por produto' },
+  { key: 'grupos',   label: 'Classificação de grupos',   icon: Tags,    descricao: 'Combustível / Automotivos / Conveniência' },
+];
+
 export default function ClienteConfiguracoes() {
   const session = useClienteSession();
   const asRede = session?.asRede;
   const redeId = asRede?.id;
+  const [aba, setAba] = useState('gasolina');
 
+  if (!redeId) {
+    return (
+      <div>
+        <PageHeader title="Configurações" description="Parametrizações da rede" />
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p>Configurações disponíveis apenas para usuários do portal Autosystem.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader title="Configurações" description={asRede?.nome || 'Parametrizações da rede'} />
+
+      {/* Abas */}
+      <div className="bg-white rounded-xl border border-gray-100 mb-4 overflow-hidden">
+        <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto">
+          {ABAS.map(a => {
+            const Icon = a.icon;
+            const ativo = aba === a.key;
+            return (
+              <button key={a.key} onClick={() => setAba(a.key)}
+                className={`flex items-start gap-2 px-4 py-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  ativo
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
+                }`}>
+                <Icon className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div className="text-left">
+                  <p>{a.label}</p>
+                  <p className="text-[10.5px] text-gray-400 font-normal">{a.descricao}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {aba === 'gasolina' && <AbaMixGasolina redeId={redeId} />}
+      {aba === 'grupos'   && <AbaClassificacaoGrupos redeId={redeId} />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Aba: Classificação de gasolina (mix Aditivada / Comum)
+// ═══════════════════════════════════════════════════════════
+function AbaMixGasolina({ redeId }) {
   const [combustiveis, setCombustiveis] = useState([]);   // [{ produto_codigo, produto_nome, grupo_codigo, litros_vendidos }]
   const [classificacao, setClassificacao] = useState(new Map());  // produto_codigo (number) → tipo
   const [classOriginal, setClassOriginal] = useState(new Map());  // estado salvo (para detectar dirty)
@@ -140,147 +211,351 @@ export default function ClienteConfiguracoes() {
     return false;
   }, [classificacao, classOriginal]);
 
-  if (!redeId) {
-    return (
-      <div>
-        <PageHeader title="Configurações" description="Parametrizações da rede" />
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p>Configurações disponíveis apenas para usuários do portal Autosystem.</p>
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-start gap-3 flex-wrap">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
+            <Droplet className="h-5 w-5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold text-gray-900">Mix de gasolina</h2>
+            <p className="text-[12px] text-gray-500 mt-0.5 max-w-xl">
+              Classifique cada gasolina vendida como <strong className="text-blue-700">Aditivada</strong> ou{' '}
+              <strong className="text-amber-700">Comum</strong>. O Mix é calculado por{' '}
+              <em>(litros aditivada) ÷ (litros aditivada + litros comum)</em>.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-[11.5px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 ring-1 ring-blue-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+              Aditivada {contagem.aditivada}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Comum {contagem.comum}
+            </span>
+            <span className="text-gray-400">de {contagem.total} produtos</span>
+          </div>
         </div>
       </div>
+
+      {/* Filtros */}
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+          <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar produto..."
+            className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        </div>
+        <div className="flex-1" />
+        {sucesso && (
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-emerald-700">
+            <CheckCircle2 className="h-4 w-4" /> {sucesso}
+          </span>
+        )}
+        {erro && (
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-red-700">
+            <AlertCircle className="h-4 w-4" /> {erro}
+          </span>
+        )}
+        <button onClick={salvar} disabled={!isDirty || salvando}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            isDirty
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          }`}>
+          {salvando
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <Save className="h-4 w-4" />}
+          {salvando ? 'Salvando...' : isDirty ? 'Salvar alterações' : 'Salvo'}
+        </button>
+      </div>
+
+      {/* Lista */}
+      {loading ? (
+        <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+          <span className="text-sm">Carregando combustíveis...</span>
+        </div>
+      ) : combustiveis.length === 0 ? (
+        <div className="p-12 text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 mb-3">
+            <Fuel className="h-6 w-6 text-amber-600" />
+          </div>
+          <p className="text-sm font-medium text-gray-900">Nenhum combustível encontrado</p>
+          <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+            Verifique se os grupos de combustível estão classificados na aba{' '}
+            <em>Classificação de grupos</em>.
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {listaFiltrada.length === 0 ? (
+            <p className="px-5 py-8 text-center text-[12px] text-gray-400">
+              Nenhum produto corresponde à busca.
+            </p>
+          ) : listaFiltrada.map(p => {
+            const codigo = Number(p.produto_codigo);
+            const tipoAtual = classificacao.get(codigo) || null;
+            return (
+              <div key={codigo} className="px-5 py-3 flex items-center gap-3 flex-wrap hover:bg-gray-50/40 transition-colors">
+                <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                  <Fuel className="h-4 w-4 text-amber-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-gray-900 truncate">{p.produto_nome}</p>
+                  <p className="text-[10.5px] text-gray-400 font-mono">
+                    cód {codigo}
+                    {p.grupo_codigo != null && ` · grupo ${p.grupo_codigo}`}
+                    {p.litros_vendidos != null && ` · ${fmtNum(p.litros_vendidos, 0)} L em 180 dias`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 flex-shrink-0">
+                  {TIPO_OPTS.map(opt => {
+                    const ativo = tipoAtual === opt.value;
+                    const corClasses = ativo
+                      ? opt.cor === 'violet' ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-200'
+                      : opt.cor === 'amber'  ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200'
+                                             : 'bg-white text-gray-600 shadow-sm ring-1 ring-gray-200'
+                      : 'text-gray-500 hover:text-gray-800';
+                    return (
+                      <button key={String(opt.value)} type="button"
+                        onClick={() => setTipo(codigo, opt.value)}
+                        className={`px-3 py-1 text-[11.5px] font-medium rounded-md transition-colors ${corClasses}`}>
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Aba: Classificação de grupos de produto
+// ═══════════════════════════════════════════════════════════
+// Lista todos os grupos vindos do servidor Autosystem (via Edge
+// Function) e permite escolher, para cada um, a categoria interna
+// (combustivel / automotivos / conveniencia / outros). O estado
+// inicial é hidratado de as_rede_grupo_produto (Supabase).
+function AbaClassificacaoGrupos({ redeId }) {
+  const [grupos, setGrupos] = useState([]); // [{ codigo, grid, nome, categoria }]
+  const [gruposOriginal, setGruposOriginal] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState('');
+  const [busca, setBusca] = useState('');
+
+  useEffect(() => {
+    if (!redeId) return;
+    (async () => {
+      try {
+        setLoading(true);
+        setErro('');
+        setSucesso('');
+        // Busca em paralelo: catálogo remoto + categorias já salvas
+        const [remotos, salvos] = await Promise.all([
+          autosystemService.buscarGruposProdutoAutosystem(redeId),
+          autosystemService.listarGruposProdutoRede(redeId),
+        ]);
+        const porCodigo = new Map();
+        (salvos || []).forEach(s => {
+          if (s.codigo != null) porCodigo.set(Number(s.codigo), s.categoria);
+        });
+        const lista = (remotos || []).map(g => ({
+          codigo: g.codigo != null ? Number(g.codigo) : null,
+          grid: g.grid != null ? Number(g.grid) : null,
+          nome: g.nome || '—',
+          categoria: g.codigo != null ? (porCodigo.get(Number(g.codigo)) || '') : '',
+        }));
+        setGrupos(lista);
+        setGruposOriginal(lista.map(g => ({ ...g })));
+      } catch (err) {
+        setErro(err.message || 'Falha ao buscar grupos');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [redeId]);
+
+  const gruposFiltrados = useMemo(() => {
+    if (!busca.trim()) return grupos;
+    const q = busca.trim().toLowerCase();
+    return grupos.filter(g =>
+      (g.nome || '').toLowerCase().includes(q)
+      || String(g.codigo).includes(busca.trim()),
     );
+  }, [grupos, busca]);
+
+  const setCategoria = (codigo, categoria) => {
+    setGrupos(prev => prev.map(g => g.codigo === codigo
+      ? { ...g, categoria: g.categoria === categoria ? '' : categoria }
+      : g
+    ));
+    setSucesso('');
+  };
+
+  const contagem = useMemo(() => {
+    const total = grupos.length;
+    const classificados = grupos.filter(g => g.categoria).length;
+    return { total, classificados, pendentes: total - classificados };
+  }, [grupos]);
+
+  const isDirty = useMemo(() => {
+    if (grupos.length !== gruposOriginal.length) return true;
+    const mapaOrig = new Map(gruposOriginal.map(g => [g.codigo, g.categoria || '']));
+    for (const g of grupos) {
+      if ((mapaOrig.get(g.codigo) || '') !== (g.categoria || '')) return true;
+    }
+    return false;
+  }, [grupos, gruposOriginal]);
+
+  async function salvar() {
+    if (!redeId) return;
+    setSalvando(true);
+    setErro('');
+    setSucesso('');
+    try {
+      await autosystemService.salvarGruposProdutoCategoria(redeId, grupos);
+      setGruposOriginal(grupos.map(g => ({ ...g })));
+      setSucesso(`${contagem.classificados} grupo(s) classificado(s) salvo(s).`);
+    } catch (err) {
+      setErro(err.message || 'Falha ao salvar');
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
-    <div>
-      <PageHeader title="Configurações" description={asRede?.nome || 'Parametrizações da rede'} />
-
-      {/* Seção: MIX */}
-      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-start gap-3 flex-wrap">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
-              <Droplet className="h-5 w-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-[15px] font-semibold text-gray-900">Mix de gasolina</h2>
-              <p className="text-[12px] text-gray-500 mt-0.5 max-w-xl">
-                Classifique cada gasolina vendida como <strong className="text-blue-700">Aditivada</strong> ou{' '}
-                <strong className="text-amber-700">Comum</strong>. O Mix é calculado por{' '}
-                <em>(litros aditivada) ÷ (litros aditivada + litros comum)</em>.
-              </p>
-            </div>
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-start gap-3 flex-wrap">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm flex-shrink-0">
+            <Tags className="h-5 w-5 text-white" />
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-[11.5px]">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 ring-1 ring-blue-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                Aditivada {contagem.aditivada}
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Comum {contagem.comum}
-              </span>
-              <span className="text-gray-400">de {contagem.total} produtos</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Filtros */}
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-            <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar produto..."
-              className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          </div>
-          <div className="flex-1" />
-          {sucesso && (
-            <span className="inline-flex items-center gap-1.5 text-[12px] text-emerald-700">
-              <CheckCircle2 className="h-4 w-4" /> {sucesso}
-            </span>
-          )}
-          {erro && (
-            <span className="inline-flex items-center gap-1.5 text-[12px] text-red-700">
-              <AlertCircle className="h-4 w-4" /> {erro}
-            </span>
-          )}
-          <button onClick={salvar} disabled={!isDirty || salvando}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              isDirty
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}>
-            {salvando
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : <Save className="h-4 w-4" />}
-            {salvando ? 'Salvando...' : isDirty ? 'Salvar alterações' : 'Salvo'}
-          </button>
-        </div>
-
-        {/* Lista */}
-        {loading ? (
-          <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-            <span className="text-sm">Carregando combustíveis...</span>
-          </div>
-        ) : combustiveis.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 mb-3">
-              <Fuel className="h-6 w-6 text-amber-600" />
-            </div>
-            <p className="text-sm font-medium text-gray-900">Nenhum combustível encontrado</p>
-            <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-              Verifique se os grupos de combustível estão classificados em{' '}
-              <em>/admin/clientes → Redes Autosystem → Classificar grupos</em>.
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold text-gray-900">Grupos de produto</h2>
+            <p className="text-[12px] text-gray-500 mt-0.5 max-w-xl">
+              Para cada grupo trazido do servidor Autosystem, defina a categoria interna do Portal CCI.
+              Grupos não classificados ficam sem categoria e podem ser ignorados em relatórios.
             </p>
           </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {listaFiltrada.length === 0 ? (
-              <p className="px-5 py-8 text-center text-[12px] text-gray-400">
-                Nenhum produto corresponde à busca.
-              </p>
-            ) : listaFiltrada.map(p => {
-              const codigo = Number(p.produto_codigo);
-              const tipoAtual = classificacao.get(codigo) || null;
-              return (
-                <div key={codigo} className="px-5 py-3 flex items-center gap-3 flex-wrap hover:bg-gray-50/40 transition-colors">
-                  <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-                    <Fuel className="h-4 w-4 text-amber-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-gray-900 truncate">{p.produto_nome}</p>
-                    <p className="text-[10.5px] text-gray-400 font-mono">
-                      cód {codigo}
-                      {p.grupo_codigo != null && ` · grupo ${p.grupo_codigo}`}
-                      {p.litros_vendidos != null && ` · ${fmtNum(p.litros_vendidos, 0)} L em 180 dias`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 flex-shrink-0">
-                    {TIPO_OPTS.map(opt => {
-                      const ativo = tipoAtual === opt.value;
-                      const corClasses = ativo
-                        ? opt.cor === 'violet' ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-200'
-                        : opt.cor === 'amber'  ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200'
-                                               : 'bg-white text-gray-600 shadow-sm ring-1 ring-gray-200'
-                        : 'text-gray-500 hover:text-gray-800';
-                      return (
-                        <button key={String(opt.value)} type="button"
-                          onClick={() => setTipo(codigo, opt.value)}
-                          className={`px-3 py-1 text-[11.5px] font-medium rounded-md transition-colors ${corClasses}`}>
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        </div>
+        <div className="flex items-center gap-2 text-[11.5px]">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            {contagem.classificados} classificados
+          </span>
+          {contagem.pendentes > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              {contagem.pendentes} pendentes
+            </span>
+          )}
+          <span className="text-gray-400">de {contagem.total} grupos</span>
+        </div>
       </div>
+
+      {/* Filtros */}
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+          <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar grupo por nome ou código..."
+            className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        </div>
+        <div className="flex-1" />
+        {sucesso && (
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-emerald-700">
+            <CheckCircle2 className="h-4 w-4" /> {sucesso}
+          </span>
+        )}
+        {erro && (
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-red-700">
+            <AlertCircle className="h-4 w-4" /> {erro}
+          </span>
+        )}
+        <button onClick={salvar} disabled={!isDirty || salvando || grupos.length === 0}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            isDirty && grupos.length > 0
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          }`}>
+          {salvando
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <Save className="h-4 w-4" />}
+          {salvando ? 'Salvando...' : isDirty ? 'Salvar alterações' : 'Salvo'}
+        </button>
+      </div>
+
+      {/* Lista */}
+      {loading ? (
+        <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+          <span className="text-sm">Buscando grupos de produto do servidor...</span>
+        </div>
+      ) : grupos.length === 0 && !erro ? (
+        <div className="p-12 text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 mb-3">
+            <Tags className="h-6 w-6 text-gray-400" />
+          </div>
+          <p className="text-sm font-medium text-gray-900">Nenhum grupo retornado</p>
+          <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+            O servidor Autosystem não retornou nenhum grupo de produto.
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {gruposFiltrados.length === 0 ? (
+            <p className="px-5 py-8 text-center text-[12px] text-gray-400">
+              Nenhum grupo corresponde à busca.
+            </p>
+          ) : gruposFiltrados.map(g => (
+            <div key={g.codigo ?? g.nome} className="px-5 py-3 flex items-center gap-3 flex-wrap hover:bg-gray-50/40 transition-colors">
+              <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                <Tags className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-gray-900 truncate">{g.nome}</p>
+                <p className="text-[10.5px] text-gray-400 font-mono">
+                  cód {g.codigo ?? '—'}
+                  {g.grid != null && ` · grid ${g.grid}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
+                {CATEGORIAS_GRUPO.map(cat => {
+                  const ativa = g.categoria === cat.key;
+                  const cls = CAT_CLASSES[cat.cor];
+                  return (
+                    <button key={cat.key} type="button"
+                      onClick={() => setCategoria(g.codigo, cat.key)}
+                      className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                        ativa ? cls.ativa : `bg-white ${cls.idle}`
+                      }`}>
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && grupos.length > 0 && (
+        <div className="px-5 py-2.5 border-t border-gray-100 text-[11px] text-gray-500">
+          Clique novamente em uma categoria para desmarcá-la.
+        </div>
+      )}
     </div>
   );
 }

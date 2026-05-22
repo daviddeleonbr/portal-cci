@@ -462,7 +462,7 @@ export default function RelatorioEvolucaoMensal() {
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="Entradas" fill="#10b981" />
                   <Bar dataKey="Saídas" fill="#ef4444" />
-                  <Bar dataKey="Variação" fill="#3b82f6" />
+                  <Bar dataKey="Variação" fill="#14b8a6" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

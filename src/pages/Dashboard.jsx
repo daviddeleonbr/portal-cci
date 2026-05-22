@@ -124,8 +124,8 @@ export default function Dashboard() {
             <AreaChart data={receitaMensalData}>
               <defs>
                 <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorDespesa" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#f87171" stopOpacity={0.1} />
@@ -136,7 +136,7 @@ export default function Dashboard() {
               <XAxis dataKey="mes" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip content={customTooltip} />
-              <Area type="monotone" dataKey="receita" name="Receita" stroke="#3b82f6" strokeWidth={2} fill="url(#colorReceita)" />
+              <Area type="monotone" dataKey="receita" name="Receita" stroke="#14b8a6" strokeWidth={2} fill="url(#colorReceita)" />
               <Area type="monotone" dataKey="despesa" name="Despesa" stroke="#f87171" strokeWidth={2} fill="url(#colorDespesa)" />
             </AreaChart>
           </ResponsiveContainer>

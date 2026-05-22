@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, Pencil, Trash2, Loader2, Search, Shield, Users, Mail,
   Check, Eye, EyeOff, KeyRound, UserCog, ChevronLeft, ChevronRight,
-  IdCard, Lock as LockIcon, ShieldCheck, Network,
+  IdCard, Lock as LockIcon, ShieldCheck, Network, Calendar,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
@@ -163,6 +163,7 @@ export default function CciUsuarios() {
                   <th className="px-4 py-3">Rede Vinculada</th>
                   <th className="px-4 py-3 text-center">Permissões</th>
                   <th className="px-4 py-3 text-center">Status</th>
+                  <th className="px-4 py-3">Cadastrado em</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -234,6 +235,16 @@ export default function CciUsuarios() {
                         <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-500">
                           Inativo
                         </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.created_at ? (
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                          <Calendar className="h-3 w-3 text-gray-400" />
+                          {new Date(u.created_at).toLocaleDateString('pt-BR')}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">

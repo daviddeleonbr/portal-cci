@@ -32,7 +32,7 @@ export const receitaMensalData = [
 ];
 
 export const despesasPorCategoria = [
-  { categoria: 'Pessoal', valor: 125000, cor: '#3b82f6' },
+  { categoria: 'Pessoal', valor: 125000, cor: '#14b8a6' },
   { categoria: 'Aluguel', valor: 48000, cor: '#8b5cf6' },
   { categoria: 'Impostos', valor: 62400, cor: '#ef4444' },
   { categoria: 'Marketing', valor: 28000, cor: '#f59e0b' },

@@ -17,6 +17,18 @@ import * as qualityApi from '../services/qualityApiService';
 import * as autosystemService from '../services/autosystemService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
 
+// Mascara IP exibindo apenas o primeiro e o ultimo octeto (ex.: 187.***.***.45).
+// Hostnames (sem 4 octetos) caem num fallback que mostra so primeiro/ultimo caractere.
+function mascararIp(ip) {
+  if (!ip) return '';
+  const partes = ip.split('.');
+  if (partes.length === 4 && partes.every(p => /^\d+$/.test(p))) {
+    return `${partes[0]}.***.***.${partes[3]}`;
+  }
+  if (ip.length <= 2) return ip;
+  return `${ip[0]}***${ip[ip.length - 1]}`;
+}
+
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -580,6 +592,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   const [redeSlug, setRedeSlug] = useState('');
   const [redeSlugEdited, setRedeSlugEdited] = useState(false);
   const [redeIp, setRedeIp] = useState('');
+  const [redeIpMascarado, setRedeIpMascarado] = useState(''); // valor mascarado original em modo edicao; usado pra detectar alteracao
   const [redePorta, setRedePorta] = useState('');
   const [redeBanco, setRedeBanco] = useState('');
   const [redeUsuario, setRedeUsuario] = useState('');
@@ -601,6 +614,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
     setRedeSlug('');
     setRedeSlugEdited(false);
     setRedeIp('');
+    setRedeIpMascarado('');
     setRedePorta('');
     setRedeBanco('');
     setRedeUsuario('');
@@ -618,11 +632,14 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
         try {
           setBuscando(true);
           const cred = await autosystemService.obterCredenciais(editandoRede.id);
-          setRedeIp(cred?.conexao_ip || '');
-          setRedePorta(cred?.conexao_porta != null ? String(cred.conexao_porta) : '');
-          setRedeBanco(cred?.conexao_banco || '');
+          // IP mascarado (so primeiro e ultimo octeto). Porta e banco intencionalmente
+          // vazios — "deixe em branco para manter o atual" (mesmo padrao da senha).
+          const ipMask = mascararIp(cred?.conexao_ip || '');
+          setRedeIp(ipMask);
+          setRedeIpMascarado(ipMask);
+          setRedePorta('');
+          setRedeBanco('');
           setRedeUsuario(cred?.conexao_usuario || '');
-          // Senha intencionalmente vazia — "deixe em branco para manter a atual"
           setRedeSenha('');
         } catch (err) {
           showToast?.('error', 'Erro ao carregar credenciais: ' + err.message);
@@ -666,17 +683,19 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
     try {
       setSaving(true);
       if (editandoRede?.id) {
-        // Modo edicao: senha vazia = manter atual (undefined no service)
-        await autosystemService.atualizarRede(editandoRede.id, {
+        // Modo edicao: campos vazios ou inalterados (IP ainda mascarado) = manter atual.
+        // Service preserva o valor quando recebemos undefined no payload.
+        const payload = {
           nome: redeNome.trim(),
           slug: redeSlug.trim(),
-          conexao_ip: redeIp.trim(),
-          conexao_porta: redePorta !== '' ? redePorta : null,
-          conexao_banco: redeBanco.trim(),
           conexao_usuario: redeUsuario.trim(),
-          // se nao digitou nada, undefined → service nao manda → RPC preserva
-          senha: redeSenha ? redeSenha : undefined,
-        });
+        };
+        const ipTrim = redeIp.trim();
+        if (ipTrim !== '' && ipTrim !== redeIpMascarado) payload.conexao_ip = ipTrim;
+        if (redePorta !== '') payload.conexao_porta = redePorta;
+        if (redeBanco.trim() !== '') payload.conexao_banco = redeBanco.trim();
+        if (redeSenha) payload.senha = redeSenha;
+        await autosystemService.atualizarRede(editandoRede.id, payload);
         showToast('success', 'Rede atualizada');
       } else {
         await autosystemService.criarRede({
@@ -1051,7 +1070,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 <p className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
                   Credenciais de conexão ao servidor <strong>{redeNome}</strong>.
                   {editandoRede
-                    ? ' Todos os campos são criptografados antes de serem armazenados. Deixe a senha em branco para manter a atual.'
+                    ? ' Todos os campos são criptografados antes de serem armazenados. Por segurança, o IP aparece mascarado e os demais campos vêm em branco — preencha apenas o que desejar alterar.'
                     : ' Todos os campos são criptografados antes de serem armazenados.'}
                 </p>
               </div>
@@ -1064,14 +1083,14 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 </label>
                 <input type="text" autoFocus value={redeIp}
                   onChange={(e) => setRedeIp(e.target.value)}
-                  placeholder="187.45.123.45 ou hostname"
+                  placeholder={editandoRede ? 'Deixe em branco para manter o atual' : '187.45.123.45 ou hostname'}
                   className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Porta</label>
                 <input type="number" min="1" max="65535" value={redePorta}
                   onChange={(e) => setRedePorta(e.target.value)}
-                  placeholder="5432"
+                  placeholder={editandoRede ? 'Manter atual' : '5432'}
                   className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               </div>
             </div>
@@ -1082,7 +1101,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               </label>
               <input type="text" value={redeBanco}
                 onChange={(e) => setRedeBanco(e.target.value)}
-                placeholder="autosystem_prod"
+                placeholder={editandoRede ? 'Deixe em branco para manter o atual' : 'autosystem_prod'}
                 className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
             </div>
 

@@ -40,7 +40,7 @@ function diasEntre(de, ate) {
 // Paletas das categorias (alinhadas com o resto do portal)
 const CAT_PALETA = {
   combustivel:  { bg: 'bg-amber-50',   text: 'text-amber-700',   icone: Fuel,    chartFill: '#fcd34d' },
-  automotivos:  { bg: 'bg-blue-50',    text: 'text-blue-700',    icone: Package, chartFill: '#93c5fd' },
+  automotivos:  { bg: 'bg-blue-50',    text: 'text-blue-700',    icone: Package, chartFill: '#5eead4' },
   conveniencia: { bg: 'bg-emerald-50', text: 'text-emerald-700', icone: Store,   chartFill: '#86efac' },
 };
 

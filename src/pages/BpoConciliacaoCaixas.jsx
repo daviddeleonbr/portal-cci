@@ -1087,7 +1087,7 @@ export default function BpoConciliacaoCaixas({
               <div className="divide-y divide-gray-100 flex-1">
                 <LinhaBreakdown icon={Banknote} iconColor="text-emerald-600" iconBg="bg-emerald-50" barHex="#10b981"
                   label="Dinheiro" valor={totaisPorForma.dinheiro} total={totalForma} />
-                <LinhaBreakdown icon={CreditCard} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#3b82f6"
+                <LinhaBreakdown icon={CreditCard} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#14b8a6"
                   label="Cartão / PIX" valor={totaisPorForma.cartao} total={totalForma} />
                 <LinhaBreakdown icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#8b5cf6"
                   label="Cheque" valor={totaisPorForma.cheque} total={totalForma} />
@@ -1921,7 +1921,7 @@ function PainelAutosystem({
           <div className="divide-y divide-gray-100 flex-1">
             <LinhaBreakdown icon={Banknote} iconColor="text-emerald-600" iconBg="bg-emerald-50" barHex="#10b981"
               label="Dinheiro" valor={totaisForma?.dinheiro || 0} total={totalForma} />
-            <LinhaBreakdown icon={CreditCard} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#3b82f6"
+            <LinhaBreakdown icon={CreditCard} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#14b8a6"
               label="Cartão / PIX" valor={totaisForma?.cartao_pix || 0} total={totalForma} />
             <LinhaBreakdown icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-50" barHex="#8b5cf6"
               label="Cheque" valor={totaisForma?.cheque || 0} total={totalForma} />
