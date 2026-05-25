@@ -329,7 +329,14 @@ export default function ClienteComercialProdutividade() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendedoresEnriquecidos]);
   const tabelaVendedores = useMemo(() => {
-    return [...vendedoresEnriquecidos].sort((a, b) => {
+    // Esconde vendedores sem dados em nenhuma das colunas da análise comparativa.
+    const comDados = vendedoresEnriquecidos.filter(v =>
+      COLS_ANALISE.some(c => {
+        const x = pegarValor(v, c.campo);
+        return Number.isFinite(x) && x !== 0;
+      })
+    );
+    return comDados.sort((a, b) => {
       const va = pegarValor(a, ordemCampo);
       const vb = pegarValor(b, ordemCampo);
       // null/NaN sempre depois

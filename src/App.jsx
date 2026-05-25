@@ -36,7 +36,6 @@ import CciUsuarios from './pages/CciUsuarios';
 import BpoConciliacaoBancaria from './pages/BpoConciliacaoBancaria';
 import BpoConciliacaoCaixas from './pages/BpoConciliacaoCaixas';
 import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
-import BpoValidacaoOfx from './pages/BpoValidacaoOfx';
 import BpoAlteracoesCaixas from './pages/BpoAlteracoesCaixas';
 import CciRelatoriosBi from './pages/CciRelatoriosBi';
 import CciContato from './pages/CciContato';
@@ -60,6 +59,7 @@ import WpUsuarios from './pages/cliente/webposto/ClienteUsuarios';
 import WpComercialVendas from './pages/cliente/webposto/ClienteComercialVendas';
 import WpComercialOperacao from './pages/cliente/webposto/ClienteComercialOperacao';
 import WpComercialProdutividade from './pages/cliente/webposto/ClienteComercialProdutividade';
+import WpConfiguracoes from './pages/cliente/webposto/ClienteConfiguracoes';
 import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
 // Cliente Autosystem (esqueletos — implementados página a página)
 import AsDashboard from './pages/cliente/autosystem/ClienteDashboard';
@@ -145,7 +145,7 @@ export default function App() {
           <Route path="/admin/bpo/conciliacao-bancaria" element={<BpoConciliacaoBancaria />} />
           <Route path="/admin/bpo/conciliacao-caixas" element={<BpoConciliacaoCaixas />} />
           <Route path="/admin/bpo/caixa-administrativo" element={<BpoCaixaAdministrativo />} />
-          <Route path="/admin/bpo/validacao-ofx" element={<BpoValidacaoOfx />} />
+          <Route path="/admin/bpo/validacao-ofx" element={<Navigate to="/admin/bpo/conciliacao-bancaria?aba=ofx" replace />} />
           <Route path="/admin/bpo/alteracoes-caixas" element={<BpoAlteracoesCaixas />} />
 
           {/* Relatórios de BI (Power BI) */}
@@ -179,6 +179,7 @@ export default function App() {
           <Route path="/cliente/webposto/comercial/vendas" element={<WpComercialVendas />} />
           <Route path="/cliente/webposto/comercial/operacao" element={<WpComercialOperacao />} />
           <Route path="/cliente/webposto/comercial/produtividade" element={<WpComercialProdutividade />} />
+          <Route path="/cliente/webposto/configuracoes" element={<WpConfiguracoes />} />
           <Route path="/cliente/webposto/relatorios-bi" element={<ClienteRelatoriosBi />} />
 
           {/* Cliente Autosystem */}

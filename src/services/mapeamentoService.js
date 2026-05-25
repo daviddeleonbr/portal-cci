@@ -132,3 +132,31 @@ export async function moverMapeamento(id, novoGrupoDreId) {
   if (error) throw error;
   return data;
 }
+
+// ===================== MIX de produtos (Webposto) =====================
+// Classificação de gasolina aditivada/comum por rede webposto (chave_api).
+// Espelha as funções de autosystemService.listarMixProdutos/salvarMixProdutos.
+
+export async function listarMixProdutosWebposto(chaveApiId) {
+  if (!chaveApiId) throw new Error('chave_api_id e obrigatorio');
+  const { data, error } = await supabase.rpc('chave_api_produto_mix_listar', { p_chave_api_id: chaveApiId });
+  if (error) throw new Error('Falha ao listar classificacoes de MIX: ' + error.message);
+  return Array.isArray(data) ? data : [];
+}
+
+export async function salvarMixProdutosWebposto(chaveApiId, classificacoes) {
+  if (!chaveApiId) throw new Error('chave_api_id e obrigatorio');
+  if (!Array.isArray(classificacoes)) throw new Error('classificacoes deve ser array');
+  const payload = classificacoes
+    .filter(c => c && c.produto_codigo != null && (c.tipo === 'aditivada' || c.tipo === 'comum'))
+    .map(c => ({
+      produto_codigo: Number(c.produto_codigo),
+      produto_nome:   String(c.produto_nome || ''),
+      tipo:           c.tipo,
+    }));
+  const { error } = await supabase.rpc('chave_api_produto_mix_salvar', {
+    p_chave_api_id: chaveApiId,
+    p_classificacoes: payload,
+  });
+  if (error) throw new Error('Falha ao salvar classificacoes: ' + error.message);
+}

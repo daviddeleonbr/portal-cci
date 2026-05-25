@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Landmark, Loader2, AlertCircle, RefreshCw, Search, TrendingUp, TrendingDown,
   ArrowDownToLine, ArrowUpFromLine, Wallet, Calendar, FileText, Building2, ChevronRight,
+  FileSearch,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Modal from '../components/ui/Modal';
@@ -14,6 +16,54 @@ import * as contasBancariasService from '../services/clienteContasBancariasServi
 import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
 import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
+import { BpoValidacaoOfxView } from './BpoValidacaoOfx';
+
+const ABAS = [
+  { key: 'movimento', label: 'Movimento bancário', icon: Landmark,
+    descricao: 'Movimentações das contas bancárias organizadas em árvore Empresa › Conta › Mês › Dia' },
+  { key: 'ofx',       label: 'Validação OFX',      icon: FileSearch,
+    descricao: 'Compare um arquivo OFX bancário com os lançamentos já registrados no sistema' },
+];
+
+export default function BpoConciliacaoBancaria() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const abaUrl = searchParams.get('aba');
+  const aba = ABAS.some(a => a.key === abaUrl) ? abaUrl : 'movimento';
+  const trocarAba = (key) => {
+    const next = new URLSearchParams(searchParams);
+    if (key === 'movimento') next.delete('aba'); else next.set('aba', key);
+    setSearchParams(next, { replace: true });
+  };
+  const abaAtiva = ABAS.find(a => a.key === aba) || ABAS[0];
+
+  return (
+    <div>
+      <PageHeader title="Conciliação Bancária" description={abaAtiva.descricao} />
+
+      <div className="bg-white rounded-xl border border-gray-100 mb-4 overflow-hidden">
+        <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto">
+          {ABAS.map(a => {
+            const Icon = a.icon;
+            const ativo = aba === a.key;
+            return (
+              <button key={a.key} onClick={() => trocarAba(a.key)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  ativo
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
+                }`}>
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                <span>{a.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {aba === 'movimento' ? <BpoMovimentoBancarioView /> : <BpoValidacaoOfxView />}
+    </div>
+  );
+}
 
 function toLocalDateStr(d) {
   const y = d.getFullYear();
@@ -73,7 +123,7 @@ function sanitizarCnpj(s) {
   return str;
 }
 
-export default function BpoConciliacaoBancaria() {
+function BpoMovimentoBancarioView() {
   const { labelEmpresa, labelRede } = useAnonimizador();
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
@@ -527,8 +577,6 @@ export default function BpoConciliacaoBancaria() {
 
   return (
     <div>
-      <PageHeader title="Conciliação Bancária" description="Movimentações das contas bancárias de toda a rede, organizadas em arvore Empresa > Conta > Mês > Dia > Lançamentos" />
-
       {/* Seletor rede + periodo */}
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px_160px_auto] gap-3 items-end">

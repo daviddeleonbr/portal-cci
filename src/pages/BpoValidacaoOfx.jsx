@@ -1,17 +1,35 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import {
-  FileSearch, Upload, Loader2, AlertCircle, Check, X, RefreshCw, FileText,
-  ArrowDownToLine, ArrowUpFromLine, ChevronRight, Landmark, Calendar,
+  FileSearch, Upload, Loader2, AlertCircle, RefreshCw, FileText, Link2,
+  Trash2, AlertTriangle,
 } from 'lucide-react';
-import PageHeader from '../components/ui/PageHeader';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as autosystemService from '../services/autosystemService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
+import * as ofxCorrelacaoService from '../services/ofxCorrelacaoService';
 import { formatCurrency } from '../utils/format';
 import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
+import Toast from '../components/ui/Toast';
+import Modal from '../components/ui/Modal';
+import { useAdminSession } from '../hooks/useAuth';
+
+// Paleta visual para destacar cada correlação em ambas as colunas.
+// O índice é derivado do id (hash simples) pra ser estável entre renders.
+const PALETA_CORREL = [
+  { ring: 'ring-violet-300',  bg: 'bg-violet-50',  text: 'text-violet-700',  dot: 'bg-violet-500'  },
+  { ring: 'ring-amber-300',   bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-500'   },
+  { ring: 'ring-emerald-300', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  { ring: 'ring-sky-300',     bg: 'bg-sky-50',     text: 'text-sky-700',     dot: 'bg-sky-500'     },
+  { ring: 'ring-rose-300',    bg: 'bg-rose-50',    text: 'text-rose-700',    dot: 'bg-rose-500'    },
+  { ring: 'ring-indigo-300',  bg: 'bg-indigo-50',  text: 'text-indigo-700',  dot: 'bg-indigo-500'  },
+];
+function corDaCorrelacao(id) {
+  let h = 0;
+  for (let i = 0; i < (id || '').length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return PALETA_CORREL[h % PALETA_CORREL.length];
+}
 
 function formatDataBR(s) {
   if (!s) return '—';
@@ -83,39 +101,12 @@ function formatBanco(bankId, org) {
   return bankId || '—';
 }
 
-// Matching OFX x sistema: por tipo + valor absoluto + data (janela de tolerancia).
-// Cada movimento do sistema so pode ser consumido por 1 transacao do OFX.
-function compararOfxComSistema(ofx, movsSistema, toleranciaDias = 1) {
-  const restantes = new Set(movsSistema.map((_, i) => i));
-  const resultado = ofx.transacoes.map((trn) => {
-    const candidatos = [];
-    for (const i of restantes) {
-      const mv = movsSistema[i];
-      if (mv.tipo !== trn.tipo) continue;
-      if (Math.abs(mv.valor - trn.valor) > 0.01) continue;
-      // Diferenca de dias
-      const d1 = new Date(trn.data + 'T00:00:00');
-      const d2 = new Date(mv.data + 'T00:00:00');
-      const diffDias = Math.abs((d1 - d2) / (1000 * 60 * 60 * 24));
-      if (diffDias > toleranciaDias) continue;
-      candidatos.push({ idx: i, diffDias });
-    }
-    if (candidatos.length === 0) return { ...trn, status: 'faltando', match: null };
-    // Prefere match com diferenca 0 (mesma data); empate: primeiro que aparecer
-    candidatos.sort((a, b) => a.diffDias - b.diffDias);
-    const escolhido = candidatos[0];
-    restantes.delete(escolhido.idx);
-    return {
-      ...trn,
-      status: escolhido.diffDias === 0 ? 'casada' : 'casada-data',
-      match: movsSistema[escolhido.idx],
-    };
-  });
-  const extrasSistema = Array.from(restantes).map(i => movsSistema[i]);
-  return { transacoes: resultado, extrasSistema };
-}
+export default function BpoValidacaoOfx() { return <BpoValidacaoOfxView />; }
 
-export default function BpoValidacaoOfx() {
+export function BpoValidacaoOfxView() {
+  const session = useAdminSession();
+  const usuarioId = session?.usuario?.id || null;
+
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
   const [redesAutosystem, setRedesAutosystem] = useState([]);
@@ -128,11 +119,21 @@ export default function BpoValidacaoOfx() {
   const [arquivo, setArquivo] = useState(null);
   const [ofx, setOfx] = useState(null);
   const [movsSistema, setMovsSistema] = useState([]);
-  const [comparacao, setComparacao] = useState(null);
+  const [correlacoes, setCorrelacoes] = useState([]);
+  const [selOfx, setSelOfx] = useState(() => new Set()); // Set<fitid>
+  const [selSistema, setSelSistema] = useState(() => new Set()); // Set<movimento_codigo>
   const [loadingInicial, setLoadingInicial] = useState(true);
   const [loadingContas, setLoadingContas] = useState(false);
   const [loadingDados, setLoadingDados] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
+  const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
+  const [confirmExcluir, setConfirmExcluir] = useState({ open: false, correlacao: null });
+
+  const showToast = (type, message) => {
+    setToast({ show: true, type, message });
+    setTimeout(() => setToast(t => ({ ...t, show: false })), 2800);
+  };
 
   useEffect(() => {
     (async () => {
@@ -206,7 +207,9 @@ export default function BpoValidacaoOfx() {
   useEffect(() => {
     setContaCodigo('');
     setMovsSistema([]);
-    setComparacao(null);
+    setCorrelacoes([]);
+    setSelOfx(new Set());
+    setSelSistema(new Set());
   }, [clienteId]);
 
   // Contas bancarias elegiveis da empresa selecionada (classif=bancaria ou aplicacao, ativas)
@@ -240,8 +243,10 @@ export default function BpoValidacaoOfx() {
     setErro(null);
     setArquivo(file);
     setOfx(null);
-    setComparacao(null);
     setMovsSistema([]);
+    setCorrelacoes([]);
+    setSelOfx(new Set());
+    setSelSistema(new Set());
     if (!file) return;
     try {
       const text = await file.text();
@@ -256,7 +261,7 @@ export default function BpoValidacaoOfx() {
     }
   };
 
-  const comparar = useCallback(async () => {
+  const carregar = useCallback(async () => {
     if (!cliente || !contaCodigo || !ofx) return;
     setLoadingDados(true);
     setErro(null);
@@ -268,14 +273,17 @@ export default function BpoValidacaoOfx() {
         dataFinal: ofx.dtEnd,
         empresaCodigo: cliente.empresa_codigo,
       };
-      const movs = await qualityApi.buscarMovimentoConta(chave.chave, filtros);
+      const [movs, correlacoesSalvas] = await Promise.all([
+        qualityApi.buscarMovimentoConta(chave.chave, filtros),
+        ofxCorrelacaoService.listarCorrelacoes(cliente.id, contaCodigo).catch(() => []),
+      ]);
       const cod = Number(contaCodigo);
       const doSistema = (movs || [])
         .filter(m => Number(m.contaCodigo) === cod)
         .map(m => {
           const isCredito = m.tipo === 'Crédito' || m.tipo === 'Credito' || m.tipo === 'C';
           return {
-            id: m.codigo || m.movimentoContaCodigo,
+            id: Number(m.codigo ?? m.movimentoContaCodigo),
             data: m.dataMovimento,
             tipo: isCredito ? 'credito' : 'debito',
             valor: Math.abs(Number(m.valor || 0)),
@@ -284,7 +292,9 @@ export default function BpoValidacaoOfx() {
           };
         });
       setMovsSistema(doSistema);
-      setComparacao(compararOfxComSistema(ofx, doSistema));
+      setCorrelacoes(correlacoesSalvas);
+      setSelOfx(new Set());
+      setSelSistema(new Set());
     } catch (err) {
       setErro('Erro ao buscar movimentos do sistema: ' + err.message);
     } finally {
@@ -292,34 +302,155 @@ export default function BpoValidacaoOfx() {
     }
   }, [cliente, contaCodigo, ofx, chavesApi]);
 
-  const resumo = useMemo(() => {
-    if (!comparacao) return null;
-    const casadas = comparacao.transacoes.filter(t => t.status === 'casada' || t.status === 'casada-data').length;
-    const faltando = comparacao.transacoes.filter(t => t.status === 'faltando').length;
-    const extras = comparacao.extrasSistema.length;
-    return { total: comparacao.transacoes.length, casadas, faltando, extras };
-  }, [comparacao]);
+  // ─── Índices para lookup rápido por correlação ──────────────
+  // Mapas: identificador → correlacao (objeto). Quando o item já está numa
+  // correlação salva, aparece com badge da cor da correlação em ambos os lados.
+  const correlPorOfx = useMemo(() => {
+    const m = new Map();
+    (correlacoes || []).forEach(c => {
+      (c.itens || []).forEach(it => {
+        if (it.lado === 'ofx' && it.fitid) m.set(String(it.fitid), c);
+      });
+    });
+    return m;
+  }, [correlacoes]);
+  const correlPorSistema = useMemo(() => {
+    const m = new Map();
+    (correlacoes || []).forEach(c => {
+      (c.itens || []).forEach(it => {
+        if (it.lado === 'sistema' && it.movimento_codigo != null) {
+          m.set(Number(it.movimento_codigo), c);
+        }
+      });
+    });
+    return m;
+  }, [correlacoes]);
 
-  // Totais agregados: OFX x Sistema (entradas, saidas, liquido)
-  const totaisComparativos = useMemo(() => {
-    if (!ofx || !comparacao) return null;
-    const somar = (arr) => arr.reduce((acc, t) => {
-      if (t.tipo === 'credito') acc.entradas += t.valor;
-      else acc.saidas += t.valor;
+  // ─── Drift detection: para cada item de correlação do lado sistema,
+  // compara snapshot com o valor atual da Quality. Retorna mapa
+  // movimento_codigo → { snapshot, atual, diff: array de campos alterados }
+  const driftPorSistema = useMemo(() => {
+    const m = new Map();
+    const atualPorCodigo = new Map(movsSistema.map(mv => [Number(mv.id), mv]));
+    (correlacoes || []).forEach(c => {
+      (c.itens || []).forEach(it => {
+        if (it.lado !== 'sistema' || it.movimento_codigo == null) return;
+        const atual = atualPorCodigo.get(Number(it.movimento_codigo));
+        if (!atual) {
+          m.set(Number(it.movimento_codigo), { ausente: true, snapshot: it });
+          return;
+        }
+        const diffCampos = [];
+        if (Math.abs(Number(it.valor) - Number(atual.valor)) > 0.01) diffCampos.push('valor');
+        if (it.data && atual.data && String(it.data).slice(0, 10) !== String(atual.data).slice(0, 10)) diffCampos.push('data');
+        if ((it.descricao || '') !== (atual.descricao || '')) diffCampos.push('descricao');
+        if (diffCampos.length > 0) m.set(Number(it.movimento_codigo), { snapshot: it, atual, diffCampos });
+      });
+    });
+    return m;
+  }, [correlacoes, movsSistema]);
+
+  // ─── Totais selecionados em cada coluna ─────────────────────
+  const totaisSelecionados = useMemo(() => {
+    const somar = (lista) => lista.reduce((acc, t) => {
+      const v = Number(t.valor || 0);
+      if (t.tipo === 'credito') acc.creditos += v;
+      else acc.debitos += v;
       return acc;
-    }, { entradas: 0, saidas: 0 });
-    const ofxTot = somar(ofx.transacoes);
-    const sisTot = somar(movsSistema);
+    }, { creditos: 0, debitos: 0 });
+    const ofxSel = (ofx?.transacoes || []).filter(t => selOfx.has(String(t.fitid)));
+    const sisSel = movsSistema.filter(m => selSistema.has(Number(m.id)));
     return {
-      ofx: { ...ofxTot, liquido: ofxTot.entradas - ofxTot.saidas, qtd: ofx.transacoes.length },
-      sistema: { ...sisTot, liquido: sisTot.entradas - sisTot.saidas, qtd: movsSistema.length },
-      diff: {
-        entradas: ofxTot.entradas - sisTot.entradas,
-        saidas: ofxTot.saidas - sisTot.saidas,
-        liquido: (ofxTot.entradas - ofxTot.saidas) - (sisTot.entradas - sisTot.saidas),
-      },
+      ofx: { ...somar(ofxSel), qtd: ofxSel.length, itens: ofxSel },
+      sistema: { ...somar(sisSel), qtd: sisSel.length, itens: sisSel },
     };
-  }, [ofx, comparacao, movsSistema]);
+  }, [ofx, movsSistema, selOfx, selSistema]);
+
+  // ─── Validação para habilitar Vincular ──────────────────────
+  // Regras: ambos lados precisam ter ao menos 1 item; tipos batem (só crédito
+  // ou só débito de cada lado); soma absoluta bate dentro de R$ 0,01.
+  const validacaoVincular = useMemo(() => {
+    const { ofx: o, sistema: s } = totaisSelecionados;
+    if (o.qtd === 0 || s.qtd === 0) return { ok: false, motivo: 'Selecione ao menos 1 item de cada lado' };
+    const tiposOfx = new Set(o.itens.map(i => i.tipo));
+    const tiposSis = new Set(s.itens.map(i => i.tipo));
+    if (tiposOfx.size > 1) return { ok: false, motivo: 'Mistura crédito e débito no OFX selecionado' };
+    if (tiposSis.size > 1) return { ok: false, motivo: 'Mistura crédito e débito no sistema selecionado' };
+    const tipoOfx = [...tiposOfx][0];
+    const tipoSis = [...tiposSis][0];
+    if (tipoOfx !== tipoSis) return { ok: false, motivo: 'Tipos diferentes (OFX é ' + tipoOfx + ', sistema é ' + tipoSis + ')' };
+    const totalOfx = tipoOfx === 'credito' ? o.creditos : o.debitos;
+    const totalSis = tipoSis === 'credito' ? s.creditos : s.debitos;
+    const diff = Math.abs(totalOfx - totalSis);
+    if (diff > 0.01) return { ok: false, motivo: 'Soma não bate: Δ ' + formatCurrency(totalOfx - totalSis) };
+    return { ok: true, tipo: tipoOfx, total: totalOfx };
+  }, [totaisSelecionados]);
+
+  const vincular = useCallback(async () => {
+    if (!validacaoVincular.ok || !cliente || !chavesApi || !contaCodigo) return;
+    setSalvando(true);
+    try {
+      const itensOfx = totaisSelecionados.ofx.itens.map(t => ({
+        fitid:     t.fitid,
+        valor:     t.valor,
+        data:      t.data,
+        tipo:      t.tipo,
+        descricao: t.memo || t.name || '',
+      }));
+      const itensSistema = totaisSelecionados.sistema.itens.map(t => ({
+        movimento_codigo: t.id,
+        valor:            t.valor,
+        data:             t.data,
+        tipo:             t.tipo,
+        descricao:        t.descricao,
+        documento:        t.documento,
+      }));
+      await ofxCorrelacaoService.criarCorrelacao({
+        chaveApiId:  cliente.chave_api_id,
+        clienteId:   cliente.id,
+        contaCodigo: Number(contaCodigo),
+        tipo:        validacaoVincular.tipo,
+        valorTotal:  validacaoVincular.total,
+        criadoPor:   usuarioId,
+        itensOfx,
+        itensSistema,
+      });
+      // Recarrega as correlações
+      const lista = await ofxCorrelacaoService.listarCorrelacoes(cliente.id, Number(contaCodigo));
+      setCorrelacoes(lista);
+      setSelOfx(new Set());
+      setSelSistema(new Set());
+      showToast('success', 'Correlação salva');
+    } catch (err) {
+      showToast('error', err.message || 'Falha ao salvar');
+    } finally {
+      setSalvando(false);
+    }
+  }, [validacaoVincular, totaisSelecionados, cliente, chavesApi, contaCodigo, usuarioId]);
+
+  const excluirCorrelacao = useCallback(async (id) => {
+    try {
+      await ofxCorrelacaoService.excluirCorrelacao(id);
+      setCorrelacoes(prev => prev.filter(c => c.id !== id));
+      setConfirmExcluir({ open: false, correlacao: null });
+      showToast('success', 'Correlação excluída');
+    } catch (err) {
+      showToast('error', err.message || 'Falha ao excluir');
+    }
+  }, []);
+
+  const toggleOfx = (fitid) => setSelOfx(prev => {
+    const n = new Set(prev);
+    const k = String(fitid);
+    if (n.has(k)) n.delete(k); else n.add(k);
+    return n;
+  });
+  const toggleSistema = (id) => setSelSistema(prev => {
+    const n = new Set(prev);
+    const k = Number(id);
+    if (n.has(k)) n.delete(k); else n.add(k);
+    return n;
+  });
 
   if (loadingInicial) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
@@ -327,8 +458,6 @@ export default function BpoValidacaoOfx() {
 
   return (
     <div>
-      <PageHeader title="Validação OFX" description="Compare um arquivo OFX bancário com os lançamentos já registrados no sistema para identificar o que falta lancar" />
-
       {/* Seletor rede + empresa + conta + upload */}
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
@@ -381,10 +510,10 @@ export default function BpoValidacaoOfx() {
               {arquivo.name} · {(arquivo.size / 1024).toFixed(1)} KB
             </p>
           )}
-          <button onClick={comparar} disabled={!ofx || !contaCodigo || loadingDados}
+          <button onClick={carregar} disabled={!ofx || !contaCodigo || loadingDados}
             className="ml-auto flex items-center gap-2 h-10 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Comparar com sistema
+            Carregar dados
           </button>
         </div>
       </div>
@@ -428,212 +557,183 @@ export default function BpoValidacaoOfx() {
         </div>
       )}
 
-      {/* Resumo da comparacao (KPIs) */}
-      {resumo && (
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
-          <Kpi label="OFX" valor={resumo.total} icon={FileText} color="blue" raw hint="transações no arquivo" />
-          <Kpi label="Lancadas" valor={resumo.casadas} icon={Check} color="emerald" raw
-            hint={`${resumo.total > 0 ? ((resumo.casadas / resumo.total) * 100).toFixed(0) : 0}% do OFX`} />
-          <Kpi label="Faltando lancar" valor={resumo.faltando} icon={AlertCircle} color="red" raw
-            hint="no OFX mas não no sistema" />
-          <Kpi label="Extras no sistema" valor={resumo.extras} icon={ChevronRight} color="amber" raw
-            hint="no sistema mas não no OFX" />
+      {/* Toolbar de vínculo: aparece quando há seleção em qualquer lado */}
+      {movsSistema.length > 0 && (selOfx.size > 0 || selSistema.size > 0) && (
+        <div className="sticky top-0 z-20 bg-white rounded-xl border border-blue-200 shadow-sm mb-3 p-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2 text-[12px] text-gray-700">
+            <Link2 className="h-4 w-4 text-blue-500" />
+            <span className="font-semibold">Selecionado:</span>
+          </div>
+          <div className="text-[12px]">
+            <span className="text-gray-500">Sistema</span>{' '}
+            <span className="font-semibold text-gray-900">{totaisSelecionados.sistema.qtd}</span>
+            {totaisSelecionados.sistema.creditos > 0 && <span className="text-emerald-700 ml-1">+{formatCurrency(totaisSelecionados.sistema.creditos)}</span>}
+            {totaisSelecionados.sistema.debitos > 0 && <span className="text-red-700 ml-1">-{formatCurrency(totaisSelecionados.sistema.debitos)}</span>}
+          </div>
+          <div className="text-gray-300">|</div>
+          <div className="text-[12px]">
+            <span className="text-gray-500">OFX</span>{' '}
+            <span className="font-semibold text-gray-900">{totaisSelecionados.ofx.qtd}</span>
+            {totaisSelecionados.ofx.creditos > 0 && <span className="text-emerald-700 ml-1">+{formatCurrency(totaisSelecionados.ofx.creditos)}</span>}
+            {totaisSelecionados.ofx.debitos > 0 && <span className="text-red-700 ml-1">-{formatCurrency(totaisSelecionados.ofx.debitos)}</span>}
+          </div>
+          <div className="flex-1" />
+          {!validacaoVincular.ok && (
+            <span className="text-[11.5px] text-amber-700 flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5" /> {validacaoVincular.motivo}
+            </span>
+          )}
+          <button onClick={() => { setSelOfx(new Set()); setSelSistema(new Set()); }}
+            className="text-[11.5px] text-gray-500 hover:text-gray-800 px-2 py-1">
+            Limpar
+          </button>
+          <button onClick={vincular} disabled={!validacaoVincular.ok || salvando}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+            Vincular
+          </button>
         </div>
       )}
 
-      {/* Comparativo de totais OFX x Sistema */}
-      {totaisComparativos && (
+      {/* Layout 2 colunas: Sistema (esq) | OFX (dir) */}
+      {movsSistema.length > 0 && ofx && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+          {/* ─── Coluna Sistema (esquerda) ─── */}
+          <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-blue-50/40 flex items-center gap-2">
+              <h3 className="text-[13px] font-semibold text-gray-800">Sistema</h3>
+              <span className="text-[11px] text-gray-400">· {movsSistema.length} movimento(s) · {selSistema.size} selec.</span>
+            </div>
+            <div className="max-h-[640px] overflow-y-auto divide-y divide-gray-100">
+              {movsSistema.length === 0 ? (
+                <p className="px-4 py-10 text-center text-[12px] text-gray-400">Nenhum movimento no período</p>
+              ) : movsSistema.map(m => {
+                const correl = correlPorSistema.get(Number(m.id));
+                const cor = correl ? corDaCorrelacao(correl.id) : null;
+                const drift = driftPorSistema.get(Number(m.id));
+                const checked = selSistema.has(Number(m.id));
+                return (
+                  <label key={m.id}
+                    className={`flex items-start gap-2 px-4 py-2 cursor-pointer transition-colors ${
+                      checked ? 'bg-blue-50/60' : 'hover:bg-gray-50/60'
+                    } ${correl ? `ring-1 ${cor.ring} ring-inset` : ''}`}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleSistema(m.id)}
+                      className="mt-1 h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-mono text-[11px] text-gray-500 tabular-nums">{formatDataBR(m.data)}</span>
+                        {correl && (
+                          <span className={`inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 ${cor.bg} ${cor.text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${cor.dot}`} />
+                            {correl.label || 'vínculo'}
+                          </span>
+                        )}
+                        {drift && (
+                          <span className="inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 bg-amber-50 text-amber-700"
+                            title={drift.ausente ? `Movimento removido. Snapshot: R$ ${drift.snapshot.valor} em ${formatDataBR(drift.snapshot.data)}` : `Alteração em: ${drift.diffCampos.join(', ')}. Snapshot: R$ ${drift.snapshot.valor} em ${formatDataBR(drift.snapshot.data)}`}>
+                            <AlertTriangle className="h-2.5 w-2.5" /> {drift.ausente ? 'removido' : 'alterado'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[12px] text-gray-800 truncate">{m.descricao}</p>
+                      {m.documento && <p className="text-[10px] text-gray-400 font-mono">doc {m.documento}</p>}
+                    </div>
+                    <span className={`text-right font-mono text-[12px] tabular-nums whitespace-nowrap font-semibold ${m.tipo === 'credito' ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {m.tipo === 'credito' ? '+' : '-'}{formatCurrency(m.valor)}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ─── Coluna OFX (direita) ─── */}
+          <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-blue-50/40 flex items-center gap-2">
+              <h3 className="text-[13px] font-semibold text-gray-800">OFX</h3>
+              <span className="text-[11px] text-gray-400">· {ofx.transacoes.length} transação(ões) · {selOfx.size} selec.</span>
+            </div>
+            <div className="max-h-[640px] overflow-y-auto divide-y divide-gray-100">
+              {ofx.transacoes.map((t, i) => {
+                const correl = t.fitid ? correlPorOfx.get(String(t.fitid)) : null;
+                const cor = correl ? corDaCorrelacao(correl.id) : null;
+                const checked = selOfx.has(String(t.fitid));
+                return (
+                  <label key={t.fitid || i}
+                    className={`flex items-start gap-2 px-4 py-2 cursor-pointer transition-colors ${
+                      checked ? 'bg-blue-50/60' : 'hover:bg-gray-50/60'
+                    } ${correl ? `ring-1 ${cor.ring} ring-inset` : ''}`}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleOfx(t.fitid)}
+                      disabled={!t.fitid}
+                      className="mt-1 h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400 disabled:opacity-30" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-mono text-[11px] text-gray-500 tabular-nums">{formatDataBR(t.data)}</span>
+                        {correl && (
+                          <span className={`inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 ${cor.bg} ${cor.text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${cor.dot}`} />
+                            {correl.label || 'vínculo'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[12px] text-gray-800 truncate">{t.memo || '—'}</p>
+                      {t.name && <p className="text-[10px] text-gray-400 truncate">{t.name}</p>}
+                    </div>
+                    <span className={`text-right font-mono text-[12px] tabular-nums whitespace-nowrap font-semibold ${t.tipo === 'credito' ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {t.tipo === 'credito' ? '+' : '-'}{formatCurrency(t.valor)}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Correlações salvas */}
+      {correlacoes.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-            <FileSearch className="h-4 w-4 text-blue-500" />
-            <h3 className="text-sm font-semibold text-gray-800">Totais: OFX x Sistema</h3>
-            <span className="text-[11px] text-gray-400">
-              · diferença positiva = OFX maior · diferença negativa = Sistema maior
-            </span>
+            <Link2 className="h-4 w-4 text-blue-500" />
+            <h3 className="text-sm font-semibold text-gray-800">Vínculos salvos</h3>
+            <span className="text-[11px] text-gray-400">· {correlacoes.length} correlação(ões)</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 border-b border-gray-100">
-                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-4 py-2.5"></th>
-                  <th className="px-4 py-2.5 text-right">OFX</th>
-                  <th className="px-4 py-2.5 text-right">Sistema</th>
-                  <th className="px-4 py-2.5 text-right">Diferença (OFX - Sistema)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                <tr className="hover:bg-gray-50/60">
-                  <td className="px-4 py-2.5 text-[12.5px]">
-                    <span className="inline-flex items-center gap-1.5 font-medium text-gray-800">
-                      <ArrowDownToLine className="h-3.5 w-3.5 text-emerald-600" /> Entradas
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[13px] text-emerald-700 font-semibold">
-                    +{formatCurrency(totaisComparativos.ofx.entradas)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[13px] text-emerald-700 font-semibold">
-                    +{formatCurrency(totaisComparativos.sistema.entradas)}
-                  </td>
-                  <td className={`px-4 py-2.5 text-right font-mono tabular-nums text-[13px] font-semibold ${
-                    Math.abs(totaisComparativos.diff.entradas) < 0.01
-                      ? 'text-gray-400' : totaisComparativos.diff.entradas > 0 ? 'text-blue-700' : 'text-amber-700'
-                  }`}>
-                    {Math.abs(totaisComparativos.diff.entradas) < 0.01
-                      ? '✓ bate'
-                      : `${totaisComparativos.diff.entradas > 0 ? '+' : ''}${formatCurrency(totaisComparativos.diff.entradas)}`}
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50/60">
-                  <td className="px-4 py-2.5 text-[12.5px]">
-                    <span className="inline-flex items-center gap-1.5 font-medium text-gray-800">
-                      <ArrowUpFromLine className="h-3.5 w-3.5 text-red-600" /> Saídas
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[13px] text-red-700 font-semibold">
-                    -{formatCurrency(totaisComparativos.ofx.saidas)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[13px] text-red-700 font-semibold">
-                    -{formatCurrency(totaisComparativos.sistema.saidas)}
-                  </td>
-                  <td className={`px-4 py-2.5 text-right font-mono tabular-nums text-[13px] font-semibold ${
-                    Math.abs(totaisComparativos.diff.saidas) < 0.01
-                      ? 'text-gray-400' : totaisComparativos.diff.saidas > 0 ? 'text-blue-700' : 'text-amber-700'
-                  }`}>
-                    {Math.abs(totaisComparativos.diff.saidas) < 0.01
-                      ? '✓ bate'
-                      : `${totaisComparativos.diff.saidas > 0 ? '+' : ''}${formatCurrency(totaisComparativos.diff.saidas)}`}
-                  </td>
-                </tr>
-                <tr className="bg-gray-50/40 font-semibold">
-                  <td className="px-4 py-2.5 text-[12.5px] text-gray-800">Liquido (Entradas - Saídas)</td>
-                  <td className={`px-4 py-2.5 text-right font-mono tabular-nums text-[13px] ${totaisComparativos.ofx.liquido >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {totaisComparativos.ofx.liquido >= 0 ? '+' : ''}{formatCurrency(totaisComparativos.ofx.liquido)}
-                  </td>
-                  <td className={`px-4 py-2.5 text-right font-mono tabular-nums text-[13px] ${totaisComparativos.sistema.liquido >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {totaisComparativos.sistema.liquido >= 0 ? '+' : ''}{formatCurrency(totaisComparativos.sistema.liquido)}
-                  </td>
-                  <td className={`px-4 py-2.5 text-right font-mono tabular-nums text-[13px] ${
-                    Math.abs(totaisComparativos.diff.liquido) < 0.01
-                      ? 'text-gray-400' : totaisComparativos.diff.liquido > 0 ? 'text-blue-700' : 'text-amber-700'
-                  }`}>
-                    {Math.abs(totaisComparativos.diff.liquido) < 0.01
-                      ? '✓ bate'
-                      : `${totaisComparativos.diff.liquido > 0 ? '+' : ''}${formatCurrency(totaisComparativos.diff.liquido)}`}
-                  </td>
-                </tr>
-                <tr className="text-[11px] text-gray-500">
-                  <td className="px-4 py-1.5">Qtd. de transações</td>
-                  <td className="px-4 py-1.5 text-right font-mono tabular-nums">{totaisComparativos.ofx.qtd}</td>
-                  <td className="px-4 py-1.5 text-right font-mono tabular-nums">{totaisComparativos.sistema.qtd}</td>
-                  <td className="px-4 py-1.5 text-right font-mono tabular-nums">
-                    {totaisComparativos.ofx.qtd - totaisComparativos.sistema.qtd > 0 ? '+' : ''}
-                    {totaisComparativos.ofx.qtd - totaisComparativos.sistema.qtd}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="divide-y divide-gray-100">
+            {correlacoes.map(c => {
+              const cor = corDaCorrelacao(c.id);
+              const itensOfx = (c.itens || []).filter(i => i.lado === 'ofx');
+              const itensSis = (c.itens || []).filter(i => i.lado === 'sistema');
+              const temDrift = itensSis.some(i => driftPorSistema.has(Number(i.movimento_codigo)));
+              return (
+                <div key={c.id} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50/40 transition-colors">
+                  <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${cor.dot}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-[13px] font-semibold text-gray-900">{c.label || `Correlação ${String(c.id).slice(0, 8)}`}</span>
+                      <span className={`inline-flex items-center text-[10px] font-medium rounded-full px-1.5 py-0.5 ${cor.bg} ${cor.text}`}>
+                        {c.tipo === 'credito' ? '+' : '-'}{formatCurrency(c.valor_total)}
+                      </span>
+                      {temDrift && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium rounded-full px-1.5 py-0.5 bg-amber-50 text-amber-700">
+                          <AlertTriangle className="h-2.5 w-2.5" /> alteração detectada no sistema
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      {itensSis.length} sistema ↔ {itensOfx.length} OFX
+                      {' · criado em '}{c.criado_em ? new Date(c.criado_em).toLocaleString('pt-BR') : '—'}
+                    </p>
+                  </div>
+                  <button onClick={() => setConfirmExcluir({ open: true, correlacao: c })}
+                    title="Excluir vínculo"
+                    className="rounded p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
-      )}
-
-      {/* Tabela principal: transacoes OFX x status */}
-      {comparacao && (
-        <>
-          <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
-            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-              <FileSearch className="h-4 w-4 text-blue-500" />
-              <h3 className="text-sm font-semibold text-gray-800">Transações do OFX</h3>
-              <span className="text-[11px] text-gray-400">· {comparacao.transacoes.length} registros</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50/80 border-b border-gray-100">
-                  <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className="px-4 py-2.5">Status</th>
-                    <th className="px-4 py-2.5">Data</th>
-                    <th className="px-4 py-2.5">Descrição (OFX)</th>
-                    <th className="px-4 py-2.5">Doc.</th>
-                    <th className="px-4 py-2.5 text-right">Valor</th>
-                    <th className="px-4 py-2.5">Correspondente no sistema</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {comparacao.transacoes.map((t, i) => (
-                    <tr key={t.fitid || i} className={`${t.status === 'faltando' ? 'bg-red-50/40' : ''} hover:bg-blue-50/30 transition-colors`}>
-                      <td className="px-4 py-2">
-                        <StatusBadge status={t.status} />
-                      </td>
-                      <td className="px-4 py-2 text-[12px] text-gray-700 font-mono tabular-nums">{formatDataBR(t.data)}</td>
-                      <td className="px-4 py-2 text-[12px] text-gray-800 max-w-[320px]">
-                        <p className="truncate">{t.memo || '—'}</p>
-                        {t.name && <p className="text-[10.5px] text-gray-400 truncate">{t.name}</p>}
-                      </td>
-                      <td className="px-4 py-2 text-[11px] text-gray-500 font-mono">{t.checknum && t.checknum !== '0' ? t.checknum : (t.refnum || '—')}</td>
-                      <td className="px-4 py-2 text-right font-mono text-[12.5px] tabular-nums">
-                        <span className={t.tipo === 'credito' ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
-                          {t.tipo === 'credito' ? '+' : '-'}{formatCurrency(t.valor)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-[11.5px] text-gray-700 max-w-[320px]">
-                        {t.match ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[11px] text-gray-400 tabular-nums flex-shrink-0">{formatDataBR(t.match.data)}</span>
-                            <span className="truncate">{t.match.descricao}</span>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-red-700">— não encontrado —</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Extras: movimentos do sistema que nao bateram com o OFX */}
-          {comparacao.extrasSistema.length > 0 && (
-            <div className="bg-white rounded-2xl border border-amber-200/60 shadow-sm overflow-hidden mb-5">
-              <div className="px-5 py-3 border-b border-amber-100 bg-amber-50/40 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-600" />
-                <h3 className="text-sm font-semibold text-amber-800">Movimentos no sistema sem correspondencia no OFX</h3>
-                <span className="text-[11px] text-amber-600">· {comparacao.extrasSistema.length} registros</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50/80 border-b border-gray-100">
-                    <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                      <th className="px-4 py-2.5">Data</th>
-                      <th className="px-4 py-2.5">Descrição (sistema)</th>
-                      <th className="px-4 py-2.5">Doc.</th>
-                      <th className="px-4 py-2.5 text-right">
-                        <span className="inline-flex items-center gap-1 text-emerald-700"><ArrowDownToLine className="h-3 w-3" /> Entrada</span>
-                      </th>
-                      <th className="px-4 py-2.5 text-right">
-                        <span className="inline-flex items-center gap-1 text-red-700"><ArrowUpFromLine className="h-3 w-3" /> Saída</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {comparacao.extrasSistema.map((m) => (
-                      <tr key={m.id} className="hover:bg-amber-50/40 transition-colors">
-                        <td className="px-4 py-2 text-[12px] text-gray-700 font-mono tabular-nums">{formatDataBR(m.data)}</td>
-                        <td className="px-4 py-2 text-[12px] text-gray-800 max-w-[420px] truncate">{m.descricao}</td>
-                        <td className="px-4 py-2 text-[11px] text-gray-500 font-mono">{m.documento || '—'}</td>
-                        <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums">
-                          {m.tipo === 'credito' ? <span className="text-emerald-600 font-semibold">{formatCurrency(m.valor)}</span> : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums">
-                          {m.tipo === 'debito' ? <span className="text-red-600 font-semibold">{formatCurrency(m.valor)}</span> : <span className="text-gray-300">—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
       )}
 
       {!ofx && !erro && (
@@ -641,58 +741,35 @@ export default function BpoValidacaoOfx() {
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
             <FileSearch className="h-7 w-7 text-white" />
           </div>
-          <p className="text-sm font-semibold text-gray-900 mb-1">Envie um arquivo OFX para validar</p>
+          <p className="text-sm font-semibold text-gray-900 mb-1">Envie um arquivo OFX para começar</p>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
             Selecione a rede, a empresa e a conta bancária; em seguida envie o OFX do banco.
-            A página vai cruzar as transações do arquivo com os movimentos já registrados no período.
+            Você poderá vincular transações do OFX aos lançamentos do sistema, agrupando o quanto quiser de cada lado.
           </p>
         </div>
       )}
-    </div>
-  );
-}
 
-function StatusBadge({ status }) {
-  if (status === 'casada') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-        <Check className="h-2.5 w-2.5" /> Lancada
-      </span>
-    );
-  }
-  if (status === 'casada-data') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
-        title="Lancada mas com data diferente do OFX">
-        <Check className="h-2.5 w-2.5" /> Lancada*
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
-      <X className="h-2.5 w-2.5" /> Faltando
-    </span>
-  );
-}
+      <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-function Kpi({ label, valor, icon: Icon, color, raw, hint }) {
-  const colors = {
-    blue:    'bg-blue-50 text-blue-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    red:     'bg-red-50 text-red-600',
-    amber:   'bg-amber-50 text-amber-600',
-  };
-  return (
-    <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-xl border border-gray-200/60 p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{label}</p>
-        <div className={`h-7 w-7 rounded-md flex items-center justify-center ${colors[color]}`}>
-          <Icon className="h-3.5 w-3.5" />
+      <Modal open={confirmExcluir.open} onClose={() => setConfirmExcluir({ open: false, correlacao: null })}
+        title="Excluir vínculo" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Excluir o vínculo <strong>{confirmExcluir.correlacao?.label || String(confirmExcluir.correlacao?.id || '').slice(0, 8)}</strong>?
+            Os lançamentos do OFX e do sistema voltam a ficar disponíveis para novo vínculo.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setConfirmExcluir({ open: false, correlacao: null })}
+              className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
+              Cancelar
+            </button>
+            <button onClick={() => excluirCorrelacao(confirmExcluir.correlacao.id)}
+              className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">
+              Excluir
+            </button>
+          </div>
         </div>
-      </div>
-      <p className={`font-bold text-gray-900 tabular-nums ${raw ? 'text-xl' : 'text-lg'}`}>{valor}</p>
-      {hint && <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>}
-    </motion.div>
+      </Modal>
+    </div>
   );
 }

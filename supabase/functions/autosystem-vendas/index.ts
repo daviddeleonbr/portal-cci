@@ -224,8 +224,36 @@ serve(async (req) => {
       return json({ pares, total_transacoes });
     }
 
+    // ─── CTE de custo via SRs ligadas por seq_cupom ────────────────
+    // Replicação fiel da lógica interna do Autosystem (descoberta no corpo
+    // da função 3-arg compartilhada). O link correto entre V e suas SRs é
+    // via `mlid + seq_cupom` (NÃO id_er_sr nem janela de seq).
+    //
+    // Para cada SR linkada, o custo unitário da matéria-prima vem da
+    // função pública `preco_custo_empresa_f(produto, empresa)` (2-arg),
+    // que já é usada pelo próprio Autosystem para produtos atômicos.
+    // Multiplica pela quantidade consumida (sr.quantidade) e soma.
+    const cteCustoComposto = `
+      with custo_composto_v as (
+        select v.grid as v_grid,
+               coalesce(
+                 (select sum(sr.quantidade * preco_custo_empresa_f(sr.produto, v.empresa))
+                  from lancto sr
+                  where sr.mlid = v.mlid
+                    and sr.seq_cupom = v.seq_cupom
+                    and sr.operacao = 'SR'),
+                 0
+               ) as custo
+        from lancto v
+        where v.operacao = 'V'
+          and v.empresa = any($1::bigint[])
+          and v.data between $2 and $3
+          and exists (select 1 from produto_composicao pc where pc.produto = v.produto)
+      )
+    `;
+
     const sql = por_mes_produto
-      ? `
+      ? `${cteCustoComposto}
       select
         to_char(l.data, 'YYYY-MM')                                 as ano_mes,
         l.produto                                                  as produto_codigo,
@@ -235,12 +263,14 @@ serve(async (req) => {
         sum(l.valor)                                                as valor,
         sum(
           coalesce(
-            (select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid),
+            nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
+            cc.custo,
             0
-          ) * l.quantidade
+          )
         )                                                           as valor_custo
       from lancto l
       left join produto prod on prod.grid = l.produto
+      left join custo_composto_v cc on cc.v_grid = l.grid
       where l.operacao = 'V'
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
@@ -255,11 +285,11 @@ serve(async (req) => {
       order by to_char(l.data, 'YYYY-MM'), sum(l.valor) desc
     `
       : por_dia
-      ? `
+      ? `${cteCustoComposto}
       select
         l.empresa,
         l.data,
-        l.produto                                                 as produto_codigo,
+        prod.codigo                                                as produto_codigo,
         convert_to(coalesce(prod.nome::text, ''), 'LATIN1')       as produto_nome,
         prod.grupo                                                 as grupo_produto_codigo,
         sum(l.quantidade)                                          as quantidade,
@@ -269,12 +299,14 @@ serve(async (req) => {
         sum(case when l.valor_desconto < 0 then abs(l.valor_desconto) else 0 end)         as valor_descontos,
         sum(
           coalesce(
-            (select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid),
+            nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
+            cc.custo,
             0
-          ) * l.quantidade
+          )
         )                                                           as valor_custo
       from lancto l
       left join produto prod on prod.grid = l.produto
+      left join custo_composto_v cc on cc.v_grid = l.grid
       where l.operacao = 'V'
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
@@ -285,22 +317,24 @@ serve(async (req) => {
              and d.produto  = l.produto
              and d.operacao = 'DC'
         )
-      group by l.empresa, l.data, l.produto, prod.nome, prod.grupo
+      group by l.empresa, l.data, prod.codigo, prod.nome, prod.grupo
       order by l.data, sum(l.valor) desc
     `
       : por_mes
-      ? `
+      ? `${cteCustoComposto}
       select
         to_char(l.data, 'YYYY-MM')                                 as ano_mes,
         sum(l.quantidade)                                          as quantidade,
         sum(l.valor)                                                as valor,
         sum(
           coalesce(
-            (select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid),
+            nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
+            cc.custo,
             0
-          ) * l.quantidade
+          )
         )                                                           as valor_custo
       from lancto l
+      left join custo_composto_v cc on cc.v_grid = l.grid
       where l.operacao = 'V'
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
@@ -314,7 +348,7 @@ serve(async (req) => {
       order by to_char(l.data, 'YYYY-MM')
     `
       : agregado
-      ? `
+      ? `${cteCustoComposto}
       select
         l.empresa,
         l.produto                                                 as produto_codigo,
@@ -325,9 +359,10 @@ serve(async (req) => {
         sum(coalesce(l.valor_desconto, 0))                         as valor_desconto,
         sum(
           coalesce(
-            (select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid),
+            nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
+            cc.custo,
             0
-          ) * l.quantidade
+          )
         )                                                          as valor_custo,
         count(*)                                                   as itens,
         l.vendedor                                                 as vendedor_pessoa_id,
@@ -336,6 +371,7 @@ serve(async (req) => {
       from lancto l
       left join produto prod on prod.grid = l.produto
       left join pessoa  pe   on pe.grid   = l.vendedor
+      left join custo_composto_v cc on cc.v_grid = l.grid
       where l.operacao = 'V'
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
@@ -348,7 +384,7 @@ serve(async (req) => {
       group by l.empresa, l.produto, prod.nome, prod.grupo, l.vendedor, pe.nome
       order by sum(l.valor) desc
     `
-      : `
+      : `${cteCustoComposto}
       select
         l.empresa,
         l.data,
@@ -360,15 +396,17 @@ serve(async (req) => {
         l.valor,
         l.valor_desconto,
         coalesce(
-          (select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid),
+          nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
+          cc.custo,
           0
-        ) * l.quantidade                                           as valor_custo,
+        )                                                          as valor_custo,
         l.vendedor                                                 as vendedor_pessoa_id,
         convert_to(coalesce(pe.nome::text, ''), 'LATIN1')         as vendedor_nome,
         convert_to(coalesce(l.vendedor::text, ''), 'LATIN1')      as vendedor
       from lancto l
       left join produto prod on prod.grid = l.produto
       left join pessoa  pe   on pe.grid   = l.vendedor
+      left join custo_composto_v cc on cc.v_grid = l.grid
       where l.operacao = 'V'
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3

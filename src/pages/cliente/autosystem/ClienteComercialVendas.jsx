@@ -27,11 +27,12 @@ const SUB_ABAS_AUTOMOTIVOS = [
 ];
 // Sub-abas exibidas dentro da aba "Conveniência". Mesma estrutura de Automotivos.
 const SUB_ABAS_CONVENIENCIA = [
-  { key: 'dia',       label: 'Realizado dia a dia', icone: CalendarDays  },
-  { key: 'grupo',     label: 'Realizado por grupo', icone: Package       },
-  { key: 'pareto',    label: 'Análise de pareto',   icone: BarChart3     },
-  { key: 'tempo',     label: 'Linha do tempo',      icone: Clock         },
-  { key: 'carrinho',  label: 'Carrinho de compras', icone: ShoppingCart  },
+  { key: 'dia',            label: 'Realizado dia a dia', icone: CalendarDays  },
+  { key: 'grupo',          label: 'Realizado por grupo', icone: Package       },
+  { key: 'pareto',         label: 'Análise de pareto',   icone: BarChart3     },
+  { key: 'analise_margem', label: 'Análise de margem',   icone: Percent       },
+  { key: 'tempo',          label: 'Linha do tempo',      icone: Clock         },
+  { key: 'carrinho',       label: 'Carrinho de compras', icone: ShoppingCart  },
 ];
 
 // Paleta de cores por categoria. Classes Tailwind explicitas para o JIT.
@@ -440,7 +441,7 @@ export default function ClienteComercialVendas() {
   // Realizado dia a dia (Conveniência).
   useEffect(() => {
     if (aba !== 'conveniencia') return;
-    if (!['dia', 'grupo', 'pareto'].includes(subAbaConveniencia)) return;
+    if (!['dia', 'grupo', 'pareto', 'analise_margem'].includes(subAbaConveniencia)) return;
     if (!redeId || empresasSel.length === 0) { setRealizadoDiarioConv([]); return; }
     const gruposCat = [];
     mapaGrupos.forEach((cat, grid) => { if (cat === 'conveniencia') gruposCat.push(grid); });
@@ -1268,6 +1269,51 @@ export default function ClienteComercialVendas() {
     return result;
   }, [realizadoDiarioConv, mapaNomeGrupos]);
 
+  // Análise de margem (Conveniência): agrega o realizado por produto, calcula
+  // lucro bruto e margem %. Lista plana ordenada por faturamento desc, com
+  // grupo associado pra permitir filtro multi-select e busca por nome/código.
+  const analiseMargemConvProdutos = useMemo(() => {
+    const m = new Map();
+    (realizadoDiarioConv || []).forEach(r => {
+      const k = String(r.produto_codigo);
+      if (!m.has(k)) {
+        m.set(k, {
+          produto_codigo: r.produto_codigo,
+          produto_nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          grupo_codigo: r.grupo_produto_codigo != null ? Number(r.grupo_produto_codigo) : null,
+          qtd: 0, valor: 0, custo: 0,
+        });
+      }
+      const p = m.get(k);
+      p.qtd   += Number(r.quantidade) || 0;
+      p.valor += Number(r.valor) || 0;
+      p.custo += Number(r.valor_custo) || 0;
+      if (r.produto_nome && /^Produto #/.test(p.produto_nome)) p.produto_nome = r.produto_nome;
+    });
+    const out = Array.from(m.values()).map(p => {
+      const lucro = p.valor - p.custo;
+      return {
+        ...p,
+        grupo_nome: p.grupo_codigo != null
+          ? (mapaNomeGrupos.get(p.grupo_codigo) || `Grupo ${p.grupo_codigo}`)
+          : 'Sem grupo',
+        lucro,
+        margem: p.valor > 0 ? (lucro / p.valor) * 100 : 0,
+      };
+    });
+    return out.sort((a, b) => b.valor - a.valor);
+  }, [realizadoDiarioConv, mapaNomeGrupos]);
+
+  // Grupos disponíveis para o multi-select da análise de margem
+  const analiseMargemConvGrupos = useMemo(() => {
+    const m = new Map();
+    analiseMargemConvProdutos.forEach(p => {
+      if (p.grupo_codigo == null) return;
+      if (!m.has(p.grupo_codigo)) m.set(p.grupo_codigo, { codigo: p.grupo_codigo, nome: p.grupo_nome });
+    });
+    return Array.from(m.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  }, [analiseMargemConvProdutos]);
+
   // Pareto Conveniência: grupos disponíveis + dados ordenados.
   const gruposConvDisponiveis = useMemo(() => {
     const m = new Map();
@@ -1946,6 +1992,22 @@ export default function ClienteComercialVendas() {
                   cor="emerald"
                 />
               )
+            ) : subAbaConveniencia === 'analise_margem' ? (
+              erroDiarioConv ? (
+                <div className="m-4 bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Não foi possível carregar a análise de margem</p>
+                    <p className="text-red-700 mt-1">{erroDiarioConv}</p>
+                  </div>
+                </div>
+              ) : (
+                <AnaliseMargemConv
+                  loading={loadingDiarioConv}
+                  produtos={analiseMargemConvProdutos}
+                  grupos={analiseMargemConvGrupos}
+                />
+              )
             ) : subAbaConveniencia === 'carrinho' ? (
               <CarrinhoCompras
                 cor="emerald"
@@ -2283,7 +2345,10 @@ export default function ClienteComercialVendas() {
 
       {/* Evolução 12 meses (acima da tree) */}
       {aba === 'geral' && (
-        <GraficoEvolucao12m serie={serieEvolucao} loading={loadingEvolucao} />
+        <>
+          <GraficoEvolucao12m serie={serieEvolucao} loading={loadingEvolucao} />
+          <GraficoLucroMargem12m serie={serieEvolucao} loading={loadingEvolucao} />
+        </>
       )}
 
       {/* Conteúdo: a tree de análise só aparece na aba "Visão geral".
@@ -2429,16 +2494,40 @@ function CelulaUnica({ valor, ma, aa, moeda = true, decimais = 0, sub, divisor, 
 
 // Gráfico de barras + linha — evolução dos últimos 12 meses:
 //   - Bar: Litros vendidos (eixo esquerdo, em L)
-//   - Line com marcadores: Lucro bruto por litro (eixo direito, em R$/L)
+//   - Line com marcadores: Lucro bruto por litro OU Margem % (eixo direito,
+//     conforme seletor no cabeçalho)
 //   - Labels acima das barras: variação % de litros vs mês anterior
+const METRICAS_EVOL = [
+  { key: 'lucroPorLitro', label: 'Lucro / litro', formato: (v) => formatCurrency(v),
+    tickFmt: (v) => `R$ ${Number(v).toFixed(2)}` },
+  { key: 'margemPct',     label: 'Margem %',      formato: (v) => `${Number(v).toFixed(1)}%`,
+    tickFmt: (v) => `${Number(v).toFixed(1)}%` },
+];
 function GraficoEvolucao12m({ serie, loading }) {
+  const [metricaKey, setMetricaKey] = useState('lucroPorLitro');
+  const metrica = METRICAS_EVOL.find(m => m.key === metricaKey) || METRICAS_EVOL[0];
   const temDados = (serie || []).some(p => p.litros > 0 || p.faturamento > 0);
   return (
     <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
-      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
         <LineChartIcon className="h-4 w-4 text-blue-500" />
         <h3 className="text-sm font-semibold text-gray-800">Evolução · últimos 12 meses</h3>
-        <span className="text-[11px] text-gray-400">· Litros vendidos e lucro / litro</span>
+        <span className="text-[11px] text-gray-400">· Litros vendidos e {metrica.label.toLowerCase()}</span>
+        <div className="flex-1" />
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          {METRICAS_EVOL.map(m => {
+            const ativo = m.key === metricaKey;
+            return (
+              <button key={m.key} type="button" onClick={() => setMetricaKey(m.key)}
+                className={`px-3 py-1 text-[11.5px] font-medium rounded-md transition-colors ${
+                  ativo ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-200'
+                        : 'text-gray-500 hover:text-gray-800'
+                }`}>
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
       {loading ? (
         <div className="h-72 flex items-center justify-center gap-2 text-sm text-gray-500">
@@ -2460,11 +2549,11 @@ function GraficoEvolucao12m({ serie, loading }) {
                   ? `${(v / 1000).toFixed(0)}k L`
                   : `${v.toFixed(0)} L`} />
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#e5e7eb"
-                tickFormatter={(v) => `R$ ${Number(v).toFixed(2)}`} />
+                tickFormatter={metrica.tickFmt} />
               <Tooltip
                 formatter={(value, name) => {
-                  if (name === 'Litros')           return [`${formatNumero(value, 2)} L`, name];
-                  if (name === 'Lucro / litro')    return [formatCurrency(value), name];
+                  if (name === 'Litros')      return [`${formatNumero(value, 2)} L`, name];
+                  if (name === metrica.label) return [metrica.formato(value), name];
                   return [value, name];
                 }}
                 labelStyle={{ fontSize: 12, fontWeight: 600 }}
@@ -2475,9 +2564,66 @@ function GraficoEvolucao12m({ serie, loading }) {
                 fill="#c4b5fd" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="litrosVarMA" content={<LabelVariacaoMA />} />
               </Bar>
-              <Line yAxisId="right" type="monotone" dataKey="lucroPorLitro" name="Lucro / litro"
+              <Line yAxisId="right" type="monotone" dataKey={metrica.key} name={metrica.label}
                 stroke="#10b981" strokeWidth={2}
                 dot={{ r: 3, fill: '#a7f3d0', stroke: '#10b981', strokeWidth: 1 }}
+                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Gráfico complementar — evolução dos últimos 12 meses:
+//   - Bar: Lucro bruto R$ (eixo esquerdo)
+//   - Line com marcadores: Margem % (eixo direito)
+function GraficoLucroMargem12m({ serie, loading }) {
+  const temDados = (serie || []).some(p => p.lucro !== 0 || p.faturamento > 0);
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+        <LineChartIcon className="h-4 w-4 text-emerald-500" />
+        <h3 className="text-sm font-semibold text-gray-800">Lucro bruto & Margem · últimos 12 meses</h3>
+        <span className="text-[11px] text-gray-400">· R$ de lucro e % de margem</span>
+      </div>
+      {loading ? (
+        <div className="h-72 flex items-center justify-center gap-2 text-sm text-gray-500">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+          Carregando evolução...
+        </div>
+      ) : !temDados ? (
+        <div className="h-72 flex items-center justify-center text-sm text-gray-500">
+          Sem dados nos últimos 12 meses.
+        </div>
+      ) : (
+        <div className="px-2 py-3">
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={serie} margin={{ top: 24, right: 30, left: 10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1" />
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#e5e7eb"
+                tickFormatter={(v) => Math.abs(v) >= 1000
+                  ? `R$ ${(v / 1000).toFixed(0)}k`
+                  : `R$ ${v.toFixed(0)}`} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#e5e7eb"
+                tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
+              <Tooltip
+                formatter={(value, name) => {
+                  if (name === 'Lucro bruto') return [formatCurrency(value), name];
+                  if (name === 'Margem')      return [`${Number(value).toFixed(1)}%`, name];
+                  return [value, name];
+                }}
+                labelStyle={{ fontSize: 12, fontWeight: 600 }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar yAxisId="left" dataKey="lucro" name="Lucro bruto"
+                fill="#86efac" radius={[4, 4, 0, 0]} />
+              <Line yAxisId="right" type="monotone" dataKey="margemPct" name="Margem"
+                stroke="#0ea5e9" strokeWidth={2}
+                dot={{ r: 3, fill: '#bae6fd', stroke: '#0ea5e9', strokeWidth: 1 }}
                 activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -4070,6 +4216,200 @@ function Evolucao12mCombustivel({ loading, serie, produtos, produtoSelecionado, 
             </ResponsiveContainer>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// Conveniência · Análise de margem: tabela plana de produtos com lucro/margem,
+// filtro multi-select de grupos, busca por nome/código e toggle "apenas margem
+// negativa". Margens negativas são destacadas em vermelho.
+function AnaliseMargemConv({ loading, produtos, grupos }) {
+  const [gruposSel, setGruposSel] = useState(() => new Set());
+  const [busca, setBusca] = useState('');
+  const [soNegativa, setSoNegativa] = useState(false);
+  const [gruposAberto, setGruposAberto] = useState(false);
+  const refDrop = useRef(null);
+
+  useEffect(() => {
+    const onClick = (e) => { if (refDrop.current && !refDrop.current.contains(e.target)) setGruposAberto(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const filtrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return produtos.filter(p => {
+      if (gruposSel.size > 0 && !gruposSel.has(p.grupo_codigo)) return false;
+      if (soNegativa && !(p.margem < 0)) return false;
+      if (q) {
+        const nome = String(p.produto_nome || '').toLowerCase();
+        const cod = String(p.produto_codigo || '');
+        if (!nome.includes(q) && !cod.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [produtos, gruposSel, busca, soNegativa]);
+
+  const totais = useMemo(() => {
+    let valor = 0, custo = 0;
+    filtrados.forEach(p => { valor += p.valor; custo += p.custo; });
+    const lucro = valor - custo;
+    return { valor, custo, lucro, margem: valor > 0 ? (lucro / valor) * 100 : 0 };
+  }, [filtrados]);
+
+  const todosMarcados = gruposSel.size === grupos.length && grupos.length > 0;
+  const labelGrupos = gruposSel.size === 0
+    ? 'Todos'
+    : todosMarcados ? `Todos (${grupos.length})`
+    : gruposSel.size === 1
+    ? grupos.find(g => gruposSel.has(g.codigo))?.nome || '1 grupo'
+    : `${gruposSel.size} grupos`;
+
+  if (loading) {
+    return (
+      <div className="p-12 flex items-center justify-center gap-3 text-gray-500">
+        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+        <span className="text-sm">Carregando análise...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Filtros */}
+      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/40 flex items-center gap-3 flex-wrap">
+        <div ref={refDrop} className="relative">
+          <button type="button" onClick={() => setGruposAberto(o => !o)}
+            className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[200px] max-w-[280px] ${
+              gruposAberto ? 'border-emerald-400 ring-2 ring-emerald-100 text-gray-800'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-emerald-300'
+            }`}>
+            <span className="inline-flex items-center gap-1.5">
+              <Package className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Grupos:</span>
+              <span className="truncate">{labelGrupos}</span>
+            </span>
+            <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${gruposAberto ? 'rotate-180' : ''}`} />
+          </button>
+          {gruposAberto && (
+            <div className="absolute left-0 top-full mt-1 w-72 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
+              <button type="button" onClick={() => setGruposSel(prev =>
+                prev.size === grupos.length ? new Set() : new Set(grupos.map(g => g.codigo))
+              )}
+                className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 text-left">
+                <input type="checkbox" checked={todosMarcados} onChange={() => {}}
+                  className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                <span className="text-[12.5px] font-medium text-gray-700">
+                  {todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}
+                </span>
+              </button>
+              <div className="max-h-72 overflow-y-auto">
+                {grupos.map(g => (
+                  <label key={g.codigo}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={gruposSel.has(g.codigo)}
+                      onChange={() => setGruposSel(prev => {
+                        const next = new Set(prev);
+                        if (next.has(g.codigo)) next.delete(g.codigo); else next.add(g.codigo);
+                        return next;
+                      })}
+                      className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                    <span className="text-[12.5px] text-gray-800 truncate">{g.nome}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+          <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar produto (nome ou código)..."
+            className="w-full pl-8 pr-3 py-2 text-[12px] border border-gray-200 rounded-lg bg-white focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+        </div>
+
+        <button type="button" onClick={() => setSoNegativa(o => !o)}
+          className={`h-9 inline-flex items-center gap-1.5 rounded-lg border px-3 text-[12px] font-medium transition-colors ${
+            soNegativa
+              ? 'border-red-400 bg-red-50 text-red-700 hover:bg-red-100'
+              : 'border-gray-200 bg-white text-gray-700 hover:border-red-300 hover:text-red-700'
+          }`}>
+          <TrendingDown className="h-3.5 w-3.5" />
+          Só margem negativa
+          {soNegativa && <span className="text-[10px] text-red-500 ml-1">(ativo)</span>}
+        </button>
+
+        <div className="flex-1 hidden sm:block" />
+        <span className="text-[11px] text-gray-500">
+          {filtrados.length} de {produtos.length} produtos
+        </span>
+      </div>
+
+      {/* Tabela */}
+      {produtos.length === 0 ? (
+        <div className="p-12 text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 mb-3">
+            <Percent className="h-6 w-6 text-emerald-600" />
+          </div>
+          <p className="text-sm font-medium text-gray-900">Nenhuma venda de conveniência no período</p>
+        </div>
+      ) : filtrados.length === 0 ? (
+        <div className="p-12 text-center text-[13px] text-gray-500">
+          Nenhum produto corresponde aos filtros.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0 z-10">
+              <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2.5">Grupo</th>
+                <th className="px-4 py-2.5">Produto</th>
+                <th className="px-4 py-2.5">Código</th>
+                <th className="px-4 py-2.5 text-right">Faturamento</th>
+                <th className="px-4 py-2.5 text-right">Custo</th>
+                <th className="px-4 py-2.5 text-right">Lucro bruto</th>
+                <th className="px-4 py-2.5 text-right">Margem</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtrados.map(p => {
+                const neg = p.margem < 0;
+                return (
+                  <tr key={p.produto_codigo} className={neg ? 'bg-red-50/40 hover:bg-red-50/70' : 'hover:bg-emerald-50/30'}>
+                    <td className="px-4 py-2 text-[12px] text-gray-700 truncate max-w-[200px]">{p.grupo_nome}</td>
+                    <td className="px-4 py-2 text-[12.5px] text-gray-900 font-medium truncate max-w-[300px]">{p.produto_nome}</td>
+                    <td className="px-4 py-2 text-[11px] text-gray-500 font-mono">{p.produto_codigo}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[12px] text-gray-800">{formatCurrency(p.valor)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-[12px] text-gray-600">{formatCurrency(p.custo)}</td>
+                    <td className={`px-4 py-2 text-right font-mono tabular-nums text-[12px] font-semibold ${neg ? 'text-red-700' : 'text-gray-900'}`}>
+                      {formatCurrency(p.lucro)}
+                    </td>
+                    <td className={`px-4 py-2 text-right font-mono tabular-nums text-[12px] font-bold ${neg ? 'text-red-700' : 'text-emerald-700'}`}>
+                      {p.margem.toFixed(1)}%
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="bg-gray-50/70 border-t-2 border-gray-200">
+              <tr>
+                <td colSpan={3} className="px-4 py-2 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
+                  Total ({filtrados.length} produto{filtrados.length === 1 ? '' : 's'})
+                </td>
+                <td className="px-4 py-2 text-right font-mono tabular-nums text-[12.5px] font-bold text-gray-900">{formatCurrency(totais.valor)}</td>
+                <td className="px-4 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-700">{formatCurrency(totais.custo)}</td>
+                <td className={`px-4 py-2 text-right font-mono tabular-nums text-[12.5px] font-bold ${totais.lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}>
+                  {formatCurrency(totais.lucro)}
+                </td>
+                <td className={`px-4 py-2 text-right font-mono tabular-nums text-[12.5px] font-bold ${totais.margem < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                  {totais.margem.toFixed(1)}%
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       )}
     </div>
   );
