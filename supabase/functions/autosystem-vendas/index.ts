@@ -225,14 +225,12 @@ serve(async (req) => {
     }
 
     // ─── CTE de custo via SRs ligadas por seq_cupom ────────────────
-    // Replicação fiel da lógica interna do Autosystem (descoberta no corpo
-    // da função 3-arg compartilhada). O link correto entre V e suas SRs é
-    // via `mlid + seq_cupom` (NÃO id_er_sr nem janela de seq).
-    //
-    // Para cada SR linkada, o custo unitário da matéria-prima vem da
-    // função pública `preco_custo_empresa_f(produto, empresa)` (2-arg),
-    // que já é usada pelo próprio Autosystem para produtos atômicos.
-    // Multiplica pela quantidade consumida (sr.quantidade) e soma.
+    // Replicação fiel da lógica interna do Autosystem. O link correto entre
+    // V e suas SRs é via `mlid + seq_cupom`. Para cada SR linkada, o custo
+    // unitário da matéria-prima vem da função pública (2-arg)
+    // `preco_custo_empresa_f(produto, empresa)` — versão que comprovadamente
+    // bateu com R$ 2.232,00 no produto 920 (CAPUCCINO TRADICIONAL UN,
+    // período 01-30/04/2026).
     const cteCustoComposto = `
       with custo_composto_v as (
         select v.grid as v_grid,

@@ -3697,24 +3697,80 @@ function TreeRealizadoAutoGrupo({ arvore, expandidos, onToggle, cor = 'blue' }) 
     );
   }
 
+  // Ordenação no nível de grupo. Default: faturamento desc (mantém o
+  // comportamento anterior da árvore). Clique no cabeçalho alterna.
+  const [ordemCampo, setOrdemCampo] = useState('valor');
+  const [ordemDir, setOrdemDir]     = useState('desc');
+  function clickHeader(campo) {
+    if (campo === ordemCampo) setOrdemDir(d => d === 'desc' ? 'asc' : 'desc');
+    else { setOrdemCampo(campo); setOrdemDir('desc'); }
+  }
+  function pegarValor(gNode, campo) {
+    const s = gNode.stats;
+    switch (campo) {
+      case 'nome':   return (gNode.nome || '').toLowerCase();
+      case 'qtd':    return s.qtd;
+      case 'valor':  return s.valor;
+      case 'custo':  return s.custo;
+      case 'lucro':  return s.valor - s.custo;
+      case 'margem': return s.valor > 0 ? (s.valor - s.custo) / s.valor : 0;
+      default:       return 0;
+    }
+  }
+  const arvoreOrdenada = useMemo(() => {
+    return [...arvore].sort((a, b) => {
+      const va = pegarValor(a, ordemCampo);
+      const vb = pegarValor(b, ordemCampo);
+      if (typeof va === 'string') {
+        return ordemDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      }
+      const na = !Number.isFinite(va), nb = !Number.isFinite(vb);
+      if (na && nb) return 0;
+      if (na) return 1;
+      if (nb) return -1;
+      return ordemDir === 'asc' ? va - vb : vb - va;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arvore, ordemCampo, ordemDir]);
+
+  function ThSort({ campo, children, className = 'text-right border-l-2 border-gray-300' }) {
+    const ativo = ordemCampo === campo;
+    const setaUp   = ativo && ordemDir === 'asc';
+    const setaDown = ativo && ordemDir === 'desc';
+    return (
+      <th className={`px-2.5 py-2 select-none ${className}`}>
+        <button type="button" onClick={() => clickHeader(campo)}
+          className={`w-full inline-flex items-center gap-1 hover:text-gray-800 transition-colors ${
+            className.includes('text-left') ? 'justify-start' : 'justify-end'
+          } ${ativo ? 'text-blue-700' : ''}`}>
+          <span className="whitespace-nowrap">{children}</span>
+          <span className="inline-flex flex-col items-center -my-0.5 leading-none">
+            <span className={`text-[8px] ${setaUp ? 'text-blue-700' : 'text-gray-300'}`}>▲</span>
+            <span className={`text-[8px] -mt-0.5 ${setaDown ? 'text-blue-700' : 'text-gray-300'}`}>▼</span>
+          </span>
+        </button>
+      </th>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 border-y border-gray-200 sticky top-0 z-10">
           <tr className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
-            <th className="px-4 py-2 text-left">Grupo / Data / Produto</th>
-            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Qtd</th>
-            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Faturamento</th>
-            <th className="px-2.5 py-2 text-right border-l border-gray-200">Custo</th>
-            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Lucro bruto</th>
-            <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Margem</th>
+            <ThSort campo="nome"   className="text-left">Grupo / Data / Produto</ThSort>
+            <ThSort campo="qtd">Qtd</ThSort>
+            <ThSort campo="valor">Faturamento</ThSort>
+            <ThSort campo="custo" className="text-right border-l border-gray-200">Custo</ThSort>
+            <ThSort campo="lucro">Lucro bruto</ThSort>
+            <ThSort campo="margem">Margem</ThSort>
             <th className="px-2.5 py-2 text-right border-l-2 border-gray-300">Preço méd.</th>
             <th className="px-2.5 py-2 text-right border-l border-gray-200">Custo méd.</th>
             <th className="px-2.5 py-2 text-right border-l border-gray-200">Lucro méd.</th>
           </tr>
         </thead>
         <tbody>
-          {arvore.map(gNode => {
+          {arvoreOrdenada.map(gNode => {
             const gKey = `aG:${gNode.codigo ?? 'none'}`;
             const gAberto = expandidos.has(gKey);
             return (
@@ -4224,6 +4280,27 @@ function Evolucao12mCombustivel({ loading, serie, produtos, produtoSelecionado, 
 // Conveniência · Análise de margem: tabela plana de produtos com lucro/margem,
 // filtro multi-select de grupos, busca por nome/código e toggle "apenas margem
 // negativa". Margens negativas são destacadas em vermelho.
+// Cabeçalho ordenável usado na Análise de Margem (Conveniência).
+function ThSortAM({ campo, ordemCampo, ordemDir, onClick, align = 'right', children }) {
+  const ativo = ordemCampo === campo;
+  const setaUp   = ativo && ordemDir === 'asc';
+  const setaDown = ativo && ordemDir === 'desc';
+  return (
+    <th className="px-4 py-2.5 select-none">
+      <button type="button" onClick={() => onClick(campo)}
+        className={`w-full inline-flex items-center gap-1 hover:text-gray-800 transition-colors ${
+          align === 'left' ? 'justify-start' : 'justify-end'
+        } ${ativo ? 'text-emerald-700' : ''}`}>
+        <span className="whitespace-nowrap">{children}</span>
+        <span className="inline-flex flex-col items-center -my-0.5 leading-none">
+          <span className={`text-[8px] ${setaUp ? 'text-emerald-700' : 'text-gray-300'}`}>▲</span>
+          <span className={`text-[8px] -mt-0.5 ${setaDown ? 'text-emerald-700' : 'text-gray-300'}`}>▼</span>
+        </span>
+      </button>
+    </th>
+  );
+}
+
 function AnaliseMargemConv({ loading, produtos, grupos }) {
   const [gruposSel, setGruposSel] = useState(() => new Set());
   const [busca, setBusca] = useState('');
@@ -4237,9 +4314,29 @@ function AnaliseMargemConv({ loading, produtos, grupos }) {
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
+  // Ordenação. Default: faturamento desc (mantém ordem natural do produtos
+  // que já vem ordenado por valor desc no useMemo do parent).
+  const [ordemCampo, setOrdemCampo] = useState('valor');
+  const [ordemDir, setOrdemDir]     = useState('desc');
+  function clickHeader(campo) {
+    if (campo === ordemCampo) setOrdemDir(d => d === 'desc' ? 'asc' : 'desc');
+    else { setOrdemCampo(campo); setOrdemDir('desc'); }
+  }
+  function pegarValor(p, campo) {
+    switch (campo) {
+      case 'grupo':   return (p.grupo_nome    || '').toLowerCase();
+      case 'produto': return (p.produto_nome  || '').toLowerCase();
+      case 'valor':   return p.valor;
+      case 'custo':   return p.custo;
+      case 'lucro':   return p.lucro;
+      case 'margem':  return p.margem;
+      default:        return 0;
+    }
+  }
+
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return produtos.filter(p => {
+    const arr = produtos.filter(p => {
       if (gruposSel.size > 0 && !gruposSel.has(p.grupo_codigo)) return false;
       if (soNegativa && !(p.margem < 0)) return false;
       if (q) {
@@ -4249,7 +4346,20 @@ function AnaliseMargemConv({ loading, produtos, grupos }) {
       }
       return true;
     });
-  }, [produtos, gruposSel, busca, soNegativa]);
+    return arr.sort((a, b) => {
+      const va = pegarValor(a, ordemCampo);
+      const vb = pegarValor(b, ordemCampo);
+      if (typeof va === 'string') {
+        return ordemDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      }
+      const na = !Number.isFinite(va), nb = !Number.isFinite(vb);
+      if (na && nb) return 0;
+      if (na) return 1;
+      if (nb) return -1;
+      return ordemDir === 'asc' ? va - vb : vb - va;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produtos, gruposSel, busca, soNegativa, ordemCampo, ordemDir]);
 
   const totais = useMemo(() => {
     let valor = 0, custo = 0;
@@ -4364,13 +4474,13 @@ function AnaliseMargemConv({ loading, produtos, grupos }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0 z-10">
               <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                <th className="px-4 py-2.5">Grupo</th>
-                <th className="px-4 py-2.5">Produto</th>
+                <ThSortAM campo="grupo"   ordemCampo={ordemCampo} ordemDir={ordemDir} onClick={clickHeader} align="left">Grupo</ThSortAM>
+                <ThSortAM campo="produto" ordemCampo={ordemCampo} ordemDir={ordemDir} onClick={clickHeader} align="left">Produto</ThSortAM>
                 <th className="px-4 py-2.5">Código</th>
-                <th className="px-4 py-2.5 text-right">Faturamento</th>
-                <th className="px-4 py-2.5 text-right">Custo</th>
-                <th className="px-4 py-2.5 text-right">Lucro bruto</th>
-                <th className="px-4 py-2.5 text-right">Margem</th>
+                <ThSortAM campo="valor"   ordemCampo={ordemCampo} ordemDir={ordemDir} onClick={clickHeader}>Faturamento</ThSortAM>
+                <ThSortAM campo="custo"   ordemCampo={ordemCampo} ordemDir={ordemDir} onClick={clickHeader}>Custo</ThSortAM>
+                <ThSortAM campo="lucro"   ordemCampo={ordemCampo} ordemDir={ordemDir} onClick={clickHeader}>Lucro bruto</ThSortAM>
+                <ThSortAM campo="margem"  ordemCampo={ordemCampo} ordemDir={ordemDir} onClick={clickHeader}>Margem</ThSortAM>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
