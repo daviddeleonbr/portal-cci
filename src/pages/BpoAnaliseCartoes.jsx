@@ -182,7 +182,7 @@ export default function BpoAnaliseCartoes() {
       const empresaCodigo = Number(empresa.empresa_codigo);
       const filtros = { dataInicial: dataDe, dataFinal: dataAte, empresaCodigo };
 
-      const [vendas, formas, funcionarios, itens, produtos, grupos, administradoras] = await Promise.all([
+      const [vendas, formas, funcionarios, itens, produtos, grupos, administradoras, abastecimentos] = await Promise.all([
         qualityApi.buscarVendas(chave.chave, { ...filtros, situacao: 'A' }),
         qualityApi.buscarVendaFormaPagamento(chave.chave, filtros),
         qualityApi.buscarFuncionarios(chave.chave),
@@ -190,6 +190,7 @@ export default function BpoAnaliseCartoes() {
         qualityApi.buscarProdutos(chave.chave).catch(() => []),
         qualityApi.buscarGrupos(chave.chave).catch(() => []),
         qualityApi.buscarAdministradoras(chave.chave).catch(() => []),
+        qualityApi.buscarAbastecimentos(chave.chave, filtros).catch(() => []),
       ]);
 
       const mapFunc = new Map();
@@ -216,6 +217,13 @@ export default function BpoAnaliseCartoes() {
         if (cod != null) mapAdm.set(Number(cod), a);
       });
 
+      // Indexa abastecimentos por VENDA_ITEM.vendaItemCodigo (ligação direta).
+      const abastPorVendaItem = new Map();
+      (abastecimentos || []).forEach(a => {
+        const vic = a.vendaItemCodigo;
+        if (vic != null) abastPorVendaItem.set(Number(vic), a);
+      });
+
       // Indexa formas de pagamento por vendaCodigo
       const formasPorVenda = new Map();
       (formas || []).forEach(fp => {
@@ -238,7 +246,8 @@ export default function BpoAnaliseCartoes() {
         const vc = v.vendaCodigo || v.codigo;
         const itensV = itensPorVenda.get(vc) || [];
 
-        // Mapeia itens já com categoria + nome do produto
+        // Mapeia itens já com categoria + nome do produto + hora REAL do abastecimento
+        // resolvida via ABASTECIMENTO.vendaItemCodigo = VENDA_ITEM.vendaItemCodigo.
         const itensProc = itensV.map(it => {
           const cod = it.produtoCodigo;
           const prod = mapProd.get(cod);
@@ -246,6 +255,10 @@ export default function BpoAnaliseCartoes() {
           const valorTotal = Number(it.totalVenda || 0) + Number(it.totalAcrescimo || 0);
           const valorUnitario = qtd > 0 ? valorTotal / qtd : 0;
           const categoria = classificarItem(it, mapProd, mapGrp);
+          const vic = it.vendaItemCodigo != null ? Number(it.vendaItemCodigo) : null;
+          const abast = vic != null ? abastPorVendaItem.get(vic) : null;
+          const dataHoraAbast = abast?.dataHoraAbastecimento ?? null;
+
           return {
             produtoCodigo: cod,
             produtoNome: prod?.descricao || prod?.nome || `Produto #${cod}`,
@@ -253,6 +266,7 @@ export default function BpoAnaliseCartoes() {
             valorUnitario,
             valorTotal,
             categoria,
+            dataHora: dataHoraAbast,
           };
         });
 
@@ -738,6 +752,7 @@ function DetalheVenda({ divergencia: d }) {
             <thead className="text-gray-400">
               <tr>
                 <th className="text-left px-3 py-1.5 font-medium uppercase text-[9px] tracking-wider">Produto</th>
+                <th className="text-left px-2 py-1.5 font-medium uppercase text-[9px] tracking-wider">Hora</th>
                 <th className="text-right px-2 py-1.5 font-medium uppercase text-[9px] tracking-wider">Qtd</th>
                 <th className="text-right px-2 py-1.5 font-medium uppercase text-[9px] tracking-wider">Unit.</th>
                 <th className="text-right px-3 py-1.5 font-medium uppercase text-[9px] tracking-wider">Total</th>
@@ -747,6 +762,9 @@ function DetalheVenda({ divergencia: d }) {
               {d.itens.map((it, idx) => (
                 <tr key={`${it.produtoCodigo}-${idx}`} className={`border-t border-gray-50 ${it.categoria === 'combustivel' ? 'bg-amber-50/30' : ''}`}>
                   <td className="px-3 py-1.5 text-gray-700">{it.produtoNome}</td>
+                  <td className="px-2 py-1.5 text-[10px] font-mono text-gray-500 tabular-nums">
+                    {it.dataHora ? formatHora(it.dataHora) : <span className="text-gray-300">—</span>}
+                  </td>
                   <td className="px-2 py-1.5 text-right font-mono tabular-nums text-gray-600">
                     {it.quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}
                   </td>
