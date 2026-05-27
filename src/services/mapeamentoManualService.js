@@ -58,3 +58,43 @@ export async function excluirConta(id) {
   const { error } = await supabase.from('mapeamento_manual_contas').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ===================== POR REDE AUTOSYSTEM =====================
+// Mapeamento centralizado por rede Autosystem (espelha o padrão webposto
+// onde o mapeamento é por `chave_api_id`). Uma configuração serve todas
+// as empresas da rede.
+
+export async function listarContasPorRede(asRedeId, mascaraId) {
+  const { data, error } = await supabase
+    .from('mapeamento_manual_contas')
+    .select('*, grupos_dre(id, nome, tipo, parent_id)')
+    .eq('as_rede_id', asRedeId)
+    .eq('mascara_id', mascaraId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function listarContasDaRede(asRedeId) {
+  const { data, error } = await supabase
+    .from('mapeamento_manual_contas')
+    .select('*, grupos_dre(id, nome, tipo, mascara_id)')
+    .eq('as_rede_id', asRedeId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function criarContaPorRede({ as_rede_id, mascara_id, grupo_dre_id, conta_codigo, conta_descricao, conta_natureza, observacoes }) {
+  const { data, error } = await supabase
+    .from('mapeamento_manual_contas')
+    .insert({
+      as_rede_id, mascara_id, grupo_dre_id,
+      conta_codigo: conta_codigo || null,
+      conta_descricao, conta_natureza, observacoes,
+    })
+    .select('*, grupos_dre(id, nome, tipo)')
+    .single();
+  if (error) throw error;
+  return data;
+}

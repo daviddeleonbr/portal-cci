@@ -7,7 +7,9 @@ import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
 import * as cciContatoService from '../services/cciContatoService';
 
-export default function CciContato() {
+export default function CciContato() { return <CciContatoView withHeader />; }
+
+export function CciContatoView({ withHeader = false }) {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({
@@ -58,10 +60,12 @@ export default function CciContato() {
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-      <PageHeader
-        title="Contato da CCI"
-        description="Canais públicos exibidos na landing page para agendamento de diagnóstico."
-      />
+      {withHeader && (
+        <PageHeader
+          title="Contato da CCI"
+          description="Canais públicos exibidos na landing page para agendamento de diagnóstico."
+        />
+      )}
 
       {carregando ? (
         <div className="flex items-center gap-2 py-12 justify-center text-gray-500">

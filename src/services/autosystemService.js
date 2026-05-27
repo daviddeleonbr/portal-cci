@@ -227,6 +227,105 @@ export async function salvarContasCategoria(redeId, contas) {
   }
 }
 
+// ─── Contas caixa/banco (base do fluxo de caixa) ─────────────
+// Marca quais contas do plano de contas Autosystem representam caixa/banco.
+// O relatório de fluxo de caixa considera apenas lançamentos onde uma dessas
+// contas aparece em conta_debitar OU conta_creditar; a contraparte define
+// o grupo na máscara de fluxo.
+
+export async function listarContasCaixaBancoRede(redeId) {
+  if (!redeId) return [];
+  const { data, error } = await supabase
+    .from('as_rede_conta_caixa_banco')
+    .select('*')
+    .eq('as_rede_id', redeId)
+    .order('codigo', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// Replace-all: apaga as contas atuais da rede e insere a nova lista.
+export async function salvarContasCaixaBanco(redeId, contas) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const validas = (contas || [])
+    .filter(c => c && c.codigo)
+    .map(c => ({
+      as_rede_id: redeId,
+      codigo: String(c.codigo),
+      nome: c.nome || null,
+    }));
+
+  const { error: delErr } = await supabase
+    .from('as_rede_conta_caixa_banco')
+    .delete()
+    .eq('as_rede_id', redeId);
+  if (delErr) throw delErr;
+
+  if (validas.length === 0) return;
+
+  const { error: insErr } = await supabase
+    .from('as_rede_conta_caixa_banco')
+    .insert(validas);
+  if (insErr) throw insErr;
+}
+
+// ─── Lançamentos do movto por lista de contas ────────────────
+// Retorna os movimentos onde `conta_debitar` OU `conta_creditar` esteja
+// em `contas_codigos`. Usado pelo RelatorioDRE Autosystem pra popular as
+// contas mapeadas em `mapeamento_manual_contas` (receitas e despesas).
+export async function buscarLancamentosAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const contas = Array.isArray(filtros.contas_codigos) ? filtros.contas_codigos : [];
+  if (contas.length === 0) return [];
+  const { data, error } = await supabase.functions.invoke('autosystem-lancamentos', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de: filtros.data_de,
+      data_ate: filtros.data_ate,
+      contas_codigos: contas.map(c => String(c)),
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar lançamentos');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.lancamentos) ? data.lancamentos : [];
+}
+
+// ─── Fluxo de caixa Autosystem ────────────────────────────────
+// Retorna lançamentos do movto onde uma das contas (debit/credit) é
+// caixa/banco. A contraparte (a outra conta do lançamento) é o que o
+// front classifica na máscara de fluxo. Transferências entre 2 contas
+// caixa/banco são excluídas no SQL.
+export async function buscarFluxoCaixaAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const caixa = Array.isArray(filtros.contas_caixa_banco) ? filtros.contas_caixa_banco : [];
+  if (caixa.length === 0) return [];
+  const { data, error } = await supabase.functions.invoke('autosystem-fluxo-caixa', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de: filtros.data_de,
+      data_ate: filtros.data_ate,
+      contas_caixa_banco: caixa.map(c => String(c)),
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar fluxo de caixa');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.lancamentos) ? data.lancamentos : [];
+}
+
 // ─── Outras entradas (não-venda) ─────────────────────────────
 // Lançamentos onde `conta_debitar` começa com '1.1.2' (entrada no caixa)
 // e `conta_creditar` NÃO começa com '4.1' (não é receita de vendas).

@@ -263,7 +263,7 @@ function ValorFormatado({ v, field, obj }) {
 
 // ─── Página ────────────────────────────────────────────────────
 
-export default function BpoAlteracoesCaixas() {
+export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
   const { labelEmpresa } = useAnonimizador();
   const [clientes, setClientes] = useState([]);
   const [redesAutosystem, setRedesAutosystem] = useState([]);
@@ -651,7 +651,9 @@ export default function BpoAlteracoesCaixas() {
 
   return (
     <div>
-      <PageHeader title="Alterações em caixas" description="Histórico de mudanças nos lançamentos via movto_flow" />
+      {!hideHeader && (
+        <PageHeader title="Alterações em caixas" description="Histórico de mudanças nos lançamentos via movto_flow" />
+      )}
 
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4 mb-4">
         {loadingMeta ? (

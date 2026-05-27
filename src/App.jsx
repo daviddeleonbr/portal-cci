@@ -25,7 +25,9 @@ import RelatorioAnaliseLancamentos from './pages/RelatorioAnaliseLancamentos';
 import RelatorioFluxoCaixa from './pages/RelatorioFluxoCaixa';
 import RelatorioEvolucaoMensal from './pages/RelatorioEvolucaoMensal';
 import RelatorioDRERede from './pages/RelatorioDRERede';
+import RelatorioDREAsRede from './pages/RelatorioDREAsRede';
 import RelatorioFluxoCaixaRede from './pages/RelatorioFluxoCaixaRede';
+import RelatorioFluxoCaixaAsRede from './pages/RelatorioFluxoCaixaAsRede';
 import RelatorioAnaliseIA from './pages/RelatorioAnaliseIA';
 import RelatorioAnaliseLancamentosRede from './pages/RelatorioAnaliseLancamentosRede';
 import CciPlanoContas from './pages/CciPlanoContas';
@@ -38,8 +40,8 @@ import BpoConciliacaoCaixas from './pages/BpoConciliacaoCaixas';
 import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
 import BpoAlteracoesCaixas from './pages/BpoAlteracoesCaixas';
 import CciRelatoriosBi from './pages/CciRelatoriosBi';
-import CciContato from './pages/CciContato';
 import CciNotificacoes from './pages/CciNotificacoes';
+import AdminConfiguracoes from './pages/AdminConfiguracoes';
 
 // Cliente
 import ClienteLayout from './components/layout/cliente/ClienteLayout';
@@ -135,6 +137,8 @@ export default function App() {
           <Route path="/admin/relatorios-cliente/:clienteId/analise-lancamentos" element={<RelatorioAnaliseLancamentos />} />
           <Route path="/admin/relatorios-cliente/:clienteId/fluxo-caixa" element={<RelatorioFluxoCaixa />} />
           <Route path="/admin/relatorios-cliente/rede/:chaveApiId/dre" element={<RelatorioDRERede />} />
+          <Route path="/admin/relatorios-cliente/rede-as/:asRedeId/dre" element={<RelatorioDREAsRede />} />
+          <Route path="/admin/relatorios-cliente/rede-as/:asRedeId/fluxo-caixa" element={<RelatorioFluxoCaixaAsRede />} />
           <Route path="/admin/relatorios-cliente/rede/:chaveApiId/fluxo-caixa" element={<RelatorioFluxoCaixaRede />} />
           <Route path="/admin/relatorios-cliente/:clienteId/analise-ia" element={<RelatorioAnaliseIA />} />
           <Route path="/admin/relatorios-cliente/rede/:chaveApiId/analise-ia" element={<RelatorioAnaliseIA modoRede={true} />} />
@@ -150,7 +154,8 @@ export default function App() {
 
           {/* Relatórios de BI (Power BI) */}
           <Route path="/admin/relatorios-bi" element={<CciRelatoriosBi />} />
-          <Route path="/admin/contato" element={<CciContato />} />
+          <Route path="/admin/contato" element={<Navigate to="/admin/configuracoes" replace />} />
+          <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
           <Route path="/admin/notificacoes" element={<CciNotificacoes />} />
 
           {/* Relatorios (kept for compatibility) */}

@@ -11,6 +11,7 @@ import * as fluxoService from '../services/mascaraFluxoCaixaService';
 import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
+import * as autosystemService from '../services/autosystemService';
 import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
 
@@ -116,11 +117,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     (async () => {
       try {
         if (modoRede) {
+          const isAutosystem = !!redeContexto.asRedeId;
+          const idChave = isAutosystem ? redeContexto.asRedeId : redeContexto.chaveApiId;
           const virtualCliente = {
-            id: `__rede__${redeContexto.chaveApiId}`,
+            id: `__rede__${idChave}`,
             nome: redeContexto.nomeRede,
-            chave_api_id: redeContexto.chaveApiId,
-            usa_webposto: true,
+            chave_api_id: isAutosystem ? null : redeContexto.chaveApiId,
+            as_rede_id:   isAutosystem ? redeContexto.asRedeId : null,
+            usa_webposto: !isAutosystem,
             empresa_codigo: redeContexto.empresaCodigos?.[0] ?? null,
             _empresaCodigos: redeContexto.empresaCodigos || [],
             _empresas: redeContexto.empresas || [],
@@ -131,13 +135,32 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           setMascaras(masks || []);
           if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
           try {
-            const chavesApi = await mapService.listarChavesApi();
-            const chave = chavesApi.find(ch => ch.id === redeContexto.chaveApiId);
-            const tasks = [contasBancariasService.listarPorRede(redeContexto.chaveApiId)];
-            if (chave?.chave) tasks.push(qualityApi.buscarContas(chave.chave));
-            const [classif, ctas] = await Promise.all(tasks);
-            setContasClassificadas(classif || []);
-            setContasMeta(ctas || []);
+            if (isAutosystem) {
+              // Autosystem: as "contas classificadas" e o "catalogo de contas"
+              // vêm de as_rede_conta_caixa_banco (todas tratadas como 'caixa').
+              const cbList = await autosystemService
+                .listarContasCaixaBancoRede(redeContexto.asRedeId)
+                .catch(() => []);
+              const classif = (cbList || []).map(c => ({
+                conta_codigo: c.codigo,
+                tipo: 'caixa',
+                ativo: true,
+              }));
+              const ctas = (cbList || []).map(c => ({
+                contaCodigo: c.codigo,
+                descricao: c.nome || `Conta ${c.codigo}`,
+              }));
+              setContasClassificadas(classif);
+              setContasMeta(ctas);
+            } else {
+              const chavesApi = await mapService.listarChavesApi();
+              const chave = chavesApi.find(ch => ch.id === redeContexto.chaveApiId);
+              const tasks = [contasBancariasService.listarPorRede(redeContexto.chaveApiId)];
+              if (chave?.chave) tasks.push(qualityApi.buscarContas(chave.chave));
+              const [classif, ctas] = await Promise.all(tasks);
+              setContasClassificadas(classif || []);
+              setContasMeta(ctas || []);
+            }
           } catch (_) { setContasClassificadas([]); setContasMeta([]); }
         } else {
           const [c, masks] = await Promise.all([
@@ -147,8 +170,26 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           setCliente(c);
           setMascaras(masks || []);
           if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
-          // Carrega classificacao das contas + catalogo CONTA da rede
-          if (c?.chave_api_id) {
+          if (c?.as_rede_id) {
+            // Cliente Autosystem individual
+            try {
+              const cbList = await autosystemService
+                .listarContasCaixaBancoRede(c.as_rede_id)
+                .catch(() => []);
+              const classif = (cbList || []).map(cb => ({
+                conta_codigo: cb.codigo,
+                tipo: 'caixa',
+                ativo: true,
+              }));
+              const ctas = (cbList || []).map(cb => ({
+                contaCodigo: cb.codigo,
+                descricao: cb.nome || `Conta ${cb.codigo}`,
+              }));
+              setContasClassificadas(classif);
+              setContasMeta(ctas);
+            } catch (_) { setContasClassificadas([]); setContasMeta([]); }
+          } else if (c?.chave_api_id) {
+            // Carrega classificacao das contas + catalogo CONTA da rede
             try {
               const chavesApi = await mapService.listarChavesApi();
               const chave = chavesApi.find(ch => ch.id === c.chave_api_id);
@@ -164,7 +205,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       finally { setLoading(false); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clienteId, modoRede, redeContexto?.chaveApiId]);
+  }, [clienteId, modoRede, redeContexto?.chaveApiId, redeContexto?.asRedeId]);
 
   // ─── Carregar grupos + mapeamentos ─────────────────────────
   useEffect(() => {
@@ -175,7 +216,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const tasks = [fluxoService.listarGrupos(mascaraSelecionada.id)];
         if (cliente.usa_webposto && cliente.chave_api_id) {
           tasks.push(fluxoService.listarMapeamentosEmpresa(cliente.chave_api_id));
+        } else if (cliente.as_rede_id) {
+          // Autosystem: config por rede (compartilhada entre empresas).
+          tasks.push(fluxoService.listarContasManualPorRede(cliente.as_rede_id, mascaraSelecionada.id));
         } else {
+          // Fallback p/ cliente_id (legado) quando a empresa não tem as_rede_id.
           tasks.push(fluxoService.listarContasManual(cliente.id, mascaraSelecionada.id));
         }
         const [grps, maps] = await Promise.all(tasks);
@@ -242,8 +287,129 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // ─── Fetch MOVIMENTO_CONTA + TITULO_PAGAR ─────────────────
   const carregarDados = useCallback(async () => {
     if (!cliente) return;
+
+    // ─ Autosystem: usa contas caixa/banco + lançamentos do movto ─
+    if (!cliente.usa_webposto && cliente.as_rede_id) {
+      const _t0 = performance.now();
+      try {
+        setLoadingDados(true);
+        setDadosCarregados(false);
+        setError(null);
+        setTempoGeracao(null);
+
+        const empresaCodigos = (cliente._empresaCodigos && cliente._empresaCodigos.length)
+          ? cliente._empresaCodigos
+          : (cliente.empresa_codigo != null ? [cliente.empresa_codigo] : []);
+        if (empresaCodigos.length === 0) {
+          throw new Error('Cliente Autosystem sem empresa_codigo definido.');
+        }
+
+        const contasCaixaBanco = (await autosystemService
+          .listarContasCaixaBancoRede(cliente.as_rede_id)
+          .catch(() => []))
+          .map(c => String(c.codigo));
+        if (contasCaixaBanco.length === 0) {
+          setError('Nenhuma conta caixa/banco marcada. Configure em '
+            + '/admin/parametros/mapeamento → Autosystem → Fluxo → "Contas Caixa / Banco".');
+          setDadosPorMes({});
+          setDadosCarregados(true);
+          return;
+        }
+
+        const total = meses.length;
+        let concluidas = 0;
+        setLoadingProgress({ atual: 0, total, mensagem: `Buscando fluxo Autosystem (${meses.length} mês(es))...` });
+
+        const results = await Promise.all(meses.map(async m => {
+          const r = rangeMes(m.ano, m.mes);
+          let lancs = [];
+          try {
+            lancs = await autosystemService.buscarFluxoCaixaAutosystem(
+              cliente.as_rede_id,
+              empresaCodigos,
+              { data_de: r.dataInicial, data_ate: r.dataFinal, contas_caixa_banco: contasCaixaBanco },
+            );
+          } catch (e) {
+            console.error('[Fluxo Autosystem] Falha no fetch', { mes: m.key, err: e });
+          }
+          concluidas++;
+          setLoadingProgress({ atual: concluidas, total, mensagem: `${m.label}: ${lancs.length} lancamentos` });
+          return { key: m.key, lancs };
+        }));
+
+        // Converte lançamentos Autosystem para o formato MOVIMENTO_CONTA que
+        // o resto do componente já entende. A conta caixa/banco vira contaCodigo;
+        // a contraparte vira planoContaGerencialCodigo (para casar com mapeamentos
+        // de fluxo); o sinal (debit=+ / credit=-) vira tipo Crédito/Débito.
+        //
+        // Quando contraparte é 2.1.1.x (conta-ponte), preferimos a
+        // `contraparte_resolvida_codigo` (despesa real) vinda da provisão.
+        // Se não houver provisão, marcamos com flag pra mostrar como
+        // "Despesa não classificada (2.1.1)".
+        const mapa = {};
+        let totalConvertidos = 0;
+        let naoClassificadas211 = 0;
+        results.forEach(r => {
+          const movs = (r.lancs || []).map(l => {
+            const sinal = Number(l.sinal) || 0;
+            const tipo = sinal > 0 ? 'Crédito' : 'Débito';
+            const cpBruto = String(l.contraparte_codigo ?? '');
+            const cpResolv = l.contraparte_resolvida_codigo != null
+              ? String(l.contraparte_resolvida_codigo)
+              : null;
+            const isPonte211 = /^2\.1\.1/.test(cpBruto);
+            const naoClassificada = isPonte211 && !cpResolv;
+            if (naoClassificada) naoClassificadas211++;
+            const planoEfetivo = cpResolv || cpBruto;
+            return {
+              codigo: l.lancamento_id != null ? `as-${l.lancamento_id}` : undefined,
+              movimentoContaCodigo: l.lancamento_id ?? null,
+              contaCodigo: l.lado_caixa === 'debito' ? String(l.debito_codigo ?? '') : String(l.credito_codigo ?? ''),
+              planoContaGerencialCodigo: planoEfetivo,
+              // Campos extras pra diagnóstico/badge no front
+              _viaProvisao: !!l.via_provisao,
+              _naoClassificada211: naoClassificada,
+              _contraparteBruta: cpBruto,
+              tipo,
+              valor: Math.abs(Number(l.valor || 0)),
+              dataMovimento: String(l.data ?? '').slice(0, 10),
+              descricao: [
+                naoClassificada ? '[2.1.1 sem provisão]' : '',
+                l.documento ? `Nº ${l.documento}` : '',
+                l.pessoa_nome || '',
+                l.obs || '',
+              ].filter(Boolean).join(' · '),
+              tipoDocumentoOrigem: 'AUTOSYSTEM',
+              empresaCodigo: l.empresa,
+            };
+          });
+          totalConvertidos += movs.length;
+          mapa[r.key] = { movimentos: movs };
+        });
+
+        console.info('[Fluxo Autosystem] Carregado:', {
+          asRedeId: cliente.as_rede_id,
+          empresas: empresaCodigos.length,
+          contasCaixaBanco: contasCaixaBanco.length,
+          totalConvertidos,
+          provisoes211NaoResolvidas: naoClassificadas211,
+        });
+
+        setDadosPorMes(mapa);
+        setTituloPagarMap(new Map());
+        setTitulosPorPagamento(new Map());
+        setDadosCarregados(true);
+        setTempoGeracao(performance.now() - _t0);
+      } catch (err) {
+        setError('Erro ao buscar fluxo de caixa Autosystem: ' + err.message);
+      } finally {
+        setLoadingDados(false);
+      }
+      return;
+    }
+
     if (!cliente.usa_webposto || !cliente.chave_api_id) {
-      setError('Fluxo de Caixa disponível apenas para clientes Webposto (integração Quality API).');
+      setError('Fluxo de Caixa disponível apenas para clientes Webposto ou Autosystem.');
       return;
     }
     const _t0 = performance.now();
@@ -360,12 +526,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
   }, [dadosCarregados, loadingDados, reportSolicitado, dadosPorMes, grupos, mapeamentos]);
 
-  // Map contaCodigo (sempre como Number) -> classificacao (tipo).
-  // Coagir a Number evita mismatch com m.contaCodigo que pode vir string da API.
+  // Map contaCodigo (sempre como String) -> classificacao (tipo).
+  // String suporta tanto Webposto (códigos numéricos) quanto Autosystem
+  // (códigos hierárquicos do plano de contas, ex: "1.1.2.001").
   const tipoPorConta = useMemo(() => {
     const m = new Map();
     contasClassificadas.forEach(c => {
-      if (c.ativo !== false) m.set(Number(c.conta_codigo), c.tipo);
+      if (c.ativo !== false) m.set(String(c.conta_codigo), c.tipo);
     });
     return m;
   }, [contasClassificadas]);
@@ -377,12 +544,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     [contasClassificadas],
   );
 
-  // Map contaCodigo (sempre Number) -> descricao (da CONTA endpoint)
+  // Map contaCodigo (String) -> descricao (da CONTA endpoint ou contas caixa/banco)
   const descricaoPorConta = useMemo(() => {
     const m = new Map();
     contasMeta.forEach(c => {
       const cod = c.contaCodigo ?? c.codigo;
-      if (cod != null) m.set(Number(cod), c.descricao || c.nome || `Conta #${cod}`);
+      if (cod != null) m.set(String(cod), c.descricao || c.nome || `Conta #${cod}`);
     });
     return m;
   }, [contasMeta]);
@@ -395,7 +562,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     Object.values(dadosPorMes).forEach(dados => {
       (dados.movimentos || []).forEach(m => {
         if (m.contaCodigo == null) return;
-        const cod = Number(m.contaCodigo);
+        const cod = String(m.contaCodigo);
         const tipoConta = tipoPorConta.get(cod);
         if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
         if (!tiposContaAtivos.has(tipoConta)) return;
@@ -418,7 +585,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     Object.entries(dadosPorMes).forEach(([mesKey, dados]) => {
       (dados.movimentos || []).forEach(m => {
         if (m.contaCodigo == null) return;
-        const cod = Number(m.contaCodigo);
+        const cod = String(m.contaCodigo);
         // 1. Filtro por classificacao - precisa ser explicita em Cadastros > Clientes.
         //    Conta sem classificacao (ou aplicacao/outras) NAO entra no fluxo.
         const tipoConta = tipoPorConta.get(cod);
@@ -527,7 +694,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const porConta = new Map();
     todos.forEach(m => {
       if (m.contaCodigo == null) return;
-      const cod = Number(m.contaCodigo);
+      const cod = String(m.contaCodigo);
       const tipoConta = tipoPorConta.get(cod);
       if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
       if (!tiposContaAtivos.has(tipoConta)) return;
@@ -722,7 +889,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const ec = Number(m.empresaCodigo);
         if (!porEmpresa[ec]) return;
         if (m.contaCodigo == null) return;
-        const contaCod = Number(m.contaCodigo);
+        const contaCod = String(m.contaCodigo);
         const tipoConta = tipoPorConta.get(contaCod);
         if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
         if (!tiposContaAtivos.has(tipoConta)) return;
@@ -789,7 +956,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
     (dados.movimentos || []).forEach(m => {
       if (m.contaCodigo == null) return;
-      const cod = Number(m.contaCodigo);
+      const cod = String(m.contaCodigo);
       const tipoConta = tipoPorConta.get(cod);
       if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
       if (!tiposContaAtivos.has(tipoConta)) return;

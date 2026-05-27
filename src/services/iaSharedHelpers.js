@@ -2,19 +2,60 @@
 // Centraliza chamada Claude, utils de data e re-exporta API key do insightsService.
 
 export { carregarApiKey, salvarApiKey, limparApiKey } from './insightsService';
+import { carregarApiKey as carregarApiKeyLS, salvarApiKey as salvarApiKeyLS } from './insightsService';
+import { obterConfiguracaoIa } from './configuracoesIaService';
 
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-opus-4-7';
+const MODEL_DEFAULT = 'claude-opus-4-7';
+
+// ─── Carrega config IA do Supabase (com fallback localStorage) ─
+// Admin-managed: a chave Anthropic e os parâmetros vivem em
+// `configuracoes_ia` (singleton). Se o fetch falhar (ex.: offline ou
+// migration ainda não aplicada), retorna a chave do localStorage como
+// fallback. Quando o fetch retorna chave, faz "hydration" no localStorage
+// para que o código síncrono legado continue funcionando sem mudanças.
+export async function carregarConfiguracaoIa() {
+  try {
+    const cfg = await obterConfiguracaoIa();
+    if (cfg?.api_key) {
+      try { salvarApiKeyLS(cfg.api_key); } catch (_) { /* ignore */ }
+    }
+    return {
+      apiKey:           cfg?.api_key || carregarApiKeyLS() || '',
+      modelo:           cfg?.modelo || MODEL_DEFAULT,
+      maxTokens:        Number(cfg?.max_tokens) || 20000,
+      adaptiveThinking: cfg?.adaptive_thinking !== false,
+      ativo:            cfg?.ativo !== false,
+    };
+  } catch (_) {
+    return {
+      apiKey:           carregarApiKeyLS() || '',
+      modelo:           MODEL_DEFAULT,
+      maxTokens:        20000,
+      adaptiveThinking: true,
+      ativo:            true,
+    };
+  }
+}
 
 // ─── Chamada unificada Claude ──────────────────────────────────
 // - systemBlocks: array de { type:'text', text } — o ultimo recebe cache_control
 // - user: texto da mensagem do usuario
-// - Modelo claude-opus-4-7 com adaptive thinking (nao retorna texto do thinking)
+// - Modelo, adaptiveThinking e maxTokens vêm da config admin (Supabase) por
+//   padrão; podem ser sobrescritos via parâmetros explícitos.
 // - anthropic-dangerous-direct-browser-access pq e front-end
-// max_tokens com adaptive thinking inclui tokens de pensamento — por isso folgado.
-// Com schema expandido (combustiveis detalhado + automotivos + conveniencia), 20k e o minimo seguro.
-export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 20000 }) {
-  if (!apiKey) throw new Error('Chave de API não configurada');
+export async function chamarClaudeAPI({ apiKey, system, user, maxTokens, modelo, adaptiveThinking } = {}) {
+  // Se faltarem parâmetros, busca da config admin no Supabase
+  let cfg = null;
+  if (!apiKey || !modelo || maxTokens == null || adaptiveThinking == null) {
+    cfg = await carregarConfiguracaoIa();
+  }
+  const finalKey   = apiKey       ?? cfg?.apiKey;
+  const finalModel = modelo       ?? cfg?.modelo ?? MODEL_DEFAULT;
+  const finalMax   = maxTokens    ?? cfg?.maxTokens ?? 20000;
+  const finalThink = adaptiveThinking ?? cfg?.adaptiveThinking ?? true;
+
+  if (!finalKey) throw new Error('Chave de API não configurada');
 
   const blocks = Array.isArray(system) ? system : [{ type: 'text', text: String(system) }];
   // cache_control no ULTIMO bloco de system cacheia tudo antes dele (tools + system)
@@ -22,21 +63,23 @@ export async function chamarClaudeAPI({ apiKey, system, user, maxTokens = 20000 
     blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: { type: 'ephemeral' } };
   }
 
+  const body = {
+    model: finalModel,
+    max_tokens: finalMax,
+    system: blocks,
+    messages: [{ role: 'user', content: user }],
+  };
+  if (finalThink) body.thinking = { type: 'adaptive' };
+
   const res = await fetch(CLAUDE_URL, {
     method: 'POST',
     headers: {
-      'x-api-key': apiKey,
+      'x-api-key': finalKey,
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: maxTokens,
-      thinking: { type: 'adaptive' },
-      system: blocks,
-      messages: [{ role: 'user', content: user }],
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

@@ -4,9 +4,11 @@ import {
   Coins, Loader2, AlertCircle, Building2, Zap, Calendar,
   UserRound, CheckCircle2, TrendingUp, TrendingDown, RefreshCw, Clock, ChevronRight,
   Fuel, Wrench, ShoppingBag, Package, CreditCard, Banknote, FileText, MoreHorizontal,
-  XCircle, ChevronDown, PlusCircle, MinusCircle, Printer,
+  XCircle, ChevronDown, PlusCircle, MinusCircle, Printer, History,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
+import BpoAlteracoesCaixas from './BpoAlteracoesCaixas';
+import BpoAnaliseCartoes from './BpoAnaliseCartoes';
 import Modal from '../components/ui/Modal';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
@@ -41,6 +43,9 @@ export default function BpoConciliacaoCaixas({
   dataInitial = null,
 } = {}) {
   const modoCliente = !!clienteFixed;
+
+  // Aba ativa (só no admin). Modo cliente continua sem abas.
+  const [abaAtiva, setAbaAtiva] = useState('conciliacao'); // 'conciliacao' | 'alteracoes' | 'cartoes'
 
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
@@ -859,6 +864,44 @@ export default function BpoConciliacaoCaixas({
         </PageHeader>
       </div>
 
+      {/* Tabs (só modo admin) */}
+      {!modoCliente && (
+        <div className="flex items-center gap-1 mb-4 bg-gray-100 rounded-xl p-1 w-fit no-print">
+          <button onClick={() => setAbaAtiva('conciliacao')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              abaAtiva === 'conciliacao' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <Coins className="h-4 w-4" /> Conciliação de caixas
+          </button>
+          <button onClick={() => setAbaAtiva('alteracoes')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              abaAtiva === 'alteracoes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <History className="h-4 w-4" /> Alterações em caixas
+          </button>
+          <button onClick={() => setAbaAtiva('cartoes')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              abaAtiva === 'cartoes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <CreditCard className="h-4 w-4" /> Análise de cartões
+          </button>
+        </div>
+      )}
+
+      {/* Aba: Alterações em caixas (embed do componente standalone) */}
+      {!modoCliente && abaAtiva === 'alteracoes' && (
+        <BpoAlteracoesCaixas hideHeader />
+      )}
+
+      {/* Aba: Análise de cartões */}
+      {!modoCliente && abaAtiva === 'cartoes' && (
+        <BpoAnaliseCartoes />
+      )}
+
+      {/* Aba: Conciliação de caixas (conteúdo original) */}
+      {(modoCliente || abaAtiva === 'conciliacao') && (
+        <>
+
       {/* Cabecalho visivel apenas na impressao */}
       {carregado && cliente && (
         <PrintHeader cliente={cliente} rede={redeAtual} data={data} />
@@ -1359,6 +1402,9 @@ export default function BpoConciliacaoCaixas({
               </table>
             </div>
           </div>
+        </>
+      )}
+
         </>
       )}
     </div>

@@ -13,6 +13,8 @@ import * as mapService from '../services/mapeamentoService';
 import * as manualService from '../services/mapeamentoManualService';
 import * as vendasMapService from '../services/mapeamentoVendasService';
 import { TIPOS_VENDA } from '../services/mapeamentoVendasService';
+import * as vendasAutosystemMapService from '../services/mapeamentoVendasAutosystemService';
+import * as autosystemService from '../services/autosystemService';
 import * as qualityApi from '../services/qualityApiService';
 import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
@@ -67,6 +69,14 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const [dadosPorMes, setDadosPorMes] = useState({});       // { 'YYYY-MM': { titulosPagar, titulosReceber, vendaItens, vendas } }
   const [dadosPorMesAnterior, setDadosPorMesAnterior] = useState({});  // mesmo, ano anterior (para AH)
   const [mapeamentoVendas, setMapeamentoVendas] = useState([]);
+  // Autosystem: vendas/custo agregados por (categoria, mes)
+  // categorias: combustivel | automotivos | conveniencia
+  // { atual: { [categoria]: { [mesKey]: { venda, custo } } }, anterior: idem }
+  const [vendasAutosystemPorMes, setVendasAutosystemPorMes] = useState({ atual: {}, anterior: {} });
+  const [mapVendasAutosystem, setMapVendasAutosystem] = useState([]);
+  // Categorização de grupo_produto → categoria, vinda de as_rede_grupo_produto
+  // (parametrizada em /cliente/autosystem/configuracoes).
+  const [categoriasGruposProduto, setCategoriasGruposProduto] = useState(new Map());
   // Catalogos (cacheados ao entrar)
   const [produtosMap, setProdutosMap] = useState(new Map());
   const [gruposCatMap, setGruposCatMap] = useState(new Map());
@@ -85,6 +95,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
   const [ocultarZeradas, setOcultarZeradas] = useState(true);
   const [showAH, setShowAH] = useState(true);
+  const [mostrarTotal, setMostrarTotal] = useState(true);
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
   const [tempoGeracao, setTempoGeracao] = useState(null); // ms
@@ -108,11 +119,15 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     (async () => {
       try {
         if (modoRede) {
+          // Autosystem vs Webposto: o redeContexto traz asRedeId OU chaveApiId.
+          const isAutosystem = !!redeContexto.asRedeId;
+          const idChave = isAutosystem ? redeContexto.asRedeId : redeContexto.chaveApiId;
           const virtualCliente = {
-            id: `__rede__${redeContexto.chaveApiId}`,
+            id: `__rede__${idChave}`,
             nome: redeContexto.nomeRede,
-            chave_api_id: redeContexto.chaveApiId,
-            usa_webposto: true,
+            chave_api_id: isAutosystem ? null : redeContexto.chaveApiId,
+            as_rede_id:   isAutosystem ? redeContexto.asRedeId : null,
+            usa_webposto: !isAutosystem,
             // Usa o primeiro empresaCodigo como "representativo" (legacy);
             // o fetch real usa a lista completa via modoRede.
             empresa_codigo: redeContexto.empresaCodigos?.[0] ?? null,
@@ -137,7 +152,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       finally { setLoading(false); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clienteId, modoRede, redeContexto?.chaveApiId]);
+  }, [clienteId, modoRede, redeContexto?.chaveApiId, redeContexto?.asRedeId]);
 
   // ─── Load grupos ────────────────────────────────────────
   useEffect(() => {
@@ -167,8 +182,13 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       if (cliente.usa_webposto && cliente.chave_api_id) {
         const maps = await mapService.listarMapeamentos(cliente.chave_api_id);
         setMapeamentos(maps || []);
+        setMapVendasAutosystem([]);
       } else {
-        const cts = await manualService.listarContas(cliente.id, mascaraSelecionada.id);
+        // Autosystem: config por rede (compartilhada entre empresas).
+        // Fallback p/ cliente_id (legado) quando a empresa não tem as_rede_id.
+        const cts = cliente.as_rede_id
+          ? await manualService.listarContasPorRede(cliente.as_rede_id, mascaraSelecionada.id)
+          : await manualService.listarContas(cliente.id, mascaraSelecionada.id);
         const adapted = (cts || []).map(c => ({
           id: c.id,
           grupo_dre_id: c.grupo_dre_id,
@@ -178,6 +198,50 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           isManual: true,
         }));
         setMapeamentos(adapted);
+        // Mapeamento de vendas/custo por categoria + categorização dos grupos
+        if (cliente.as_rede_id) {
+          let vmaps = [], gruposProd = [];
+          try {
+            vmaps = await vendasAutosystemMapService.listarMapeamentos(
+              cliente.as_rede_id, mascaraSelecionada.id,
+            );
+          } catch (e) {
+            console.error('[DRE Autosystem] Falha em listarMapeamentos (mapeamento_vendas_autosystem). '
+              + 'Verifique se a migration 049 foi aplicada.', e);
+          }
+          try {
+            gruposProd = await autosystemService.listarGruposProdutoRede(cliente.as_rede_id);
+          } catch (e) {
+            console.error('[DRE Autosystem] Falha em listarGruposProdutoRede', e);
+          }
+          console.info('[DRE Autosystem] Mapeamentos carregados:', {
+            asRedeId: cliente.as_rede_id,
+            mascaraId: mascaraSelecionada.id,
+            mapVendasCount: vmaps.length,
+            mapVendas: vmaps.map(m => ({ categoria: m.categoria, tipo: m.tipo, destino: m.grupo_dre_id || m.grupo_fluxo_id })),
+            gruposProdutoCategorizados: gruposProd.length,
+          });
+          if (vmaps.length === 0) {
+            console.warn('[DRE Autosystem] Nenhum mapeamento de vendas/custo configurado. '
+              + 'Configure em /admin/parametros/mapeamento → aba Autosystem → "Vendas / Custo por categoria".');
+          }
+          setMapVendasAutosystem(vmaps || []);
+          // A venda traz `grupo_produto_codigo = produto.grupo` (que na verdade
+          // é o GRID do grupo na tabela grupo_produto). Indexamos prioritariamente
+          // por grid; codigo fica como fallback caso a categorização só tenha codigo.
+          const catMap = new Map();
+          (gruposProd || []).forEach(g => {
+            if (!g.categoria) return;
+            if (g.grid != null) catMap.set(Number(g.grid), g.categoria);
+            if (g.codigo != null && !catMap.has(Number(g.codigo))) {
+              catMap.set(Number(g.codigo), g.categoria);
+            }
+          });
+          setCategoriasGruposProduto(catMap);
+        } else {
+          setMapVendasAutosystem([]);
+          setCategoriasGruposProduto(new Map());
+        }
       }
     } catch (err) { setError(err.message); }
     finally { setLoadingMapeamentos(false); }
@@ -188,9 +252,203 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // ─── Load lancamentos para todos os meses (atual e anterior) ─
   const carregarLancamentos = useCallback(async () => {
     if (!cliente || meses.length === 0) return;
+
+    // Cliente Autosystem: busca vendas/custo agregados por (grupo_produto, mês)
+    // usando a mesma edge function que /cliente/autosystem/comercial/vendas.
+    if (!cliente.usa_webposto && cliente.as_rede_id) {
+      const _t0 = performance.now();
+      try {
+        setLoadingDados(true);
+        setDadosCarregados(false);
+        setError(null);
+        setTempoGeracao(null);
+
+        const empresaCodigos = (cliente._empresaCodigos && cliente._empresaCodigos.length)
+          ? cliente._empresaCodigos
+          : (cliente.empresa_codigo != null ? [cliente.empresa_codigo] : []);
+        if (empresaCodigos.length === 0) {
+          throw new Error('Cliente Autosystem sem empresa_codigo definido.');
+        }
+
+        const promises = meses.flatMap(m => {
+          const r = rangeMes(m.ano, m.mes);
+          const rAnt = rangeMes(m.ano - 1, m.mes);
+          return [
+            { key: m.key, ...r, isPrev: false, label: m.label },
+            { key: m.key, ...rAnt, isPrev: true, label: m.label },
+          ];
+        });
+
+        // Códigos das contas mapeadas (apenas Autosystem): puxa lançamentos
+        // do movto onde a conta aparece em conta_debitar OU conta_creditar.
+        const contasCodigosMapeados = Array.from(new Set(
+          (mapeamentos || [])
+            .map(m => String(m.plano_conta_codigo || '').trim())
+            .filter(c => c.length > 0),
+        ));
+
+        const total = promises.length;
+        let concluidas = 0;
+        setLoadingProgress({ atual: 0, total, mensagem: `Buscando dados Autosystem de ${meses.length} mês(es)...` });
+
+        const results = await Promise.all(promises.map(async (p) => {
+          // Vendas: `agregado: true` retorna 1 linha por (empresa, produto, vendedor)
+          // com sum(valor), sum(quantidade), sum(custo) etc.
+          // Lançamentos: filtra movto pelos conta_codigo mapeados.
+          let vendas = [], lancs = [];
+          try {
+            [vendas, lancs] = await Promise.all([
+              autosystemService.buscarVendasAutosystem(
+                cliente.as_rede_id,
+                empresaCodigos,
+                { data_de: p.dataInicial, data_ate: p.dataFinal, agregado: true },
+              ),
+              contasCodigosMapeados.length > 0
+                ? autosystemService.buscarLancamentosAutosystem(
+                    cliente.as_rede_id,
+                    empresaCodigos,
+                    { data_de: p.dataInicial, data_ate: p.dataFinal, contas_codigos: contasCodigosMapeados },
+                  )
+                : Promise.resolve([]),
+            ]);
+          } catch (err) {
+            console.error('[DRE Autosystem] Falha em buscar dados', { periodo: p, err });
+          }
+          concluidas++;
+          const periodoLabel = p.isPrev ? `${p.label} (ano anterior)` : p.label;
+          setLoadingProgress({
+            atual: concluidas, total,
+            mensagem: `${periodoLabel} · ${vendas.length} itens · ${lancs.length} lancamentos`,
+          });
+          return { ...p, vendas, lancs };
+        }));
+
+        // Diagnóstico: avisa se nada veio do Autosystem
+        const totalItens = results.reduce((s, r) => s + (r.vendas?.length || 0), 0);
+        if (totalItens === 0) {
+          console.warn('[DRE Autosystem] Nenhum item de venda retornado para a rede', {
+            asRedeId: cliente.as_rede_id, empresaCodigos, meses: meses.map(m => m.key),
+          });
+        }
+        if (categoriasGruposProduto.size === 0) {
+          console.warn('[DRE Autosystem] Grupos de produto não categorizados em as_rede_grupo_produto. '
+            + 'Configure em /cliente/autosystem/configuracoes — todos os itens serão ignorados.');
+        }
+
+        // Agrega por (categoria, mesKey, empresaCodigo) → { venda, custo }
+        // Granularidade por empresa é necessária pra aba "Por Empresa".
+        // Usa a categorização vinda de as_rede_grupo_produto. Itens cuja
+        // categoria não está classificada são ignorados.
+        const atual = {};
+        const anterior = {};
+        let ignoradosSemCategoria = 0;
+        let aproveitados = 0;
+        const gruposIgnoradosSet = new Set();
+        results.forEach(r => {
+          const target = r.isPrev ? anterior : atual;
+          (r.vendas || []).forEach(v => {
+            const gp = Number(v.grupo_produto_codigo ?? 0);
+            const categoria = categoriasGruposProduto.get(gp);
+            if (!categoria) {
+              ignoradosSemCategoria++;
+              gruposIgnoradosSet.add(gp);
+              return;
+            }
+            aproveitados++;
+            const ec = String(v.empresa ?? '');
+            const valor = Number(v.valor || 0);
+            const custo = Number(v.valor_custo || 0);
+            if (!target[categoria]) target[categoria] = {};
+            if (!target[categoria][r.key]) target[categoria][r.key] = {};
+            if (!target[categoria][r.key][ec]) target[categoria][r.key][ec] = { venda: 0, custo: 0 };
+            target[categoria][r.key][ec].venda += valor;
+            target[categoria][r.key][ec].custo += custo;
+          });
+        });
+        if (ignoradosSemCategoria > 0) {
+          console.warn('[DRE Autosystem] Itens ignorados por grupo de produto sem categoria:', {
+            ignorados: ignoradosSemCategoria,
+            aproveitados,
+            gruposSemCategoria: Array.from(gruposIgnoradosSet),
+          });
+        }
+
+        // Converte lançamentos Autosystem para o formato titulosReceber/Pagar
+        // usado pela indexação Webposto. Regra contábil:
+        //   • lado = 'credito' → soma + (vai pra titulosReceber)
+        //   • lado = 'debito'  → soma − (vai pra titulosPagar)
+        //   • lado = 'ambos'   → insere em ambos (raríssimo; conta consigo mesma)
+        // O `planoContaGerencialCodigo` é o conta_codigo daquele lado.
+        function lancToTitulo(l, codigo, lado) {
+          return {
+            codigo: l.lancamento_id != null ? `as-${l.lancamento_id}-${lado}` : undefined,
+            planoContaGerencialCodigo: codigo,
+            empresaCodigo: l.empresa,
+            // movto.data como única fonte de data do lançamento
+            dataMovimento: l.data,
+            dataPagamento: l.data,
+            vencimento: l.data,
+            valor: Number(l.valor || 0),
+            valorPago: Number(l.valor || 0),
+            // descricao base vazia → composição mostra só doc + fornecedor + obs
+            descricao: '',
+            numeroTitulo: l.documento || '',
+            nomeFornecedor: l.pessoa_nome || '',
+            nomeCliente: l.pessoa_nome || '',
+            observacao: (l.obs || '').trim(),
+            situacao: 'pago',
+          };
+        }
+        const dadosAtualPorMes = {};
+        const dadosAnteriorPorMes = {};
+        let totalLancsCarregados = 0;
+        let lancsSemMatch = 0;
+        results.forEach(r => {
+          const bucket = r.isPrev ? dadosAnteriorPorMes : dadosAtualPorMes;
+          if (!bucket[r.key]) bucket[r.key] = { titulosReceber: [], titulosPagar: [], vendaItens: [], vendas: [] };
+          (r.lancs || []).forEach(l => {
+            const cred = String(l.credito_codigo ?? '');
+            const deb  = String(l.debito_codigo ?? '');
+            let matched = false;
+            if ((l.lado === 'credito' || l.lado === 'ambos') && cred) {
+              bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
+              matched = true;
+            }
+            if ((l.lado === 'debito' || l.lado === 'ambos') && deb) {
+              bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
+              matched = true;
+            }
+            if (matched) totalLancsCarregados++;
+            else lancsSemMatch++;
+          });
+        });
+        if (lancsSemMatch > 0) {
+          console.warn('[DRE Autosystem] Lancamentos sem lado/codigo:', { semMatch: lancsSemMatch });
+        }
+        console.info('[DRE Autosystem] Lancamentos carregados:', {
+          totalLancsCarregados,
+          contasMapeadasUsadas: contasCodigosMapeados.length,
+        });
+
+        setLoadingProgress({ atual: total, total, mensagem: 'Montando o relatório...' });
+        await new Promise(rsv => setTimeout(rsv, 200));
+        setDadosPorMes(dadosAtualPorMes);
+        setDadosPorMesAnterior(dadosAnteriorPorMes);
+        setVendasAutosystemPorMes({ atual, anterior });
+        setDadosCarregados(true);
+        setTempoGeracao(performance.now() - _t0);
+      } catch (err) {
+        setError('Erro ao buscar vendas Autosystem: ' + err.message);
+      } finally {
+        setLoadingDados(false);
+      }
+      return;
+    }
+
     if (!cliente.usa_webposto || !cliente.chave_api_id) {
       setDadosPorMes({});
       setDadosPorMesAnterior({});
+      setVendasAutosystemPorMes({ atual: {}, anterior: {} });
       setDadosCarregados(true);
       return;
     }
@@ -288,7 +546,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     } finally {
       setLoadingDados(false);
     }
-  }, [cliente, meses]);
+  }, [cliente, meses, categoriasGruposProduto, mapeamentos]);
 
   // Ao mudar periodo ou mascara apos ja ter gerado, invalida o relatorio (usuario deve clicar "Montar DRE" novamente)
   useEffect(() => {
@@ -333,7 +591,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
     };
-  }, [dadosCarregados, loadingGrupos, loadingMapeamentos, loadingDados, dadosPorMes, dadosPorMesAnterior, mapeamentos, mapeamentoVendas, grupos]);
+  }, [dadosCarregados, loadingGrupos, loadingMapeamentos, loadingDados, dadosPorMes, dadosPorMesAnterior, mapeamentos, mapeamentoVendas, vendasAutosystemPorMes, mapVendasAutosystem, grupos]);
 
   // ─── Indexar lancamentos por conta + mes (totais + itens) ──
   function indexarPorConta(dadosMap) {
@@ -360,6 +618,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         if (numTitulo) partes.push(`Nº ${numTitulo}`);
         const contraparte = (t.nomeFornecedor || t.nomeCliente || '').trim();
         if (contraparte) partes.push(contraparte);
+        const observ = (t.observacao || t.obs || '').trim();
+        if (observ) partes.push(observ);
         const descricaoComposta = partes.join(' \u00b7 ');
 
         if (!lancamentos[codigo]) lancamentos[codigo] = [];
@@ -439,6 +699,51 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     [dadosPorMesAnterior, mapeamentoVendas, produtosMap, gruposCatMap]
   );
 
+  // ─── Indexar VENDAS/CUSTO Autosystem por grupo DRE ──────────
+  // Para cada mapeamento (categoria, tipo) → soma vendas[categoria][mes].(venda|custo)
+  // no grupo_dre_id, com sinal: venda = +, custo = − (CMV).
+  function indexarVendasAutosystemPorGrupoDRE(porCategoria) {
+    const out = {}; // { grupo_dre_id: { key: { valoresPorMes, label } } }
+    if (!Array.isArray(mapVendasAutosystem) || mapVendasAutosystem.length === 0) return out;
+    const LABELS = {
+      combustivel: 'Combustível',
+      automotivos: 'Automotivos',
+      conveniencia: 'Conveniência',
+    };
+    mapVendasAutosystem.forEach(m => {
+      const gpId = m.grupo_dre_id || m.grupo_fluxo_id;
+      if (!gpId) return;
+      const catLabel = LABELS[m.categoria] || m.categoria;
+      const sinal = m.tipo === 'custo' ? -1 : 1;
+      const label = `${catLabel} (${m.tipo === 'custo' ? 'custo' : 'vendas'})`;
+      const key = `as-${m.categoria}-${m.tipo}`;
+      meses.forEach(mes => {
+        // Soma todas empresas do mês (granularidade por-empresa preservada
+        // só pra aba "Por Empresa"; no DRE principal somamos tudo).
+        const porEmp = porCategoria?.[m.categoria]?.[mes.key] || {};
+        let val = 0;
+        Object.values(porEmp).forEach(x => {
+          val += m.tipo === 'custo' ? Number(x?.custo || 0) : Number(x?.venda || 0);
+        });
+        if (!out[gpId]) out[gpId] = {};
+        if (!out[gpId][key]) out[gpId][key] = { valoresPorMes: {}, label };
+        out[gpId][key].valoresPorMes[mes.key] =
+          (out[gpId][key].valoresPorMes[mes.key] || 0) + (val * sinal);
+      });
+    });
+    return out;
+  }
+  const vendasASAtualPorGrupo = useMemo(
+    () => indexarVendasAutosystemPorGrupoDRE(vendasAutosystemPorMes.atual),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vendasAutosystemPorMes.atual, mapVendasAutosystem, meses]
+  );
+  const vendasASAnteriorPorGrupo = useMemo(
+    () => indexarVendasAutosystemPorGrupoDRE(vendasAutosystemPorMes.anterior),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vendasAutosystemPorMes.anterior, mapVendasAutosystem, meses]
+  );
+
   // ─── Build DRE tree com totais por mes + total + AH ────
   const dreTree = useMemo(() => {
     if (!grupos.length) return [];
@@ -510,6 +815,37 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         });
       }
 
+      // Contas virtuais Vendas/Custo do AUTOSYSTEM (por grupo de produto)
+      const vendasAS = vendasASAtualPorGrupo[grupo.id];
+      const vendasASAnt = vendasASAnteriorPorGrupo[grupo.id];
+      if (vendasAS) {
+        Object.entries(vendasAS).forEach(([key, dados]) => {
+          const valoresPorMes = {};
+          const valoresAnt = {};
+          let totalPeriodo = 0;
+          let totalAnt = 0;
+          meses.forEach(mes => {
+            const v = dados.valoresPorMes[mes.key] || 0;
+            const va = vendasASAnt?.[key]?.valoresPorMes[mes.key] || 0;
+            valoresPorMes[mes.key] = v;
+            valoresAnt[mes.key] = va;
+            totalPeriodo += v;
+            totalAnt += va;
+          });
+          contas.push({
+            id: `${key}-${grupo.id}`,
+            codigo: '',
+            descricao: dados.label,
+            isVendas: true,
+            valoresPorMes,
+            valoresAnt,
+            totalPeriodo,
+            totalAnt,
+            lancamentos: [],
+          });
+        });
+      }
+
       const children = grupos
         .filter(g => g.parent_id === grupo.id)
         .sort((a, b) => a.ordem - b.ordem)
@@ -546,7 +882,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       .filter(g => !g.parent_id)
       .sort((a, b) => a.ordem - b.ordem)
       .map(buildNode);
-  }, [grupos, mapeamentos, idxAtual, idxAnterior, lancamentosAtual, vendasAtualPorGrupo, vendasAnteriorPorGrupo, meses]);
+  }, [grupos, mapeamentos, idxAtual, idxAnterior, lancamentosAtual, vendasAtualPorGrupo, vendasAnteriorPorGrupo, vendasASAtualPorGrupo, vendasASAnteriorPorGrupo, meses]);
 
   // ─── Acumulado para subtotais/resultados ─────────────────
   const dreComCalculos = useMemo(() => {
@@ -610,6 +946,24 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, total: 0 };
     });
 
+    // Autosystem: soma vendas/custo dos mapeamentos (todos os meses do período)
+    // por empresa. tipo='venda' soma +, tipo='custo' soma −.
+    if (Array.isArray(mapVendasAutosystem) && mapVendasAutosystem.length > 0) {
+      mapVendasAutosystem.forEach(m => {
+        if (!m.grupo_dre_id && !m.grupo_fluxo_id) return;
+        const sinal = m.tipo === 'custo' ? -1 : 1;
+        meses.forEach(mes => {
+          const porEmp = vendasAutosystemPorMes.atual?.[m.categoria]?.[mes.key] || {};
+          Object.entries(porEmp).forEach(([ec, x]) => {
+            const ecNum = Number(ec);
+            if (!porEmpresa[ecNum]) return;
+            const val = (m.tipo === 'custo' ? Number(x?.custo || 0) : Number(x?.venda || 0)) * sinal;
+            porEmpresa[ecNum].total += val;
+          });
+        });
+      });
+    }
+
     Object.values(dadosPorMes).forEach(d => {
       // Titulos (receita e saida)
       (d.titulosReceber || []).forEach(t => {
@@ -666,7 +1020,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       })),
       totalConsolidado,
     };
-  }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap]);
+  }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap, mapVendasAutosystem, vendasAutosystemPorMes.atual, meses]);
 
   // ═══════════════════════════════════════════════════════════
   // ABA "POR EMPRESA": mesmo relatorio da mascara DRE, mas com
@@ -742,6 +1096,34 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     });
     return { totais, lancamentos };
   }, [mesEmpresa, dadosPorMes]);
+
+  // Vendas/custo Autosystem do mes selecionado, por (grupo_dre, key, empresaCodigo)
+  // — espelha vendasASAtualPorGrupo mas com empresa como "coluna".
+  const vendasASEmpresaPorGrupo = useMemo(() => {
+    const out = {};
+    if (!mesEmpresa || !Array.isArray(mapVendasAutosystem) || mapVendasAutosystem.length === 0) return out;
+    const LABELS = {
+      combustivel: 'Combustível',
+      automotivos: 'Automotivos',
+      conveniencia: 'Conveniência',
+    };
+    mapVendasAutosystem.forEach(m => {
+      const gpId = m.grupo_dre_id || m.grupo_fluxo_id;
+      if (!gpId) return;
+      const catLabel = LABELS[m.categoria] || m.categoria;
+      const sinal = m.tipo === 'custo' ? -1 : 1;
+      const label = `${catLabel} (${m.tipo === 'custo' ? 'custo' : 'vendas'})`;
+      const key = `as-${m.categoria}-${m.tipo}`;
+      const porEmp = vendasAutosystemPorMes.atual?.[m.categoria]?.[mesEmpresa.key] || {};
+      Object.entries(porEmp).forEach(([ec, x]) => {
+        const val = (m.tipo === 'custo' ? Number(x?.custo || 0) : Number(x?.venda || 0)) * sinal;
+        if (!out[gpId]) out[gpId] = {};
+        if (!out[gpId][key]) out[gpId][key] = { valoresPorMes: {}, label };
+        out[gpId][key].valoresPorMes[ec] = (out[gpId][key].valoresPorMes[ec] || 0) + val;
+      });
+    });
+    return out;
+  }, [mesEmpresa, mapVendasAutosystem, vendasAutosystemPorMes.atual]);
 
   // Vendas do mes selecionado agregadas por (grupo, empresa, tipo)
   const vendasEmpresaPorGrupo = useMemo(() => {
@@ -854,6 +1236,33 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         });
       }
 
+      // Contas virtuais Vendas/Custo do AUTOSYSTEM por empresa
+      const vendasASGrupo = vendasASEmpresaPorGrupo[grupo.id];
+      if (vendasASGrupo) {
+        Object.entries(vendasASGrupo).forEach(([key, dados]) => {
+          const valoresPorMes = {};
+          const valoresAnt = {};
+          let totalPeriodo = 0;
+          colunasEmpresa.forEach(col => {
+            const v = dados.valoresPorMes[col.key] || 0;
+            valoresPorMes[col.key] = v;
+            valoresAnt[col.key] = 0;
+            totalPeriodo += v;
+          });
+          contas.push({
+            id: `${key}-emp-${grupo.id}`,
+            codigo: '',
+            descricao: dados.label,
+            isVendas: true,
+            valoresPorMes,
+            valoresAnt,
+            totalPeriodo,
+            totalAnt: 0,
+            lancamentos: [],
+          });
+        });
+      }
+
       const children = grupos
         .filter(g => g.parent_id === grupo.id)
         .sort((a, b) => a.ordem - b.ordem)
@@ -885,7 +1294,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       .filter(g => !g.parent_id)
       .sort((a, b) => a.ordem - b.ordem)
       .map(buildNode);
-  }, [modoRede, grupos, mapeamentos, colunasEmpresa, idxEmpresaFull, vendasEmpresaPorGrupo]);
+  }, [modoRede, grupos, mapeamentos, colunasEmpresa, idxEmpresaFull, vendasEmpresaPorGrupo, vendasASEmpresaPorGrupo]);
 
   // Acumulado (subtotais / resultado) espelhando dreComCalculos mas com colunasEmpresa
   const dreComCalculosEmpresa = useMemo(() => {
@@ -1142,6 +1551,13 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               }`}>
               AH
             </button>
+            <button onClick={() => setMostrarTotal(!mostrarTotal)}
+              title={mostrarTotal ? 'Ocultar coluna Total' : 'Mostrar coluna Total'}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
+                mostrarTotal ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}>
+              Total
+            </button>
           </div>
         </div>
       </motion.div>
@@ -1211,7 +1627,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               O relatório sera gerado com os 3 meses terminando em <strong>{meses[meses.length - 1]?.label}</strong>: <strong>{meses.map(m => m.label).join(', ')}</strong>.
             </p>
           </motion.div>
-        ) : (loadingDados || loadingGrupos || loadingMapeamentos || (!reportReady && cliente.usa_webposto)) ? (
+        ) : (loadingDados || loadingGrupos || loadingMapeamentos || (!reportReady && (cliente.usa_webposto || cliente.as_rede_id))) ? (
           <FriendlyLoader key="loader" progress={loadingProgress} cliente={cliente} periodoLabel={periodoLabel}
             stageLabel={
               loadingGrupos ? 'Carregando estrutura da máscara...'
@@ -1278,8 +1694,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                         <col key={`${c.key}-cav`} style={{ width: 45 }} />
                       </>
                     ))}
-                    <col style={{ width: 110 }} />
-                    <col style={{ width: 45 }} />
+                    {mostrarTotal && <col style={{ width: 110 }} />}
+                    {mostrarTotal && <col style={{ width: 45 }} />}
                   </colgroup>
                   <thead className="bg-gray-50/80">
                     <tr className="text-gray-500">
@@ -1293,8 +1709,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                           <th key={`${c.key}-hav`} className="text-right px-1 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 whitespace-nowrap">AV%</th>
                         </>
                       ))}
-                      <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
-                      <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-100/60 whitespace-nowrap">AV%</th>
+                      {mostrarTotal && (
+                        <>
+                          <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
+                          <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-100/60 whitespace-nowrap">AV%</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -1308,6 +1728,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                         onToggleConta={toggleConta}
                         ocultarZeradas={ocultarZeradas}
                         showAH={false}
+                        mostrarTotal={mostrarTotal}
                       />
                     ))}
                   </tbody>
@@ -1412,9 +1833,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                       <col key={`${m.key}-av`} style={{ width: 55 }} />
                     </>
                   ))}
-                  <col style={{ width: 125 }} />
-                  <col style={{ width: 55 }} />
-                  {showAH && <col style={{ width: 75 }} />}
+                  {mostrarTotal && <col style={{ width: 125 }} />}
+                  {mostrarTotal && <col style={{ width: 55 }} />}
+                  {mostrarTotal && showAH && <col style={{ width: 75 }} />}
                 </colgroup>
                 <thead className="bg-gray-50/80">
                   <tr className="text-gray-500">
@@ -1425,9 +1846,13 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                         <th key={`${m.key}-av`} className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 whitespace-nowrap">AV%</th>
                       </>
                     ))}
-                    <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
-                    <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-100/60 whitespace-nowrap">AV%</th>
-                    {showAH && <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">AH%</th>}
+                    {mostrarTotal && (
+                      <>
+                        <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
+                        <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-100/60 whitespace-nowrap">AV%</th>
+                        {showAH && <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">AH%</th>}
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -1441,6 +1866,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                       onToggleConta={toggleConta}
                       ocultarZeradas={ocultarZeradas}
                       showAH={showAH}
+                      mostrarTotal={mostrarTotal}
                     />
                   ))}
                 </tbody>
@@ -1579,7 +2005,7 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
 }
 
 // ─── Recursive node rows (group + sub-groups + contas) ──────
-function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedContas, onToggleGrupo, onToggleConta, ocultarZeradas, showAH }) {
+function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedContas, onToggleGrupo, onToggleConta, ocultarZeradas, showAH, mostrarTotal = true }) {
   const isCalc = node.tipo === 'subtotal' || node.tipo === 'resultado';
   const isResultado = node.tipo === 'resultado';
   const isExpanded = expandedGrupos.has(node.id);
@@ -1652,22 +2078,26 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
             </>
           );
         })}
-        <td className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap bg-gray-50/40 ${
-          isResultado ? 'font-bold text-emerald-700'
-            : isCalc ? 'font-semibold text-gray-700'
-              : node.totalPeriodo >= 0 ? 'text-gray-900 font-semibold' : 'text-red-600 font-semibold'
-        }`}>
-          {formatCurrencyCompact(node.totalPeriodo)}
-        </td>
-        <td className="text-right px-2 py-2 font-mono tabular-nums text-[10px] text-gray-400 bg-gray-50/40 whitespace-nowrap">
-          {!isCalc && baseAV.total > 0 ? `${(node.totalPeriodo / baseAV.total * 100).toFixed(1)}%` : ''}
-        </td>
-        {showAH && (
-          <td className="text-right px-3 py-2 font-mono tabular-nums text-[11px] bg-gray-50/40 whitespace-nowrap">
-            {!isCalc && Math.abs(node.totalAnt) > 0.01 ? (
-              <AHBadge atual={node.totalPeriodo} anterior={node.totalAnt} />
-            ) : ''}
-          </td>
+        {mostrarTotal && (
+          <>
+            <td className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap bg-gray-50/40 ${
+              isResultado ? 'font-bold text-emerald-700'
+                : isCalc ? 'font-semibold text-gray-700'
+                  : node.totalPeriodo >= 0 ? 'text-gray-900 font-semibold' : 'text-red-600 font-semibold'
+            }`}>
+              {formatCurrencyCompact(node.totalPeriodo)}
+            </td>
+            <td className="text-right px-2 py-2 font-mono tabular-nums text-[10px] text-gray-400 bg-gray-50/40 whitespace-nowrap">
+              {!isCalc && baseAV.total > 0 ? `${(node.totalPeriodo / baseAV.total * 100).toFixed(1)}%` : ''}
+            </td>
+            {showAH && (
+              <td className="text-right px-3 py-2 font-mono tabular-nums text-[11px] bg-gray-50/40 whitespace-nowrap">
+                {!isCalc && Math.abs(node.totalAnt) > 0.01 ? (
+                  <AHBadge atual={node.totalPeriodo} anterior={node.totalAnt} />
+                ) : ''}
+              </td>
+            )}
+          </>
         )}
       </tr>
 
@@ -1683,6 +2113,7 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
             onToggleConta={onToggleConta}
             ocultarZeradas={ocultarZeradas}
             showAH={showAH}
+            mostrarTotal={mostrarTotal}
           />
         ))}
       </AnimatePresence>
@@ -1691,7 +2122,7 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
       {isExpanded && !isCalc && contasFiltradas.map(conta => {
         const isContaExpanded = expandedContas?.has(conta.id);
         const temLancs = conta.lancamentos && conta.lancamentos.length > 0;
-        const totalCols = 1 + (meses.length * 2) + 2 + (showAH ? 1 : 0);
+        const totalCols = 1 + (meses.length * 2) + (mostrarTotal ? 2 + (showAH ? 1 : 0) : 0);
         return (
           <>
             <tr key={conta.id} className="conta-row border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
@@ -1731,20 +2162,24 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
                   </>
                 );
               })}
-              <td className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11px] bg-gray-50/40 whitespace-nowrap ${
-                conta.totalPeriodo >= 0 ? 'text-gray-700' : 'text-red-600'
-              }`}>
-                {formatCurrencyCompact(conta.totalPeriodo)}
-              </td>
-              <td className="text-right px-2 py-1.5 font-mono tabular-nums text-[10px] text-gray-400 bg-gray-50/40 whitespace-nowrap">
-                {baseAV.total > 0 && conta.totalPeriodo !== 0 ? `${(conta.totalPeriodo / baseAV.total * 100).toFixed(1)}%` : ''}
-              </td>
-              {showAH && (
-                <td className="text-right px-3 py-1.5 font-mono tabular-nums text-[10px] bg-gray-50/40 whitespace-nowrap">
-                  {Math.abs(conta.totalAnt) > 0.01 ? (
-                    <AHBadge atual={conta.totalPeriodo} anterior={conta.totalAnt} small />
-                  ) : ''}
-                </td>
+              {mostrarTotal && (
+                <>
+                  <td className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11px] bg-gray-50/40 whitespace-nowrap ${
+                    conta.totalPeriodo >= 0 ? 'text-gray-700' : 'text-red-600'
+                  }`}>
+                    {formatCurrencyCompact(conta.totalPeriodo)}
+                  </td>
+                  <td className="text-right px-2 py-1.5 font-mono tabular-nums text-[10px] text-gray-400 bg-gray-50/40 whitespace-nowrap">
+                    {baseAV.total > 0 && conta.totalPeriodo !== 0 ? `${(conta.totalPeriodo / baseAV.total * 100).toFixed(1)}%` : ''}
+                  </td>
+                  {showAH && (
+                    <td className="text-right px-3 py-1.5 font-mono tabular-nums text-[10px] bg-gray-50/40 whitespace-nowrap">
+                      {Math.abs(conta.totalAnt) > 0.01 ? (
+                        <AHBadge atual={conta.totalPeriodo} anterior={conta.totalAnt} small />
+                      ) : ''}
+                    </td>
+                  )}
+                </>
               )}
             </tr>
 
@@ -1775,11 +2210,15 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
                       <td key={`${m.key}-av`} className="px-2 py-1"></td>
                     </>
                   ))}
-                  <td className={`${valorClasses} bg-gray-100/40`}>
-                    {formatCurrencyCompact(valorComSinal)}
-                  </td>
-                  <td className="px-2 py-1 bg-gray-100/40"></td>
-                  {showAH && <td className="px-3 py-1 bg-gray-100/40"></td>}
+                  {mostrarTotal && (
+                    <>
+                      <td className={`${valorClasses} bg-gray-100/40`}>
+                        {formatCurrencyCompact(valorComSinal)}
+                      </td>
+                      <td className="px-2 py-1 bg-gray-100/40"></td>
+                      {showAH && <td className="px-3 py-1 bg-gray-100/40"></td>}
+                    </>
+                  )}
                 </tr>
               );
             })}
@@ -1792,7 +2231,10 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
 
 function formatDataBR(d) {
   if (!d) return '\u2014';
-  const [y, m, dd] = d.split('-');
+  // Aceita "YYYY-MM-DD" e ISO com timestamp ("YYYY-MM-DDTHH:mm:ss.sssZ")
+  const apenasData = String(d).slice(0, 10);
+  const [y, m, dd] = apenasData.split('-');
+  if (!y || !m || !dd) return String(d);
   return `${dd}/${m}/${y.slice(2)}`;
 }
 

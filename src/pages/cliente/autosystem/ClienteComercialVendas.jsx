@@ -19,11 +19,12 @@ const SUB_ABAS_COMBUSTIVEL = [
 
 // Sub-abas exibidas dentro da aba "Automotivos".
 const SUB_ABAS_AUTOMOTIVOS = [
-  { key: 'dia',       label: 'Realizado dia a dia', icone: CalendarDays  },
-  { key: 'grupo',     label: 'Realizado por grupo', icone: Package       },
-  { key: 'pareto',    label: 'Análise de pareto',   icone: BarChart3     },
-  { key: 'tempo',     label: 'Linha do tempo',      icone: Clock         },
-  { key: 'carrinho',  label: 'Carrinho de compras', icone: ShoppingCart  },
+  { key: 'dia',            label: 'Realizado dia a dia', icone: CalendarDays  },
+  { key: 'grupo',          label: 'Realizado por grupo', icone: Package       },
+  { key: 'pareto',         label: 'Análise de pareto',   icone: BarChart3     },
+  { key: 'analise_margem', label: 'Análise de margem',   icone: Percent       },
+  { key: 'tempo',          label: 'Linha do tempo',      icone: Clock         },
+  { key: 'carrinho',       label: 'Carrinho de compras', icone: ShoppingCart  },
 ];
 // Sub-abas exibidas dentro da aba "Conveniência". Mesma estrutura de Automotivos.
 const SUB_ABAS_CONVENIENCIA = [
@@ -419,7 +420,7 @@ export default function ClienteComercialVendas() {
   // semanal neste relatório). Carrega também na sub-aba "grupo" — mesma base.
   useEffect(() => {
     if (aba !== 'automotivos') return;
-    if (!['dia', 'grupo', 'pareto'].includes(subAbaAutomotivos)) return;
+    if (!['dia', 'grupo', 'pareto', 'analise_margem'].includes(subAbaAutomotivos)) return;
     if (!redeId || empresasSel.length === 0) { setRealizadoDiarioAuto([]); return; }
     const gruposAuto = [];
     mapaGrupos.forEach((cat, grid) => { if (cat === 'automotivos') gruposAuto.push(grid); });
@@ -1508,6 +1509,51 @@ export default function ClienteComercialVendas() {
     return out;
   }, [evolucao12mAuto, tempoGruposSel, tempoProdutosSel]);
 
+  // Análise de margem (Automotivos): agrega o realizado por produto, calcula
+  // lucro bruto e margem %. Mesmo padrão usado em Conveniência —
+  // ver `analiseMargemConvProdutos`.
+  const analiseMargemAutoProdutos = useMemo(() => {
+    const m = new Map();
+    (realizadoDiarioAuto || []).forEach(r => {
+      const k = String(r.produto_codigo);
+      if (!m.has(k)) {
+        m.set(k, {
+          produto_codigo: r.produto_codigo,
+          produto_nome: r.produto_nome || `Produto #${r.produto_codigo}`,
+          grupo_codigo: r.grupo_produto_codigo != null ? Number(r.grupo_produto_codigo) : null,
+          qtd: 0, valor: 0, custo: 0,
+        });
+      }
+      const p = m.get(k);
+      p.qtd   += Number(r.quantidade) || 0;
+      p.valor += Number(r.valor) || 0;
+      p.custo += Number(r.valor_custo) || 0;
+      if (r.produto_nome && /^Produto #/.test(p.produto_nome)) p.produto_nome = r.produto_nome;
+    });
+    const out = Array.from(m.values()).map(p => {
+      const lucro = p.valor - p.custo;
+      return {
+        ...p,
+        grupo_nome: p.grupo_codigo != null
+          ? (mapaNomeGrupos.get(p.grupo_codigo) || `Grupo ${p.grupo_codigo}`)
+          : 'Sem grupo',
+        lucro,
+        margem: p.valor > 0 ? (lucro / p.valor) * 100 : 0,
+      };
+    });
+    return out.sort((a, b) => b.valor - a.valor);
+  }, [realizadoDiarioAuto, mapaNomeGrupos]);
+
+  // Grupos disponíveis para o multi-select da análise de margem (Automotivos)
+  const analiseMargemAutoGrupos = useMemo(() => {
+    const m = new Map();
+    analiseMargemAutoProdutos.forEach(p => {
+      if (p.grupo_codigo == null) return;
+      if (!m.has(p.grupo_codigo)) m.set(p.grupo_codigo, { codigo: p.grupo_codigo, nome: p.grupo_nome });
+    });
+    return Array.from(m.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  }, [analiseMargemAutoProdutos]);
+
   // Lista de grupos de automotivos disponíveis nos dados (para o seletor do pareto).
   const gruposAutoDisponiveis = useMemo(() => {
     const m = new Map();
@@ -2165,6 +2211,22 @@ export default function ClienteComercialVendas() {
                       : new Set(gruposAutoDisponiveis.map(g => g.codigo))
                   )}
                   onLimpar={() => setParetoGrupos(new Set())}
+                />
+              )
+            ) : subAbaAutomotivos === 'analise_margem' ? (
+              erroDiarioAuto ? (
+                <div className="m-4 bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Não foi possível carregar a análise de margem</p>
+                    <p className="text-red-700 mt-1">{erroDiarioAuto}</p>
+                  </div>
+                </div>
+              ) : (
+                <AnaliseMargemConv
+                  loading={loadingDiarioAuto}
+                  produtos={analiseMargemAutoProdutos}
+                  grupos={analiseMargemAutoGrupos}
                 />
               )
             ) : subAbaAutomotivos === 'carrinho' ? (

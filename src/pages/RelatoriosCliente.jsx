@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import * as clientesService from '../services/clientesService';
+import * as autosystemService from '../services/autosystemService';
 import { useAnonimizador } from '../services/anonimizarService';
 import { useAdminSession } from '../hooks/useAuth';
 
@@ -79,6 +80,7 @@ export default function RelatoriosCliente() {
   const session = useAdminSession();
   const podeUsarIA = (session?.usuario?.permissoes || []).includes('analise_ia');
   const [clientes, setClientes] = useState([]);
+  const [redesAutosystem, setRedesAutosystem] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expandedRedes, setExpandedRedes] = useState(new Set());
@@ -86,8 +88,12 @@ export default function RelatoriosCliente() {
   const carregar = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await clientesService.listarClientes();
+      const [data, redesAS] = await Promise.all([
+        clientesService.listarClientes(),
+        autosystemService.listarRedes().catch(() => []),
+      ]);
       setClientes((data || []).filter(c => c.status === 'ativo'));
+      setRedesAutosystem(redesAS || []);
     } finally {
       setLoading(false);
     }
@@ -95,38 +101,77 @@ export default function RelatoriosCliente() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  // Filtro empresa-level (busca cobre nome, CNPJ e nome da rede)
+  // Mapa: as_rede_id → { id, nome } pra resolver o nome da rede Autosystem
+  // (clientesService.listarClientes só faz JOIN em chaves_api, então pra
+  // Autosystem precisamos da lista separada de redes).
+  const mapaRedesAS = useMemo(() => {
+    const m = new Map();
+    (redesAutosystem || []).forEach(r => { if (r?.id) m.set(r.id, r); });
+    return m;
+  }, [redesAutosystem]);
+
+  // Filtro empresa-level (busca cobre nome, CNPJ e nome da rede webposto OU autosystem)
   const filtrados = useMemo(() => {
     if (!search) return clientes;
     const q = search.toLowerCase();
-    return clientes.filter(c =>
-      c.nome?.toLowerCase().includes(q)
-      || c.cnpj?.includes(search)
-      || (c.chaves_api?.nome || '').toLowerCase().includes(q)
-    );
-  }, [clientes, search]);
+    return clientes.filter(c => {
+      if (c.nome?.toLowerCase().includes(q)) return true;
+      if (c.cnpj?.includes(search)) return true;
+      if ((c.chaves_api?.nome || '').toLowerCase().includes(q)) return true;
+      const nomeAS = c.as_rede_id ? (mapaRedesAS.get(c.as_rede_id)?.nome || '') : '';
+      if (nomeAS.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [clientes, search, mapaRedesAS]);
 
-  // Agrupa empresas por rede
+  // Agrupa empresas por rede. Considera tanto Webposto (chave_api_id) quanto
+  // Autosystem (as_rede_id). Chaves compostas com prefixo evitam colisão
+  // entre uuids dos dois sistemas.
   const redes = useMemo(() => {
     const map = new Map();
     filtrados.forEach(c => {
-      const key = c.chave_api_id || '_sem_rede';
-      if (!map.has(key)) {
-        map.set(key, {
+      let key, info;
+      if (c.chave_api_id) {
+        key = `wb:${c.chave_api_id}`;
+        info = {
           id: key,
+          tipo: 'webposto',
+          nome: c.chaves_api?.nome || '',
+          provedor: c.chaves_api?.provedor || '',
           chaveApi: c.chaves_api || null,
-          chaveApiId: c.chave_api_id || null,
-          empresas: [],
-        });
+          chaveApiId: c.chave_api_id,
+          asRede: null,
+          asRedeId: null,
+        };
+      } else if (c.as_rede_id) {
+        const r = mapaRedesAS.get(c.as_rede_id);
+        key = `as:${c.as_rede_id}`;
+        info = {
+          id: key,
+          tipo: 'autosystem',
+          nome: r?.nome || '',
+          provedor: 'autosystem',
+          chaveApi: null,
+          chaveApiId: null,
+          asRede: r || null,
+          asRedeId: c.as_rede_id,
+        };
+      } else {
+        key = '_sem_rede';
+        info = {
+          id: key, tipo: 'sem_rede', nome: '', provedor: '',
+          chaveApi: null, chaveApiId: null, asRede: null, asRedeId: null,
+        };
       }
+      if (!map.has(key)) map.set(key, { ...info, empresas: [] });
       map.get(key).empresas.push(c);
     });
     return Array.from(map.values()).sort((a, b) => {
       if (a.id === '_sem_rede') return 1;
       if (b.id === '_sem_rede') return -1;
-      return (a.chaveApi?.nome || '').localeCompare(b.chaveApi?.nome || '');
+      return (a.nome || '').localeCompare(b.nome || '');
     });
-  }, [filtrados]);
+  }, [filtrados, mapaRedesAS]);
 
   // Expande automaticamente quando ha apenas 1 rede OU quando o usuario busca algo
   useEffect(() => {
@@ -177,9 +222,9 @@ export default function RelatoriosCliente() {
         <div className="space-y-3">
           {redes.map((rede, i) => {
             const expanded = expandedRedes.has(rede.id);
-            const nomeRede = labelRede(rede.chaveApi?.nome || 'Sem rede', rede.id);
-            const provedor = rede.chaveApi?.provedor || '';
-            const usaWebposto = rede.empresas.some(c => c.usa_webposto);
+            const nomeRede = labelRede(rede.nome || 'Sem rede', rede.id);
+            const provedor = rede.provedor || '';
+            const usaWebposto = rede.tipo === 'webposto' && rede.empresas.some(c => c.usa_webposto);
             return (
               <motion.div key={rede.id}
                 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -207,6 +252,33 @@ export default function RelatoriosCliente() {
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] font-medium flex-shrink-0">
                       <Zap className="h-2.5 w-2.5" /> Webposto
                     </span>
+                  )}
+                  {rede.tipo === 'autosystem' && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[10px] font-medium flex-shrink-0">
+                      <Network className="h-2.5 w-2.5" /> Autosystem
+                    </span>
+                  )}
+                  {rede.tipo === 'autosystem' && rede.asRedeId && (
+                    <>
+                      <Link
+                        to={`/admin/relatorios-cliente/rede-as/${rede.asRedeId}/dre`}
+                        onClick={(e) => e.stopPropagation()}
+                        title="DRE consolidada da rede Autosystem"
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-colors shadow-sm"
+                      >
+                        <FileBarChart className="h-3 w-3" />
+                        DRE da Rede
+                      </Link>
+                      <Link
+                        to={`/admin/relatorios-cliente/rede-as/${rede.asRedeId}/fluxo-caixa`}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Fluxo de Caixa consolidado da rede Autosystem"
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-colors shadow-sm"
+                      >
+                        <Wallet className="h-3 w-3" />
+                        Fluxo da Rede
+                      </Link>
+                    </>
                   )}
                   {usaWebposto && rede.chaveApiId && (
                     <>
