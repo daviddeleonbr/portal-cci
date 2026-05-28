@@ -311,7 +311,7 @@ export async function buscarFluxoCaixaAutosystem(redeId, empresaCodigos, filtros
     throw new Error('data_de e data_ate são obrigatórios.');
   }
   const caixa = Array.isArray(filtros.contas_caixa_banco) ? filtros.contas_caixa_banco : [];
-  if (caixa.length === 0) return [];
+  if (caixa.length === 0) return { lancamentos: [], saldosIniciais: {} };
   const { data, error } = await supabase.functions.invoke('autosystem-fluxo-caixa', {
     body: {
       rede_id: redeId,
@@ -323,7 +323,10 @@ export async function buscarFluxoCaixaAutosystem(redeId, empresaCodigos, filtros
   });
   if (error) throw await _extrairErroFn(error, 'Falha ao buscar fluxo de caixa');
   if (data?.error) throw new Error(data.detail || data.error);
-  return Array.isArray(data?.lancamentos) ? data.lancamentos : [];
+  return {
+    lancamentos: Array.isArray(data?.lancamentos) ? data.lancamentos : [],
+    saldosIniciais: data?.saldos_iniciais || {},
+  };
 }
 
 // ─── Outras entradas (não-venda) ─────────────────────────────

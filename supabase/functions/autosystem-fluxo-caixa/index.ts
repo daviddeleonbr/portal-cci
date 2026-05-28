@@ -251,7 +251,39 @@ serve(async (req) => {
       return out;
     });
 
-    return json({ lancamentos: linhas });
+    // Saldo inicial por empresa: soma o efeito líquido de TODOS os lançamentos
+    // das contas caixa/banco anteriores à data_de.
+    //   debit em caixa  → entrada (+ valor)
+    //   credit em caixa → saída   (- valor)
+    failedStep = 'select_saldos_iniciais';
+    const sqlSaldos = `
+      select
+        m.empresa                                       as empresa,
+        coalesce(sum(
+          case
+            when m.conta_debitar  = any($3::text[]) then  m.valor
+            when m.conta_creditar = any($3::text[]) then -m.valor
+            else 0
+          end
+        ), 0)                                           as saldo_inicial
+      from movto m
+      where m.empresa = any($1::bigint[])
+        and m.data < $2
+        and (m.conta_debitar = any($3::text[]) or m.conta_creditar = any($3::text[]))
+      group by m.empresa
+    `;
+    const saldosResult = await pg.queryObject<Record<string, unknown>>({
+      text: sqlSaldos,
+      args: [empresasNum, data_de, codigosCaixa],
+    });
+    const saldosIniciaisPorEmpresa: Record<string, number> = {};
+    saldosResult.rows.forEach(r => {
+      const ec = Number(r.empresa);
+      const v = Number(r.saldo_inicial || 0);
+      if (Number.isFinite(ec)) saldosIniciaisPorEmpresa[String(ec)] = v;
+    });
+
+    return json({ lancamentos: linhas, saldos_iniciais: saldosIniciaisPorEmpresa });
   } catch (err) {
     return json(
       {

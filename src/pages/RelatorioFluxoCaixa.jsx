@@ -62,6 +62,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [qtdMeses, setQtdMeses] = useState(3);
 
   const [dadosPorMes, setDadosPorMes] = useState({});
+  // Saldos iniciais por empresa (Autosystem) — soma do efeito líquido das contas
+  // caixa/banco anteriores à data inicial do período.
+  const [saldosIniciaisPorEmpresa, setSaldosIniciaisPorEmpresa] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
@@ -262,6 +265,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     setDadosCarregados(false);
     setReportReady(false);
     setDadosPorMes({});
+    setSaldosIniciaisPorEmpresa({});
   }, [mesFinal, qtdMeses, mascaraSelecionada]);
 
   // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado.
@@ -322,20 +326,26 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
         const results = await Promise.all(meses.map(async m => {
           const r = rangeMes(m.ano, m.mes);
-          let lancs = [];
+          let lancs = [], saldosIniciais = {};
           try {
-            lancs = await autosystemService.buscarFluxoCaixaAutosystem(
+            const out = await autosystemService.buscarFluxoCaixaAutosystem(
               cliente.as_rede_id,
               empresaCodigos,
               { data_de: r.dataInicial, data_ate: r.dataFinal, contas_caixa_banco: contasCaixaBanco },
             );
+            lancs = out.lancamentos || [];
+            saldosIniciais = out.saldosIniciais || {};
           } catch (e) {
             console.error('[Fluxo Autosystem] Falha no fetch', { mes: m.key, err: e });
           }
           concluidas++;
           setLoadingProgress({ atual: concluidas, total, mensagem: `${m.label}: ${lancs.length} lancamentos` });
-          return { key: m.key, lancs };
+          return { key: m.key, mesIdx: meses.indexOf(m), lancs, saldosIniciais };
         }));
+
+        // Saldos iniciais do período = do primeiro mês (data mais antiga)
+        const primeiroMes = results.find(r => r.mesIdx === 0);
+        const saldosIniciaisPeriodo = primeiroMes?.saldosIniciais || {};
 
         // Converte lançamentos Autosystem para o formato MOVIMENTO_CONTA que
         // o resto do componente já entende. A conta caixa/banco vira contaCodigo;
@@ -396,6 +406,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         });
 
         setDadosPorMes(mapa);
+        setSaldosIniciaisPorEmpresa(saldosIniciaisPeriodo);
         setTituloPagarMap(new Map());
         setTitulosPorPagamento(new Map());
         setDadosCarregados(true);
@@ -881,7 +892,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     cliente._empresas.forEach(emp => {
       const ec = Number(emp.empresa_codigo);
       if (!Number.isFinite(ec)) return;
-      porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, entradas: 0, saidas: 0, variacao: 0 };
+      const saldoInicial = Number(saldosIniciaisPorEmpresa?.[String(ec)] ?? 0);
+      porEmpresa[ec] = {
+        empresa: emp, empresaCodigo: ec,
+        saldoInicial,
+        entradas: 0, saidas: 0, variacao: 0, saldoFinal: saldoInicial,
+      };
     });
 
     Object.values(dadosPorMes).forEach(d => {
@@ -900,10 +916,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       });
     });
 
-    const arr = Object.values(porEmpresa).map(p => ({
-      ...p,
-      variacao: p.entradas - p.saidas,
-    })).sort((a, b) => b.variacao - a.variacao);
+    const arr = Object.values(porEmpresa).map(p => {
+      const variacao = p.entradas - p.saidas;
+      return { ...p, variacao, saldoFinal: p.saldoInicial + variacao };
+    }).sort((a, b) => b.variacao - a.variacao);
     const somaAbs = arr.reduce((s, p) => s + Math.abs(p.variacao), 0);
     const totalConsolidado = arr.reduce((s, p) => s + p.variacao, 0);
     return {
@@ -912,8 +928,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         participacao: somaAbs > 0 ? (Math.abs(p.variacao) / somaAbs) * 100 : 0,
       })),
       totalConsolidado,
+      totalSaldoInicial: arr.reduce((s, p) => s + p.saldoInicial, 0),
+      totalSaldoFinal:   arr.reduce((s, p) => s + p.saldoFinal, 0),
     };
-  }, [modoRede, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas]);
+  }, [modoRede, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisPorEmpresa]);
 
   // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
   // quando quiser auditar itens fora da mascara.
@@ -1507,9 +1525,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                         <th className="px-4 py-2.5">#</th>
                         <th className="px-4 py-2.5">Empresa</th>
+                        <th className="px-4 py-2.5 text-right">Saldo inicial</th>
                         <th className="px-4 py-2.5 text-right">Entradas</th>
                         <th className="px-4 py-2.5 text-right">Saídas</th>
                         <th className="px-4 py-2.5 text-right">Variação</th>
+                        <th className="px-4 py-2.5 text-right">Saldo final</th>
                         <th className="px-4 py-2.5 text-right">Participação</th>
                       </tr>
                     </thead>
@@ -1518,10 +1538,16 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         <tr key={p.empresaCodigo} className="hover:bg-gray-50/60">
                           <td className="px-4 py-2 text-[11px] text-gray-400 font-mono">{i + 1}</td>
                           <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa ? labelEmpresa(p.empresa) : `#${p.empresaCodigo}`}</td>
+                          <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-gray-700">
+                            {formatCurrency(p.saldoInicial)}
+                          </td>
                           <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-emerald-600">+{formatCurrency(p.entradas)}</td>
                           <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-red-600">-{formatCurrency(p.saidas)}</td>
                           <td className={`px-4 py-2 text-right font-mono text-[12.5px] font-semibold tabular-nums ${p.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                             {p.variacao > 0 ? '+' : ''}{formatCurrency(p.variacao)}
+                          </td>
+                          <td className={`px-4 py-2 text-right font-mono text-[12.5px] font-bold tabular-nums ${p.saldoFinal >= 0 ? 'text-gray-900' : 'text-red-700'}`}>
+                            {formatCurrency(p.saldoFinal)}
                           </td>
                           <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-gray-800 font-semibold">
                             {p.participacao.toFixed(1)}%
@@ -1532,6 +1558,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     <tfoot className="bg-gray-50/60 border-t border-gray-200">
                       <tr className="text-[12px] font-semibold">
                         <td className="px-4 py-3 text-gray-700" colSpan={2}>Consolidado ({resultadoPorEmpresa.empresas.length} empresas)</td>
+                        <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-700">
+                          {formatCurrency(resultadoPorEmpresa.totalSaldoInicial)}
+                        </td>
                         <td className="px-4 py-3 text-right font-mono tabular-nums text-emerald-700">
                           +{formatCurrency(resultadoPorEmpresa.empresas.reduce((s, p) => s + p.entradas, 0))}
                         </td>
@@ -1540,6 +1569,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         </td>
                         <td className={`px-4 py-3 text-right font-mono tabular-nums ${resultadoPorEmpresa.totalConsolidado >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                           {resultadoPorEmpresa.totalConsolidado > 0 ? '+' : ''}{formatCurrency(resultadoPorEmpresa.totalConsolidado)}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-mono tabular-nums ${resultadoPorEmpresa.totalSaldoFinal >= 0 ? 'text-gray-900' : 'text-red-700'}`}>
+                          {formatCurrency(resultadoPorEmpresa.totalSaldoFinal)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-700">100.0%</td>
                       </tr>
