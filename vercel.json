@@ -2,6 +2,9 @@
   "rewrites": [
     { "source": "/api/quality/:path*",       "destination": "https://web.qualityautomacao.com.br/INTEGRACAO/:path*" },
     { "source": "/api/asaas-sandbox/:path*", "destination": "https://api-sandbox.asaas.com/v3/:path*" },
-    { "source": "/api/asaas/:path*",         "destination": "https://api.asaas.com/v3/:path*" }
+    { "source": "/api/asaas/:path*",         "destination": "https://api.asaas.com/v3/:path*" },
+    { "source": "/((?!api/).*)",             "destination": "/index.html" }
   ]
 }
+</content>
+</invoke>
