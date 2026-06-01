@@ -41,12 +41,16 @@ import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
 import BpoAlteracoesCaixas from './pages/BpoAlteracoesCaixas';
 import CciRelatoriosBi from './pages/CciRelatoriosBi';
 import CciNotificacoes from './pages/CciNotificacoes';
+import CciMensagensIniciais from './pages/CciMensagensIniciais';
+import CciMelhorias from './pages/CciMelhorias';
+import ClienteMelhorias from './pages/cliente/ClienteMelhorias';
 import AdminConfiguracoes from './pages/AdminConfiguracoes';
 
 // Cliente
 import ClienteLayout from './components/layout/cliente/ClienteLayout';
 import ClienteLogin from './pages/cliente/ClienteLogin';
 import ClienteRedefinirSenha from './pages/cliente/ClienteRedefinirSenha';
+import ClienteCriarSenha from './pages/cliente/ClienteCriarSenha';
 // Cliente Webposto
 import WpDashboard from './pages/cliente/webposto/ClienteDashboard';
 import WpDRE from './pages/cliente/webposto/ClienteDRE';
@@ -80,7 +84,7 @@ import AsComercialProdutividade from './pages/cliente/autosystem/ClienteComercia
 import AsConfiguracoes from './pages/cliente/autosystem/ClienteConfiguracoes';
 
 // Auth
-import { RequireAdmin, RequireCliente } from './components/auth/RequireAuth';
+import { RequireAdmin, RequireCliente, RequirePermissaoCliente } from './components/auth/RequireAuth';
 
 export default function App() {
   return (
@@ -157,6 +161,8 @@ export default function App() {
           <Route path="/admin/contato" element={<Navigate to="/admin/configuracoes" replace />} />
           <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
           <Route path="/admin/notificacoes" element={<CciNotificacoes />} />
+          <Route path="/admin/mensagens-iniciais" element={<CciMensagensIniciais />} />
+          <Route path="/admin/melhorias" element={<CciMelhorias />} />
 
           {/* Relatorios (kept for compatibility) */}
           <Route path="/admin/relatorios" element={<Relatorios />} />
@@ -164,6 +170,7 @@ export default function App() {
 
         {/* Cliente Portal */}
         <Route path="/cliente/login" element={<ClienteLogin />} />
+        <Route path="/cliente/criar-senha" element={<ClienteCriarSenha />} />
         <Route path="/redefinir-senha" element={<ClienteRedefinirSenha />} />
         <Route path="/cliente/redefinir-senha" element={<ClienteRedefinirSenha />} />
 
@@ -177,13 +184,14 @@ export default function App() {
           <Route path="/cliente/webposto/financeiro" element={<Navigate to="/cliente/webposto/financeiro/contas-pagar" replace />} />
           <Route path="/cliente/webposto/financeiro/contas-pagar" element={<WpContasPagar />} />
           <Route path="/cliente/webposto/financeiro/contas-receber" element={<WpContasReceber />} />
-          <Route path="/cliente/webposto/sangrias" element={<WpSangrias />} />
+          <Route path="/cliente/webposto/sangrias" element={<RequirePermissaoCliente permissao="sangrias"><WpSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/suporte" element={<WpSuporte />} />
+          <Route path="/cliente/webposto/melhorias" element={<ClienteMelhorias />} />
           <Route path="/cliente/webposto/usuarios" element={<WpUsuarios />} />
           <Route path="/cliente/webposto/comercial" element={<Navigate to="/cliente/webposto/comercial/vendas" replace />} />
-          <Route path="/cliente/webposto/comercial/vendas" element={<WpComercialVendas />} />
-          <Route path="/cliente/webposto/comercial/operacao" element={<WpComercialOperacao />} />
-          <Route path="/cliente/webposto/comercial/produtividade" element={<WpComercialProdutividade />} />
+          <Route path="/cliente/webposto/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><WpComercialVendas /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/comercial/operacao" element={<RequirePermissaoCliente permissao="comercial_operacao"><WpComercialOperacao /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/comercial/produtividade" element={<RequirePermissaoCliente permissao="comercial_produtividade"><WpComercialProdutividade /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/configuracoes" element={<WpConfiguracoes />} />
           <Route path="/cliente/webposto/relatorios-bi" element={<ClienteRelatoriosBi />} />
 
@@ -196,13 +204,14 @@ export default function App() {
           <Route path="/cliente/autosystem/financeiro" element={<Navigate to="/cliente/autosystem/financeiro/contas-pagar" replace />} />
           <Route path="/cliente/autosystem/financeiro/contas-pagar" element={<AsContasPagar />} />
           <Route path="/cliente/autosystem/financeiro/contas-receber" element={<AsContasReceber />} />
-          <Route path="/cliente/autosystem/sangrias" element={<AsSangrias />} />
+          <Route path="/cliente/autosystem/sangrias" element={<RequirePermissaoCliente permissao="sangrias"><AsSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/suporte" element={<AsSuporte />} />
+          <Route path="/cliente/autosystem/melhorias" element={<ClienteMelhorias />} />
           <Route path="/cliente/autosystem/usuarios" element={<AsUsuarios />} />
           <Route path="/cliente/autosystem/comercial" element={<Navigate to="/cliente/autosystem/comercial/vendas" replace />} />
-          <Route path="/cliente/autosystem/comercial/vendas" element={<AsComercialVendas />} />
-          <Route path="/cliente/autosystem/comercial/operacao" element={<AsComercialOperacao />} />
-          <Route path="/cliente/autosystem/comercial/produtividade" element={<AsComercialProdutividade />} />
+          <Route path="/cliente/autosystem/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><AsComercialVendas /></RequirePermissaoCliente>} />
+          <Route path="/cliente/autosystem/comercial/operacao" element={<RequirePermissaoCliente permissao="comercial_operacao"><AsComercialOperacao /></RequirePermissaoCliente>} />
+          <Route path="/cliente/autosystem/comercial/produtividade" element={<RequirePermissaoCliente permissao="comercial_produtividade"><AsComercialProdutividade /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/relatorios-bi" element={<ClienteRelatoriosBi />} />
           <Route path="/cliente/autosystem/configuracoes" element={<AsConfiguracoes />} />
         </Route>

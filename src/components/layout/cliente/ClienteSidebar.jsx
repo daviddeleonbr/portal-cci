@@ -6,7 +6,7 @@ import {
   LayoutDashboard, BarChart3, TrendingUp, PieChart,
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
-  ArrowUpRight, ArrowDownLeft, Settings,
+  ArrowUpRight, ArrowDownLeft, Settings, Lightbulb,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
@@ -32,9 +32,9 @@ function buildNavigation(prefix) {
     {
       section: 'Comercial',
       items: [
-        { name: 'Vendas', href: `${prefix}/comercial/vendas`, icon: ShoppingCart },
-        { name: 'Operação', href: `${prefix}/comercial/operacao`, icon: Activity },
-        { name: 'Produtividade', href: `${prefix}/comercial/produtividade`, icon: Gauge },
+        { name: 'Vendas', href: `${prefix}/comercial/vendas`, icon: ShoppingCart, permissao: 'comercial_vendas' },
+        { name: 'Operação', href: `${prefix}/comercial/operacao`, icon: Activity, permissao: 'comercial_operacao' },
+        { name: 'Produtividade', href: `${prefix}/comercial/produtividade`, icon: Gauge, permissao: 'comercial_produtividade' },
       ],
     },
     {
@@ -55,6 +55,7 @@ function buildNavigation(prefix) {
       section: 'Atendimento',
       items: [
         { name: 'Suporte', href: `${prefix}/suporte`, icon: HelpCircle, permissao: 'suporte' },
+        { name: 'Melhorias do Sistema', href: `${prefix}/melhorias`, icon: Lightbulb },
       ],
     },
     {
@@ -67,11 +68,14 @@ function buildNavigation(prefix) {
   ];
 }
 
-function filtrarNavegacao(navigationAll, permissoes, cliente) {
+// flagSource é o objeto onde procuramos as flags `requerFlag` (`exibir_dre`
+// etc.). Para Webposto vem de `session.cliente` (flag por empresa);
+// para Autosystem vem de `session.asRede` (flag por rede).
+function filtrarNavegacao(navigationAll, permissoes, flagSource) {
   const perms = new Set(permissoes || []);
   const visivel = (item) => {
     if (item.permissao && !perms.has(item.permissao)) return false;
-    if (item.requerFlag && !cliente?.[item.requerFlag]) return false;
+    if (item.requerFlag && !flagSource?.[item.requerFlag]) return false;
     return true;
   };
   return navigationAll
@@ -101,13 +105,16 @@ export default function ClienteSidebar({ collapsed, onToggle }) {
   const navigate = useNavigate();
   const session = useClienteSession();
   const cliente = session?.cliente;
+  const asRede  = session?.asRede;
   const usuario = session?.usuario;
   const tipoCliente = session?.tipoCliente || 'webposto';
   const prefix = `/cliente/${tipoCliente}`;
+  // Flags (DRE / Fluxo) vêm do cliente (Webposto) ou da rede (Autosystem)
+  const flagSource = tipoCliente === 'autosystem' ? asRede : cliente;
 
   const navigation = useMemo(
-    () => filtrarNavegacao(buildNavigation(prefix), usuario?.permissoes, cliente),
-    [prefix, usuario?.permissoes, cliente],
+    () => filtrarNavegacao(buildNavigation(prefix), usuario?.permissoes, flagSource),
+    [prefix, usuario?.permissoes, flagSource],
   );
 
   const [expanded, setExpanded] = useState(() => {

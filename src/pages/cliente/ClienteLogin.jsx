@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, ArrowRight, Building2, AlertCircle, ArrowLeft, X, Mail, Copy, CheckCircle2, Loader2 } from 'lucide-react';
 import { loginCliente, getClienteSession } from '../../lib/auth';
 import * as authResetService from '../../services/authResetService';
+import { verificarPrimeiroAcesso } from '../../services/userImportService';
 
 export default function ClienteLogin() {
   const navigate = useNavigate();
@@ -27,6 +28,14 @@ export default function ClienteLogin() {
     setErro('');
     setLoading(true);
     try {
+      // Primeiro acesso: usuário importado em lote, senha ainda NULL.
+      // Redireciona para a tela de criar senha (a senha digitada é
+      // ignorada — usuário define a definitiva lá).
+      const precisaCriar = await verificarPrimeiroAcesso(email);
+      if (precisaCriar) {
+        navigate(`/cliente/criar-senha?email=${encodeURIComponent(email)}`);
+        return;
+      }
       const session = await loginCliente(email, senha);
       const dest = `/cliente/${session.tipoCliente || 'webposto'}/dashboard`;
       navigate(dest, { replace: true });

@@ -80,6 +80,29 @@ export default function Clientes() {
     }
   };
 
+  // Toggle individual (carrega 1 toggle por vez por rede+flag)
+  const [togglesAtivosAS, setTogglesAtivosAS] = useState(new Set());
+  const handleToggleRelatorioAS = async (rede, campo) => {
+    const key = `${rede.id}:${campo}`;
+    if (togglesAtivosAS.has(key)) return;
+    setTogglesAtivosAS(prev => new Set(prev).add(key));
+    try {
+      const novo = !rede[campo];
+      await autosystemService.atualizarRede(rede.id, { [campo]: novo });
+      setRedesAutosystem(prev => prev.map(r => r.id === rede.id ? { ...r, [campo]: novo } : r));
+      const label = campo === 'exibir_dre' ? 'DRE' : 'Fluxo de Caixa';
+      showToast('success', `${label} ${novo ? 'liberado' : 'bloqueado'} para a rede`);
+    } catch (err) {
+      showToast('error', err.message);
+    } finally {
+      setTogglesAtivosAS(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
   const handleDelete = async (cliente) => {
     try {
       await clientesService.excluirCliente(cliente.id);
@@ -366,6 +389,8 @@ export default function Clientes() {
       <SecaoRedesAutosystem
         redes={redesAutosystem}
         loading={loading}
+        togglesAtivos={togglesAtivosAS}
+        onToggleRelatorio={handleToggleRelatorioAS}
         onNova={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
         onEditar={(rede) => setModalWizard({ open: true, preRede: null, editandoRede: rede })}
         onImportar={(rede) => setModalEmpresasAS({ open: true, rede })}
@@ -446,7 +471,7 @@ export default function Clientes() {
 // ═══════════════════════════════════════════════════════════
 // Seção: Redes Autosystem (listagem + ações)
 // ═══════════════════════════════════════════════════════════
-function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, onClassificarGrupos, onClassificarContas, onExcluir }) {
+function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio, onNova, onEditar, onImportar, onClassificarGrupos, onClassificarContas, onExcluir }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       className="bg-white dark:bg-slate-900/40 rounded-xl border border-gray-200/60 dark:border-white/10 overflow-hidden shadow-sm mt-6">
@@ -485,6 +510,7 @@ function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, on
               <tr className="border-b border-gray-100 dark:border-white/10 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                 <th className="text-left px-6 py-3 font-medium">Nome</th>
                 <th className="text-left px-6 py-3 font-medium">Slug</th>
+                <th className="text-center px-6 py-3 font-medium">Relatórios liberados</th>
                 <th className="text-center px-6 py-3 font-medium">Status</th>
                 <th className="px-6 py-3 w-32"></th>
               </tr>
@@ -501,6 +527,24 @@ function SecaoRedesAutosystem({ redes, loading, onNova, onEditar, onImportar, on
                     </div>
                   </td>
                   <td className="px-6 py-3 text-[12px] text-gray-600 dark:text-gray-400 font-mono">{rede.slug}</td>
+                  <td className="px-6 py-3">
+                    <div className="flex items-center justify-center gap-2">
+                      <ToggleRelatorioMini
+                        icon={BarChart3}
+                        label="DRE"
+                        ativo={!!rede.exibir_dre}
+                        loading={togglesAtivos?.has(`${rede.id}:exibir_dre`)}
+                        onToggle={() => onToggleRelatorio?.(rede, 'exibir_dre')}
+                      />
+                      <ToggleRelatorioMini
+                        icon={TrendingUp}
+                        label="Fluxo"
+                        ativo={!!rede.exibir_fluxo_caixa}
+                        loading={togglesAtivos?.has(`${rede.id}:exibir_fluxo_caixa`)}
+                        onToggle={() => onToggleRelatorio?.(rede, 'exibir_fluxo_caixa')}
+                      />
+                    </div>
+                  </td>
                   <td className="px-6 py-3 text-center">
                     {rede.ativo ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30 px-2 py-0.5 text-[10px] font-medium">
@@ -1611,6 +1655,30 @@ function ToggleRelatorio({ icon: Icon, label, desc, ativo, loading, disabled, on
   );
 }
 
+// Versão compacta (pílula clicável) para usar dentro de células de tabela.
+function ToggleRelatorioMini({ icon: Icon, label, ativo, loading, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={loading}
+      aria-pressed={ativo}
+      title={`${ativo ? 'Liberado' : 'Bloqueado'} — clique para alternar`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all disabled:opacity-50 ${
+        ativo
+          ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300'
+          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.02] dark:text-gray-400'
+      }`}
+    >
+      {loading
+        ? <Loader2 className="h-3 w-3 animate-spin" />
+        : <Icon className="h-3 w-3" />}
+      <span>{label}</span>
+      <span className={`ml-0.5 h-1.5 w-1.5 rounded-full ${ativo ? 'bg-blue-500' : 'bg-gray-300 dark:bg-white/20'}`} />
+    </button>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════
 // Modal Detalhes
 // ═══════════════════════════════════════════════════════════
@@ -1879,12 +1947,16 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
 // Modal: Importar empresas do Autosystem
 // ═══════════════════════════════════════════════════════════
 function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSaved, showToast }) {
+  const [modo, setModo] = useState('importar'); // 'importar' | 'manual'
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [empresas, setEmpresas] = useState([]);
   const [selecionadas, setSelecionadas] = useState(new Set());
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
+  const FORM_MANUAL_VAZIO = { nome: '', razao_social: '', cnpj: '', empresa_codigo: '' };
+  const [formManual, setFormManual] = useState(FORM_MANUAL_VAZIO);
+  const [salvandoManual, setSalvandoManual] = useState(false);
 
   // CNPJs já cadastrados nesta rede (para marcar como "já importada")
   const cnpjsExistentes = useMemo(() => {
@@ -1898,10 +1970,12 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
 
   useEffect(() => {
     if (!open || !rede) return;
+    setModo('importar');
     setEmpresas([]);
     setSelecionadas(new Set());
     setErro('');
     setBusca('');
+    setFormManual(FORM_MANUAL_VAZIO);
     (async () => {
       try {
         setLoading(true);
@@ -1961,15 +2035,117 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
     }
   };
 
+  // Cadastro manual — usado quando a empresa não consegue ser obtida via integração.
+  // empresa_codigo é opcional: sem ele a empresa fica vinculada à rede mas
+  // sem acesso a relatórios que dependem do banco remoto (contas a pagar,
+  // vendas etc. filtram por empresa_codigo).
+  const cnpjManualDuplicado = useMemo(() => {
+    const n = normalizarCnpj(formManual.cnpj);
+    return n && cnpjsExistentes.has(n);
+  }, [formManual.cnpj, cnpjsExistentes]);
+
+  const podeSalvarManual = formManual.nome.trim().length > 0 && !cnpjManualDuplicado;
+
+  const salvarManual = async () => {
+    if (!rede || !podeSalvarManual) return;
+    setSalvandoManual(true);
+    try {
+      const ec = String(formManual.empresa_codigo || '').trim();
+      const ecNum = ec ? Number(ec) : null;
+      if (ec && !Number.isFinite(ecNum)) {
+        showToast('error', 'Código da empresa deve ser numérico');
+        setSalvandoManual(false);
+        return;
+      }
+      await clientesService.criarCliente({
+        nome: formManual.nome.trim(),
+        razao_social: formManual.razao_social.trim() || null,
+        cnpj: formManual.cnpj.trim() || null,
+        empresa_codigo: ecNum,
+        as_rede_id: rede.id,
+        chave_api_id: null,
+        status: 'ativo',
+      });
+      showToast('success', 'Empresa adicionada manualmente');
+      setFormManual(FORM_MANUAL_VAZIO);
+      onSaved();
+    } catch (err) {
+      const msg = err.message?.includes('duplicate') || err.message?.includes('unique')
+        ? 'Já existe uma empresa com este CNPJ.'
+        : 'Erro ao adicionar: ' + err.message;
+      showToast('error', msg);
+    } finally {
+      setSalvandoManual(false);
+    }
+  };
+
   return (
     <Modal open={open} onClose={onClose}
-      title={`Importar empresas — ${rede?.nome || ''}`} size="xl">
+      title={`Empresas — ${rede?.nome || ''}`} size="xl">
       <div className="space-y-4">
-        <p className="text-xs text-gray-600 dark:text-gray-400">
-          Selecione as empresas do servidor Autosystem que deseja cadastrar como clientes nesta rede.
-        </p>
+        {/* Tabs: importar do servidor vs. cadastro manual */}
+        <div className="inline-flex p-1 rounded-lg bg-gray-100 dark:bg-white/5">
+          <button onClick={() => setModo('importar')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              modo === 'importar'
+                ? 'bg-white dark:bg-white/10 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800'
+            }`}>
+            <Server className="h-3.5 w-3.5" /> Importar do servidor
+          </button>
+          <button onClick={() => setModo('manual')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              modo === 'manual'
+                ? 'bg-white dark:bg-white/10 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800'
+            }`}>
+            <Plus className="h-3.5 w-3.5" /> Adicionar manualmente
+          </button>
+        </div>
 
-        {loading ? (
+        {modo === 'manual' ? (
+          <FormManualEmpresa
+            form={formManual}
+            setForm={setFormManual}
+            cnpjDuplicado={cnpjManualDuplicado}
+            podeSalvar={podeSalvarManual}
+            salvando={salvandoManual}
+            onSalvar={salvarManual}
+            onCancelar={onClose}
+          />
+        ) : (
+          <ConteudoImportarServidor
+            loading={loading} erro={erro} empresas={empresas}
+            busca={busca} setBusca={setBusca}
+            empresasFiltradas={empresasFiltradas}
+            cnpjsExistentes={cnpjsExistentes}
+            selecionadas={selecionadas}
+            toggleEmpresa={toggleEmpresa}
+            toggleTodas={toggleTodas}
+            saving={saving}
+            onCancelar={onClose}
+            onSalvar={salvar}
+          />
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// Conteúdo da aba "Importar do servidor" — extraído pra simplificar o
+// componente pai que agora também tem a aba de cadastro manual.
+function ConteudoImportarServidor({
+  loading, erro, empresas, busca, setBusca, empresasFiltradas,
+  cnpjsExistentes, selecionadas, toggleEmpresa, toggleTodas,
+  saving, onCancelar, onSalvar,
+}) {
+  return (
+    <>
+      <p className="text-xs text-gray-600 dark:text-gray-400">
+        Selecione as empresas do servidor Autosystem que deseja cadastrar como clientes nesta rede.
+      </p>
+
+      {loading ? (
           <div className="py-12 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
             <Loader2 className="h-6 w-6 animate-spin" />
             <p className="text-sm">Conectando ao servidor e buscando empresas...</p>
@@ -2067,11 +2243,11 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
                 {empresas.length > 0 && ` de ${empresas.length}`}
               </p>
               <div className="flex gap-3">
-                <button onClick={onClose}
+                <button onClick={onCancelar}
                   className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
                   Cancelar
                 </button>
-                <button onClick={salvar} disabled={selecionadas.size === 0 || saving}
+                <button onClick={onSalvar} disabled={selecionadas.size === 0 || saving}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
                   {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Importar {selecionadas.size > 0 && `(${selecionadas.size})`}
@@ -2080,8 +2256,92 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
             </div>
           </>
         )}
+    </>
+  );
+}
+
+// Formulário de cadastro manual de empresa numa rede Autosystem.
+// Use quando a empresa não conseguir ser obtida via integração — preencha
+// pelo menos o Nome. O Código da empresa (empresa_codigo) é opcional, mas
+// sem ele a empresa fica vinculada à rede sem acesso aos relatórios que
+// dependem do banco remoto (Contas a pagar/receber, Vendas, etc.).
+function FormManualEmpresa({ form, setForm, cnpjDuplicado, podeSalvar, salvando, onSalvar, onCancelar }) {
+  const set = (campo) => (e) => setForm(f => ({ ...f, [campo]: e.target.value }));
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-3 py-2.5 flex items-start gap-2.5 text-[12px] text-amber-800 dark:text-amber-200">
+        <AlertCircle className="h-4 w-4 flex-shrink-0 mt-px" />
+        <div>
+          Use este formulário só quando a empresa não puder ser obtida via
+          integração. Sem o <strong>código da empresa</strong>, ela fica vinculada
+          à rede mas não aparece nos relatórios que dependem do banco remoto
+          (Contas a pagar/receber, Vendas, Dashboard etc.). Você pode preencher
+          o código depois, quando a integração estiver disponível.
+        </div>
       </div>
-    </Modal>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="sm:col-span-2">
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+            Nome (fantasia) <span className="text-rose-500">*</span>
+          </label>
+          <input type="text" value={form.nome} onChange={set('nome')} autoFocus
+            placeholder="Ex: Posto Central"
+            className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+            Razão social
+          </label>
+          <input type="text" value={form.razao_social} onChange={set('razao_social')}
+            placeholder="Ex: Posto Central Combustíveis LTDA"
+            className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+            CNPJ
+          </label>
+          <input type="text" value={form.cnpj} onChange={set('cnpj')}
+            placeholder="00.000.000/0000-00"
+            className={`w-full h-10 rounded-lg border bg-white dark:bg-white/5 px-3 text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 ${
+              cnpjDuplicado
+                ? 'border-rose-400 focus:border-rose-400 focus:ring-rose-500/20'
+                : 'border-gray-200 dark:border-white/10 focus:border-blue-400 focus:ring-blue-500/20'
+            }`} />
+          {cnpjDuplicado && (
+            <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-300">
+              Já existe uma empresa com este CNPJ nesta rede.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+            Código da empresa <span className="text-gray-400 normal-case font-normal tracking-normal">(opcional)</span>
+          </label>
+          <input type="text" inputMode="numeric" value={form.empresa_codigo} onChange={set('empresa_codigo')}
+            placeholder="Ex: 1023"
+            className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 text-sm font-mono text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+          <p className="mt-1 text-[10.5px] text-gray-400 dark:text-gray-500">
+            ID interno da empresa no Autosystem. Sem isso, relatórios do banco remoto ficam indisponíveis.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 dark:border-white/10">
+        <button onClick={onCancelar}
+          className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+          Cancelar
+        </button>
+        <button onClick={onSalvar} disabled={!podeSalvar || salvando}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+          {salvando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          <Plus className="h-3.5 w-3.5" /> Adicionar empresa
+        </button>
+      </div>
+    </div>
   );
 }
 

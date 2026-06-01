@@ -27,7 +27,9 @@ export function gerarSlug(nome) {
 
 const SELECT_PUBLICO = `
   id, nome, slug,
-  ativo, observacoes, created_at, updated_at
+  ativo, observacoes,
+  exibir_dre, exibir_fluxo_caixa,
+  created_at, updated_at
 `;
 
 export async function listarRedes() {
@@ -83,10 +85,12 @@ export async function atualizarRede(id, campos) {
 
   // Update dos campos publicos
   const update = {};
-  if (resto.nome !== undefined)        update.nome = resto.nome;
-  if (resto.slug !== undefined)        update.slug = resto.slug;
-  if (resto.ativo !== undefined)       update.ativo = resto.ativo;
-  if (resto.observacoes !== undefined) update.observacoes = resto.observacoes || null;
+  if (resto.nome !== undefined)               update.nome = resto.nome;
+  if (resto.slug !== undefined)               update.slug = resto.slug;
+  if (resto.ativo !== undefined)              update.ativo = resto.ativo;
+  if (resto.observacoes !== undefined)        update.observacoes = resto.observacoes || null;
+  if (resto.exibir_dre !== undefined)         update.exibir_dre = !!resto.exibir_dre;
+  if (resto.exibir_fluxo_caixa !== undefined) update.exibir_fluxo_caixa = !!resto.exibir_fluxo_caixa;
 
   if (Object.keys(update).length > 0) {
     const { error } = await supabase

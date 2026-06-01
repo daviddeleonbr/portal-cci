@@ -19,6 +19,7 @@ import * as autosystemService from '../services/autosystemService';
 
 export default function CciRelatoriosBi() {
   const [lista, setLista] = useState([]);
+  const [acessosPorRel, setAcessosPorRel] = useState(new Map());
   const [redesWp, setRedesWp] = useState([]);
   const [redesAs, setRedesAs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +45,11 @@ export default function CciRelatoriosBi() {
       setRedesWp((rsWp || []).filter(r => r.ativo !== false));
       setRedesAs((rsAs || []).filter(r => r.ativo !== false));
       setLista(ls || []);
+      // Contagem de usuários permitidos por relatório (em batch)
+      const acessos = await relatoriosBiService
+        .contarAcessosPorRelatorio((ls || []).map(r => r.id))
+        .catch(() => new Map());
+      setAcessosPorRel(acessos);
     } catch (err) { showToast('error', err.message); }
     finally { setLoading(false); }
   }, []);
@@ -166,6 +172,7 @@ export default function CciRelatoriosBi() {
                   <th className="px-4 py-2.5">Nome</th>
                   <th className="px-4 py-2.5">Rede</th>
                   <th className="px-4 py-2.5">Link</th>
+                  <th className="px-4 py-2.5 text-center">Acessos</th>
                   <th className="px-4 py-2.5 text-right">Ordem</th>
                   <th className="px-4 py-2.5 text-center">Ativo</th>
                   <th className="px-4 py-2.5 text-right w-20">Ações</th>
@@ -197,6 +204,25 @@ export default function CciRelatoriosBi() {
                           <ExternalLink className="h-3 w-3 flex-shrink-0" />
                           <span className="truncate">{abreviarUrl(r.link_publico)}</span>
                         </a>
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {(() => {
+                          const n = acessosPorRel.get(r.id) || 0;
+                          if (n === 0) {
+                            return (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10.5px] font-semibold px-2 py-0.5"
+                                title="Nenhum usuário associado — visível a todos os usuários da rede">
+                                <Globe className="h-3 w-3" /> Todos
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10.5px] font-semibold px-2 py-0.5"
+                              title={`${n} usuário(s) com acesso permitido`}>
+                              <Users className="h-3 w-3" /> {n}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[12px] text-gray-700">{r.ordem}</td>
                       <td className="px-4 py-2.5 text-center">

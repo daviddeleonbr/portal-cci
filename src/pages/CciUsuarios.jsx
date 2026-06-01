@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, Pencil, Trash2, Loader2, Search, Shield, Users, Mail,
   Check, Eye, EyeOff, KeyRound, UserCog, ChevronLeft, ChevronRight,
@@ -20,6 +20,8 @@ export default function CciUsuarios() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('todos');
+  // 'todas' | 'sem_rede' | 'wp:<id>' | 'as:<id>'
+  const [filtroRede, setFiltroRede] = useState('todas');
   const [modal, setModal] = useState({ open: false, data: null });
   const [confirm, setConfirm] = useState({ open: false });
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
@@ -90,12 +92,22 @@ export default function CciUsuarios() {
     const q = busca.trim().toLowerCase();
     return usuarios.filter(u => {
       if (filtroTipo !== 'todos' && u.tipo !== filtroTipo) return false;
+      if (filtroRede !== 'todas') {
+        if (filtroRede === 'sem_rede') {
+          if (u.chave_api_id || u.as_rede_id) return false;
+        } else {
+          const [tipo, id] = filtroRede.split(':');
+          if (tipo === 'wp' && u.chave_api_id !== id) return false;
+          if (tipo === 'as' && u.as_rede_id !== id)   return false;
+        }
+      }
       if (!q) return true;
       return u.nome.toLowerCase().includes(q)
         || (u.email || '').toLowerCase().includes(q)
-        || (u.chaves_api?.nome || '').toLowerCase().includes(q);
+        || (u.chaves_api?.nome || '').toLowerCase().includes(q)
+        || (u.as_rede?.nome || '').toLowerCase().includes(q);
     });
-  }, [usuarios, busca, filtroTipo]);
+  }, [usuarios, busca, filtroTipo, filtroRede]);
 
   const stats = useMemo(() => ({
     total: usuarios.length,
@@ -124,12 +136,36 @@ export default function CciUsuarios() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white rounded-xl border border-gray-200/60 p-3 mb-4 flex items-center gap-3">
-        <div className="relative flex-1 max-w-md">
+      <div className="bg-white rounded-xl border border-gray-200/60 p-3 mb-4 flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input value={busca} onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome, email ou cliente..."
+            placeholder="Buscar por nome, email ou rede..."
             className="w-full h-9 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        </div>
+        <div className="relative">
+          <Network className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+          <select value={filtroRede} onChange={(e) => setFiltroRede(e.target.value)}
+            title="Filtrar por rede"
+            className="h-9 rounded-lg border border-gray-200 pl-8 pr-8 text-xs font-medium text-gray-700 bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 appearance-none cursor-pointer min-w-[200px]">
+            <option value="todas">Todas as redes</option>
+            <option value="sem_rede">— Sem rede (Admin) —</option>
+            {chavesApi.length > 0 && (
+              <optgroup label="Webposto">
+                {chavesApi.map(r => (
+                  <option key={`wp:${r.id}`} value={`wp:${r.id}`}>{r.nome}</option>
+                ))}
+              </optgroup>
+            )}
+            {redesAutosystem.length > 0 && (
+              <optgroup label="Autosystem">
+                {redesAutosystem.map(r => (
+                  <option key={`as:${r.id}`} value={`as:${r.id}`}>{r.nome}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none rotate-90" />
         </div>
         <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
           {['todos', 'admin', 'cliente'].map(t => (

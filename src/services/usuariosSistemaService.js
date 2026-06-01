@@ -23,6 +23,8 @@ export const PERMISSOES_ADMIN = [
   { key: 'conciliacao_caixas', label: 'Conciliação de Caixas', grupo: 'BPO' },
   { key: 'caixa_administrativo', label: 'Caixa Administrativo', grupo: 'BPO' },
   { key: 'notificacoes', label: 'Notificações (enviar)', grupo: 'Comunicação' },
+  { key: 'mensagens_iniciais', label: 'Mensagens Iniciais (modal cliente)', grupo: 'Comunicação' },
+  { key: 'melhorias', label: 'Melhorias de Sistema (sugestões clientes)', grupo: 'Comunicação' },
 ];
 
 export const PERMISSOES_CLIENTE = [
@@ -30,6 +32,9 @@ export const PERMISSOES_CLIENTE = [
   { key: 'dre', label: 'DRE', grupo: 'Relatórios' },
   { key: 'fluxo_caixa', label: 'Fluxo de Caixa', grupo: 'Relatórios' },
   { key: 'relatorios_bi', label: 'Relatórios de BI (Power BI)', grupo: 'Relatórios' },
+  { key: 'comercial_vendas', label: 'Comercial · Vendas', grupo: 'Comercial' },
+  { key: 'comercial_operacao', label: 'Comercial · Operação', grupo: 'Comercial' },
+  { key: 'comercial_produtividade', label: 'Comercial · Produtividade', grupo: 'Comercial' },
   { key: 'sangrias', label: 'Sangrias', grupo: 'Operacional' },
   { key: 'bpo', label: 'Serviços BPO', grupo: 'Operacional' },
   { key: 'documentos', label: 'Documentos', grupo: 'Operacional' },
@@ -58,15 +63,22 @@ export async function listarUsuarios() {
   return data || [];
 }
 
-// Lista somente usuarios de uma rede especifica (usado pelo admin da rede)
-export async function listarUsuariosDaRede(chaveApiId) {
-  if (!chaveApiId) return [];
-  const { data, error } = await supabase
+// Lista somente usuarios de uma rede especifica (usado pelo admin da rede).
+// Aceita assinatura legada `listarUsuariosDaRede(chaveApiId)` ou objeto
+// `{ chave_api_id, as_rede_id }` (autosystem).
+export async function listarUsuariosDaRede(arg) {
+  const opts = typeof arg === 'string' || arg == null
+    ? { chave_api_id: arg }
+    : arg;
+  const { chave_api_id, as_rede_id } = opts;
+  if (!chave_api_id && !as_rede_id) return [];
+  let query = supabase
     .from('cci_usuarios_sistema')
     .select('*')
-    .eq('tipo', 'cliente')
-    .eq('chave_api_id', chaveApiId)
-    .order('nome', { ascending: true });
+    .eq('tipo', 'cliente');
+  if (chave_api_id) query = query.eq('chave_api_id', chave_api_id);
+  if (as_rede_id)   query = query.eq('as_rede_id',   as_rede_id);
+  const { data, error } = await query.order('nome', { ascending: true });
   if (error) throw error;
   return data || [];
 }

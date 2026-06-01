@@ -152,6 +152,24 @@ export async function excluir(id) {
 // Acesso por usuário (cci_usuarios_sistema, tipo='cliente')
 // ────────────────────────────────────────────────────────────────
 
+// Conta quantos usuários estão associados a cada relatório da lista.
+// Retorna Map<relatorio_id, count>. Relatórios sem entrada na tabela
+// ponte não aparecem no mapa (count = 0 → "visível a todos").
+export async function contarAcessosPorRelatorio(relatorioIds) {
+  const ids = Array.from(new Set((relatorioIds || []).filter(Boolean)));
+  if (ids.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from('cliente_relatorios_bi_usuario')
+    .select('relatorio_id')
+    .in('relatorio_id', ids);
+  if (error) throw error;
+  const m = new Map();
+  for (const row of data || []) {
+    m.set(row.relatorio_id, (m.get(row.relatorio_id) || 0) + 1);
+  }
+  return m;
+}
+
 // Retorna a lista de usuário_ids com acesso a um relatório específico.
 export async function listarUsuariosDoRelatorio(relatorioId) {
   if (!relatorioId) return [];

@@ -36,6 +36,9 @@ function primeiroDiaDoMesIso() {
 export default function ClienteDashboard() {
   const session = useClienteSession();
   const asRede = session?.asRede;
+  // Permissão de financeiro: controla a exibição (e o fetch) dos blocos
+  // de Contas a pagar e Contas a receber no dashboard.
+  const temPermFinanceiro = (session?.usuario?.permissoes || []).includes('financeiro');
   const clientesRede = useMemo(() => session?.clientesRede || [], [session]);
   const empresasDisponiveis = useMemo(
     () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
@@ -146,6 +149,7 @@ export default function ClienteDashboard() {
 
   // Contas a pagar — janela de 30 dias atrás a 30 dias à frente.
   useEffect(() => {
+    if (!temPermFinanceiro) { setContasPagar([]); return; }
     if (!redeId || empresasSel.length === 0) { setContasPagar([]); return; }
     let cancelado = false;
     setLoadingCP(true);
@@ -163,10 +167,11 @@ export default function ClienteDashboard() {
       setContasPagar(lists.flat());
     }).finally(() => { if (!cancelado) setLoadingCP(false); });
     return () => { cancelado = true; };
-  }, [redeId, empresasSelIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [redeId, empresasSelIds, temPermFinanceiro]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Contas a receber — mesma janela de 30 dias antes / 30 dias à frente.
   useEffect(() => {
+    if (!temPermFinanceiro) { setContasReceber([]); return; }
     if (!redeId || empresasSel.length === 0) { setContasReceber([]); return; }
     let cancelado = false;
     setLoadingCR(true);
@@ -184,7 +189,7 @@ export default function ClienteDashboard() {
       setContasReceber(lists.flat());
     }).finally(() => { if (!cancelado) setLoadingCR(false); });
     return () => { cancelado = true; };
-  }, [redeId, empresasSelIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [redeId, empresasSelIds, temPermFinanceiro]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Totais consolidados
   const totais = useMemo(() => {
@@ -390,7 +395,8 @@ export default function ClienteDashboard() {
               sub={totais.mix == null ? 'classifique' : null} />
           </div>
 
-          {/* Contas a pagar */}
+          {/* Contas a pagar — gated pela permissão 'financeiro' */}
+          {temPermFinanceiro && (
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
               <ArrowUpRight className="h-4 w-4 text-rose-500" />
@@ -430,7 +436,10 @@ export default function ClienteDashboard() {
             )}
           </div>
 
-          {/* Contas a receber — matriz categoria × bucket */}
+          )}
+
+          {/* Contas a receber — matriz categoria × bucket. Gated pela permissão 'financeiro' */}
+          {temPermFinanceiro && (
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
               <ArrowDownLeft className="h-4 w-4 text-emerald-500" />
@@ -563,6 +572,7 @@ export default function ClienteDashboard() {
               </>
             )}
           </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
             {/* Gráfico 12 meses */}

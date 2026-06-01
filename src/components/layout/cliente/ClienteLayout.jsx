@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ClienteSidebar from './ClienteSidebar';
 import ClienteHeader from './ClienteHeader';
+import ModalNovidades from '../../ui/ModalNovidades';
 
 export default function ClienteLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -18,6 +19,7 @@ export default function ClienteLayout() {
         <div className="absolute inset-0 app-vignette" />
       </div>
 
+      <ModalNovidades />
       <ClienteSidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <div
         className={`relative transition-all duration-300 ${
