@@ -69,8 +69,8 @@ const _cacheContasPagar = {
   key: null,
   timestamp: 0,
 };
-function chaveCache(empresaIds, venctoDe, venctoAte) {
-  return `${[...empresaIds].sort().join(',')}|${venctoDe}|${venctoAte}`;
+function chaveCache(empresaIds, venctoDe, venctoAte, ignorarPeriodo) {
+  return `${[...empresaIds].sort().join(',')}|${ignorarPeriodo ? 'ALL' : `${venctoDe}|${venctoAte}`}`;
 }
 function cacheValido(key) {
   return _cacheContasPagar.data
@@ -113,8 +113,9 @@ export default function ClienteContasPagar() {
 
   const [venctoDe, setVenctoDe] = useState(inicioMesAtual());
   const [venctoAte, setVenctoAte] = useState(fimMesAtual());
+  const [ignorarPeriodo, setIgnorarPeriodo] = useState(false);
 
-  const cacheKeyInicial = chaveCache(empresasSelIds, venctoDe, venctoAte);
+  const cacheKeyInicial = chaveCache(empresasSelIds, venctoDe, venctoAte, ignorarPeriodo);
   const cacheInicial = cacheValido(cacheKeyInicial) ? _cacheContasPagar.data : null;
 
   const [loading, setLoading] = useState(!cacheInicial);
@@ -136,7 +137,7 @@ export default function ClienteContasPagar() {
       return;
     }
 
-    const key = chaveCache(empresasSelIds, venctoDe, venctoAte);
+    const key = chaveCache(empresasSelIds, venctoDe, venctoAte, ignorarPeriodo);
     if (!force && cacheValido(key)) {
       setTitulos(_cacheContasPagar.data);
       setError(null);
@@ -150,8 +151,8 @@ export default function ClienteContasPagar() {
       const results = await Promise.allSettled(
         empresasSel.map(emp =>
           autosystemService.buscarContasPagar(redeId, emp.empresa_codigo, {
-            vencto_de: venctoDe || null,
-            vencto_ate: venctoAte || null,
+            vencto_de: ignorarPeriodo ? null : (venctoDe || null),
+            vencto_ate: ignorarPeriodo ? null : (venctoAte || null),
           }).then(contas => contas.map(c => ({
             ...c,
             _empresaId: emp.id,
@@ -181,7 +182,7 @@ export default function ClienteContasPagar() {
     } finally {
       setLoading(false);
     }
-  }, [redeId, empresasSel, empresasSelIds, venctoDe, venctoAte]);
+  }, [redeId, empresasSel, empresasSelIds, venctoDe, venctoAte, ignorarPeriodo]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -405,14 +406,28 @@ export default function ClienteContasPagar() {
       <PageHeader title="Contas a Pagar" description="Títulos pendentes de pagamento">
         {/* Filtro de data */}
         <div className="hidden md:flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+          <span className={`text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap transition-colors ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-500'}`}>
             <Calendar className="h-3 w-3" /> Vencimento entre
           </span>
           <input type="date" value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          <span className="text-[10px] text-gray-400">e</span>
+            disabled={ignorarPeriodo}
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed" />
+          <span className={`text-[10px] ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-400'}`}>e</span>
           <input type="date" value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            disabled={ignorarPeriodo}
+            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed" />
+          <label
+            title="Ignora o filtro de vencimento e busca todos os títulos pendentes do banco"
+            className={`inline-flex items-center gap-1.5 h-9 rounded-lg border px-2.5 text-xs font-medium cursor-pointer select-none transition-colors ${
+              ignorarPeriodo
+                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}>
+            <input type="checkbox" checked={ignorarPeriodo}
+              onChange={e => setIgnorarPeriodo(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+            Todo o período
+          </label>
         </div>
         {podeFiltrarEmpresa && (
           <EmpresaMultiSelect

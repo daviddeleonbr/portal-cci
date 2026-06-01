@@ -5,8 +5,9 @@ import {
   Loader2, AlertCircle, RefreshCw, Building2, ChevronDown,
   ShoppingCart, TrendingUp, Percent, Fuel, Coins, Droplet,
   Users, Package, Store, Activity, Gauge,
-  ArrowRight, ArrowUpRight, LineChart as LineChartIcon, BarChart3,
-  Calendar, AlertTriangle, Clock,
+  ArrowRight, ArrowUpRight, ArrowDownLeft, LineChart as LineChartIcon, BarChart3,
+  Calendar, AlertTriangle, Clock, CheckCircle2,
+  CreditCard, FileText, Receipt, MoreHorizontal, Banknote,
 } from 'lucide-react';
 import {
   ComposedChart, Bar, Line, PieChart, Pie, Cell,
@@ -87,8 +88,10 @@ export default function ClienteDashboard() {
   const [vendedores, setVendedores] = useState([]);
   const [evolucao12m, setEvolucao12m] = useState([]);
   const [contasPagar, setContasPagar] = useState([]);
+  const [contasReceber, setContasReceber] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingCP, setLoadingCP] = useState(false);
+  const [loadingCR, setLoadingCR] = useState(false);
   const [erro, setErro] = useState('');
 
   function somarDias(iso, n) {
@@ -159,6 +162,27 @@ export default function ClienteDashboard() {
       if (cancelado) return;
       setContasPagar(lists.flat());
     }).finally(() => { if (!cancelado) setLoadingCP(false); });
+    return () => { cancelado = true; };
+  }, [redeId, empresasSelIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Contas a receber — mesma janela de 30 dias antes / 30 dias à frente.
+  useEffect(() => {
+    if (!redeId || empresasSel.length === 0) { setContasReceber([]); return; }
+    let cancelado = false;
+    setLoadingCR(true);
+    const hoje = isoHoje();
+    const venctoDe  = somarDias(hoje, -30);
+    const venctoAte = somarDias(hoje, +30);
+    Promise.all(
+      empresasSel.map(e =>
+        autosystemService.buscarContasReceber(redeId, e.empresa_codigo, {
+          vencto_de: venctoDe, vencto_ate: venctoAte,
+        }).catch(() => [])
+      )
+    ).then(lists => {
+      if (cancelado) return;
+      setContasReceber(lists.flat());
+    }).finally(() => { if (!cancelado) setLoadingCR(false); });
     return () => { cancelado = true; };
   }, [redeId, empresasSelIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -248,12 +272,62 @@ export default function ClienteDashboard() {
     return { vencidas: v, prox7: p7, prox30: p30, total: v.total + p7.total + p30.total };
   }, [contasPagar]);
 
-  // Distribuição por categoria (donut)
+  // Classifica conta a receber pelo prefixo de `conta_debitar` (grupo 1.3.x).
+  //   1.3.01    → Cartões
+  //   1.3.02    → Cheques
+  //   1.3.03.1  → Notas a prazo
+  //   1.3.03.2  → Faturas a receber
+  //   demais 1.3.* → Outros
+  function classificarContaReceber(cod) {
+    const s = String(cod || '');
+    if (s.startsWith('1.3.01'))   return 'cartoes';
+    if (s.startsWith('1.3.02'))   return 'cheques';
+    if (s.startsWith('1.3.03.1')) return 'notas';
+    if (s.startsWith('1.3.03.2')) return 'faturas';
+    return 'outros';
+  }
+
+  // Matriz contas a receber por (categoria × bucket).
+  // Buckets: vencido (vencto < hoje), hoje (vencto = hoje), aVencer (vencto > hoje).
+  const recebMatrix = useMemo(() => {
+    const hoje = isoHoje();
+    const mk = () => ({ qtd: 0, total: 0 });
+    const base = () => ({ vencido: mk(), hoje: mk(), aVencer: mk(), totalLinha: 0 });
+    const out = {
+      cartoes: base(),
+      cheques: base(),
+      notas:   base(),
+      faturas: base(),
+      outros:  base(),
+    };
+    const totaisBucket = { vencido: mk(), hoje: mk(), aVencer: mk() };
+    (contasReceber || []).forEach(c => {
+      const venc = String(c.vencto || '').slice(0, 10);
+      const val = Number(c.valor) || 0;
+      if (!venc) return;
+      const cat = classificarContaReceber(c.debito_codigo);
+      const bucket = venc < hoje ? 'vencido' : venc === hoje ? 'hoje' : 'aVencer';
+      out[cat][bucket].qtd++;
+      out[cat][bucket].total += val;
+      out[cat].totalLinha += val;
+      totaisBucket[bucket].qtd++;
+      totaisBucket[bucket].total += val;
+    });
+    const totalGeral =
+      totaisBucket.vencido.total + totaisBucket.hoje.total + totaisBucket.aVencer.total;
+    return { categorias: out, totais: totaisBucket, totalGeral };
+  }, [contasReceber]);
+
+  // Distribuição por categoria (donut) — usa LUCRO BRUTO por categoria
   const categoriaDonut = useMemo(() => [
-    { nome: 'Combustível',  valor: totais.cats.combustivel.fat,  cor: '#fcd34d' },
-    { nome: 'Automotivos',  valor: totais.cats.automotivos.fat,  cor: '#5eead4' },
-    { nome: 'Conveniência', valor: totais.cats.conveniencia.fat, cor: '#86efac' },
+    { nome: 'Combustível',  valor: totais.cats.combustivel.lucro,  cor: '#fcd34d' },
+    { nome: 'Automotivos',  valor: totais.cats.automotivos.lucro,  cor: '#5eead4' },
+    { nome: 'Conveniência', valor: totais.cats.conveniencia.lucro, cor: '#86efac' },
   ].filter(c => c.valor > 0), [totais]);
+  const totalDonut = useMemo(
+    () => categoriaDonut.reduce((s, c) => s + (c.valor || 0), 0),
+    [categoriaDonut],
+  );
 
   if (empresasDisponiveis.length === 0) {
     return (
@@ -356,17 +430,138 @@ export default function ClienteDashboard() {
             )}
           </div>
 
-          {/* Quick links */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-            <QuickLink to="/cliente/autosystem/comercial/vendas"
-              icone={ShoppingCart} cor="violet" titulo="Vendas"
-              desc="Análise detalhada por categoria, grupo e produto" />
-            <QuickLink to="/cliente/autosystem/comercial/operacao"
-              icone={Activity}     cor="blue"   titulo="Operação"
-              desc="Bombas, bicos, uso e aferições" />
-            <QuickLink to="/cliente/autosystem/comercial/produtividade"
-              icone={Gauge}        cor="amber"  titulo="Produtividade"
-              desc="Performance e ranking de vendedores" />
+          {/* Contas a receber — matriz categoria × bucket */}
+          <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+              <ArrowDownLeft className="h-4 w-4 text-emerald-500" />
+              <h3 className="text-[13px] font-semibold text-gray-800">Contas a receber</h3>
+              <span className="text-[11px] text-gray-400">
+                · janela de 30 dias · total {formatCurrency(recebMatrix.totalGeral)}
+              </span>
+              <Link to="/cliente/autosystem/financeiro/contas-receber"
+                className="ml-auto inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 font-medium">
+                Ver todas <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+            {loadingCR ? (
+              <div className="p-6 flex items-center justify-center gap-2 text-gray-500">
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                <span className="text-sm">Carregando contas...</span>
+              </div>
+            ) : recebMatrix.totalGeral === 0 ? (
+              <div className="p-8 text-center text-[12.5px] text-gray-400">
+                <CheckCircle2 className="h-7 w-7 text-emerald-300 mx-auto mb-2" />
+                Nenhuma conta a receber no período.
+              </div>
+            ) : (
+              <>
+                {/* KPIs no topo — visão executiva */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 border-b border-gray-100">
+                  <KpiReceber
+                    icone={AlertTriangle} cor="rose"
+                    label="Vencidas"
+                    sub="precisam de cobrança"
+                    total={recebMatrix.totais.vencido.total}
+                    qtd={recebMatrix.totais.vencido.qtd}
+                    totalGeral={recebMatrix.totalGeral} />
+                  <KpiReceber
+                    icone={Clock} cor="amber"
+                    label="Vencem hoje"
+                    sub="entra hoje no caixa"
+                    total={recebMatrix.totais.hoje.total}
+                    qtd={recebMatrix.totais.hoje.qtd}
+                    totalGeral={recebMatrix.totalGeral} />
+                  <KpiReceber
+                    icone={Calendar} cor="emerald"
+                    label="A vencer"
+                    sub="próximos 30 dias"
+                    total={recebMatrix.totais.aVencer.total}
+                    qtd={recebMatrix.totais.aVencer.qtd}
+                    totalGeral={recebMatrix.totalGeral} />
+                </div>
+
+                {/* Matriz detalhada: categoria × bucket */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50/60 border-b border-gray-200">
+                      <tr className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-2 text-left">Categoria</th>
+                        <th className="px-3 py-2 text-right">Vencidas</th>
+                        <th className="px-3 py-2 text-right">Hoje</th>
+                        <th className="px-3 py-2 text-right">A vencer</th>
+                        <th className="px-3 py-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {CATEGORIAS_RECEBER.map(cat => {
+                        const dados = recebMatrix.categorias[cat.key];
+                        const propor = recebMatrix.totalGeral > 0
+                          ? (dados.totalLinha / recebMatrix.totalGeral) * 100
+                          : 0;
+                        const Icone = cat.icone;
+                        return (
+                          <tr key={cat.key} className="border-t border-gray-100 hover:bg-gray-50/40">
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <span className={`h-7 w-7 rounded-lg ${cat.bg} flex items-center justify-center flex-shrink-0`}>
+                                  <Icone className={`h-3.5 w-3.5 ${cat.icon}`} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className={`text-[12.5px] font-semibold ${cat.text} leading-tight`}>
+                                    {cat.label}
+                                  </p>
+                                  <div className="mt-1 h-1 w-24 rounded-full bg-gray-100 overflow-hidden">
+                                    <div className={`h-full ${cat.barBg}`} style={{ width: `${Math.min(100, propor)}%` }} />
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <CelulaReceber qtd={dados.vencido.qtd} total={dados.vencido.total} acento="rose" />
+                            <CelulaReceber qtd={dados.hoje.qtd}    total={dados.hoje.total}    acento="amber" />
+                            <CelulaReceber qtd={dados.aVencer.qtd} total={dados.aVencer.total} acento="emerald" />
+                            <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                              <p className={`font-mono tabular-nums text-[12.5px] font-bold ${dados.totalLinha > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
+                                {formatCurrency(dados.totalLinha)}
+                              </p>
+                              <p className="text-[9.5px] text-gray-400 mt-0.5">
+                                {propor.toFixed(1)}% do total
+                              </p>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-gray-50/80 border-t-2 border-gray-200">
+                      <tr className="text-[11.5px] font-bold">
+                        <td className="px-4 py-2.5 text-gray-700 uppercase tracking-wider text-[10px]">Total geral</td>
+                        <td className="px-3 py-2.5 text-right">
+                          <p className={`font-mono tabular-nums ${recebMatrix.totais.vencido.total > 0 ? 'text-rose-700' : 'text-gray-300'}`}>
+                            {formatCurrency(recebMatrix.totais.vencido.total)}
+                          </p>
+                          <p className="text-[9.5px] text-gray-400 font-normal mt-0.5">{recebMatrix.totais.vencido.qtd} doc.</p>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <p className={`font-mono tabular-nums ${recebMatrix.totais.hoje.total > 0 ? 'text-amber-700' : 'text-gray-300'}`}>
+                            {formatCurrency(recebMatrix.totais.hoje.total)}
+                          </p>
+                          <p className="text-[9.5px] text-gray-400 font-normal mt-0.5">{recebMatrix.totais.hoje.qtd} doc.</p>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <p className={`font-mono tabular-nums ${recebMatrix.totais.aVencer.total > 0 ? 'text-emerald-700' : 'text-gray-300'}`}>
+                            {formatCurrency(recebMatrix.totais.aVencer.total)}
+                          </p>
+                          <p className="text-[9.5px] text-gray-400 font-normal mt-0.5">{recebMatrix.totais.aVencer.qtd} doc.</p>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <p className="font-mono tabular-nums text-gray-900">{formatCurrency(recebMatrix.totalGeral)}</p>
+                          <p className="text-[9.5px] text-gray-400 font-normal mt-0.5">100%</p>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
@@ -410,16 +605,16 @@ export default function ClienteDashboard() {
               </div>
             </div>
 
-            {/* Donut por categoria */}
+            {/* Donut por categoria — Lucro bruto */}
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-blue-500" />
-                <h3 className="text-[13px] font-semibold text-gray-800">Por categoria · mês</h3>
+                <h3 className="text-[13px] font-semibold text-gray-800">Lucro bruto por categoria · mês</h3>
               </div>
               <div className="p-3">
                 {categoriaDonut.length === 0 ? (
                   <div className="h-72 flex items-center justify-center text-sm text-gray-400">
-                    Sem vendas no mês.
+                    Sem lucro registrado no mês.
                   </div>
                 ) : (
                   <>
@@ -436,7 +631,7 @@ export default function ClienteDashboard() {
                     </ResponsiveContainer>
                     <div className="mt-2 space-y-1.5">
                       {categoriaDonut.map(c => {
-                        const pct = totais.fat > 0 ? (c.valor / totais.fat) * 100 : 0;
+                        const pct = totalDonut > 0 ? (c.valor / totalDonut) * 100 : 0;
                         return (
                           <div key={c.nome} className="flex items-center gap-2 text-[11.5px]">
                             <span className="h-2.5 w-2.5 rounded-sm flex-shrink-0" style={{ background: c.cor }} />
@@ -551,9 +746,10 @@ function Kpi({ icone: Icone, cor, label, valor, sub, negativo }) {
 
 function BucketContas({ icone: Icone, cor, label, total, qtd, ehAlerta }) {
   const palette = {
-    rose:  { bg: 'bg-rose-50',  icon: 'text-rose-600',  text: 'text-rose-700'  },
-    amber: { bg: 'bg-amber-50', icon: 'text-amber-600', text: 'text-amber-700' },
-    blue:  { bg: 'bg-blue-50',  icon: 'text-blue-600',  text: 'text-blue-700'  },
+    rose:    { bg: 'bg-rose-50',    icon: 'text-rose-600',    text: 'text-rose-700'    },
+    amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   text: 'text-amber-700'   },
+    blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600',    text: 'text-blue-700'    },
+    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', text: 'text-emerald-700' },
   };
   const Pal = palette[cor] || palette.blue;
   const vazio = qtd === 0;
@@ -572,6 +768,80 @@ function BucketContas({ icone: Icone, cor, label, total, qtd, ehAlerta }) {
         {vazio ? 'nenhuma conta' : `${qtd} ${qtd === 1 ? 'conta' : 'contas'}`}
       </p>
     </div>
+  );
+}
+
+// Categorias do contas a receber Autosystem (plano de contas 1.3.x).
+const CATEGORIAS_RECEBER = [
+  { key: 'cartoes', label: 'Cartões',          icone: CreditCard,     bg: 'bg-blue-50',    icon: 'text-blue-600',    text: 'text-blue-800',    barBg: 'bg-blue-500'    },
+  { key: 'cheques', label: 'Cheques',          icone: Banknote,       bg: 'bg-purple-50',  icon: 'text-purple-600',  text: 'text-purple-800',  barBg: 'bg-purple-500'  },
+  { key: 'notas',   label: 'Notas a prazo',    icone: FileText,       bg: 'bg-amber-50',   icon: 'text-amber-600',   text: 'text-amber-800',   barBg: 'bg-amber-500'   },
+  { key: 'faturas', label: 'Faturas a receber',icone: Receipt,        bg: 'bg-cyan-50',    icon: 'text-cyan-600',    text: 'text-cyan-800',    barBg: 'bg-cyan-500'    },
+  { key: 'outros',  label: 'Outros',           icone: MoreHorizontal, bg: 'bg-gray-100',   icon: 'text-gray-600',    text: 'text-gray-800',    barBg: 'bg-gray-500'    },
+];
+
+// KPI grande no topo do card de contas a receber.
+// Mostra valor + qtd + % do total geral, com cor adequada ao bucket.
+function KpiReceber({ icone: Icone, cor, label, sub, total, qtd, totalGeral }) {
+  const palette = {
+    rose:    { bg: 'bg-rose-50',    icon: 'text-rose-600',    accent: 'text-rose-700',    bar: 'bg-rose-500'    },
+    amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   accent: 'text-amber-700',   bar: 'bg-amber-500'   },
+    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', accent: 'text-emerald-700', bar: 'bg-emerald-500' },
+  };
+  const Pal = palette[cor] || palette.emerald;
+  const pct = totalGeral > 0 ? (total / totalGeral) * 100 : 0;
+  const vazio = qtd === 0;
+  return (
+    <div className="p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`h-8 w-8 rounded-lg ${Pal.bg} flex items-center justify-center flex-shrink-0`}>
+          <Icone className={`h-4 w-4 ${Pal.icon}`} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold text-gray-700 uppercase tracking-wider leading-tight">{label}</p>
+          {sub && <p className="text-[10px] text-gray-400 leading-tight">{sub}</p>}
+        </div>
+        {!vazio && (
+          <span className={`ml-auto text-[10px] font-bold ${Pal.accent}`}>
+            {pct.toFixed(0)}%
+          </span>
+        )}
+      </div>
+      <p className={`text-2xl font-bold tracking-tight ${vazio ? 'text-gray-300' : Pal.accent}`}>
+        {vazio ? '—' : formatCurrency(total)}
+      </p>
+      <div className="flex items-center gap-2 mt-1">
+        <p className="text-[11px] text-gray-500">
+          {vazio ? 'nenhum documento' : `${qtd} ${qtd === 1 ? 'documento' : 'documentos'}`}
+        </p>
+        {!vazio && (
+          <div className="flex-1 h-1 rounded-full bg-gray-100 overflow-hidden">
+            <div className={`h-full ${Pal.bar}`} style={{ width: `${Math.min(100, pct)}%` }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Célula da matriz contas a receber × categoria. Valor + qtd embaixo.
+// Acento por bucket: rose (vencido), amber (hoje), emerald (a vencer).
+function CelulaReceber({ qtd, total, acento = 'emerald' }) {
+  const accentText = {
+    rose:    'text-rose-700',
+    amber:   'text-amber-700',
+    emerald: 'text-emerald-700',
+  }[acento];
+  const vazio = qtd === 0;
+  return (
+    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+      <p className={`font-mono tabular-nums text-[12.5px] font-semibold ${vazio ? 'text-gray-300' : accentText}`}>
+        {vazio ? '—' : formatCurrency(total)}
+      </p>
+      <p className="text-[9.5px] text-gray-400 mt-0.5">
+        {vazio ? '' : `${qtd} doc.`}
+      </p>
+    </td>
   );
 }
 

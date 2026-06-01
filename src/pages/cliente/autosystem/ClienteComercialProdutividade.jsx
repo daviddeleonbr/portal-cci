@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Loader2, AlertCircle, RefreshCw, Building2, ChevronDown, ChevronRight,
   Users, Fuel, Package, Store,
   Search, Coins, Calendar, Boxes, LineChart as LineChartIcon, Droplet, Gauge,
+  Trophy, Medal, Award, Info,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -302,6 +304,7 @@ export default function ClienteComercialProdutividade() {
       case 'lucro':          return s.lucro;
       case 'ticketComb':     return s.abastecimentos    > 0 ? s.fatCombustivel  / s.abastecimentos    : 0;
       case 'ticketAuto':     return s.vendasAutomotivos > 0 ? s.fatAutomotivos  / s.vendasAutomotivos : 0;
+      case 'score':          return scoresPorVendedor.get(`${v.empresa}::${v.vendedor_codigo}`) || 0;
       default:               return 0;
     }
   }
@@ -328,6 +331,47 @@ export default function ClienteComercialProdutividade() {
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendedoresEnriquecidos]);
+
+  // Score 0-100 por vendedor — média das 6 métricas normalizadas (min-max).
+  // Vendedor com valor zero/inválido recebe 0 naquela métrica. Lucro negativo
+  // também conta como 0 (não penaliza além disso). Útil pra ranquear quem
+  // performa bem em todas as dimensões da Pista.
+  const scoresPorVendedor = useMemo(() => {
+    const out = new Map(); // key: `${empresa}::${vendedor_codigo}` → score
+    vendedoresEnriquecidos.forEach(v => {
+      let soma = 0;
+      let qtdMetricas = 0;
+      COLS_ANALISE.forEach(c => {
+        const val = pegarValor(v, c.campo);
+        const esc = escalas[c.campo] || { min: 0, max: 0 };
+        const range = esc.max - esc.min;
+        let norm = 0;
+        if (range > 0 && Number.isFinite(val) && val > 0) {
+          norm = Math.max(0, Math.min(1, (val - esc.min) / range));
+        }
+        soma += norm;
+        qtdMetricas++;
+      });
+      const score = qtdMetricas > 0 ? (soma / qtdMetricas) * 100 : 0;
+      out.set(`${v.empresa}::${v.vendedor_codigo}`, score);
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendedoresEnriquecidos, escalas]);
+
+  // Ranking 1-based pelo score (medalhas top 3).
+  const rankingScore = useMemo(() => {
+    const arr = vendedoresEnriquecidos
+      .map(v => ({
+        key: `${v.empresa}::${v.vendedor_codigo}`,
+        score: scoresPorVendedor.get(`${v.empresa}::${v.vendedor_codigo}`) || 0,
+      }))
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+    const m = new Map();
+    arr.forEach((x, i) => m.set(x.key, i + 1));
+    return m;
+  }, [vendedoresEnriquecidos, scoresPorVendedor]);
   const tabelaVendedores = useMemo(() => {
     // Esconde vendedores sem dados em nenhuma das colunas da análise comparativa.
     const comDados = vendedoresEnriquecidos.filter(v =>
@@ -513,7 +557,21 @@ export default function ClienteComercialProdutividade() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                     <tr className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                      <th className="px-3 py-2 text-left">Vendedor</th>
+                      <th className="px-3 py-2 text-center select-none relative">
+                        <div className="inline-flex items-center justify-center gap-1.5">
+                          <button type="button" onClick={() => clickHeader('score')}
+                            className={`inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors ${ordemCampo === 'score' ? 'text-blue-700' : ''}`}>
+                            <Trophy className="h-3 w-3 text-amber-500" />
+                            <span className="whitespace-nowrap">Score</span>
+                            <span className="inline-flex flex-col items-center -my-0.5 leading-none">
+                              <span className={`text-[8px] ${ordemCampo === 'score' && ordemDir === 'asc' ? 'text-blue-700' : 'text-gray-300'}`}>▲</span>
+                              <span className={`text-[8px] -mt-0.5 ${ordemCampo === 'score' && ordemDir === 'desc' ? 'text-blue-700' : 'text-gray-300'}`}>▼</span>
+                            </span>
+                          </button>
+                          <ScoreInfoTooltip />
+                        </div>
+                      </th>
+                      <th className="px-3 py-2 text-left border-l border-gray-100">Vendedor</th>
                       {COLS_ANALISE.map(c => {
                         const Icone = c.icone;
                         const ativo = ordemCampo === c.campo;
@@ -536,31 +594,39 @@ export default function ClienteComercialProdutividade() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {tabelaVendedores.map(v => (
-                      <tr key={`an-${v.empresa}-${v.vendedor_codigo}`} className="hover:bg-blue-50/30 transition-colors">
-                        <td className="px-3 py-1.5">
-                          <p className="text-[12px] font-medium text-gray-900 truncate max-w-[240px]">
-                            {v.vendedor_nome || <span className="italic text-gray-400">sem nome</span>}
-                          </p>
-                          <p className="text-[9.5px] text-gray-400 font-mono">cód {v.vendedor_codigo}</p>
-                        </td>
-                        {COLS_ANALISE.map(c => {
-                          const val = pegarValor(v, c.campo);
-                          const escala = escalas[c.campo] || { min: 0, max: 0 };
-                          const style = corHeatmap(val, escala.min, escala.max, c.cor);
-                          const negativo = (c.campo === 'lucro' || c.campo === 'automotivos') && val < 0;
-                          const vazio = !Number.isFinite(val) || val === 0;
-                          return (
-                            <td key={c.campo} style={style}
-                              className={`px-2.5 py-1.5 text-right font-mono tabular-nums text-[12px] border-l border-gray-100 ${
-                                vazio ? 'text-gray-300' : negativo ? 'text-red-700 font-semibold' : 'text-gray-900 font-semibold'
-                              }`}>
-                              {vazio ? '—' : c.fmt(val)}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                    {tabelaVendedores.map(v => {
+                      const score = scoresPorVendedor.get(`${v.empresa}::${v.vendedor_codigo}`) || 0;
+                      // Posição no ranking de score (1-based). Top 3 ganham medalha.
+                      const rankScore = rankingScore.get(`${v.empresa}::${v.vendedor_codigo}`);
+                      return (
+                        <tr key={`an-${v.empresa}-${v.vendedor_codigo}`} className="hover:bg-blue-50/30 transition-colors">
+                          <td className="px-3 py-1.5 text-center">
+                            <ScoreBadge score={score} rank={rankScore} />
+                          </td>
+                          <td className="px-3 py-1.5 border-l border-gray-100">
+                            <p className="text-[12px] font-medium text-gray-900 truncate max-w-[240px]">
+                              {v.vendedor_nome || <span className="italic text-gray-400">sem nome</span>}
+                            </p>
+                            <p className="text-[9.5px] text-gray-400 font-mono">cód {v.vendedor_codigo}</p>
+                          </td>
+                          {COLS_ANALISE.map(c => {
+                            const val = pegarValor(v, c.campo);
+                            const escala = escalas[c.campo] || { min: 0, max: 0 };
+                            const style = corHeatmap(val, escala.min, escala.max, c.cor);
+                            const negativo = (c.campo === 'lucro' || c.campo === 'automotivos') && val < 0;
+                            const vazio = !Number.isFinite(val) || val === 0;
+                            return (
+                              <td key={c.campo} style={style}
+                                className={`px-2.5 py-1.5 text-right font-mono tabular-nums text-[12px] border-l border-gray-100 ${
+                                  vazio ? 'text-gray-300' : negativo ? 'text-red-700 font-semibold' : 'text-gray-900 font-semibold'
+                                }`}>
+                                {vazio ? '—' : c.fmt(val)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -726,6 +792,151 @@ function corHeatmap(valor, min, max, cor = 'violet') {
   const opacity = 0.06 + 0.34 * intensity; // 6% até 40%
   const rgb = COR_RGB[cor] || COR_RGB.violet;
   return { backgroundColor: `rgba(${rgb}, ${opacity})` };
+}
+
+// Tooltip explicativo do cálculo do Score.
+// Renderizado via createPortal no document.body com position: fixed para
+// escapar do overflow:auto da tabela. Posicionamento calculado a partir do
+// rect do botão e reajustado em scroll/resize/escape.
+function ScoreInfoTooltip() {
+  const [aberto, setAberto] = useState(false);
+  const btnRef = useRef(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const WIDTH = 320;
+
+  useEffect(() => {
+    if (!aberto) return;
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (!r) return;
+      // Centraliza embaixo do botão; clampa pra não sair da viewport.
+      const idealLeft = r.left + r.width / 2 - WIDTH / 2;
+      const left = Math.max(8, Math.min(idealLeft, window.innerWidth - WIDTH - 8));
+      setPos({ top: r.bottom + 8, left });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    const onKey = (e) => { if (e.key === 'Escape') setAberto(false); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [aberto]);
+
+  return (
+    <>
+      <button ref={btnRef} type="button"
+        aria-label="Como o Score é calculado"
+        onMouseEnter={() => setAberto(true)}
+        onMouseLeave={() => setAberto(false)}
+        onFocus={() => setAberto(true)}
+        onBlur={() => setAberto(false)}
+        onClick={(e) => { e.stopPropagation(); setAberto(o => !o); }}
+        className="inline-flex items-center justify-center h-4 w-4 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-help">
+        <Info className="h-3 w-3" />
+      </button>
+      {aberto && createPortal(
+        <div
+          role="tooltip"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: WIDTH, zIndex: 9999 }}
+          className="rounded-xl bg-gray-900 text-white shadow-2xl ring-1 ring-black/10 pointer-events-none text-left normal-case tracking-normal">
+          {/* setinha apontando pro botão */}
+          <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-3 w-3 rotate-45 bg-gray-900" />
+          <div className="relative p-3.5">
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy className="h-3.5 w-3.5 text-amber-400" />
+              <p className="text-[12px] font-semibold">Como o Score é calculado</p>
+            </div>
+            <p className="text-[11px] text-gray-300 leading-relaxed mb-2.5">
+              Pontuação <strong className="text-white">0–100</strong> que mede a performance do
+              vendedor em <strong className="text-white">6 dimensões</strong> da Pista.
+              Cada métrica é normalizada (min→max) e o Score é a média simples delas.
+            </p>
+            <div className="border-t border-white/10 pt-2 mb-2.5">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">
+                Métricas utilizadas
+              </p>
+              <ul className="space-y-1 text-[11px] text-gray-200">
+                <li className="flex items-center gap-1.5"><Package className="h-2.5 w-2.5 text-blue-400" /> Vendas de automotivos</li>
+                <li className="flex items-center gap-1.5"><Droplet className="h-2.5 w-2.5 text-blue-300" /> Mix de aditivada</li>
+                <li className="flex items-center gap-1.5"><Coins className="h-2.5 w-2.5 text-amber-400" /> Abastecimentos</li>
+                <li className="flex items-center gap-1.5"><Coins className="h-2.5 w-2.5 text-emerald-400" /> Lucro bruto</li>
+                <li className="flex items-center gap-1.5"><Fuel className="h-2.5 w-2.5 text-amber-400" /> Ticket médio combustíveis</li>
+                <li className="flex items-center gap-1.5"><Package className="h-2.5 w-2.5 text-blue-400" /> Ticket médio automotivos</li>
+              </ul>
+            </div>
+            <div className="border-t border-white/10 pt-2 mb-2.5">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+                Fórmula
+              </p>
+              <p className="font-mono text-[10.5px] text-emerald-300 bg-white/5 rounded px-1.5 py-1">
+                norm = (valor − mín) / (máx − mín)
+              </p>
+              <p className="font-mono text-[10.5px] text-emerald-300 bg-white/5 rounded px-1.5 py-1 mt-1">
+                score = média(norm × 6 métricas) × 100
+              </p>
+            </div>
+            <div className="border-t border-white/10 pt-2">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">
+                Faixas de cor
+              </p>
+              <div className="grid grid-cols-2 gap-1 text-[10.5px]">
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> 80–100 excelente</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300" /> 60–79 bom</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-400" /> 40–59 médio</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-400" /> 1–39 atenção</span>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// Badge circular do Score (0-100) com cor gradativa e medalha para top 3.
+//   0-39   → vermelho (precisa atenção)
+//   40-59  → âmbar (médio)
+//   60-79  → emerald (bom)
+//   80-100 → emerald forte + ring (excelente)
+function ScoreBadge({ score, rank }) {
+  const n = Math.round(score || 0);
+  const cor = n >= 80 ? 'emerald-strong'
+            : n >= 60 ? 'emerald'
+            : n >= 40 ? 'amber'
+            : n > 0   ? 'red'
+            : 'gray';
+  const PAL = {
+    'emerald-strong': { bg: 'bg-emerald-500', text: 'text-white',        ring: 'ring-emerald-300', med: 'text-emerald-600' },
+    emerald:          { bg: 'bg-emerald-100', text: 'text-emerald-800',  ring: 'ring-emerald-200', med: 'text-emerald-600' },
+    amber:            { bg: 'bg-amber-100',   text: 'text-amber-800',    ring: 'ring-amber-200',   med: 'text-amber-600'   },
+    red:              { bg: 'bg-rose-100',    text: 'text-rose-800',     ring: 'ring-rose-200',    med: 'text-rose-600'    },
+    gray:             { bg: 'bg-gray-100',    text: 'text-gray-400',     ring: 'ring-gray-200',    med: 'text-gray-400'    },
+  }[cor];
+  // Ícone de medalha pros top 3 (ouro/prata/bronze).
+  const Medalha = rank === 1 ? Trophy : (rank === 2 || rank === 3) ? Medal : null;
+  const corMedalha = rank === 1 ? 'text-amber-500'
+                   : rank === 2 ? 'text-gray-400'
+                   : rank === 3 ? 'text-amber-700' : '';
+  return (
+    <div className="inline-flex flex-col items-center gap-0.5">
+      <div className={`relative inline-flex items-center justify-center h-9 w-9 rounded-full ${PAL.bg} ${PAL.text} ring-2 ${PAL.ring} shadow-sm`}>
+        <span className="font-bold text-[12.5px] tabular-nums leading-none">{n}</span>
+        {Medalha && (
+          <Medalha className={`absolute -top-1.5 -right-1.5 h-3.5 w-3.5 ${corMedalha} drop-shadow-sm`} />
+        )}
+      </div>
+      {rank && rank <= 3 && (
+        <span className={`text-[8.5px] font-bold uppercase tracking-wider ${corMedalha}`}>
+          {rank === 1 ? '1º' : rank === 2 ? '2º' : '3º'}
+        </span>
+      )}
+    </div>
+  );
 }
 
 // Painel de detalhes do vendedor (linha expandida da tabela).

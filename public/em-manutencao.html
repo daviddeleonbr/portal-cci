@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#070912" />
+  <title>Em manutenção · CCI Consultoria</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #070912;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow-x: hidden;
+      position: relative;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    /* Aurora blur de fundo (mesmo padrão das telas de login) */
+    body::before, body::after {
+      content: "";
+      position: fixed;
+      border-radius: 9999px;
+      filter: blur(140px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::before {
+      width: 520px; height: 520px;
+      top: -120px; left: -120px;
+      background: rgba(13, 148, 136, 0.30);
+    }
+    body::after {
+      width: 560px; height: 560px;
+      bottom: -160px; right: -160px;
+      background: rgba(20, 184, 166, 0.22);
+    }
+    /* Vinheta radial */
+    .vignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 1;
+      background: radial-gradient(ellipse at center, rgba(7,9,18,0) 0%, rgba(7,9,18,0.85) 100%);
+    }
+    .card {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 520px;
+      background: rgba(13, 16, 32, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 40px 32px;
+      text-align: center;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+    }
+    .badge {
+      width: 64px; height: 64px;
+      margin: 0 auto 20px;
+      border-radius: 18px;
+      background: #0d9488;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+      box-shadow: 0 18px 40px -10px rgba(13, 148, 136, 0.55);
+      animation: pulse 2.6s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1);   box-shadow: 0 18px 40px -10px rgba(13, 148, 136, 0.55); }
+      50%      { transform: scale(1.04); box-shadow: 0 22px 50px -8px  rgba(20, 184, 166, 0.75); }
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #f1f5f9;
+    }
+    .subtitle {
+      margin: 0 0 24px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: #94a3b8;
+    }
+    .strong { color: #f1f5f9; font-weight: 500; }
+    /* Bloco editável de previsão */
+    .eta {
+      margin: 0 0 24px;
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: rgba(13, 148, 136, 0.10);
+      border: 1px solid rgba(13, 148, 136, 0.25);
+      color: #5eead4;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .eta-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #14b8a6;
+      margin-bottom: 4px;
+      opacity: 0.85;
+    }
+    .footer {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 12px;
+      color: #64748b;
+    }
+    .footer .brand { color: #94a3b8; font-weight: 500; }
+    @media (max-width: 480px) {
+      .card { padding: 32px 22px; border-radius: 20px; }
+      h1 { font-size: 24px; }
+      .subtitle { font-size: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .badge { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="vignette"></div>
+
+  <main class="card" role="main" aria-live="polite">
+    <div class="badge" aria-hidden="true">C</div>
+
+    <h1>Em manutenção</h1>
+    <p class="subtitle">
+      Estamos realizando uma <span class="strong">atualização programada</span> no portal.
+      Em alguns instantes tudo voltará ao normal.
+    </p>
+
+    <!-- EDITE AQUI: previsão de retorno -->
+    <div class="eta">
+      <span class="eta-label">Previsão de retorno</span>
+      Voltamos em alguns minutos.
+    </div>
+    <!-- /EDITE AQUI -->
+
+    <div class="footer">
+      <span class="brand">CCI Consultoria</span> · Obrigado pela paciência.
+    </div>
+  </main>
+</body>
+</html>

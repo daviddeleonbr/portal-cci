@@ -94,6 +94,7 @@ const ABAS = [
   { key: 'conveniencia', label: 'Conveniências',icone: Store,      categoria: 'conveniencia'},
 ];
 import PageHeader from '../../../components/ui/PageHeader';
+import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
@@ -238,6 +239,10 @@ export default function ClienteComercialVendas() {
   const [subAbaAutomotivos, setSubAbaAutomotivos] = useState('dia');
   const [subAbaConveniencia, setSubAbaConveniencia] = useState('dia');
   const [expandidos, setExpandidos] = useState(new Set());
+
+  // Modal de detalhe ao clicar numa categoria do resumo Posto × Categoria
+  // (mostra realizado + projeções em cards)
+  const [detalheCatModal, setDetalheCatModal] = useState(null);
 
   // Evolução dos últimos 12 meses (independente do período selecionado)
   const [evolucao12m, setEvolucao12m] = useState([]);
@@ -1731,6 +1736,39 @@ export default function ClienteComercialVendas() {
     return out;
   }, [evolucao12m]);
 
+  // Séries de evolução (12m) por categoria — alimentam o sparkline do modal.
+  // Reutilizamos os states já carregados: evolucao12m (combustíveis), Auto, Conv.
+  // Cada série é normalizada para 12 meses com lucro, margem% e faturamento.
+  const seriesEvolucaoPorCategoria = useMemo(() => {
+    const buildSerie = (rows) => {
+      const idx = new Map();
+      (rows || []).forEach(r => idx.set(String(r.ano_mes), r));
+      const hoje = new Date();
+      const out = [];
+      for (let i = 11; i >= 0; i--) {
+        const m = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+        const ym = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
+        const row = idx.get(ym);
+        const fat   = row ? Number(row.valor) || 0 : 0;
+        const custo = row ? Number(row.valor_custo) || 0 : 0;
+        const lucro = fat - custo;
+        out.push({
+          ano_mes: ym,
+          rotulo: `${MESES_PT_CURTO[m.getMonth()]}/${String(m.getFullYear()).slice(2)}`,
+          faturamento: fat,
+          lucro,
+          margemPct: fat > 0 ? (lucro / fat) * 100 : 0,
+        });
+      }
+      return out;
+    };
+    return {
+      combustivel:  serieEvolucao,
+      automotivos:  buildSerie(evolucao12mAuto),
+      conveniencia: buildSerie(evolucao12mConv),
+    };
+  }, [serieEvolucao, evolucao12mAuto, evolucao12mConv]);
+
   // Sem empresas Autosystem
   if (empresasDisponiveis.length === 0) {
     return (
@@ -1812,26 +1850,43 @@ export default function ClienteComercialVendas() {
       </div>
 
       {/* Cards de lucro bruto (apenas na Visão geral) */}
-      {aba === 'geral' && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-          {CATEGORIAS.filter(c => ['combustivel', 'automotivos', 'conveniencia'].includes(c.key)).map(c => {
-            const dados = totaisGerais.porCat[c.key] || { lucro: 0, valor: 0, custo: 0 };
-            const dadosAA = totaisAnoAnterior.porCat[c.key] || { lucro: 0, valor: 0, custo: 0 };
-            const margem = dados.valor > 0 ? dados.lucro / dados.valor : 0;
-            return (
-              <KpiLucro key={c.key} cat={c}
-                lucro={dados.lucro}
-                margem={margem}
-                lucroAnoAnterior={dadosAA.lucro}
-              />
-            );
-          })}
-          <KpiLucroGlobal
-            lucro={totaisGerais.totalLucro}
-            margem={totaisGerais.totalValor > 0 ? totaisGerais.totalLucro / totaisGerais.totalValor : 0}
-            lucroAnoAnterior={totaisAnoAnterior.totalLucro}
-          />
-        </div>
+      {aba === 'geral' && (() => {
+        const projetar = (total) => {
+          if (!projParams?.dec || projParams.dec <= 0) return total;
+          return total * (projParams.diasAtual / projParams.dec);
+        };
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            {CATEGORIAS.filter(c => ['combustivel', 'automotivos', 'conveniencia'].includes(c.key)).map(c => {
+              const dados = totaisGerais.porCat[c.key] || { lucro: 0, valor: 0, custo: 0 };
+              const dadosAA = totaisAnoAnterior.porCat[c.key] || { lucro: 0, valor: 0, custo: 0 };
+              const margem = dados.valor > 0 ? dados.lucro / dados.valor : 0;
+              return (
+                <KpiLucro key={c.key} cat={c}
+                  lucro={dados.lucro}
+                  lucroProjecao={projetar(dados.lucro)}
+                  margem={margem}
+                  lucroAnoAnterior={dadosAA.lucro}
+                />
+              );
+            })}
+            <KpiLucroGlobal
+              lucro={totaisGerais.totalLucro}
+              lucroProjecao={projetar(totaisGerais.totalLucro)}
+              margem={totaisGerais.totalValor > 0 ? totaisGerais.totalLucro / totaisGerais.totalValor : 0}
+              lucroAnoAnterior={totaisAnoAnterior.totalLucro}
+            />
+          </div>
+        );
+      })()}
+
+      {/* Resumo por posto (apenas Realizado) — só Visão geral */}
+      {aba === 'geral' && arvoreVisivel.length > 0 && (
+        <TabelaPostoCategoria
+          arvore={arvoreVisivel}
+          multiEmpresa={multiEmpresa}
+          onAbrirDetalhe={(empresa) => setDetalheCatModal({ empresa })}
+        />
       )}
 
       {/* Cards específicos da aba Combustíveis */}
@@ -2413,9 +2468,8 @@ export default function ClienteComercialVendas() {
         </>
       )}
 
-      {/* Conteúdo: a tree de análise só aparece na aba "Visão geral".
-          Estados de loading/erro/vazio continuam visíveis em qualquer aba para
-          dar feedback ao usuário sobre o carregamento dos dados. */}
+      {/* Estados de carregamento / erro / vazio das vendas — alimentam KPIs,
+          resumo por posto e gráficos da Visão geral. */}
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
           <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
@@ -2429,7 +2483,7 @@ export default function ClienteComercialVendas() {
             <p className="text-red-700 mt-1">{erro}</p>
           </div>
         </div>
-      ) : aba !== 'geral' ? null : arvoreVisivel.length === 0 ? (
+      ) : aba === 'geral' && arvoreVisivel.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
             <ShoppingCart className="h-6 w-6 text-blue-600" />
@@ -2439,16 +2493,16 @@ export default function ClienteComercialVendas() {
             Tente ajustar o intervalo de datas ou as empresas selecionadas.
           </p>
         </div>
-      ) : (
-        <TreeVendas
-          arvore={arvoreVisivel}
-          multiEmpresa={multiEmpresa}
-          expandidos={expandidos}
-          setExpandidos={setExpandidos}
-          onToggle={toggleExpandido}
-          projParams={projParams}
-        />
-      )}
+      ) : null}
+
+      {/* Modal de detalhe do posto (acionado pelo resumo Posto) */}
+      <ModalDetalhePosto
+        aberto={!!detalheCatModal}
+        onClose={() => setDetalheCatModal(null)}
+        empresa={detalheCatModal?.empresa}
+        projParams={projParams}
+        seriesEvolucaoPorCategoria={seriesEvolucaoPorCategoria}
+      />
     </div>
   );
 }
@@ -2529,6 +2583,516 @@ function ChipDelta({ atual, base, rotulo }) {
 //   'leve'  → borda à esquerda em gray-200 (separa sub-colunas dentro da métrica)
 //   undef.  → sem borda
 // `tomProj` quando true aplica um leve tom de fundo (zebrar projeção vs atual).
+// ─── Resumo por posto (Lucro bruto por categoria) ─────────────
+// Tabela compacta com Posto + Lucro bruto realizado em Combustível,
+// Automotivos e Conveniência. Cada célula traz o valor e a variação
+// vs o mesmo período do ano anterior (AA). Clique no posto abre o
+// modal de detalhes por categoria.
+function TabelaPostoCategoria({ arvore, multiEmpresa, onAbrirDetalhe }) {
+  // Categorias fixas (mesmas exibidas nos cards / no modal).
+  const CATEGORIAS_TABELA = useMemo(
+    () => CATEGORIAS.filter(c =>
+      ['combustivel', 'automotivos', 'conveniencia'].includes(c.key)
+    ),
+    [],
+  );
+
+  // Resolve o catNode da categoria pedida; se não existir, retorna stats zerados.
+  const getCatStats = (empNode, key) => {
+    const cat = (empNode.categorias || []).find(c => c.categoria.key === key);
+    if (!cat) return { atual: 0, aa: 0 };
+    return {
+      atual: cat.stats.lucro.atual || 0,
+      aa:    cat.stats.lucro.aa    || 0,
+    };
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2 bg-gradient-to-b from-white to-gray-50/40">
+        <LayoutGrid className="h-4 w-4 text-blue-500" />
+        <h3 className="text-[13px] font-semibold text-gray-800">Lucro bruto por posto</h3>
+        <span className="text-[11px] text-gray-400">· valor realizado + variação vs mesmo período do ano anterior · clique num posto pra ver detalhes</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50/80 border-b border-gray-200">
+            <tr className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left">{multiEmpresa ? 'Posto' : 'Geral'}</th>
+              {CATEGORIAS_TABELA.map(cat => {
+                const Pal = CAT_PALETA[cat.cor];
+                const Icone = cat.icone;
+                return (
+                  <th key={cat.key} className="px-3 py-2 text-right">
+                    <span className={`inline-flex items-center gap-1.5 ${Pal.text}`}>
+                      <Icone className={`h-3 w-3 ${Pal.icon}`} />
+                      {cat.label}
+                    </span>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {arvore.map((empNode) => (
+              <tr
+                key={`emp:${empNode.empresa_codigo}`}
+                className="cursor-pointer hover:bg-blue-50/40 border-t border-gray-100 transition-colors"
+                onClick={() => onAbrirDetalhe(empNode)}
+              >
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
+                      <Building2 className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[12.5px] font-semibold text-gray-900 truncate leading-tight">
+                        {empNode.nome}
+                      </p>
+                      {empNode.empresa_codigo != null && (
+                        <p className="text-[9.5px] text-gray-500 font-mono leading-tight">
+                          cód {empNode.empresa_codigo}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </td>
+                {CATEGORIAS_TABELA.map(cat => {
+                  const s = getCatStats(empNode, cat.key);
+                  return (
+                    <td key={cat.key} className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className={`font-mono tabular-nums text-[12.5px] font-semibold ${s.atual < 0 ? 'text-red-700' : 'text-gray-900'}`}>
+                          {formatCurrency(s.atual)}
+                        </span>
+                        <BadgeComparacaoAA atual={s.atual} anoAnterior={s.aa} />
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Modal com abas Combustível / Automotivos / Conveniência —
+// cada aba mostra: cards de Qtd/Fat/Lucro (Realizado+Proj),
+// KPIs extras (Margem, Ticket médio, Lucro/litro), Top 5 grupos e
+// mini-gráfico de evolução 12m.
+function ModalDetalhePosto({ aberto, onClose, empresa, projParams, seriesEvolucaoPorCategoria }) {
+  // Abas fixas (mesmas categorias da página principal).
+  const abasCategorias = React.useMemo(
+    () => CATEGORIAS.filter(c =>
+      ['combustivel', 'automotivos', 'conveniencia'].includes(c.key)
+    ),
+    [],
+  );
+  const [abaKey, setAbaKey] = useState(abasCategorias[0]?.key || 'combustivel');
+
+  // Reseta aba ao reabrir
+  useEffect(() => {
+    if (aberto) setAbaKey(abasCategorias[0]?.key || 'combustivel');
+  }, [aberto, abasCategorias]);
+
+  if (!empresa) {
+    return <Modal open={aberto} onClose={onClose} title="" size="xl">{null}</Modal>;
+  }
+
+  // Indexa as categorias do empNode por key pra olhar rápido
+  const mapaCat = new Map();
+  (empresa.categorias || []).forEach(c => mapaCat.set(c.categoria.key, c));
+  const catNode = mapaCat.get(abaKey);
+
+  const projetar = (total, dias) => {
+    if (!projParams?.dec || projParams.dec <= 0) return total;
+    return total * (dias / projParams.dec);
+  };
+
+  const serie = seriesEvolucaoPorCategoria?.[abaKey] || [];
+
+  return (
+    <Modal open={aberto} onClose={onClose} title="" size="xl">
+      <div className="space-y-5">
+        {/* Cabeçalho do posto */}
+        <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+          <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
+            <Building2 className="h-5 w-5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Detalhe do posto</p>
+            <h3 className="text-base font-semibold text-gray-900">
+              {empresa.nome}
+              {empresa.empresa_codigo != null && (
+                <span className="text-gray-400 font-normal ml-2 text-sm font-mono">cód {empresa.empresa_codigo}</span>
+              )}
+            </h3>
+          </div>
+        </div>
+
+        {/* Abas das categorias */}
+        <div className="flex items-center gap-1 border-b border-gray-100 -mb-px overflow-x-auto">
+          {abasCategorias.map(cat => {
+            const Pal = CAT_PALETA[cat.cor];
+            const Icone = cat.icone;
+            const ativo = abaKey === cat.key;
+            return (
+              <button key={cat.key}
+                onClick={() => setAbaKey(cat.key)}
+                className={`flex items-center gap-2 px-3 py-2 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  ativo
+                    ? `${Pal.text} border-current`
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
+                }`}>
+                <Icone className={`h-4 w-4 ${ativo ? Pal.icon : 'text-gray-400'}`} />
+                <span>{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Conteúdo da aba ativa */}
+        {catNode ? (
+          <ConteudoCategoriaModal catNode={catNode} projetar={projetar} projParams={projParams} serie={serie} />
+        ) : (
+          <div className="py-8 text-center text-sm text-gray-400">
+            Sem dados nesta categoria para o posto selecionado.
+          </div>
+        )}
+
+        {projParams?.dec > 0 && (
+          <p className="text-[11px] text-gray-500 leading-relaxed">
+            Projeção calculada multiplicando o realizado pelo fator
+            <span className="font-mono mx-1">{projParams.diasAtual}/{projParams.dec}</span>
+            (dias do mês / dias decorridos).
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ConteudoCategoriaModal({ catNode, projetar, projParams, serie }) {
+  const stats = catNode.stats;
+  const isCombustivel = catNode.categoria?.key === 'combustivel';
+  const Pal = CAT_PALETA[catNode.categoria.cor];
+
+  const qtdProj   = projetar(stats.qtd.atual,   projParams?.diasAtual);
+  const fatProj   = projetar(stats.fat.atual,   projParams?.diasAtual);
+  const lucroProj = projetar(stats.lucro.atual, projParams?.diasAtual);
+  const margemAtual = stats.fat.atual > 0 ? (stats.lucro.atual / stats.fat.atual) * 100 : 0;
+  const margemProj  = fatProj > 0 ? (lucroProj / fatProj) * 100 : 0;
+  // Ticket médio = faturamento / quantidade. Para combustível "qtd" = litros.
+  const ticketAtual = stats.qtd.atual > 0 ? stats.fat.atual / stats.qtd.atual : 0;
+  const ticketProj  = qtdProj > 0 ? fatProj / qtdProj : 0;
+  // Lucro por litro só faz sentido pra combustível.
+  const luPorLAtual = stats.qtd.atual > 0 ? stats.lucro.atual / stats.qtd.atual : 0;
+  const luPorLProj  = qtdProj > 0 ? lucroProj / qtdProj : 0;
+  // Margem do mês anterior (referência alternativa quando não é combustível).
+  const margemMA = stats.fat.ma > 0 ? (stats.lucro.ma / stats.fat.ma) * 100 : 0;
+
+  // Top 5 grupos da categoria (já vêm ordenados na construção da árvore).
+  const top5 = (catNode.grupos || []).slice(0, 5);
+
+  return (
+    <div className="space-y-3">
+      {/* Cards principais (Qtd, Fat, Lucro) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <CardMetricaDetalhe
+          label="Quantidade"
+          valorRealizado={formatNumero(stats.qtd.atual, 2)}
+          valorProjecao={formatNumero(qtdProj, 2)}
+          corAcento="blue"
+        />
+        <CardMetricaDetalhe
+          label="Faturamento"
+          valorRealizado={formatCurrency(stats.fat.atual)}
+          valorProjecao={formatCurrency(fatProj)}
+          corAcento="emerald"
+        />
+        <CardMetricaDetalhe
+          label="Lucro bruto"
+          valorRealizado={formatCurrency(stats.lucro.atual)}
+          valorProjecao={formatCurrency(lucroProj)}
+          sub={`margem ${margemAtual.toFixed(1)}%`}
+          subProj={`margem ${margemProj.toFixed(1)}%`}
+          corAcento={stats.lucro.atual < 0 ? 'red' : 'amber'}
+        />
+      </div>
+
+      {/* KPIs compactos */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <KpiCompacto
+          label="Margem"
+          valorRealizado={`${margemAtual.toFixed(1)}%`}
+          valorProjecao={`${margemProj.toFixed(1)}%`}
+          corAcento="amber"
+        />
+        <KpiCompacto
+          label="Ticket médio"
+          valorRealizado={formatCurrency(ticketAtual)}
+          valorProjecao={formatCurrency(ticketProj)}
+          sub={isCombustivel ? 'por litro' : 'por item'}
+          corAcento="blue"
+        />
+        {isCombustivel ? (
+          <KpiCompacto
+            label="Lucro por litro"
+            valorRealizado={formatCurrency(luPorLAtual)}
+            valorProjecao={formatCurrency(luPorLProj)}
+            corAcento={luPorLAtual < 0 ? 'red' : 'emerald'}
+          />
+        ) : (
+          <KpiCompacto
+            label="Margem (mês anterior)"
+            valorRealizado={`${margemMA.toFixed(1)}%`}
+            valorProjecao="—"
+            sub="comparativo MA"
+            corAcento="gray"
+          />
+        )}
+      </div>
+
+      {/* Top 5 grupos + mini-gráfico em 2 colunas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <TopGruposTabela grupos={top5} paleta={Pal} />
+        <SparklineEvolucao serie={serie} paleta={Pal} />
+      </div>
+
+      {/* Referências (MA / AA) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <CardReferencia
+          label="Mês anterior"
+          qtd={stats.qtd.ma}
+          fat={stats.fat.ma}
+          lucro={stats.lucro.ma}
+        />
+        <CardReferencia
+          label="Ano anterior"
+          qtd={stats.qtd.aa}
+          fat={stats.fat.aa}
+          lucro={stats.lucro.aa}
+        />
+      </div>
+    </div>
+  );
+}
+
+// KPI compacto com Realizado + Proj. mês (versão enxuta do CardMetricaDetalhe)
+function KpiCompacto({ label, valorRealizado, valorProjecao, sub, corAcento = 'blue' }) {
+  const acentoCls = {
+    blue:    'border-blue-200 bg-blue-50/40',
+    emerald: 'border-emerald-200 bg-emerald-50/40',
+    amber:   'border-amber-200 bg-amber-50/40',
+    red:     'border-red-200 bg-red-50/40',
+    gray:    'border-gray-200 bg-gray-50/40',
+  }[corAcento];
+  return (
+    <div className={`rounded-xl border ${acentoCls} p-3`}>
+      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">{label}</p>
+      <div className="flex items-baseline gap-3 mt-1.5">
+        <div className="min-w-0">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wider">Realizado</p>
+          <p className="font-mono tabular-nums text-sm font-bold text-gray-900 mt-0.5 truncate">{valorRealizado}</p>
+        </div>
+        <div className="min-w-0 border-l border-gray-200/80 pl-3">
+          <p className="text-[9px] text-blue-600 uppercase tracking-wider">Proj.</p>
+          <p className="font-mono tabular-nums text-sm font-bold text-blue-900 mt-0.5 truncate">{valorProjecao}</p>
+        </div>
+      </div>
+      {sub && <p className="text-[10px] text-gray-500 mt-1.5">{sub}</p>}
+    </div>
+  );
+}
+
+// Top 5 grupos da categoria
+function TopGruposTabela({ grupos, paleta }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className={`px-3 py-2 ${paleta?.bg || 'bg-gray-50'} border-b border-gray-100 flex items-center gap-2`}>
+        <p className={`text-[10.5px] uppercase tracking-wider font-semibold ${paleta?.text || 'text-gray-600'}`}>
+          Top 5 grupos
+        </p>
+        <span className="text-[10px] text-gray-400">· por faturamento</span>
+      </div>
+      {grupos.length === 0 ? (
+        <p className="px-3 py-6 text-[11px] text-gray-400 text-center">Sem grupos nessa categoria.</p>
+      ) : (
+        <table className="w-full text-[11px]">
+          <thead className="text-gray-400">
+            <tr>
+              <th className="text-left px-3 py-1.5 font-medium uppercase text-[9px] tracking-wider">Grupo</th>
+              <th className="text-right px-2 py-1.5 font-medium uppercase text-[9px] tracking-wider">Qtd</th>
+              <th className="text-right px-2 py-1.5 font-medium uppercase text-[9px] tracking-wider">Fat.</th>
+              <th className="text-right px-2 py-1.5 font-medium uppercase text-[9px] tracking-wider">Lucro</th>
+              <th className="text-right px-2 py-1.5 font-medium uppercase text-[9px] tracking-wider">Margem</th>
+            </tr>
+          </thead>
+          <tbody>
+            {grupos.map(g => {
+              const fat = g.stats.fat.atual || 0;
+              const lucro = g.stats.lucro.atual || 0;
+              const margem = fat > 0 ? (lucro / fat) * 100 : 0;
+              return (
+                <tr key={`g:${g.codigo ?? 'none'}`} className="border-t border-gray-50">
+                  <td className="px-3 py-1.5 text-gray-700 truncate max-w-[180px]" title={g.nome}>
+                    {g.nome || '—'}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono tabular-nums text-gray-600">
+                    {formatNumero(g.stats.qtd.atual || 0, 2)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono tabular-nums text-gray-800 font-semibold">
+                    {formatCurrency(fat)}
+                  </td>
+                  <td className={`px-2 py-1.5 text-right font-mono tabular-nums font-semibold ${lucro < 0 ? 'text-red-700' : 'text-gray-800'}`}>
+                    {formatCurrency(lucro)}
+                  </td>
+                  <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${margem < 0 ? 'text-red-700' : 'text-gray-700'}`}>
+                    {margem.toFixed(1)}%
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// Mini-gráfico de evolução 12 meses (barras de lucro + linha de margem%)
+// SVG inline (sem dependência nova). viewBox responsivo.
+function SparklineEvolucao({ serie, paleta }) {
+  const pontos = Array.isArray(serie) ? serie : [];
+  const temDados = pontos.length >= 2 && pontos.some(p => Math.abs(p.lucro || 0) > 0.01);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className={`px-3 py-2 ${paleta?.bg || 'bg-gray-50'} border-b border-gray-100 flex items-center gap-2`}>
+        <p className={`text-[10.5px] uppercase tracking-wider font-semibold ${paleta?.text || 'text-gray-600'}`}>
+          Evolução 12 meses
+        </p>
+        <span className="text-[10px] text-gray-400">· lucro (barras) e margem % (linha)</span>
+      </div>
+
+      {!temDados ? (
+        <p className="px-3 py-6 text-[11px] text-gray-400 text-center">Sem dados de evolução disponíveis.</p>
+      ) : (
+        <div className="px-3 py-3">
+          {(() => {
+            const W = 280, H = 80, pad = 4;
+            const barW = (W - pad * 2) / pontos.length - 1;
+            const lucros = pontos.map(p => p.lucro || 0);
+            const margens = pontos.map(p => p.margemPct || 0);
+            const lucroMax = Math.max(...lucros, 0.0001);
+            const lucroMin = Math.min(...lucros, 0);
+            const lucroRange = lucroMax - lucroMin || 1;
+            // Eixo do lucro (barras) ocupa H - 18 (deixa espaço pro eixo X)
+            const baseY = H - 18;
+            const altPlot = H - 22;
+            const margemMin = Math.min(...margens);
+            const margemMax = Math.max(...margens);
+            const margemRange = (margemMax - margemMin) || 1;
+            const pontosLinha = pontos.map((p, i) => {
+              const cx = pad + i * (barW + 1) + barW / 2;
+              const cy = 2 + (1 - ((p.margemPct || 0) - margemMin) / margemRange) * (altPlot - 4);
+              return `${cx},${cy}`;
+            }).join(' ');
+            const corBar  = paleta?.icon ? paleta.icon.replace('text-', 'fill-') : 'fill-blue-400';
+            const corLine = paleta?.icon ? paleta.icon.replace('text-', 'stroke-') : 'stroke-blue-600';
+
+            return (
+              <>
+                <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[80px]" preserveAspectRatio="none">
+                  {/* Barras de lucro */}
+                  {pontos.map((p, i) => {
+                    const v = p.lucro || 0;
+                    const hBar = (Math.abs(v) / Math.max(Math.abs(lucroMax), Math.abs(lucroMin), 0.0001)) * (altPlot - 4) * 0.85;
+                    const y = v >= 0 ? baseY - hBar : baseY;
+                    const x = pad + i * (barW + 1);
+                    return (
+                      <rect key={i} x={x} y={y} width={barW} height={hBar || 0.5}
+                        className={`${corBar} ${v < 0 ? 'opacity-50' : 'opacity-90'}`} />
+                    );
+                  })}
+                  {/* Linha base */}
+                  <line x1={pad} y1={baseY} x2={W - pad} y2={baseY} className="stroke-gray-300" strokeWidth="0.5" />
+                  {/* Polilinha da margem */}
+                  <polyline points={pontosLinha} fill="none" className={`${corLine}`} strokeWidth="1.5" strokeLinejoin="round" />
+                  {/* Pontos da margem */}
+                  {pontos.map((p, i) => {
+                    const cx = pad + i * (barW + 1) + barW / 2;
+                    const cy = 2 + (1 - ((p.margemPct || 0) - margemMin) / margemRange) * (altPlot - 4);
+                    return <circle key={`pt-${i}`} cx={cx} cy={cy} r="1.5" className={corLine.replace('stroke-', 'fill-')} />;
+                  })}
+                </svg>
+                {/* Rótulos extremos */}
+                <div className="flex justify-between text-[9px] text-gray-400 font-mono mt-0.5 px-1">
+                  <span>{pontos[0]?.rotulo}</span>
+                  <span>{pontos[pontos.length - 1]?.rotulo}</span>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardMetricaDetalhe({ label, valorRealizado, valorProjecao, sub, subProj, corAcento = 'blue' }) {
+  const acentoCls = {
+    blue:    'border-blue-200 bg-blue-50/40',
+    emerald: 'border-emerald-200 bg-emerald-50/40',
+    amber:   'border-amber-200 bg-amber-50/40',
+    red:     'border-red-200 bg-red-50/40',
+  }[corAcento];
+  return (
+    <div className={`rounded-xl border ${acentoCls} p-3`}>
+      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">{label}</p>
+      <div className="mt-2 space-y-2">
+        <div>
+          <p className="text-[9px] text-gray-400 uppercase tracking-wider">Realizado</p>
+          <p className="font-mono tabular-nums text-base font-bold text-gray-900 mt-0.5">{valorRealizado}</p>
+          {sub && <p className="text-[10px] text-gray-500 mt-0.5">{sub}</p>}
+        </div>
+        <div className="pt-2 border-t border-gray-200/80">
+          <p className="text-[9px] text-blue-600 uppercase tracking-wider">Proj. mês</p>
+          <p className="font-mono tabular-nums text-base font-bold text-blue-900 mt-0.5">{valorProjecao}</p>
+          {subProj && <p className="text-[10px] text-blue-700/80 mt-0.5">{subProj}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardReferencia({ label, qtd, fat, lucro }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-3">
+      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">{label}</p>
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <p className="text-[9px] text-gray-400 uppercase tracking-wider">Qtd</p>
+          <p className="font-mono tabular-nums text-[12.5px] font-semibold text-gray-700 mt-0.5">{formatNumero(qtd, 2)}</p>
+        </div>
+        <div>
+          <p className="text-[9px] text-gray-400 uppercase tracking-wider">Faturamento</p>
+          <p className="font-mono tabular-nums text-[12.5px] font-semibold text-gray-700 mt-0.5">{formatCurrency(fat)}</p>
+        </div>
+        <div>
+          <p className="text-[9px] text-gray-400 uppercase tracking-wider">Lucro</p>
+          <p className={`font-mono tabular-nums text-[12.5px] font-semibold mt-0.5 ${lucro < 0 ? 'text-red-700' : 'text-gray-700'}`}>
+            {formatCurrency(lucro)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CelulaUnica({ valor, ma, aa, moeda = true, decimais = 0, sub, divisor, tomProj = false }) {
   const negativo = moeda && valor < 0;
   const txt = moeda ? formatCurrency(valor) : formatNumero(valor, decimais);
@@ -2926,9 +3490,10 @@ function TreeVendas({ arvore, multiEmpresa, expandidos, setExpandidos, onToggle,
   );
 }
 
-function KpiLucro({ cat, lucro, margem, lucroAnoAnterior }) {
+function KpiLucro({ cat, lucro, lucroProjecao, margem, lucroAnoAnterior }) {
   const Icone = cat.icone;
   const Pal = CAT_PALETA[cat.cor];
+  const temProj = lucroProjecao != null && Math.abs(lucroProjecao - lucro) > 0.01;
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <div className="flex items-start gap-3">
@@ -2940,6 +3505,12 @@ function KpiLucro({ cat, lucro, margem, lucroAnoAnterior }) {
           <p className={`text-lg font-semibold tracking-tight truncate ${lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}>
             {formatCurrency(lucro)}
           </p>
+          {temProj && (
+            <p className="text-[11px] text-blue-700 truncate mt-0.5">
+              <span className="text-blue-500 mr-1">Proj. mês:</span>
+              <span className="font-semibold">{formatCurrency(lucroProjecao)}</span>
+            </p>
+          )}
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             <span className="text-[11px] text-gray-400">margem {(margem * 100).toFixed(1)}%</span>
             <BadgeComparacaoAA atual={lucro} anoAnterior={lucroAnoAnterior} />
@@ -4657,7 +5228,8 @@ function KpiComAA({ cor = 'blue', icone: Icone, label, valor, valorBase, prefixo
   );
 }
 
-function KpiLucroGlobal({ lucro, margem, lucroAnoAnterior }) {
+function KpiLucroGlobal({ lucro, lucroProjecao, margem, lucroAnoAnterior }) {
+  const temProj = lucroProjecao != null && Math.abs(lucroProjecao - lucro) > 0.01;
   return (
     <div className="bg-white rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/60 to-white p-4 shadow-sm">
       <div className="flex items-start gap-3">
@@ -4669,6 +5241,12 @@ function KpiLucroGlobal({ lucro, margem, lucroAnoAnterior }) {
           <p className={`text-lg font-semibold tracking-tight truncate ${lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}>
             {formatCurrency(lucro)}
           </p>
+          {temProj && (
+            <p className="text-[11px] text-blue-700 truncate mt-0.5">
+              <span className="text-blue-500 mr-1">Proj. mês:</span>
+              <span className="font-semibold">{formatCurrency(lucroProjecao)}</span>
+            </p>
+          )}
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             <span className="text-[11px] text-gray-500">margem {(margem * 100).toFixed(1)}%</span>
             <BadgeComparacaoAA atual={lucro} anoAnterior={lucroAnoAnterior} />

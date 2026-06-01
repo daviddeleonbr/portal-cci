@@ -7,11 +7,18 @@
 // Query base:
 //   SELECT empresa, data, motivo, conta_debitar, conta_creditar,
 //          pessoa, documento, vencto, valor, obs
-//     FROM movto
+//     FROM movto m
 //    WHERE conta_creditar LIKE '2.1.1%'
 //      AND child = 0
 //      AND empresa = $empresa_codigo
 //      AND (vencto entre $vencto_de e $vencto_ate, se informados)
+//      AND NÃO EXISTE baixa correspondente (ver abaixo)
+//
+// "Em aberto": uma provisão (débito = despesa, crédito = 2.1.1.x) está
+// em aberto enquanto não houver baixa (débito = 2.1.1.x, crédito = caixa)
+// para o mesmo título. Mesma heurística usada em autosystem-fluxo-caixa:
+//   - match forte: empresa + pessoa + documento (quando documento ≠ vazio)
+//   - match fraco: empresa + pessoa + valor (fallback)
 //
 // Joins:
 //   - conta cd ON cd.codigo = movto.conta_debitar  → nome do débito
@@ -131,6 +138,25 @@ serve(async (req) => {
       "m.conta_creditar like '2.1.1%'",
       'm.child = 0',
       'm.empresa = $1',
+      // Em aberto = sem baixa correspondente. A baixa é um movto que
+      // DEBITA a mesma conta 2.1.1.x da provisão original.
+      `not exists (
+         select 1 from movto b
+          where b.empresa       = m.empresa
+            and b.conta_debitar = m.conta_creditar
+            and b.grid         <> m.grid
+            and (
+              (
+                coalesce(nullif(b.documento::text, ''), '') <> ''
+                and coalesce(nullif(b.documento::text, ''), '') = coalesce(nullif(m.documento::text, ''), '')
+                and b.pessoa is not distinct from m.pessoa
+              )
+              or (
+                b.pessoa is not distinct from m.pessoa
+                and b.valor = m.valor
+              )
+            )
+       )`,
     ];
     if (vencto_de) {
       params.push(vencto_de);
