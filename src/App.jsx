@@ -43,6 +43,7 @@ import CciRelatoriosBi from './pages/CciRelatoriosBi';
 import CciNotificacoes from './pages/CciNotificacoes';
 import CciMensagensIniciais from './pages/CciMensagensIniciais';
 import CciMelhorias from './pages/CciMelhorias';
+import CciReunioes from './pages/CciReunioes';
 import ClienteMelhorias from './pages/cliente/ClienteMelhorias';
 import AdminConfiguracoes from './pages/AdminConfiguracoes';
 
@@ -163,6 +164,7 @@ export default function App() {
           <Route path="/admin/notificacoes" element={<CciNotificacoes />} />
           <Route path="/admin/mensagens-iniciais" element={<CciMensagensIniciais />} />
           <Route path="/admin/melhorias" element={<CciMelhorias />} />
+          <Route path="/admin/reunioes" element={<CciReunioes />} />
 
           {/* Relatorios (kept for compatibility) */}
           <Route path="/admin/relatorios" element={<Relatorios />} />

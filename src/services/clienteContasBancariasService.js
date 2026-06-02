@@ -63,6 +63,24 @@ export async function atualizar(id, campos) {
   return data;
 }
 
+// Lista apenas as contas habilitadas para a ferramenta de Sangrias do
+// portal cliente. Usado pela tela /cliente/webposto/sangrias quando ela
+// migrar para o endpoint SANGRIA_CAIXA da Quality (filtra os lançamentos
+// pelos contaCodigo retornados aqui).
+// Inclui só registros ativos e com a flag `usar_em_sangrias = true`.
+export async function listarParaSangria(chaveApiId) {
+  if (!chaveApiId) return [];
+  const { data, error } = await supabase
+    .from('cliente_contas_bancarias')
+    .select('id, conta_codigo, descricao')
+    .eq('chave_api_id', chaveApiId)
+    .eq('ativo', true)
+    .eq('usar_em_sangrias', true)
+    .order('conta_codigo', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
 // Sincroniza com a lista vinda do endpoint CONTA do Quality:
 //  - cria (default 'bancaria') para contas ainda nao classificadas
 //  - atualiza descricao se mudou

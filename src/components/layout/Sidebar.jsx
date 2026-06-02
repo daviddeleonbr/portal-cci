@@ -5,6 +5,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Landmark, Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
+  Presentation,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { logoutAdmin } from '../../lib/auth';
@@ -55,6 +56,7 @@ const navigationAll = [
       { name: 'Parâmetros', href: '/admin/parametros', icon: Settings2, permissao: 'parametros' },
       { name: 'Relatórios Cliente', href: '/admin/relatorios-cliente', icon: BarChart3, permissao: 'relatorios_cliente' },
       { name: 'Relatórios BI', href: '/admin/relatorios-bi', icon: PieChart, permissao: 'relatorios_bi' },
+      { name: 'Reunião', href: '/admin/reunioes', icon: Presentation, permissao: 'reunioes' },
     ],
   },
   {

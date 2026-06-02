@@ -19,11 +19,20 @@ import * as contasBancariasService from '../services/clienteContasBancariasServi
 
 // Mascara IP exibindo apenas o primeiro e o ultimo octeto (ex.: 187.***.***.45).
 // Hostnames (sem 4 octetos) caem num fallback que mostra so primeiro/ultimo caractere.
+// Mascara o endereço do servidor (IP ou DDNS/hostname) na exibição,
+// preservando o suficiente para o admin reconhecer o cliente.
+//   - IPv4 (4 octetos numéricos): "187.***.***.45"
+//   - Hostname com domínio       : "***.ddns.net" (preserva os 2 últimos segmentos)
+//   - Outros                     : "a***z"
 function mascararIp(ip) {
   if (!ip) return '';
   const partes = ip.split('.');
   if (partes.length === 4 && partes.every(p => /^\d+$/.test(p))) {
     return `${partes[0]}.***.***.${partes[3]}`;
+  }
+  if (partes.length >= 2 && partes.some(p => /[a-zA-Z]/.test(p))) {
+    const sufixo = partes.slice(-2).join('.');
+    return `***.${sufixo}`;
   }
   if (ip.length <= 2) return ip;
   return `${ip[0]}***${ip[ip.length - 1]}`;
@@ -1123,12 +1132,16 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  <Network className="inline h-3 w-3 mr-1" /> IP do servidor
+                  <Network className="inline h-3 w-3 mr-1" /> Endereço do servidor
+                  <span className="ml-1 text-[10.5px] font-normal text-gray-400">(IP fixo ou DDNS)</span>
                 </label>
                 <input type="text" autoFocus value={redeIp}
                   onChange={(e) => setRedeIp(e.target.value)}
-                  placeholder={editandoRede ? 'Deixe em branco para manter o atual' : '187.45.123.45 ou hostname'}
+                  placeholder={editandoRede ? 'Deixe em branco para manter o atual' : '187.45.123.45  ou  meucliente.ddns.net'}
                   className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
+                <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">
+                  Aceita IP fixo, hostname ou DDNS (ex: <code className="font-mono">no-ip</code>, <code className="font-mono">duckdns</code>). Resolvido a cada consulta.
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Porta</label>
@@ -1842,6 +1855,16 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
     } finally { setSalvandoId(null); }
   };
 
+  const mudarSangrias = async (item, usar_em_sangrias) => {
+    try {
+      setSalvandoId(item.id);
+      const atualizado = await contasBancariasService.atualizar(item.id, { usar_em_sangrias });
+      setItens(prev => prev.map(i => i.id === item.id ? atualizado : i));
+    } catch (err) {
+      showToast?.('error', 'Erro ao salvar: ' + err.message);
+    } finally { setSalvandoId(null); }
+  };
+
   const iconeTipo = (tipo) => {
     if (tipo === 'bancaria') return <Landmark className="h-3.5 w-3.5 text-blue-600" />;
     if (tipo === 'aplicacao') return <Wallet className="h-3.5 w-3.5 text-emerald-600" />;
@@ -1896,6 +1919,9 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="px-3 py-2">Conta</th>
                   <th className="px-3 py-2">Tipo</th>
+                  <th className="px-3 py-2 text-center" title="Marque para incluir os lançamentos desta conta na ferramenta de Sangrias do portal cliente">
+                    Sangrias
+                  </th>
                   <th className="px-3 py-2 text-center">Ativa</th>
                 </tr>
               </thead>
@@ -1925,6 +1951,14 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
                       </p>
                     </td>
                     <td className="px-3 py-2 text-center">
+                      <label className="inline-flex items-center cursor-pointer" title="Incluir esta conta nos lançamentos retornados pela tela de Sangrias do portal cliente">
+                        <input type="checkbox" checked={!!item.usar_em_sangrias}
+                          onChange={(e) => mudarSangrias(item, e.target.checked)}
+                          disabled={salvandoId === item.id || item.ativo === false}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-400 disabled:opacity-40" />
+                      </label>
+                    </td>
+                    <td className="px-3 py-2 text-center">
                       <label className="inline-flex items-center cursor-pointer">
                         <input type="checkbox" checked={item.ativo !== false}
                           onChange={(e) => mudarAtivo(item, e.target.checked)}
@@ -1936,6 +1970,9 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
                 ))}
               </tbody>
             </table>
+            <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/40 text-[10.5px] text-gray-500">
+              <strong className="text-gray-700">Sangrias:</strong> marque as contas cujos lançamentos devem aparecer na ferramenta de Sangrias do portal cliente. Contas inativas não podem ser marcadas.
+            </div>
           </div>
         )}
       </div>
