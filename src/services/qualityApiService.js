@@ -402,3 +402,20 @@ export async function buscarAbastecimentos(apiKey, { dataInicial, dataFinal, emp
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
   });
 }
+
+// Sangrias por caixa — retiradas do caixa (por contaCodigo). Usado em
+// /cliente/webposto/sangrias com filtro pelas contas que o admin marcou
+// em /admin/clientes (flag `usar_em_sangrias` em cliente_contas_bancarias).
+//
+// Schema do retorno (objeto por sangria):
+//   sangriaCodigo, codigo, empresaCodigo, caixaCodigo, contaCodigo,
+//   usuarioCodigo, funcionarioCodigo,
+//   dinheiro, cheque, cartao, nota, cartaFrete, emprestimo, despesa,
+//   chequePre, vale, transferencia,  ← valores por meio (somar todos = total bruto)
+//   dataSangria, horaSangria, dataHoraColeta, dataHoraAtualizacao,
+//   alterada (bool), coo, numeroDocumento, observacao
+export async function buscarSangriasCaixa(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
+  return fetchPagParalelo(urlBase, 'SANGRIA_CAIXA', apiKey, {
+    limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+  });
+}

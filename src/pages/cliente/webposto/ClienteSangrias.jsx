@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   Coins, Loader2, AlertCircle, Calendar, CheckCircle2,
   TrendingUp, TrendingDown, RefreshCw, Lock, History, Save,
-  Building2,
+  Building2, UserPlus, X, Plus,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import Toast from '../../../components/ui/Toast';
@@ -12,6 +12,7 @@ import { useClienteSession } from '../../../hooks/useAuth';
 import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
 import * as sangriasService from '../../../services/clienteSangriasService';
+import * as contasBancariasService from '../../../services/clienteContasBancariasService';
 import { formatCurrency } from '../../../utils/format';
 
 // Usa componentes locais (nao UTC) para evitar que, a noite no Brasil,
@@ -51,6 +52,12 @@ export default function ClienteSangrias() {
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
   const [cienciaConfirmada, setCienciaConfirmada] = useState(false);
   const [modalConfirmacao, setModalConfirmacao] = useState(false);
+  // Catálogo de funcionários da Quality, usado no form de "adicionar
+  // sangria manual" (cobre os casos em que o funcionário esqueceu de
+  // registrar no sistema).
+  const [funcionariosLista, setFuncionariosLista] = useState([]);
+  const [novoFuncCodigo, setNovoFuncCodigo] = useState('');
+  const [novoValor, setNovoValor] = useState('');
 
   const showToast = (type, message) => {
     setToast({ show: true, type, message });
@@ -104,43 +111,64 @@ export default function ClienteSangrias() {
       if (!cliente.usa_webposto || !cliente.chave_api_id || !cliente.empresa_codigo) {
         throw new Error('Esta funcionalidade requer integração Webposto configurada');
       }
+
+      // Quais contas o admin habilitou para Sangrias?
+      // Sem nenhuma marcada, nada faz sentido buscar — orienta a configurar.
+      const contasHabilitadas = await contasBancariasService.listarParaSangria(cliente.chave_api_id);
+      if (!contasHabilitadas || contasHabilitadas.length === 0) {
+        throw new Error(
+          'Nenhuma conta foi habilitada para Sangrias. Peça ao administrador para marcar as contas '
+          + 'em Admin → Clientes → ícone "Classificar contas" → coluna "Sangrias".'
+        );
+      }
+      const codigosOk = new Set(contasHabilitadas.map(c => Number(c.conta_codigo)));
+
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
       if (!chave) throw new Error('Chave API não encontrada');
 
       const filtros = { dataInicial: data, dataFinal: data, empresaCodigo: cliente.empresa_codigo };
-      const [vendas, formasPag, funcs] = await Promise.all([
-        qualityApi.buscarVendas(chave.chave, filtros),
-        qualityApi.buscarVendaFormaPagamento(chave.chave, filtros),
+      const [sangrias, funcs] = await Promise.all([
+        qualityApi.buscarSangriasCaixa(chave.chave, filtros),
         qualityApi.buscarFuncionarios(chave.chave),
       ]);
 
-      // Mapa funcionario
+      // Guarda catálogo de funcionários para usar no form de adicionar manual
+      setFuncionariosLista(funcs || []);
+
+      // Mapa funcionario_codigo → nome
       const mapaFunc = new Map();
-      (funcs || []).forEach(f => mapaFunc.set(f.funcionarioCodigo || f.codigo, f.nome));
+      (funcs || []).forEach(f => mapaFunc.set(
+        f.funcionarioCodigo ?? f.codigo,
+        f.nome ?? f.descricao ?? `Funcionário #${f.funcionarioCodigo ?? f.codigo}`,
+      ));
 
-      // Por venda -> funcionario
-      const vendaParaFunc = new Map();
-      (vendas || []).forEach(v => {
-        if (v.cancelada === 'S') return;
-        vendaParaFunc.set(v.vendaCodigo || v.codigo, v.funcionarioCodigo);
-      });
-
-      // Agrega dinheiro apurado por funcionario
+      // Filtra sangrias pelas contas habilitadas e agrega por funcionário.
+      // O endpoint SANGRIA_CAIXA não tem um campo único `valor`; a sangria
+      // pode misturar vários meios (dinheiro, cheque, cartão, etc.). O total
+      // bruto é a soma desses campos.
+      const CAMPOS_VALOR = [
+        'dinheiro', 'cheque', 'cartao', 'nota', 'cartaFrete',
+        'emprestimo', 'despesa', 'chequePre', 'vale', 'transferencia',
+      ];
+      const SEM_FUNC = '__sem_funcionario__';
       const porFunc = new Map();
-      (formasPag || []).forEach(fp => {
-        const nome = (fp.nomeFormaPagamento || '').toUpperCase();
-        if (!/DINHEIRO|ESPECIE/.test(nome)) return;
-        const fcod = vendaParaFunc.get(fp.vendaCodigo);
-        if (!fcod) return;
-        porFunc.set(fcod, (porFunc.get(fcod) || 0) + Number(fp.valorPagamento || 0));
+      (sangrias || []).forEach(s => {
+        const conta = Number(s.contaCodigo);
+        if (!codigosOk.has(conta)) return;
+        let valor = 0;
+        for (const c of CAMPOS_VALOR) valor += Number(s[c]) || 0;
+        if (valor === 0) return;
+        const fcod = s.funcionarioCodigo || SEM_FUNC;
+        porFunc.set(fcod, (porFunc.get(fcod) || 0) + valor);
       });
 
-      // Monta registros iniciais
       const lista = Array.from(porFunc.entries())
         .map(([fcod, apurado]) => ({
           funcionarioCodigo: fcod,
-          nome: mapaFunc.get(fcod) || `Funcionário #${fcod}`,
+          nome: fcod === SEM_FUNC
+            ? 'Sem funcionário identificado'
+            : (mapaFunc.get(fcod) || `Funcionário #${fcod}`),
           dinheiroApurado: Number(apurado.toFixed(2)),
           dinheiroApresentado: '',
         }))
@@ -148,7 +176,9 @@ export default function ClienteSangrias() {
 
       setRegistros(lista);
       if (lista.length === 0) {
-        setError('Nenhuma venda em dinheiro encontrada para esta data.');
+        setError(
+          `Nenhuma sangria encontrada nas ${contasHabilitadas.length} conta(s) habilitada(s) para esta data.`
+        );
       }
     } catch (err) {
       setError(err.message);
@@ -163,6 +193,41 @@ export default function ClienteSangrias() {
     setRegistros(prev => prev.map(r =>
       r.funcionarioCodigo === fcod ? { ...r, dinheiroApresentado: valor } : r
     ));
+  };
+
+  // Adiciona uma sangria manual à tabela (fluxo: o funcionário esqueceu
+  // de registrar no sistema → admin inclui aqui pra fechar o caixa).
+  // Não persiste em lugar nenhum — só compõe a lista local da conciliação
+  // do dia, que será salva inteira em `cliente_sangrias_fechamento`.
+  const adicionarSangriaManual = () => {
+    const fcod = String(novoFuncCodigo || '').trim();
+    const valor = Number(String(novoValor || '').replace(',', '.'));
+    if (!fcod) return showToast('error', 'Selecione um funcionário.');
+    if (!Number.isFinite(valor) || valor <= 0) return showToast('error', 'Informe um valor maior que zero.');
+    if (registros.some(r => String(r.funcionarioCodigo) === fcod)) {
+      return showToast('error', 'Esse funcionário já está na tabela. Edite o valor apresentado direto na linha.');
+    }
+    const fObj = funcionariosLista.find(f =>
+      String(f.funcionarioCodigo ?? f.codigo) === fcod
+    );
+    const nome = fObj?.nome ?? fObj?.descricao ?? `Funcionário #${fcod}`;
+    setRegistros(prev => [
+      ...prev,
+      {
+        funcionarioCodigo: isNaN(Number(fcod)) ? fcod : Number(fcod),
+        nome,
+        dinheiroApurado: Number(valor.toFixed(2)),
+        dinheiroApresentado: '',
+        manual: true,
+      },
+    ].sort((a, b) => a.nome.localeCompare(b.nome)));
+    setNovoFuncCodigo('');
+    setNovoValor('');
+    setError(null); // limpa "nenhuma sangria encontrada"
+  };
+
+  const removerSangriaManual = (fcod) => {
+    setRegistros(prev => prev.filter(r => r.funcionarioCodigo !== fcod));
   };
 
   const totais = useMemo(() => {
@@ -351,15 +416,29 @@ export default function ClienteSangrias() {
           <p className="text-sm font-medium text-gray-800">Buscando vendas e apuração de {formatDataBR(data)}...</p>
         </div>
       ) : registros.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
-            <Coins className="h-7 w-7 text-white" />
+        <>
+          <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-12 text-center shadow-sm">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+              <Coins className="h-7 w-7 text-white" />
+            </div>
+            <p className="text-sm font-semibold text-gray-900 mb-1">Sem registros para {formatDataBR(data)}</p>
+            <p className="text-xs text-gray-500 max-w-md mx-auto">
+              {error || 'Não foram encontradas sangrias neste dia.'}
+            </p>
           </div>
-          <p className="text-sm font-semibold text-gray-900 mb-1">Sem registros para {formatDataBR(data)}</p>
-          <p className="text-xs text-gray-500 max-w-md mx-auto">
-            {error || 'Não foram encontradas vendas em dinheiro neste dia.'}
-          </p>
-        </div>
+          {/* Permite adicionar manualmente mesmo sem registros do sistema */}
+          {!travado && funcionariosLista.length > 0 && (
+            <FormSangriaManual
+              funcionariosLista={funcionariosLista}
+              registros={registros}
+              novoFuncCodigo={novoFuncCodigo}
+              setNovoFuncCodigo={setNovoFuncCodigo}
+              novoValor={novoValor}
+              setNovoValor={setNovoValor}
+              onAdicionar={adicionarSangriaManual}
+            />
+          )}
+        </>
       ) : (
         <>
           {/* Resumo */}
@@ -397,14 +476,25 @@ export default function ClienteSangrias() {
                     const diff = apr - Number(r.dinheiroApurado || 0);
                     const conciliado = temApr && Math.abs(diff) < 0.01;
                     return (
-                      <tr key={r.funcionarioCodigo} className="hover:bg-gray-50/60">
+                      <tr key={r.funcionarioCodigo} className={`hover:bg-gray-50/60 ${r.manual ? 'bg-amber-50/30' : ''}`}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
+                            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0 ${
+                              r.manual
+                                ? 'bg-gradient-to-br from-amber-500 to-amber-600'
+                                : 'bg-gradient-to-br from-blue-500 to-blue-600'
+                            }`}>
                               {(r.nome || '?').charAt(0)}
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-gray-900">{r.nome}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-medium text-gray-900">{r.nome}</p>
+                                {r.manual && (
+                                  <span className="inline-flex items-center gap-0.5 text-[9.5px] uppercase tracking-wider rounded-full px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 font-semibold">
+                                    Manual
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[10px] text-gray-400 font-mono">#{r.funcionarioCodigo}</p>
                             </div>
                           </div>
@@ -429,21 +519,30 @@ export default function ClienteSangrias() {
                           {temApr ? formatCurrency(diff) : '—'}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          {!temApr ? (
-                            <span className="text-[10px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-500">Pendente</span>
-                          ) : conciliado ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckCircle2 className="h-2.5 w-2.5" /> OK
-                            </span>
-                          ) : diff > 0 ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200">
-                              <TrendingUp className="h-2.5 w-2.5" /> Sobra
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-red-50 text-red-700 border border-red-200">
-                              <TrendingDown className="h-2.5 w-2.5" /> Falta
-                            </span>
-                          )}
+                          <div className="inline-flex items-center gap-1.5">
+                            {!temApr ? (
+                              <span className="text-[10px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-500">Pendente</span>
+                            ) : conciliado ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="h-2.5 w-2.5" /> OK
+                              </span>
+                            ) : diff > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200">
+                                <TrendingUp className="h-2.5 w-2.5" /> Sobra
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-red-50 text-red-700 border border-red-200">
+                                <TrendingDown className="h-2.5 w-2.5" /> Falta
+                              </span>
+                            )}
+                            {r.manual && !travado && (
+                              <button onClick={() => removerSangriaManual(r.funcionarioCodigo)}
+                                title="Remover sangria manual"
+                                className="h-5 w-5 inline-flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -465,6 +564,19 @@ export default function ClienteSangrias() {
               </table>
             </div>
           </div>
+
+          {/* Adicionar sangria manual */}
+          {!travado && (
+            <FormSangriaManual
+              funcionariosLista={funcionariosLista}
+              registros={registros}
+              novoFuncCodigo={novoFuncCodigo}
+              setNovoFuncCodigo={setNovoFuncCodigo}
+              novoValor={novoValor}
+              setNovoValor={setNovoValor}
+              onAdicionar={adicionarSangriaManual}
+            />
+          )}
 
           {/* Observacoes + Ciencia + Botão confirmar */}
           {!travado && (
@@ -666,5 +778,77 @@ function Kpi({ label, valor, icon: Icon, color }) {
       </div>
       <p className="text-lg font-bold text-gray-900 tabular-nums">{valor}</p>
     </motion.div>
+  );
+}
+
+// ============================================================
+// Form de "Adicionar sangria manual" — usado quando o funcionário
+// esqueceu de registrar a sangria no sistema e o endpoint não
+// retornou o valor. A linha entra na tabela acima marcada como
+// `manual: true` (UI âmbar + botão remover).
+// ============================================================
+function FormSangriaManual({
+  funcionariosLista, registros,
+  novoFuncCodigo, setNovoFuncCodigo,
+  novoValor, setNovoValor,
+  onAdicionar,
+}) {
+  // Funcionários ativos (ou todos) que ainda não estão na tabela
+  const jaNaTabela = new Set(registros.map(r => String(r.funcionarioCodigo)));
+  const disponiveis = (funcionariosLista || [])
+    .map(f => ({
+      codigo: f.funcionarioCodigo ?? f.codigo,
+      nome:   f.nome ?? f.descricao ?? `Funcionário #${f.funcionarioCodigo ?? f.codigo}`,
+      ativo:  f.ativo !== false && f.inativo !== true,
+    }))
+    .filter(f => f.codigo != null && f.ativo && !jaNaTabela.has(String(f.codigo)))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+
+  const podeAdicionar =
+    !!novoFuncCodigo
+    && novoValor !== ''
+    && Number(String(novoValor).replace(',', '.')) > 0;
+
+  return (
+    <div className="mt-4 bg-white rounded-xl border border-dashed border-amber-300 bg-amber-50/20 p-4 shadow-sm">
+      <div className="flex items-start gap-2 mb-3">
+        <div className="h-7 w-7 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <UserPlus className="h-3.5 w-3.5 text-amber-700" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="text-sm font-semibold text-gray-900">Adicionar sangria manual</h4>
+          <p className="text-[11.5px] text-gray-500 leading-relaxed">
+            Use quando o funcionário não registrou a sangria no sistema. O valor entra como
+            <strong className="text-amber-700"> dinheiro apurado</strong> e pode ser ajustado com o "apresentado" abaixo.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px_auto] gap-2">
+        <select value={novoFuncCodigo} onChange={(e) => setNovoFuncCodigo(e.target.value)}
+          className="h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-800 bg-white focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100">
+          <option value="">Selecione o funcionário...</option>
+          {disponiveis.map(f => (
+            <option key={f.codigo} value={f.codigo}>
+              {f.nome} (#{f.codigo})
+            </option>
+          ))}
+        </select>
+        <input type="number" inputMode="decimal" step="0.01" min="0"
+          value={novoValor} onChange={(e) => setNovoValor(e.target.value)}
+          placeholder="Valor apurado"
+          className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono text-right text-gray-900 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" />
+        <button type="button" onClick={onAdicionar} disabled={!podeAdicionar}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 px-4 h-10 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          <Plus className="h-4 w-4" /> Adicionar
+        </button>
+      </div>
+
+      {disponiveis.length === 0 && funcionariosLista.length > 0 && (
+        <p className="mt-2 text-[11px] text-gray-500 italic">
+          Todos os funcionários ativos já estão na tabela.
+        </p>
+      )}
+    </div>
   );
 }
