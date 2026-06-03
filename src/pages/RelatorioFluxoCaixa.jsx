@@ -43,7 +43,11 @@ function formatDuracao(ms) {
 
 // redeContexto (opcional): { nomeRede, chaveApiId, empresaCodigos, empresas }.
 // Quando passado, o Fluxo de Caixa agrega todas as empresas da rede.
-export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeContexto } = {}) {
+//
+// modoCliente (opcional, default false): quando true, oculta seções e
+// avisos voltados ao admin (ex.: bloco "Contas, chaves e lançamentos não
+// mapeados" — útil pra consultoria, ruído pro cliente final).
+export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeContexto, modoCliente = false } = {}) {
   const { labelEmpresa, labelCnpj } = useAnonimizador();
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
@@ -1721,7 +1725,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             </div>
 
             {/* Contas, chaves e lancamentos nao mapeados (diagnostico — apenas admin, fora de impressao) */}
-            {!clienteIdOverride && semClassificacaoNode && semClassificacaoNode.contas.length > 0 && (
+            {!modoCliente && !clienteIdOverride && semClassificacaoNode && semClassificacaoNode.contas.length > 0 && (
               <div className="bg-white rounded-2xl border border-amber-200/60 shadow-sm overflow-hidden mt-4 no-print">
                 <div className="px-5 py-3 border-b border-amber-100 bg-amber-50/40 flex items-center gap-2 flex-wrap">
                   <AlertCircle className="h-4 w-4 text-amber-600" />

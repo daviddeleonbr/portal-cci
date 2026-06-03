@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
-  Send, Loader2, Search, Users, ChevronDown, BellRing,
+  Send, Loader2, Search, Users, ChevronDown, BellRing, Network,
   Info, CircleCheck, AlertTriangle, CircleAlert,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -12,6 +12,8 @@ import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
 import { useAdminSession } from '../hooks/useAuth';
 import * as notificacoesService from '../services/notificacoesService';
+import * as mapeamentoService from '../services/mapeamentoService';
+import * as autosystemService from '../services/autosystemService';
 
 const TIPOS = [
   { v: 'info',    label: 'Informativo', Icon: Info,         cor: 'blue' },
@@ -24,6 +26,8 @@ export default function CciNotificacoes() {
   const session = useAdminSession();
   const remetenteId = session?.usuario?.id;
   const [usuarios, setUsuarios] = useState([]);
+  const [chavesApi, setChavesApi] = useState([]);   // redes Webposto
+  const [redesAs, setRedesAs] = useState([]);        // redes Autosystem
   const [enviadas, setEnviadas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState(false);
@@ -33,6 +37,8 @@ export default function CciNotificacoes() {
     titulo: '', mensagem: '', tipo: 'info', link: '',
     destinatarios: new Set(),
     filtroTipoUsuario: 'todos',
+    // 'todas' | 'sem_rede' | 'wp:<id>' | 'as:<id>'
+    filtroRede: 'todas',
   });
 
   const showToast = (type, message) => {
@@ -43,12 +49,16 @@ export default function CciNotificacoes() {
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      const [us, env] = await Promise.all([
+      const [us, env, chs, ars] = await Promise.all([
         notificacoesService.listarUsuariosDestinatarios(),
         notificacoesService.listarEnviadasResumo({ limit: 200 }),
+        mapeamentoService.listarChavesApi().catch(() => []),
+        autosystemService.listarRedes().catch(() => []),
       ]);
       setUsuarios(us);
       setEnviadas(env);
+      setChavesApi((chs || []).filter(c => c.ativo !== false));
+      setRedesAs((ars || []).filter(r => r.ativo !== false));
     } catch (e) { showToast('error', e.message); }
     finally { setLoading(false); }
   }, []);
@@ -178,9 +188,13 @@ export default function CciNotificacoes() {
             </label>
             <DestinatariosPicker
               usuarios={usuarios}
+              chavesApi={chavesApi}
+              redesAs={redesAs}
               selecionados={form.destinatarios}
               filtroTipo={form.filtroTipoUsuario}
               onSetFiltroTipo={(v) => setForm(f => ({ ...f, filtroTipoUsuario: v }))}
+              filtroRede={form.filtroRede}
+              onSetFiltroRede={(v) => setForm(f => ({ ...f, filtroRede: v }))}
               onToggle={(id) => setForm(f => {
                 const next = new Set(f.destinatarios);
                 if (next.has(id)) next.delete(id); else next.add(id);
@@ -253,7 +267,13 @@ export default function CciNotificacoes() {
   );
 }
 
-function DestinatariosPicker({ usuarios, selecionados, filtroTipo, onSetFiltroTipo, onToggle, onMarcarTodos, onLimpar }) {
+function DestinatariosPicker({
+  usuarios, chavesApi = [], redesAs = [],
+  selecionados,
+  filtroTipo, onSetFiltroTipo,
+  filtroRede = 'todas', onSetFiltroRede = () => {},
+  onToggle, onMarcarTodos, onLimpar,
+}) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const ref = useRef(null);
@@ -263,17 +283,38 @@ function DestinatariosPicker({ usuarios, selecionados, filtroTipo, onSetFiltroTi
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
+  // Opções do dropdown de rede (apenas redes que têm pelo menos 1 usuário)
+  const redesFiltro = useMemo(() => {
+    const wpIds = new Set(usuarios.map(u => u.chave_api_id).filter(Boolean));
+    const asIds = new Set(usuarios.map(u => u.as_rede_id).filter(Boolean));
+    const out = [];
+    for (const r of chavesApi) if (wpIds.has(r.id))
+      out.push({ key: `wp:${r.id}`, label: `${r.nome} (Webposto)` });
+    for (const r of redesAs)   if (asIds.has(r.id))
+      out.push({ key: `as:${r.id}`, label: `${r.nome} (Autosystem)` });
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }, [usuarios, chavesApi, redesAs]);
+
   const visiveis = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return usuarios.filter(u => {
       if (filtroTipo !== 'todos' && u.tipo !== filtroTipo) return false;
+      if (filtroRede !== 'todas') {
+        if (filtroRede === 'sem_rede') {
+          if (u.chave_api_id || u.as_rede_id) return false;
+        } else {
+          const [tipo, id] = filtroRede.split(':');
+          if (tipo === 'wp' && u.chave_api_id !== id) return false;
+          if (tipo === 'as' && u.as_rede_id   !== id) return false;
+        }
+      }
       if (q) {
         const blob = `${u.nome} ${u.email}`.toLowerCase();
         if (!blob.includes(q)) return false;
       }
       return true;
     });
-  }, [usuarios, busca, filtroTipo]);
+  }, [usuarios, busca, filtroTipo, filtroRede]);
 
   const label = selecionados.size === 0
     ? 'Selecionar destinatários'
@@ -317,6 +358,18 @@ function DestinatariosPicker({ usuarios, selecionados, filtroTipo, onSetFiltroTi
                   className="text-[11px] text-blue-600 hover:text-blue-800 font-medium">Marcar visíveis</button>
                 <button type="button" onClick={onLimpar}
                   className="text-[11px] text-gray-500 hover:text-gray-700">Limpar</button>
+              </div>
+              <div className="relative">
+                <Network className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                <select value={filtroRede} onChange={(e) => onSetFiltroRede(e.target.value)}
+                  className="w-full h-9 rounded-lg border border-gray-200 pl-8 pr-3 text-[12px] font-medium text-gray-700 bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 appearance-none cursor-pointer">
+                  <option value="todas">Todas as redes</option>
+                  <option value="sem_rede">— Sem rede (Admin/avulso) —</option>
+                  {redesFiltro.map(r => (
+                    <option key={r.key} value={r.key}>{r.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
               </div>
             </div>
             <div className="max-h-64 overflow-y-auto">

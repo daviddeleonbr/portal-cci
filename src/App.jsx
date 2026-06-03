@@ -179,8 +179,8 @@ export default function App() {
         {/* Cliente Webposto */}
         <Route element={<RequireCliente><ClienteLayout /></RequireCliente>}>
           <Route path="/cliente/webposto/dashboard" element={<WpDashboard />} />
-          <Route path="/cliente/webposto/dre" element={<WpDRE />} />
-          <Route path="/cliente/webposto/fluxo-caixa" element={<WpFluxoCaixa />} />
+          <Route path="/cliente/webposto/dre" element={<RequirePermissaoCliente permissao="dre"><WpDRE /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/fluxo-caixa" element={<RequirePermissaoCliente permissao="fluxo_caixa"><WpFluxoCaixa /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/bpo" element={<WpBPO />} />
           <Route path="/cliente/webposto/documentos" element={<WpDocumentos />} />
           <Route path="/cliente/webposto/financeiro" element={<Navigate to="/cliente/webposto/financeiro/contas-pagar" replace />} />
@@ -199,8 +199,8 @@ export default function App() {
 
           {/* Cliente Autosystem */}
           <Route path="/cliente/autosystem/dashboard" element={<AsDashboard />} />
-          <Route path="/cliente/autosystem/dre" element={<AsDRE />} />
-          <Route path="/cliente/autosystem/fluxo-caixa" element={<AsFluxoCaixa />} />
+          <Route path="/cliente/autosystem/dre" element={<RequirePermissaoCliente permissao="dre"><AsDRE /></RequirePermissaoCliente>} />
+          <Route path="/cliente/autosystem/fluxo-caixa" element={<RequirePermissaoCliente permissao="fluxo_caixa"><AsFluxoCaixa /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/bpo" element={<AsBPO />} />
           <Route path="/cliente/autosystem/documentos" element={<AsDocumentos />} />
           <Route path="/cliente/autosystem/financeiro" element={<Navigate to="/cliente/autosystem/financeiro/contas-pagar" replace />} />
