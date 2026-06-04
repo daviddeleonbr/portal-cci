@@ -3,9 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Loader2, AlertCircle, Search, RefreshCw, ChevronRight, ChevronDown,
   Clock, AlertTriangle, CheckCircle2, Calendar,
-  DollarSign, Building2,
+  DollarSign, Building2, BarChart3, TrendingDown,
 } from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
+} from 'recharts';
 import PageHeader from '../../../components/ui/PageHeader';
+import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
@@ -155,6 +159,9 @@ export default function ClienteContasPagar() {
   const [filtroStatus, setFiltroStatus] = useState('hoje');
   const [expandedDates, setExpandedDates] = useState(new Set());
   const [empresasExpandidas, setEmpresasExpandidas] = useState(new Set());
+  // Modal de detalhe disparado pelos gráficos
+  // { tipo: 'dia' | 'faixa', titulo: string, titulos: titulo[] } | null
+  const [modalDetalhe, setModalDetalhe] = useState(null);
 
   const redeId = asRede?.id;
 
@@ -258,6 +265,54 @@ export default function ClienteContasPagar() {
     }
     return m;
   }, [titulos]);
+
+  // ─── Dados pros gráficos ─────────────────────────────────────
+
+  // Próximos 7 dias (hoje + 6) — agrupa títulos por dia de vencimento
+  // efetivo (já antecipa fim-de-semana/feriado pro próximo útil).
+  const proximos7dias = useMemo(() => {
+    const buckets = new Map(); // iso → { valor, qtd }
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    // Inicializa 7 dias zerados pra garantir todas as barras
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(hoje); d.setDate(d.getDate() + i);
+      buckets.set(isoDateUtil(d), { valor: 0, qtd: 0 });
+    }
+    for (const t of enriched) {
+      if (!t.vencimentoEfetivo) continue;
+      const cur = buckets.get(t.vencimentoEfetivo);
+      if (cur) { cur.valor += t.valor; cur.qtd++; }
+    }
+    return Array.from(buckets.entries()).map(([iso, v]) => {
+      const d = new Date(iso + 'T00:00:00');
+      const diaSemana = ['dom','seg','ter','qua','qui','sex','sáb'][d.getDay()];
+      const ehFimSemana = d.getDay() === 0 || d.getDay() === 6;
+      return {
+        iso,
+        label: `${diaSemana} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`,
+        valor: v.valor,
+        qtd:   v.qtd,
+        ehFimSemana,
+      };
+    });
+  }, [enriched]);
+
+  // Vencidos agrupados por faixa de atraso (em dias)
+  const vencidosPorFaixa = useMemo(() => {
+    const faixas = [
+      { key: '1-30',  label: '1 a 30 dias',  min: 1,   max: 30,  valor: 0, qtd: 0, cor: '#f59e0b' },
+      { key: '31-60', label: '31 a 60 dias', min: 31,  max: 60,  valor: 0, qtd: 0, cor: '#f97316' },
+      { key: '61-90', label: '61 a 90 dias', min: 61,  max: 90,  valor: 0, qtd: 0, cor: '#ef4444' },
+      { key: '90+',   label: 'Mais de 90',   min: 91,  max: Infinity, valor: 0, qtd: 0, cor: '#b91c1c' },
+    ];
+    for (const t of enriched) {
+      if (!t.vencido || t.diasAteVenc == null) continue;
+      const atraso = Math.abs(t.diasAteVenc);
+      const f = faixas.find(x => atraso >= x.min && atraso <= x.max);
+      if (f) { f.valor += t.valor; f.qtd++; }
+    }
+    return faixas;
+  }, [enriched]);
 
   // "Hoje" considera o próximo dia útil quando hoje não é útil
   const datasHoje = useMemo(() => {
@@ -522,6 +577,28 @@ export default function ClienteContasPagar() {
           sub={`${totais.qtdFuturos} ${totais.qtdFuturos === 1 ? 'titulo' : 'titulos'}`} />
       </div>
 
+      {/* Gráficos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <GraficoProximos7Dias dados={proximos7dias}
+          onClickDia={(iso, labelData) => {
+            const titulos = enriched
+              .filter(t => t.vencimentoEfetivo === iso)
+              .sort((a, b) => Number(b.valor || 0) - Number(a.valor || 0));
+            if (titulos.length === 0) return;
+            setModalDetalhe({ tipo: 'dia', titulo: `Vencimentos em ${labelData}`, titulos });
+          }} />
+        <GraficoInadimplencia faixas={vencidosPorFaixa}
+          totalVencido={totais.vencidos} qtdVencidos={totais.qtdVencidos}
+          onClickFaixa={(faixa) => {
+            const titulos = enriched
+              .filter(t => t.vencido && t.diasAteVenc != null &&
+                Math.abs(t.diasAteVenc) >= faixa.min && Math.abs(t.diasAteVenc) <= faixa.max)
+              .sort((a, b) => Math.abs(b.diasAteVenc) - Math.abs(a.diasAteVenc));
+            if (titulos.length === 0) return;
+            setModalDetalhe({ tipo: 'faixa', titulo: `Vencidos — ${faixa.label}`, titulos });
+          }} />
+      </div>
+
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
         <div className="relative flex-1">
@@ -662,7 +739,78 @@ export default function ClienteContasPagar() {
           </div>
         </div>
       )}
+
+      <ModalDetalheTitulos detalhe={modalDetalhe} onClose={() => setModalDetalhe(null)} />
     </div>
+  );
+}
+
+// ─── Modal de detalhe dos títulos (disparado pelos gráficos) ─────
+
+function ModalDetalheTitulos({ detalhe, onClose }) {
+  if (!detalhe) return null;
+  const { titulo, titulos, tipo } = detalhe;
+  const total = titulos.reduce((s, t) => s + Number(t.valor || 0), 0);
+  return (
+    <Modal open={!!detalhe} onClose={onClose} title={titulo} size="xl">
+      <div>
+        {/* Resumo */}
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
+          <p className="text-[12px] text-gray-500">
+            {titulos.length} {titulos.length === 1 ? 'título' : 'títulos'}
+          </p>
+          <p className="text-lg font-bold text-gray-900 font-mono tabular-nums">
+            {formatCurrency(total)}
+          </p>
+        </div>
+
+        {/* Tabela */}
+        <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0">
+              <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2">Vencimento</th>
+                <th className="px-3 py-2">Empresa</th>
+                <th className="px-3 py-2">Fornecedor</th>
+                <th className="px-3 py-2">Doc / Motivo</th>
+                <th className="px-3 py-2 text-right">Valor</th>
+                {tipo === 'faixa' && <th className="px-3 py-2 text-center">Atraso</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {titulos.map((t, i) => (
+                <tr key={i} className="hover:bg-gray-50/60">
+                  <td className="px-3 py-2 text-[12px] font-mono tabular-nums text-gray-700">
+                    {t.vencimento ? formatDataBR(t.vencimento) : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-[12px]">
+                    <p className="text-gray-900 truncate max-w-[160px]" title={t.empresaNome}>{t.empresaNome}</p>
+                    {t.empresaCnpj && <p className="text-[10px] text-gray-400 font-mono">{t.empresaCnpj}</p>}
+                  </td>
+                  <td className="px-3 py-2 text-[12px]">
+                    <p className="text-gray-900 truncate max-w-[180px]" title={t.fornecedorNome}>{t.fornecedorNome}</p>
+                  </td>
+                  <td className="px-3 py-2 text-[11.5px]">
+                    {t.documento && <p className="text-gray-800 font-mono">{t.documento}</p>}
+                    {t.motivoNome && <p className="text-gray-500 truncate max-w-[200px]" title={t.motivoNome}>{t.motivoNome}</p>}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">
+                    {formatCurrency(t.valor)}
+                  </td>
+                  {tipo === 'faixa' && (
+                    <td className="px-3 py-2 text-center">
+                      <span className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-wider rounded-full px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 font-semibold">
+                        {Math.abs(t.diasAteVenc)}d
+                      </span>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -766,6 +914,130 @@ function ResumoCard({ icon: Icon, iconBg, iconColor, label, valor, sub, highligh
 }
 
 // ─── Multi-select de empresas (dropdown com checkboxes) ─────────
+// ─── Gráficos ─────────────────────────────────────────────────
+
+function GraficoProximos7Dias({ dados, onClickDia }) {
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  const totalQtd = dados.reduce((s, d) => s + d.qtd, 0);
+  const handleBarClick = (data) => {
+    if (!onClickDia || !data?.qtd) return;
+    onClickDia(data.iso, data.label);
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 flex-shrink-0">
+          <Calendar className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800">Próximos 7 dias</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {totalQtd} {totalQtd === 1 ? 'título' : 'títulos'} · {formatCurrency(total)}
+          </p>
+        </div>
+      </div>
+      {totalQtd === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <CheckCircle2 className="h-7 w-7 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Nenhum vencimento nos próximos 7 dias</p>
+        </div>
+      ) : (
+        <div className="p-3" style={{ height: 240 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={dados} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10.5, fill: '#94a3b8' }}
+                axisLine={false} tickLine={false}
+                tickFormatter={(v) => formatCompact(v)} />
+              <Tooltip content={<TooltipDinheiro labelSuffix="vence" qtdLabel="titulos" />} cursor={{ fill: 'rgba(245, 158, 11, 0.06)' }} />
+              <Bar dataKey="valor" radius={[6, 6, 0, 0]} onClick={handleBarClick}
+                style={{ cursor: 'pointer' }}>
+                {dados.map((d, i) => (
+                  <Cell key={i} fill={d.ehFimSemana ? '#cbd5e1' : '#f59e0b'}
+                    cursor={d.qtd > 0 ? 'pointer' : 'default'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {totalQtd > 0 && (
+        <p className="px-5 pb-3 text-[10.5px] text-gray-400 italic">Clique em uma barra para ver os títulos do dia</p>
+      )}
+    </div>
+  );
+}
+
+function GraficoInadimplencia({ faixas, totalVencido, qtdVencidos, onClickFaixa }) {
+  const handleBarClick = (data) => {
+    if (!onClickFaixa || !data?.qtd) return;
+    onClickFaixa(data);
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600 flex-shrink-0">
+          <TrendingDown className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800">Inadimplência por faixa de atraso</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {qtdVencidos} {qtdVencidos === 1 ? 'título vencido' : 'títulos vencidos'} · {formatCurrency(totalVencido)}
+          </p>
+        </div>
+      </div>
+      {qtdVencidos === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <CheckCircle2 className="h-7 w-7 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Nenhum título vencido — parabéns!</p>
+        </div>
+      ) : (
+        <div className="p-3" style={{ height: 240 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={faixas} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10.5, fill: '#94a3b8' }}
+                axisLine={false} tickLine={false}
+                tickFormatter={(v) => formatCompact(v)} />
+              <Tooltip content={<TooltipDinheiro labelSuffix="" qtdLabel="titulos" />} cursor={{ fill: 'rgba(239, 68, 68, 0.06)' }} />
+              <Bar dataKey="valor" radius={[6, 6, 0, 0]} onClick={handleBarClick}
+                style={{ cursor: 'pointer' }}>
+                {faixas.map((f, i) => (
+                  <Cell key={i} fill={f.cor} cursor={f.qtd > 0 ? 'pointer' : 'default'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {qtdVencidos > 0 && (
+        <p className="px-5 pb-3 text-[10.5px] text-gray-400 italic">Clique em uma barra para ver os títulos da faixa</p>
+      )}
+    </div>
+  );
+}
+
+function TooltipDinheiro({ active, payload, label, labelSuffix, qtdLabel }) {
+  if (!active || !payload || !payload[0]) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="rounded-lg bg-white border border-gray-200 shadow-lg px-3 py-2 text-[12px]">
+      <p className="font-semibold text-gray-900">{label} {labelSuffix && <span className="text-gray-500 font-normal">{labelSuffix}</span>}</p>
+      <p className="font-mono font-bold text-gray-900 tabular-nums">{formatCurrency(d.valor)}</p>
+      <p className="text-[10.5px] text-gray-500">{d.qtd} {d.qtd === 1 ? 'título' : qtdLabel}</p>
+    </div>
+  );
+}
+
+function formatCompact(v) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
+  return String(n);
+}
+
 function EmpresaMultiSelect({ clientesRede, selecionadas, statsPorEmpresa, onToggle, onToggleTodas }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
