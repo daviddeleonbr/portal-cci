@@ -1,12 +1,30 @@
-import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ClienteSidebar from './ClienteSidebar';
 import ClienteHeader from './ClienteHeader';
 import ModalNovidades from '../../ui/ModalNovidades';
+import { useClienteSession } from '../../../hooks/useAuth';
+import { registrarPageview } from '../../../services/usoPortalService';
 
 export default function ClienteLayout() {
   const [collapsed, setCollapsed] = useState(false);
+
+  // Telemetria: 1 pageview a cada mudança de rota (fire-and-forget).
+  // Painel admin consulta em /admin/uso-portal.
+  const location = useLocation();
+  const session = useClienteSession();
+  useEffect(() => {
+    if (!session?.usuario?.id) return;
+    registrarPageview({
+      usuario: session.usuario,
+      tipoCliente: session.tipoCliente,
+      chaveApi: session.chaveApi,
+      asRede:   session.asRede,
+      cliente:  session.cliente,
+      path: location.pathname,
+    });
+  }, [location.pathname, session?.usuario?.id, session?.cliente?.id]);
 
   return (
     <div className="min-h-screen relative app-bg">

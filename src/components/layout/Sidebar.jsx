@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Landmark, Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
-  Presentation,
+  Presentation, Activity,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { logoutAdmin } from '../../lib/auth';
@@ -66,6 +66,7 @@ const navigationAll = [
       { name: 'Notificações', href: '/admin/notificacoes', icon: Bell, permissao: 'notificacoes' },
       { name: 'Mensagens Iniciais', href: '/admin/mensagens-iniciais', icon: Megaphone, permissao: 'mensagens_iniciais' },
       { name: 'Melhorias do Sistema', href: '/admin/melhorias', icon: Lightbulb, permissao: 'melhorias' },
+      { name: 'Uso do Portal', href: '/admin/uso-portal', icon: Activity, permissao: 'uso_portal' },
     ],
   },
   {

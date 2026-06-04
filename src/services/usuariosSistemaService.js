@@ -26,6 +26,7 @@ export const PERMISSOES_ADMIN = [
   { key: 'notificacoes', label: 'Notificações (enviar)', grupo: 'Comunicação' },
   { key: 'mensagens_iniciais', label: 'Mensagens Iniciais (modal cliente)', grupo: 'Comunicação' },
   { key: 'melhorias', label: 'Melhorias de Sistema (sugestões clientes)', grupo: 'Comunicação' },
+  { key: 'uso_portal', label: 'Uso do Portal (analytics)', grupo: 'Comunicação' },
 ];
 
 export const PERMISSOES_CLIENTE = [
