@@ -157,6 +157,9 @@ async function _extrairErroFn(error, dataFallback) {
 // ─── Contas a pagar (banco remoto Autosystem) ────────────────
 // Filtros suportados:
 //   - vencto_de  / vencto_ate  (YYYY-MM-DD, opcional)
+//
+// A edge function já filtra "em aberto" via `movto_bordero` (mesma
+// heurística do cliente Autosystem nativo). Retorna direto a lista.
 export async function buscarContasPagar(redeId, empresaCodigo, filtros = {}) {
   if (!redeId) throw new Error('rede_id é obrigatório');
   if (empresaCodigo == null || empresaCodigo === '') {

@@ -18,7 +18,6 @@ export const PERMISSOES_ADMIN = [
   { key: 'parametros', label: 'Parâmetros', grupo: 'Consultoria' },
   { key: 'relatorios_cliente', label: 'Relatórios por Cliente', grupo: 'Consultoria' },
   { key: 'relatorios_bi', label: 'Relatórios de BI (Power BI)', grupo: 'Consultoria' },
-  { key: 'reunioes', label: 'Reunião (KPIs mensais)', grupo: 'Consultoria' },
   { key: 'analise_ia', label: 'Análise com IA (Claude)', grupo: 'Consultoria' },
   { key: 'conciliacao_bancaria', label: 'Conciliação Bancária', grupo: 'BPO' },
   { key: 'conciliacao_caixas', label: 'Conciliação de Caixas', grupo: 'BPO' },

@@ -1,24 +1,25 @@
 // ============================================================
 // Edge Function: autosystem-contas-pagar
 //
-// Retorna as contas a pagar em aberto da empresa selecionada,
-// vindas do servidor Autosystem remoto.
+// Retorna títulos a pagar EM ABERTO da empresa selecionada, vindos do
+// servidor Autosystem remoto.
+//
+// "Em aberto" no Autosystem = título que NÃO está em nenhum borderô
+// (tabela `movto_bordero`). Quando o título é quitado, o movto entra
+// em `movto_bordero` linkando à operação de pagamento — enquanto não
+// estiver lá, está pendente. Mesma heurística usada pelo cliente
+// nativo do Autosystem (verificado nos logs do sistema).
 //
 // Query base:
-//   SELECT empresa, data, motivo, conta_debitar, conta_creditar,
-//          pessoa, documento, vencto, valor, obs
-//     FROM movto m
-//    WHERE conta_creditar LIKE '2.1.1%'
-//      AND child = 0
-//      AND empresa = $empresa_codigo
+//   SELECT ... FROM movto m
+//    WHERE (m.conta_creditar = '2.1.1' OR m.conta_creditar LIKE '2.1.1.%')
+//      AND m.empresa = $empresa_codigo
+//      AND m.child = 0
+//      AND NOT EXISTS (
+//        SELECT 1 FROM movto_bordero mb WHERE mb.movto = m.grid
+//      )
 //      AND (vencto entre $vencto_de e $vencto_ate, se informados)
-//      AND NÃO EXISTE baixa correspondente (ver abaixo)
-//
-// "Em aberto": uma provisão (débito = despesa, crédito = 2.1.1.x) está
-// em aberto enquanto não houver baixa (débito = 2.1.1.x, crédito = caixa)
-// para o mesmo título. Mesma heurística usada em autosystem-fluxo-caixa:
-//   - match forte: empresa + pessoa + documento (quando documento ≠ vazio)
-//   - match fraco: empresa + pessoa + valor (fallback)
+//   ORDER BY m.vencto, m.data, m.documento
 //
 // Joins:
 //   - conta cd ON cd.codigo = movto.conta_debitar  → nome do débito
@@ -131,32 +132,17 @@ serve(async (req) => {
     failedStep = 'set_client_encoding';
     await pg.queryArray("set client_encoding to 'SQL_ASCII'");
 
-    // 2) Monta os parâmetros e a query base com filtros opcionais
+    // 2) Em aberto = NÃO está em movto_bordero (mesma heurística do
+    //    cliente nativo Autosystem). Conta_creditar exatamente '2.1.1'
+    //    ou descendentes diretos '2.1.1.%' (LIKE '2.1.1%' pegaria
+    //    indevidamente outras contas como 2.1.10, 2.1.11 etc.).
     failedStep = 'select_contas_pagar';
     const params: unknown[] = [empresaCodigo];
     const conds: string[] = [
-      "m.conta_creditar like '2.1.1%'",
-      'm.child = 0',
+      "(m.conta_creditar = '2.1.1' or m.conta_creditar like '2.1.1.%')",
       'm.empresa = $1',
-      // Em aberto = sem baixa correspondente. A baixa é um movto que
-      // DEBITA a mesma conta 2.1.1.x da provisão original.
-      `not exists (
-         select 1 from movto b
-          where b.empresa       = m.empresa
-            and b.conta_debitar = m.conta_creditar
-            and b.grid         <> m.grid
-            and (
-              (
-                coalesce(nullif(b.documento::text, ''), '') <> ''
-                and coalesce(nullif(b.documento::text, ''), '') = coalesce(nullif(m.documento::text, ''), '')
-                and b.pessoa is not distinct from m.pessoa
-              )
-              or (
-                b.pessoa is not distinct from m.pessoa
-                and b.valor = m.valor
-              )
-            )
-       )`,
+      'm.child = 0',
+      'not exists (select 1 from movto_bordero mb where mb.movto = m.grid)',
     ];
     if (vencto_de) {
       params.push(vencto_de);
@@ -169,6 +155,7 @@ serve(async (req) => {
 
     const sql = `
       select
+        m.grid,
         m.empresa,
         m.data,
         m.vencto,
@@ -189,7 +176,7 @@ serve(async (req) => {
       left join pessoa        p  on p.grid    = m.pessoa
       left join motivo_movto  mm on mm.grid   = m.motivo
       where ${conds.join(' and ')}
-      order by m.vencto, m.data
+      order by m.vencto, m.data, m.documento
     `;
 
     const result = await pg.queryObject<Record<string, unknown>>({ text: sql, args: params });

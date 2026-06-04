@@ -90,19 +90,49 @@ export default function ClienteContasPagar() {
     [clientesRede],
   );
 
-  // Multi-seleção independente da topbar — default: todas
-  const [empresasSelIds, setEmpresasSelIds] = useState(() =>
-    new Set(empresasDisponiveis.map(c => c.id))
-  );
-  // Sincroniza quando a lista de disponíveis muda (sessão recarregada)
+  // Persiste a seleção entre sessões (chave por rede pra não vazar entre clientes)
+  const storageKey = asRede?.id ? `cci_cp_as_empresas_${asRede.id}` : null;
+  const lerSelecaoSalva = () => {
+    if (!storageKey) return null;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return null;
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? new Set(arr) : null;
+    } catch { return null; }
+  };
+
+  // Multi-seleção: tenta restaurar do localStorage; senão default = todas
+  const [empresasSelIds, setEmpresasSelIds] = useState(() => {
+    const salva = lerSelecaoSalva();
+    if (salva && salva.size > 0) return salva;
+    return new Set(empresasDisponiveis.map(c => c.id));
+  });
+
+  // Quando a lista de disponíveis muda (sessão recarregada / troca de rede):
+  //  - se nada selecionado → marca todas
+  //  - se algumas das selecionadas saíram da rede → remove-as
   useEffect(() => {
     setEmpresasSelIds(prev => {
-      if (prev.size === 0 && empresasDisponiveis.length > 0) {
-        return new Set(empresasDisponiveis.map(c => c.id));
+      const idsValidos = new Set(empresasDisponiveis.map(c => c.id));
+      const filtradas = new Set([...prev].filter(id => idsValidos.has(id)));
+      if (filtradas.size === 0 && empresasDisponiveis.length > 0) {
+        return idsValidos;
       }
-      return prev;
+      return filtradas;
     });
   }, [empresasDisponiveis]);
+
+  // Salva no localStorage sempre que a seleção muda
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const todas = empresasSelIds.size === empresasDisponiveis.length;
+      // Remove a chave quando seleciona todas (default) — limpa storage
+      if (todas) localStorage.removeItem(storageKey);
+      else       localStorage.setItem(storageKey, JSON.stringify([...empresasSelIds]));
+    } catch { /* noop */ }
+  }, [empresasSelIds, empresasDisponiveis.length, storageKey]);
 
   const empresasSel = useMemo(
     () => empresasDisponiveis.filter(c => empresasSelIds.has(c.id)),
@@ -212,6 +242,21 @@ export default function ClienteContasPagar() {
         empresaCnpj: t._empresaCnpj,
       };
     });
+  }, [titulos]);
+
+  // Contagem de títulos + valor pendente por empresa — alimenta o dropdown
+  // (mostra quanto cada empresa contribui no conjunto atualmente carregado).
+  const statsPorEmpresa = useMemo(() => {
+    const m = new Map();
+    for (const t of titulos || []) {
+      const id = t._empresaId;
+      if (!id) continue;
+      const cur = m.get(id) || { qtd: 0, valor: 0 };
+      cur.qtd++;
+      cur.valor += Number(t.valor || 0);
+      m.set(id, cur);
+    }
+    return m;
   }, [titulos]);
 
   // "Hoje" considera o próximo dia útil quando hoje não é útil
@@ -433,6 +478,7 @@ export default function ClienteContasPagar() {
           <EmpresaMultiSelect
             clientesRede={empresasDisponiveis}
             selecionadas={empresasSelIds}
+            statsPorEmpresa={statsPorEmpresa}
             onToggle={(id) => setEmpresasSelIds(prev => {
               const next = new Set(prev);
               if (next.has(id)) next.delete(id); else next.add(id);
@@ -720,8 +766,9 @@ function ResumoCard({ icon: Icon, iconBg, iconColor, label, valor, sub, highligh
 }
 
 // ─── Multi-select de empresas (dropdown com checkboxes) ─────────
-function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleTodas }) {
+function EmpresaMultiSelect({ clientesRede, selecionadas, statsPorEmpresa, onToggle, onToggleTodas }) {
   const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
   const ref = useRef(null);
 
   useEffect(() => {
@@ -729,6 +776,22 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  // Limpa a busca ao fechar pra não confundir na próxima abertura
+  useEffect(() => { if (!aberto) setBusca(''); }, [aberto]);
+
+  // Filtra por nome ou CNPJ (case-insensitive, ignora máscara de CNPJ)
+  const visiveis = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return clientesRede;
+    const qDig = q.replace(/\D/g, '');
+    return clientesRede.filter(c => {
+      const nomeOk = (c.nome || '').toLowerCase().includes(q);
+      if (nomeOk) return true;
+      if (qDig && c.cnpj) return c.cnpj.replace(/\D/g, '').includes(qDig);
+      return false;
+    });
+  }, [clientesRede, busca]);
 
   if (clientesRede.length === 0) return null;
 
@@ -761,18 +824,39 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
           <motion.div
             initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.12 }}
-            className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
+            className="absolute right-0 top-full mt-1 w-80 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
+            {/* Busca */}
+            {clientesRede.length > 6 && (
+              <div className="px-2.5 pt-2.5">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                  <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)}
+                    placeholder="Buscar por nome ou CNPJ..." autoFocus
+                    className="w-full h-8 rounded-md border border-gray-200 pl-8 pr-2.5 text-[12px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                </div>
+              </div>
+            )}
+
+            {/* Marcar/Desmarcar todas */}
             <button type="button" onClick={onToggleTodas}
-              className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
+              className="w-full flex items-center gap-2 px-3 py-2 mt-2 border-y border-gray-100 hover:bg-gray-50 transition-colors text-left">
               <input type="checkbox" checked={todasMarcadas}
                 onChange={() => {}} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span className="text-[12.5px] font-medium text-gray-700">
                 {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
               </span>
+              <span className="ml-auto text-[10.5px] text-gray-400">
+                {selecionadas.size}/{clientesRede.length}
+              </span>
             </button>
+
+            {/* Lista */}
             <div className="max-h-72 overflow-y-auto">
-              {clientesRede.map(emp => {
+              {visiveis.length === 0 ? (
+                <p className="px-3 py-6 text-[12px] text-gray-400 text-center">Nenhuma empresa encontrada.</p>
+              ) : visiveis.map(emp => {
                 const marcada = selecionadas.has(emp.id);
+                const stats = statsPorEmpresa?.get(emp.id);
                 return (
                   <label key={emp.id}
                     className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
@@ -783,6 +867,15 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
                       <p className="text-[12.5px] text-gray-800 truncate">{emp.nome}</p>
                       {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
                     </div>
+                    {/* Contagem só faz sentido pra empresas marcadas (são as carregadas) */}
+                    {marcada && stats && (
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[11px] font-semibold text-blue-700 tabular-nums">{stats.qtd}</p>
+                        <p className="text-[9.5px] text-gray-400 font-mono">
+                          {stats.valor.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </p>
+                      </div>
+                    )}
                   </label>
                 );
               })}
