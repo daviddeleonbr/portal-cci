@@ -220,23 +220,51 @@ export default function AdminNfManifestacaoDetalhe() {
         )}
       </div>
 
-      {/* Destinação */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm p-4 sm:p-5">
-        <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold mb-2">Destinação informada pelo cliente</p>
-        {nota.tipo_destinacao === 'estoque' ? (
-          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
-            <Package className="h-4 w-4 text-emerald-600" />
-            <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Estoque (revenda)</span>
+      {/* Resumo de destinação dos produtos */}
+      {(() => {
+        const itens = nota.produtos || [];
+        const estoque = itens.filter(p => (p.tipo_destinacao || 'estoque') === 'estoque');
+        const uso = itens.filter(p => p.tipo_destinacao === 'uso_consumo');
+        const bonif = itens.filter(p => p.bonificacao);
+        const totEstoque = estoque.reduce((s, p) => s + Number(p.subtotal || 0), 0);
+        const totUso = uso.reduce((s, p) => s + Number(p.subtotal || 0), 0);
+        const totBonif = bonif.reduce((s, p) => s + Number(p.subtotal || 0), 0);
+        return (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm p-4 sm:p-5">
+            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold mb-2">Resumo da nota (por destinação dos produtos)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 p-3">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">Estoque (revenda)</span>
+                </div>
+                <p className="text-[11px] text-blue-700 dark:text-blue-300/80 mt-1">{estoque.length} {estoque.length === 1 ? 'item' : 'itens'}</p>
+                <p className="font-mono tabular-nums font-bold text-blue-900 dark:text-blue-200 mt-0.5">{formatCurrency(totEstoque)}</p>
+              </div>
+              <div className="rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 p-3">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Uso e consumo</span>
+                </div>
+                <p className="text-[11px] text-violet-700 dark:text-violet-300/80 mt-1">{uso.length} {uso.length === 1 ? 'item' : 'itens'}</p>
+                <p className="font-mono tabular-nums font-bold text-violet-900 dark:text-violet-200 mt-0.5">{formatCurrency(totUso)}</p>
+              </div>
+              <div className={`rounded-lg p-3 border ${bonif.length > 0 ? 'bg-pink-50 dark:bg-pink-500/10 border-pink-200 dark:border-pink-500/20' : 'bg-gray-50 dark:bg-white/[0.03] border-gray-200 dark:border-white/10'}`}>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={`h-4 w-4 ${bonif.length > 0 ? 'text-pink-600 dark:text-pink-400' : 'text-gray-400'}`} />
+                  <span className={`text-sm font-semibold ${bonif.length > 0 ? 'text-pink-800 dark:text-pink-300' : 'text-gray-500 dark:text-gray-400'}`}>Bonificações</span>
+                </div>
+                <p className={`text-[11px] mt-1 ${bonif.length > 0 ? 'text-pink-700 dark:text-pink-300/80' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {bonif.length} {bonif.length === 1 ? 'item' : 'itens'} marcado{bonif.length === 1 ? '' : 's'}
+                </p>
+                {bonif.length > 0 && (
+                  <p className="font-mono tabular-nums font-bold text-pink-900 dark:text-pink-200 mt-0.5">{formatCurrency(totBonif)}</p>
+                )}
+              </div>
+            </div>
           </div>
-        ) : nota.tipo_destinacao === 'uso_consumo' ? (
-          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20">
-            <Briefcase className="h-4 w-4 text-violet-600" />
-            <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Uso e consumo</span>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400">Não informada</p>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Produtos */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
@@ -271,6 +299,21 @@ export default function AdminNfManifestacaoDetalhe() {
                       <td className="px-3 py-2 text-gray-800 dark:text-gray-200">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span>{p.descricao || <span className="text-gray-400 dark:text-gray-500 italic">sem descrição</span>}</span>
+                          {/* Destinação */}
+                          {(p.tipo_destinacao || 'estoque') === 'estoque' ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-300">
+                              <Package className="h-2.5 w-2.5" /> Estoque
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-300">
+                              <Briefcase className="h-2.5 w-2.5" /> Uso/cons.
+                            </span>
+                          )}
+                          {p.bonificacao && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-pink-100 dark:bg-pink-500/20 text-pink-800 dark:text-pink-300">
+                              Bonificação
+                            </span>
+                          )}
                           {p.produto_novo && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">
                               <PackagePlus className="h-2.5 w-2.5" /> Novo

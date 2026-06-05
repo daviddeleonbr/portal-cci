@@ -70,6 +70,8 @@ import WpNotasFiscais from './pages/cliente/webposto/ClienteNotasFiscais';
 import WpNotaFiscalDetalhe from './pages/cliente/webposto/ClienteNotaFiscalDetalhe';
 import AdminNfManifestacao from './pages/AdminNfManifestacao';
 import AdminNfManifestacaoDetalhe from './pages/AdminNfManifestacaoDetalhe';
+import WpOutrasContas from './pages/cliente/webposto/ClienteOutrasContas';
+import AdminOutrasContas from './pages/AdminOutrasContas';
 import WpConfiguracoes from './pages/cliente/webposto/ClienteConfiguracoes';
 import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
 // Cliente Autosystem (esqueletos — implementados página a página)
@@ -138,6 +140,7 @@ export default function App() {
           <Route path="/admin/notas-fiscais" element={<NotasFiscais />} />
           <Route path="/admin/fiscal/manifestacao" element={<AdminNfManifestacao />} />
           <Route path="/admin/fiscal/manifestacao/:id" element={<AdminNfManifestacaoDetalhe />} />
+          <Route path="/admin/bpo/outras-contas" element={<AdminOutrasContas />} />
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
           <Route path="/admin/fiscal/agendamento" element={<NotasFiscais />} />
 
@@ -194,6 +197,7 @@ export default function App() {
           <Route path="/cliente/webposto/financeiro/contas-receber" element={<WpContasReceber />} />
           <Route path="/cliente/webposto/financeiro/notas-fiscais" element={<RequirePermissaoCliente permissao="notas_fiscais"><WpNotasFiscais /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/financeiro/notas-fiscais/:id" element={<RequirePermissaoCliente permissao="notas_fiscais"><WpNotaFiscalDetalhe /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/bpo/outras-contas" element={<RequirePermissaoCliente permissao="outras_contas"><WpOutrasContas /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/sangrias" element={<RequirePermissaoCliente permissao="sangrias"><WpSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/suporte" element={<WpSuporte />} />
           <Route path="/cliente/webposto/melhorias" element={<ClienteMelhorias />} />

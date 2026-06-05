@@ -6,7 +6,7 @@ import {
   LayoutDashboard, BarChart3, TrendingUp, PieChart,
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
-  ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet,
+  ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet, Receipt,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
@@ -49,6 +49,7 @@ function buildNavigation(prefix) {
       items: [
         { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: 'sangrias' },
         { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais' },
+        { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas' },
         { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo' },
       ],
     },

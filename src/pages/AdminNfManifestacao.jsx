@@ -8,11 +8,22 @@ import { useNavigate } from 'react-router-dom';
 import {
   FileSpreadsheet, Loader2, AlertCircle, Search, RefreshCw,
   ChevronRight, Building2, Paperclip, Package, Briefcase,
+  CalendarRange, Network,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import * as nfService from '../services/notaManifestacaoService';
+import * as mapService from '../services/mapeamentoService';
 import { formatCurrency } from '../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
+
+function inicioMesAtual() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+function hojeStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -27,10 +38,16 @@ function fmtDataHora(iso) {
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+// Tabs: a primeira lista notas que o cliente ainda não enviou (pra a CCI
+// cobrar). As demais são pós-processamento.
+// 'cobrar' agrupa pendente + em_preenchimento (ambas significam "cliente
+// não enviou ainda").
 const TABS = [
-  { key: 'enviada',   label: 'Pendentes',  cor: 'blue',    dot: 'bg-blue-500' },
-  { key: 'lancada',   label: 'Lançadas',   cor: 'emerald', dot: 'bg-emerald-500' },
-  { key: 'devolvida', label: 'Devolvidas', cor: 'rose',    dot: 'bg-rose-500' },
+  { key: 'cobrar',    label: 'Para cobrar',  cor: 'amber',   dot: 'bg-amber-500',
+    statusBd: ['pendente', 'em_preenchimento'] },
+  { key: 'enviada',   label: 'Pendentes CCI', cor: 'blue',    dot: 'bg-blue-500' },
+  { key: 'lancada',   label: 'Lançadas',     cor: 'emerald', dot: 'bg-emerald-500' },
+  { key: 'devolvida', label: 'Devolvidas',   cor: 'rose',    dot: 'bg-rose-500' },
 ];
 
 // Situações da manifestação NFe (campo `situacao_manifestacao` da Quality).
@@ -50,33 +67,54 @@ export default function AdminNfManifestacao() {
   const [notas, setNotas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useState('enviada');
+  const [tab, setTab] = useState('cobrar');
   const [busca, setBusca] = useState('');
   const [filtroSituacao, setFiltroSituacao] = useState('todas'); // 'todas' | '0' | '1'
+  const [dataDe, setDataDe] = useState(inicioMesAtual());
+  const [dataAte, setDataAte] = useState(hojeStr());
+  const [redes, setRedes] = useState([]);            // [{ id, nome }]
+  const [filtroRede, setFiltroRede] = useState('todas');
+
+  // Carrega lista de redes (chaves_api) uma vez pra popular o select.
+  useEffect(() => {
+    mapService.listarChavesApi()
+      .then(setRedes)
+      .catch(() => setRedes([]));
+  }, []);
 
   const carregar = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const lista = await nfService.listarParaAdmin();
+      const lista = await nfService.listarParaAdmin({
+        dataDe, dataAte,
+        chaveApiId: filtroRede === 'todas' ? null : filtroRede,
+      });
       setNotas(lista);
     } catch (err) {
       setError(err.message || 'Falha ao carregar');
     } finally { setLoading(false); }
-  }, []);
+  }, [dataDe, dataAte, filtroRede]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
   const contagens = useMemo(() => {
-    const c = { enviada: 0, lancada: 0, devolvida: 0 };
-    notas.forEach(n => { c[n.status_portal] = (c[n.status_portal] || 0) + 1; });
+    const c = { cobrar: 0, enviada: 0, lancada: 0, devolvida: 0 };
+    notas.forEach(n => {
+      if (n.status_portal === 'pendente' || n.status_portal === 'em_preenchimento') c.cobrar++;
+      else c[n.status_portal] = (c[n.status_portal] || 0) + 1;
+    });
     return c;
   }, [notas]);
 
+  const tabAtual = TABS.find(t => t.key === tab);
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
+    const statusFiltro = tabAtual?.statusBd || [tab];
     return notas
-      .filter(n => n.status_portal === tab)
+      .filter(n => statusFiltro.includes(n.status_portal))
       .filter(n => {
+        // Na aba "Para cobrar" só interessa quem ainda não fez manifestação.
+        if (tab === 'cobrar') return Number(n.situacao_manifestacao) === 0;
         if (filtroSituacao === 'todas') return true;
         return String(n.situacao_manifestacao ?? '') === filtroSituacao;
       })
@@ -87,16 +125,31 @@ export default function AdminNfManifestacao() {
           n.chave_documento, n.cliente?.nome, n.cliente?.cnpj,
         ].some(v => String(v || '').toLowerCase().includes(q));
       });
-  }, [notas, tab, busca, filtroSituacao]);
+  }, [notas, tab, tabAtual, busca, filtroSituacao]);
 
   const totalValor = filtradas.reduce((s, n) => s + Number(n.valor || 0), 0);
 
   return (
     <div>
-      <PageHeader title="Manifestação de Notas" description="Notas enviadas pelos clientes para validação e lançamento">
+      <PageHeader title="Manifestação de Notas" description="Notas a manifestar — cobrança de clientes, validação e lançamento">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+            <CalendarRange className="h-3 w-3" /> Emissão
+          </span>
+          <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)}
+            className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+          <span className="text-[10px] text-gray-400">e</span>
+          <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)}
+            className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+          <select value={filtroRede} onChange={e => setFiltroRede(e.target.value)}
+            className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 min-w-[180px]">
+            <option value="todas">Todas as redes</option>
+            {redes.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
+          </select>
+        </div>
         <button onClick={carregar} disabled={loading}
           aria-label="Atualizar"
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 min-w-[44px] justify-center">
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors disabled:opacity-50 min-w-[44px] justify-center">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           <span className="hidden sm:inline">Atualizar</span>
         </button>
@@ -130,12 +183,19 @@ export default function AdminNfManifestacao() {
             placeholder="Buscar por cliente, fornecedor, CNPJ ou chave..."
             className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
         </div>
-        <select value={filtroSituacao} onChange={e => setFiltroSituacao(e.target.value)}
-          className="h-[42px] rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 text-sm font-medium text-gray-700 dark:text-gray-200 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 sm:min-w-[220px]">
-          <option value="todas">Todas as situações NFe</option>
-          <option value="0">0 · Sem manifestação</option>
-          <option value="1">1 · Confirmação da operação</option>
-        </select>
+        {tab === 'cobrar' ? (
+          <div className="inline-flex items-center gap-1.5 h-[42px] px-3 rounded-lg bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-xs font-medium text-amber-800 dark:text-amber-300 sm:min-w-[220px]">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            Apenas "Sem manifestação"
+          </div>
+        ) : (
+          <select value={filtroSituacao} onChange={e => setFiltroSituacao(e.target.value)}
+            className="h-[42px] rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 text-sm font-medium text-gray-700 dark:text-gray-200 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 sm:min-w-[220px]">
+            <option value="todas">Todas as situações NFe</option>
+            <option value="0">0 · Sem manifestação</option>
+            <option value="1">1 · Confirmação da operação</option>
+          </select>
+        )}
       </div>
 
       {error && (
@@ -155,7 +215,14 @@ export default function AdminNfManifestacao() {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
             <FileSpreadsheet className="h-6 w-6 text-blue-600" />
           </div>
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Nenhuma nota nesta categoria.</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {tab === 'cobrar' ? 'Nenhuma nota aguardando cliente preencher 🎉' : 'Nenhuma nota nesta categoria.'}
+          </p>
+          {tab === 'cobrar' && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Os clientes já enviaram tudo do período. Ajuste o filtro para ver outros intervalos.
+            </p>
+          )}
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
@@ -163,13 +230,17 @@ export default function AdminNfManifestacao() {
             <table className="w-full text-sm min-w-[1100px]">
               <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  <th className="px-4 py-2.5">{tab === 'enviada' ? 'Enviada em' : tab === 'lancada' ? 'Lançada em' : 'Devolvida em'}</th>
+                  <th className="px-4 py-2.5">{
+                    tab === 'cobrar'    ? 'Sincronizada em'
+                    : tab === 'enviada' ? 'Enviada em'
+                    : tab === 'lancada' ? 'Lançada em'
+                                        : 'Devolvida em'
+                  }</th>
                   <th className="px-3 py-2.5">Cliente</th>
                   <th className="px-3 py-2.5">Fornecedor</th>
                   <th className="px-3 py-2.5">Nº NF</th>
                   <th className="px-3 py-2.5">Emissão</th>
                   <th className="px-3 py-2.5">Situação NFe</th>
-                  <th className="px-3 py-2.5 text-center">Destinação</th>
                   <th className="px-3 py-2.5 text-center">Prod.</th>
                   <th className="px-3 py-2.5 text-center">Anexos</th>
                   <th className="px-3 py-2.5 text-right">Valor</th>
@@ -178,7 +249,10 @@ export default function AdminNfManifestacao() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/10">
                 {filtradas.map(n => {
-                  const ts = tab === 'enviada' ? n.enviada_em : tab === 'lancada' ? n.lancada_em : n.devolvida_em;
+                  const ts = tab === 'cobrar'    ? n.created_at
+                          : tab === 'enviada'  ? n.enviada_em
+                          : tab === 'lancada'  ? n.lancada_em
+                                                : n.devolvida_em;
                   return (
                     <tr key={n.id}
                       onClick={() => navigate(`/admin/fiscal/manifestacao/${n.id}`)}
@@ -220,18 +294,7 @@ export default function AdminNfManifestacao() {
                           );
                         })()}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        {n.tipo_destinacao === 'estoque' ? (
-                          <span className="inline-flex items-center gap-1 text-[10.5px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                            <Package className="h-3 w-3" /> Estoque
-                          </span>
-                        ) : n.tipo_destinacao === 'uso_consumo' ? (
-                          <span className="inline-flex items-center gap-1 text-[10.5px] text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded">
-                            <Briefcase className="h-3 w-3" /> Uso/Cons.
-                          </span>
-                        ) : <span className="text-[10.5px] text-gray-400 dark:text-gray-500">—</span>}
-                      </td>
-                      <td className="px-3 py-3 text-center font-mono tabular-nums text-[12px] text-gray-700">{n.qtdProdutos}</td>
+                      <td className="px-3 py-3 text-center font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300">{n.qtdProdutos}</td>
                       <td className="px-3 py-3 text-center text-[11px] text-gray-700 dark:text-gray-300 dark:text-gray-600">
                         <span className="inline-flex items-center gap-1">
                           <Paperclip className="h-3 w-3 text-gray-400" />
@@ -248,7 +311,7 @@ export default function AdminNfManifestacao() {
               </tbody>
               <tfoot className="bg-gray-50/60 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
                 <tr className="font-semibold">
-                  <td colSpan={9} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
+                  <td colSpan={8} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
                     Total: {filtradas.length} {filtradas.length === 1 ? 'nota' : 'notas'}
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900">{formatCurrency(totalValor)}</td>

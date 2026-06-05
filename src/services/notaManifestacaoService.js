@@ -50,19 +50,33 @@ export async function listarPorCliente(clienteId, { status } = {}) {
 }
 
 // Lista todas as notas enviadas para admin (qualquer cliente).
-export async function listarParaAdmin({ status } = {}) {
+// Lista para admin com filtros opcionais. `status` aceita string única OU
+// array (ex: ['pendente','em_preenchimento'] pra fila de cobrança).
+// `chaveApiId` filtra por rede do cliente. `dataDe`/`dataAte` filtram por
+// data_emissao da NF (formato YYYY-MM-DD).
+export async function listarParaAdmin({ status, chaveApiId, dataDe, dataAte } = {}) {
   let q = supabase
     .from('nf_manifestacao')
     .select(`*,
-      cliente:clientes(id, nome, cnpj),
+      cliente:clientes(id, nome, cnpj, chave_api_id),
       produtos:nf_manifestacao_produto(count),
       arquivos:nf_manifestacao_arquivo(id, tipo)`)
     .order('enviada_em', { ascending: false, nullsFirst: false });
-  if (status) q = q.eq('status_portal', status);
-  else q = q.in('status_portal', ['enviada', 'lancada', 'devolvida']);
+
+  if (Array.isArray(status))      q = q.in('status_portal', status);
+  else if (status)                q = q.eq('status_portal', status);
+  else                            q = q.in('status_portal', ['pendente', 'em_preenchimento', 'enviada', 'lancada', 'devolvida']);
+
+  if (dataDe)  q = q.gte('data_emissao', dataDe);
+  if (dataAte) q = q.lte('data_emissao', dataAte);
+
   const { data, error } = await q;
   if (error) throw error;
-  return (data || []).map(enriquecerContagens);
+
+  let rows = (data || []).map(enriquecerContagens);
+  // Filtro de rede aplicado no JS (relação aninhada — Postgrest exige outro padrão).
+  if (chaveApiId) rows = rows.filter(r => r.cliente?.chave_api_id === chaveApiId);
+  return rows;
 }
 
 function enriquecerContagens(row) {
@@ -194,6 +208,8 @@ export async function adicionarProduto(nfId, produto) {
     valor_unitario: Number(produto.valor_unitario) || 0,
     ordem: produto.ordem ?? 0,
     produto_novo: !!produto.produto_novo,
+    tipo_destinacao: produto.tipo_destinacao || 'estoque',
+    bonificacao: !!produto.bonificacao,
   };
   const { data, error } = await supabase
     .from('nf_manifestacao_produto')
@@ -347,22 +363,37 @@ function sanitizarNomeArquivo(nome) {
 // ─── Transições de status ────────────────────────────────────
 
 // Cliente envia para CCI. Exige:
-//   - tipo_destinacao
 //   - ao menos 1 produto
+//   - cada produto com tipo_destinacao definido (estoque ou uso_consumo)
 //   - ao menos 1 arquivo Nota Fiscal (PDF/XML/foto)
 //   - boleto: ao menos 1 arquivo OU motivo_sem_boleto preenchido
-//     (ex: "paga em dinheiro", "veio sem boleto")
+//   - soma dos produtos == valor total da NF (tolerância de 1 centavo).
+//     Bonificações entram com seu valor unitário normalmente — a marca de
+//     "bonificacao=true" é só um flag para a CCI lançar corretamente.
 export async function enviarParaCci(id) {
   const nf = await obter(id);
   if (!nf) throw new Error('Nota não encontrada');
-  if (!nf.tipo_destinacao) throw new Error('Selecione o tipo de destinação (estoque ou uso e consumo)');
   if (!nf.produtos || nf.produtos.length === 0) throw new Error('Cadastre ao menos 1 produto');
+  const semDestinacao = nf.produtos.filter(p => !p.tipo_destinacao);
+  if (semDestinacao.length > 0) {
+    throw new Error(`${semDestinacao.length} produto(s) sem destinação definida (estoque ou uso e consumo).`);
+  }
   const arqs = nf.arquivos || [];
   if (!arqs.some(a => a.tipo === 'nota_fiscal')) throw new Error('Anexe ao menos 1 arquivo de Nota Fiscal');
   const temBoleto = arqs.some(a => a.tipo === 'boleto');
   const temMotivo = !!(nf.motivo_sem_boleto && nf.motivo_sem_boleto.trim());
   if (!temBoleto && !temMotivo) {
     throw new Error('Anexe pelo menos um boleto ou informe o motivo da ausência (ex: "paga em dinheiro").');
+  }
+  const totalProdutos = (nf.produtos || []).reduce(
+    (s, p) => s + Number(p.quantidade || 0) * Number(p.valor_unitario || 0), 0,
+  );
+  const valorNota = Number(nf.valor || 0);
+  if (Math.abs(totalProdutos - valorNota) > 0.01) {
+    throw new Error(
+      `Total dos produtos (R$ ${totalProdutos.toFixed(2)}) diverge do valor da NF ` +
+      `(R$ ${valorNota.toFixed(2)}). Ajuste antes de enviar.`
+    );
   }
 
   return atualizar(id, { status_portal: 'enviada', enviada_em: new Date().toISOString() });

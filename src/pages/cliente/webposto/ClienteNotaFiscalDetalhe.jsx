@@ -38,6 +38,7 @@ export default function ClienteNotaFiscalDetalhe() {
   const navigate = useNavigate();
   const session = useClienteSession();
   const cliente = session?.cliente;
+  const clientesRede = session?.clientesRede || [];
 
   const [nota, setNota] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +51,7 @@ export default function ClienteNotaFiscalDetalhe() {
   const [produtosLocal, setProdutosLocal] = useState([]);
   const [modalScan, setModalScan] = useState(false);
   const [modalNovoProduto, setModalNovoProduto] = useState(false);
+  const [modalUsoConsumo, setModalUsoConsumo] = useState(false);
 
   const carregar = useCallback(async () => {
     if (!id) return;
@@ -66,21 +68,6 @@ export default function ClienteNotaFiscalDetalhe() {
   }, [id, cliente?.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
-
-  // ─── Tipo de destinação ──────────────────────────────────
-  const mudarTipoDestinacao = async (tipo) => {
-    if (!nota || readonly) return;
-    setSalvando(true);
-    try {
-      const atualizada = await nfService.atualizar(nota.id, {
-        tipo_destinacao: tipo,
-        status_portal: nota.status_portal === 'pendente' ? 'em_preenchimento' : nota.status_portal,
-      });
-      setNota(prev => ({ ...prev, ...atualizada }));
-    } catch (err) {
-      setToast({ tipo: 'error', mensagem: 'Erro ao salvar: ' + err.message });
-    } finally { setSalvando(false); }
-  };
 
   // ─── Produtos ────────────────────────────────────────────
   // Insere um produto em branco ou pré-preenchido (vindo do scan/busca).
@@ -208,14 +195,35 @@ export default function ClienteNotaFiscalDetalhe() {
   const totalProdutos = produtosLocal.reduce((s, p) =>
     s + (Number(p.quantidade || 0) * Number(p.valor_unitario || 0)), 0);
 
+  // Resolve nome da empresa pelo empresa_codigo (rede pode ter várias).
+  // Cai pro nome do próprio cliente se for empresa única ou se não achar match.
+  const empresaNome = (() => {
+    const cod = nota.empresa_codigo;
+    if (cod != null) {
+      const match = clientesRede.find(c => String(c.empresa_codigo) === String(cod));
+      if (match?.nome) return match.nome;
+    }
+    return cliente?.nome || `cód ${cod || '—'}`;
+  })();
+
   // Pendências para envio à CCI — o botão só habilita quando lista está vazia.
   const pendencias = [];
-  if (!nota.tipo_destinacao)              pendencias.push('Tipo de destinação');
   if (produtosLocal.length === 0)         pendencias.push('Ao menos 1 produto');
+  const semDestinacao = produtosLocal.filter(p => !p.tipo_destinacao).length;
+  if (semDestinacao > 0)                  pendencias.push(`Definir destinação de ${semDestinacao} produto${semDestinacao === 1 ? '' : 's'}`);
   if (arquivosNF.length === 0)            pendencias.push('Nota fiscal anexada');
   const motivoSemBoletoOk = !!(nota.motivo_sem_boleto && nota.motivo_sem_boleto.trim());
   if (arquivosBol.length === 0 && !motivoSemBoletoOk) {
     pendencias.push('Boleto anexado ou motivo da ausência');
+  }
+  // Verifica divergência: soma dos produtos × valor total da NF (tolerância 1ct).
+  const valorNota = Number(nota.valor || 0);
+  const divergencia = totalProdutos - valorNota;
+  const haDivergencia = produtosLocal.length > 0 && Math.abs(divergencia) > 0.01;
+  if (haDivergencia) {
+    pendencias.push(
+      `Total dos produtos (${formatCurrency(totalProdutos)}) diverge do valor da NF (${formatCurrency(valorNota)})`
+    );
   }
   const podeEnviar = pendencias.length === 0;
 
@@ -256,9 +264,9 @@ export default function ClienteNotaFiscalDetalhe() {
                 <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold flex items-center gap-1"><Calendar className="h-3 w-3" /> Emissão</p>
                 <p className="font-mono tabular-nums text-gray-800 dark:text-gray-200 mt-0.5">{fmtData(nota.data_emissao)}</p>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold flex items-center gap-1"><Building2 className="h-3 w-3" /> Empresa</p>
-                <p className="font-mono tabular-nums text-gray-800 dark:text-gray-200 mt-0.5">{nota.empresa_codigo || '—'}</p>
+                <p className="text-gray-800 dark:text-gray-200 mt-0.5 truncate" title={empresaNome}>{empresaNome}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold">Valor NF</p>
@@ -281,49 +289,25 @@ export default function ClienteNotaFiscalDetalhe() {
         )}
       </div>
 
-      {/* Tipo de destinação */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm p-4 sm:p-5">
-        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 dark:text-gray-100 mb-1">Destinação</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Esta nota é para estoque (revenda) ou uso e consumo da empresa?</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {[
-            { key: 'estoque',     label: 'Estoque (revenda)',  desc: 'Produtos para revenda no posto/loja', icon: Package },
-            { key: 'uso_consumo', label: 'Uso e consumo',      desc: 'Materiais consumidos pela empresa',   icon: Briefcase },
-          ].map(opt => {
-            const Icon = opt.icon;
-            const ativo = nota.tipo_destinacao === opt.key;
-            return (
-              <button key={opt.key} onClick={() => mudarTipoDestinacao(opt.key)} disabled={readonly || salvando}
-                className={`text-left rounded-xl border-2 p-3 transition-all ${
-                  ativo
-                    ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-500/10'
-                    : 'border-gray-200 dark:border-white/10 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-white/[0.04]'
-                } ${readonly ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                <div className="flex items-center gap-2">
-                  <Icon className={`h-4 w-4 ${ativo ? 'text-blue-600' : 'text-gray-500'}`} />
-                  <p className={`text-sm font-semibold ${ativo ? 'text-blue-900 dark:text-blue-200' : 'text-gray-800 dark:text-gray-200'}`}>{opt.label}</p>
-                  {ativo && <CheckCircle2 className="h-4 w-4 text-blue-600 ml-auto" />}
-                </div>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 ml-6">{opt.desc}</p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Produtos */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
         <div className="px-4 sm:px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-2 flex-wrap">
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Produtos da nota</p>
           <span className="text-[11px] text-gray-400 dark:text-gray-500">· {produtosLocal.length} {produtosLocal.length === 1 ? 'item' : 'itens'}</span>
           {!readonly && (
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setModalScan(true)}
+                title="Estoque (revenda) — buscar no catálogo do Webposto"
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-blue-700">
                 <ScanLine className="h-3.5 w-3.5" /> Escanear / buscar
               </button>
+              <button onClick={() => setModalUsoConsumo(true)}
+                title="Item de uso e consumo da empresa (não vai pro estoque)"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/10 text-violet-800 dark:text-violet-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-violet-100 dark:hover:bg-violet-500/20">
+                <Briefcase className="h-3.5 w-3.5" /> Uso e consumo
+              </button>
               <button onClick={() => setModalNovoProduto(true)}
-                title="Informar produto que ainda não está cadastrado no Webposto"
+                title="Produto que ainda não está cadastrado no Webposto"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-500/20">
                 <PackagePlus className="h-3.5 w-3.5" /> Novo produto
               </button>
@@ -334,7 +318,10 @@ export default function ClienteNotaFiscalDetalhe() {
         {produtosLocal.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
             Nenhum produto adicionado.
-            {!readonly && <span className="block text-[11px] text-gray-400 dark:text-gray-500 mt-1">Use "Escanear / buscar" para localizar pelo código de barras, ou "Novo produto" se ele ainda não estiver cadastrado no Webposto.</span>}
+            {!readonly && <span className="block text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+              <strong>Estoque</strong> (revenda): use "Escanear / buscar" ou "Novo produto" se ainda não está no Webposto.
+              <br /><strong>Uso e consumo</strong> (interno): use o botão correspondente.
+            </span>}
           </div>
         ) : (
           <>
@@ -374,17 +361,55 @@ export default function ClienteNotaFiscalDetalhe() {
                 <tfoot className="bg-gray-50/80 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
                   <tr className="font-semibold">
                     <td colSpan={6} className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">Total dos produtos</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-900 dark:text-gray-100">{formatCurrency(totalProdutos)}</td>
+                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${haDivergencia ? 'text-rose-700 dark:text-rose-400' : 'text-gray-900 dark:text-gray-100'}`}>{formatCurrency(totalProdutos)}</td>
                     {!readonly && <td />}
                   </tr>
+                  <tr>
+                    <td colSpan={6} className="px-3 py-2 text-right text-[11px] text-gray-500 dark:text-gray-400">Valor da NF</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-600 dark:text-gray-300">{formatCurrency(valorNota)}</td>
+                    {!readonly && <td />}
+                  </tr>
+                  {haDivergencia && (
+                    <tr>
+                      <td colSpan={!readonly ? 8 : 7} className="px-3 py-2.5 bg-rose-50 dark:bg-rose-500/10 border-t border-rose-200 dark:border-rose-500/20">
+                        <div className="flex items-start gap-2 text-[12px] text-rose-800 dark:text-rose-300">
+                          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Diferença de {formatCurrency(Math.abs(divergencia))}</strong>
+                            {divergencia > 0
+                              ? ` — produtos somam ${formatCurrency(divergencia)} a mais que o valor da NF.`
+                              : ` — faltam ${formatCurrency(Math.abs(divergencia))} para fechar o valor da NF.`}
+                            <span className="block text-[11px] text-rose-700/80 dark:text-rose-300/80 mt-0.5">Ajuste quantidades/valores ou inclua os produtos faltantes antes de enviar.</span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tfoot>
               </table>
             </div>
 
-            {/* Mobile: rodapé total */}
-            <div className="md:hidden px-4 py-3 border-t-2 border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-white/[0.03] flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total</p>
-              <p className="font-mono tabular-nums text-base font-bold text-gray-900 dark:text-gray-100">{formatCurrency(totalProdutos)}</p>
+            {/* Mobile: rodapé total + alerta */}
+            <div className="md:hidden border-t-2 border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-white/[0.03]">
+              <div className="px-4 py-3 flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total dos produtos</p>
+                <p className={`font-mono tabular-nums text-base font-bold ${haDivergencia ? 'text-rose-700 dark:text-rose-400' : 'text-gray-900 dark:text-gray-100'}`}>{formatCurrency(totalProdutos)}</p>
+              </div>
+              <div className="px-4 pb-2 flex items-center justify-between">
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Valor da NF</p>
+                <p className="font-mono tabular-nums text-[12px] text-gray-600 dark:text-gray-300">{formatCurrency(valorNota)}</p>
+              </div>
+              {haDivergencia && (
+                <div className="px-4 py-3 bg-rose-50 dark:bg-rose-500/10 border-t border-rose-200 dark:border-rose-500/20 flex items-start gap-2 text-[12px] text-rose-800 dark:text-rose-300">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Diferença de {formatCurrency(Math.abs(divergencia))}</strong>
+                    <span className="block text-[11px] mt-0.5">
+                      {divergencia > 0 ? 'Produtos somam mais que o valor da NF.' : 'Faltam produtos para fechar o valor.'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -457,8 +482,21 @@ export default function ClienteNotaFiscalDetalhe() {
           cliente={cliente}
           onClose={() => setModalScan(false)}
           onAdicionar={async (dados) => {
-            await adicionarProduto(dados);
+            // Default scan = estoque. Bonificação vem do checkbox do modal.
+            await adicionarProduto({ tipo_destinacao: 'estoque', ...dados });
             setModalScan(false);
+          }}
+          onErro={(msg) => setToast({ tipo: 'error', mensagem: msg })}
+        />
+      )}
+
+      {modalUsoConsumo && (
+        <ModalUsoConsumo
+          onClose={() => setModalUsoConsumo(false)}
+          onAdicionar={async (dados) => {
+            await adicionarProduto({ ...dados, tipo_destinacao: 'uso_consumo' });
+            setModalUsoConsumo(false);
+            setToast({ tipo: 'success', mensagem: 'Item de uso e consumo adicionado' });
           }}
           onErro={(msg) => setToast({ tipo: 'error', mensagem: msg })}
         />
@@ -493,6 +531,44 @@ export default function ClienteNotaFiscalDetalhe() {
   );
 }
 
+// ─── Badges de classificação do produto (clicáveis pra alternar) ──
+// Mostra: destinação (estoque/uso e consumo), bonificação, produto novo.
+// Clique no chip de destinação alterna entre estoque e uso_consumo.
+function BadgesProduto({ produto, readonly, onMudarDestinacao, onToggleBonificacao }) {
+  const destEstoque = produto.tipo_destinacao !== 'uso_consumo';
+  const cfgDest = destEstoque
+    ? { label: 'Estoque',     bg: 'bg-blue-100 dark:bg-blue-500/20',     text: 'text-blue-800 dark:text-blue-300',     icon: Package }
+    : { label: 'Uso/consumo', bg: 'bg-violet-100 dark:bg-violet-500/20', text: 'text-violet-800 dark:text-violet-300', icon: Briefcase };
+  const Icone = cfgDest.icon;
+  const proxima = destEstoque ? 'uso_consumo' : 'estoque';
+  return (
+    <div className="inline-flex items-center gap-1 flex-shrink-0">
+      <button type="button" onClick={() => !readonly && onMudarDestinacao?.(proxima)}
+        disabled={readonly}
+        title={readonly ? cfgDest.label : `Clique para alternar (atual: ${cfgDest.label})`}
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider ${cfgDest.bg} ${cfgDest.text} ${readonly ? '' : 'hover:opacity-80 cursor-pointer'}`}>
+        <Icone className="h-2.5 w-2.5" /> {cfgDest.label}
+      </button>
+      <button type="button" onClick={() => !readonly && onToggleBonificacao?.()}
+        disabled={readonly}
+        title={produto.bonificacao ? 'Remover marca de bonificação' : 'Marcar como bonificação (informativo para CCI lançar)'}
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider ${
+          produto.bonificacao
+            ? 'bg-pink-100 dark:bg-pink-500/20 text-pink-800 dark:text-pink-300'
+            : 'bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-gray-400 opacity-60 hover:opacity-100'
+        } ${readonly && !produto.bonificacao ? 'hidden' : ''} ${readonly ? '' : 'cursor-pointer'}`}>
+        Bonif.
+      </button>
+      {produto.produto_novo && (
+        <span title="Produto novo — CCI cadastrará no Webposto"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">
+          <PackagePlus className="h-2.5 w-2.5" /> Novo
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ─── Produto: linha (desktop) ────────────────────────────────
 function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
   const subtotal = Number(produto.quantidade || 0) * Number(produto.valor_unitario || 0);
@@ -520,18 +596,15 @@ function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
         )}
       </td>
       <td className="px-3 py-1.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <input type="text" value={produto.descricao || ''} disabled={readonly}
             onChange={e => onEdit({ descricao: e.target.value })}
             onBlur={e => onCommit({ descricao: e.target.value })}
             placeholder="Descrição (opcional)"
-            className="flex-1 h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[12px] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
-          {produto.produto_novo && (
-            <span title="Produto não cadastrado no Webposto — CCI cadastrará"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 flex-shrink-0">
-              <PackagePlus className="h-2.5 w-2.5" /> Novo
-            </span>
-          )}
+            className="flex-1 min-w-[160px] h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[12px] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+          <BadgesProduto produto={produto} readonly={readonly}
+            onMudarDestinacao={(novo) => onCommit({ tipo_destinacao: novo })}
+            onToggleBonificacao={() => onCommit({ bonificacao: !produto.bonificacao })} />
         </div>
       </td>
       <td className="px-3 py-1.5">
@@ -541,7 +614,8 @@ function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
           className="w-full h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[12px] text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
       </td>
       <td className="px-3 py-1.5">
-        <input type="number" step="0.01" min="0" value={produto.valor_unitario ?? ''} disabled={readonly}
+        <input type="number" step="0.01" min="0" value={produto.valor_unitario ?? ''}
+          disabled={readonly}
           onChange={e => onEdit({ valor_unitario: e.target.value })}
           onBlur={e => onCommit({ valor_unitario: Number(e.target.value) || 0 })}
           className="w-full h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[12px] text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
@@ -567,14 +641,14 @@ function ProdutoCard({ produto, readonly, onEdit, onCommit, onRemove }) {
   const subtotal = Number(produto.quantidade || 0) * Number(produto.valor_unitario || 0);
   return (
     <div className={`p-3 space-y-2 ${produto.produto_novo ? 'bg-amber-50/40 dark:bg-amber-500/[0.06]' : ''}`}>
-      {produto.produto_novo && (
-        <div className="flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">
-            <PackagePlus className="h-3 w-3" /> Produto novo
-          </span>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <BadgesProduto produto={produto} readonly={readonly}
+          onMudarDestinacao={(novo) => onCommit({ tipo_destinacao: novo })}
+          onToggleBonificacao={() => onCommit({ bonificacao: !produto.bonificacao })} />
+        {produto.produto_novo && (
           <span className="text-[10px] text-amber-700 dark:text-amber-300/80">CCI cadastrará no Webposto</span>
-        </div>
-      )}
+        )}
+      </div>
       <div className="flex items-start gap-2">
         <input type="text" value={produto.descricao || ''} disabled={readonly}
           onChange={e => onEdit({ descricao: e.target.value })}
@@ -617,7 +691,8 @@ function ProdutoCard({ produto, readonly, onEdit, onCommit, onRemove }) {
         </label>
         <label className="block">
           <span className="text-[10px] text-gray-500">Valor unit.</span>
-          <input type="number" step="0.01" min="0" value={produto.valor_unitario ?? ''} disabled={readonly}
+          <input type="number" step="0.01" min="0" value={produto.valor_unitario ?? ''}
+            disabled={readonly}
             onChange={e => onEdit({ valor_unitario: e.target.value })}
             onBlur={e => onCommit({ valor_unitario: Number(e.target.value) || 0 })}
             className="w-full h-10 px-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
@@ -779,6 +854,110 @@ function MotivoSemBoleto({ valor, temBoletos, readonly, onSalvar }) {
           {salvando && <p className="text-[10px] text-gray-400 dark:text-gray-500">Salvando...</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Modal de item de uso e consumo (interno, não vai pro estoque) ──
+function ModalUsoConsumo({ onClose, onAdicionar }) {
+  const [descricao, setDescricao] = useState('');
+  const [quantidade, setQuantidade] = useState('1');
+  const [valorUnit, setValorUnit] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape' && !salvando) onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose, salvando]);
+
+  const podeSalvar = descricao.trim() && Number(quantidade) > 0;
+
+  const submit = async (e) => {
+    e?.preventDefault();
+    if (!podeSalvar || salvando) return;
+    setSalvando(true);
+    try {
+      await onAdicionar({
+        descricao: descricao.trim(),
+        quantidade: Number(quantidade) || 1,
+        valor_unitario: Number(valorUnit) || 0,
+      });
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={salvando ? undefined : onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100 dark:border-white/10">
+          <div className="h-10 w-10 rounded-lg bg-violet-50 dark:bg-violet-500/15 flex items-center justify-center flex-shrink-0">
+            <Briefcase className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Item de uso e consumo</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Material consumido pela empresa (não entra no estoque de revenda).
+            </p>
+          </div>
+          <button onClick={onClose} disabled={salvando}
+            className="p-2 -mr-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 dark:text-gray-400 disabled:opacity-50" aria-label="Fechar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="px-5 py-4 space-y-3">
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Descrição <span className="text-rose-500">*</span>
+            </span>
+            <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)}
+              placeholder="Ex: Papel A4 — 5 resmas"
+              className="w-full h-11 px-3 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40" />
+          </label>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Quantidade <span className="text-rose-500">*</span>
+              </span>
+              <input type="number" step="0.0001" min="0" value={quantidade}
+                onChange={e => setQuantidade(e.target.value)}
+                className="w-full h-11 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Valor unit. (R$) <span className="text-rose-500">*</span>
+              </span>
+              <input type="number" step="0.01" min="0" value={valorUnit}
+                onChange={e => setValorUnit(e.target.value)}
+                className="w-full h-11 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40" />
+            </label>
+          </div>
+
+          <div className="rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 p-2.5 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Subtotal</span>
+            <span className="font-mono tabular-nums text-sm font-bold text-gray-900 dark:text-gray-100">
+              {formatCurrency((Number(quantidade) || 0) * (Number(valorUnit) || 0))}
+            </span>
+          </div>
+        </form>
+
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/[0.02] flex items-center gap-2">
+          <button onClick={onClose} disabled={salvando}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-50">
+            Cancelar
+          </button>
+          <div className="flex-1" />
+          <button onClick={submit} disabled={!podeSalvar || salvando}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 text-white px-4 py-2 text-sm font-semibold hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed">
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Briefcase className="h-3.5 w-3.5" />}
+            Adicionar à nota
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -1064,6 +1243,7 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
   const [naoEncontrado, setNaoEncontrado] = useState(false);
   const [valorUnit, setValorUnit] = useState('');
   const [quantidade, setQuantidade] = useState('1');
+  const [bonificacao, setBonificacao] = useState(false);
   const [modoCamera, setModoCamera] = useState(false);
   const inputRef = useRef(null);
   const cameraButtonRef = useRef(null);
@@ -1122,11 +1302,12 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
       descricao: produto?.nome || '',
       quantidade: Number(quantidade) || 1,
       valor_unitario: Number(valorUnit) || 0,
+      bonificacao,
     });
   };
 
   const limparEResearch = () => {
-    setProduto(null); setNaoEncontrado(false); setCodigo(''); setValorUnit(''); setQuantidade('1');
+    setProduto(null); setNaoEncontrado(false); setCodigo(''); setValorUnit(''); setQuantidade('1'); setBonificacao(false);
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
@@ -1242,20 +1423,37 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
           )}
 
           {(produto || naoEncontrado) && (
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="text-[11px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Quantidade</span>
-                <input type="number" step="0.0001" min="0" value={quantidade}
-                  onChange={e => setQuantidade(e.target.value)}
-                  className="w-full h-10 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+            <>
+              {/* Bonificação — informação para a CCI, NÃO altera o valor */}
+              <label className={`flex items-center gap-2 h-10 px-3 rounded-lg border cursor-pointer mb-2 transition-colors ${
+                bonificacao
+                  ? 'border-pink-300 dark:border-pink-500/40 bg-pink-50 dark:bg-pink-500/10'
+                  : 'border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800/50'
+              }`}>
+                <input type="checkbox" checked={bonificacao}
+                  onChange={e => setBonificacao(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-400" />
+                <span className={`text-sm font-medium ${bonificacao ? 'text-pink-800 dark:text-pink-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                  Produto em bonificação
+                </span>
+                <span className="text-[10.5px] text-gray-500 dark:text-gray-400 ml-auto">(CCI lança como bonificação)</span>
               </label>
-              <label className="block">
-                <span className="text-[11px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Valor unit. (R$)</span>
-                <input type="number" step="0.01" min="0" value={valorUnit}
-                  onChange={e => setValorUnit(e.target.value)}
-                  className="w-full h-10 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
-              </label>
-            </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Quantidade</span>
+                  <input type="number" step="0.0001" min="0" value={quantidade}
+                    onChange={e => setQuantidade(e.target.value)}
+                    className="w-full h-10 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Valor unit. (R$)</span>
+                  <input type="number" step="0.01" min="0" value={valorUnit}
+                    onChange={e => setValorUnit(e.target.value)}
+                    className="w-full h-10 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+                </label>
+              </div>
+            </>
           )}
         </div>
 
