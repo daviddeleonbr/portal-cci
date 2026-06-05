@@ -6,7 +6,7 @@ import {
   LayoutDashboard, BarChart3, TrendingUp, PieChart,
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
-  ArrowUpRight, ArrowDownLeft, Settings, Lightbulb,
+  ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
@@ -42,6 +42,7 @@ function buildNavigation(prefix) {
       items: [
         { name: 'Contas a Pagar', href: `${prefix}/financeiro/contas-pagar`, icon: ArrowUpRight, permissao: 'financeiro' },
         { name: 'Contas a Receber', href: `${prefix}/financeiro/contas-receber`, icon: ArrowDownLeft, permissao: 'financeiro' },
+        { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais' },
       ],
     },
     {

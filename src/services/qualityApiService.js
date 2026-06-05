@@ -260,6 +260,34 @@ export async function buscarProdutos(apiKey, urlBase = DEFAULT_URL_BASE) {
   return fetchCatalogo(urlBase, 'PRODUTO', apiKey, { limite: LIMITE_PADRAO });
 }
 
+// Busca um produto pelo código de barras. O campo `produtoCodigoBarra` no
+// retorno do PRODUTO é um ARRAY DE OBJETOS no formato:
+//   [{ codigoBarra: "789..." }, ...]
+// Cada produto pode ter vários códigos (EAN13 da unidade, DUN14 da caixa).
+// Reaproveita o cache de buscarProdutos. Retorna o primeiro produto que
+// casar ou null. Tolera também formatos legados (array de strings ou string
+// solta) caso a estrutura mude.
+export async function buscarProdutoPorCodigoBarras(apiKey, codigoBarras, urlBase = DEFAULT_URL_BASE) {
+  if (!codigoBarras) return null;
+  const alvo = String(codigoBarras).trim();
+  if (!alvo) return null;
+  const produtos = await buscarProdutos(apiKey, urlBase);
+  if (!Array.isArray(produtos)) return null;
+
+  const normaliza = (c) => {
+    if (c == null) return '';
+    if (typeof c === 'object') return String(c.codigoBarra ?? c.codigo ?? '').trim();
+    return String(c).trim();
+  };
+
+  return produtos.find(p => {
+    const lista = p?.produtoCodigoBarra;
+    if (Array.isArray(lista)) return lista.some(c => normaliza(c) === alvo);
+    if (lista != null)        return normaliza(lista) === alvo;
+    return false;
+  }) || null;
+}
+
 export async function buscarGrupos(apiKey, urlBase = DEFAULT_URL_BASE) {
   return fetchCatalogo(urlBase, 'GRUPO', apiKey, { limite: LIMITE_PADRAO });
 }
@@ -285,6 +313,44 @@ export async function buscarFornecedoresQuality(apiKey, urlBase = DEFAULT_URL_BA
 // Administradoras de cartao - referenciadas por CARTAO.administradoraCodigo
 export async function buscarAdministradoras(apiKey, urlBase = DEFAULT_URL_BASE) {
   return fetchCatalogo(urlBase, 'ADMINISTRADORA', apiKey, { limite: LIMITE_PADRAO });
+}
+
+// Notas a manifestar — NF-e recebidas pela empresa pendentes de
+// manifestação (ciência/confirmação) ao SEFAZ. Cliente sincroniza, preenche
+// produtos e envia para CCI lançar.
+//
+// Parâmetros aceitos pelo endpoint (Quality swagger):
+//   - empresaCodigo (int, opcional): filtra por empresa Webposto.
+//   - dataInicial / dataFinal (date 'YYYY-MM-DD', opcionais): janela de
+//     emissão. Se omitido, o backend aplica seu default.
+//   - compraCodigo (int, opcional): filtra por compra específica.
+//   - manifestacaoCodigo (int, opcional): busca uma manifestação específica.
+//   - limite, ultimoCodigo: paginação (gerenciado pelo fetchPagSequencial).
+//
+// Flag local:
+//   - noCache (default false): ignora cache em memória + localStorage e
+//     faz request fresh. Usado quando o cliente clica "Sincronizar".
+//
+// Nota: NÃO existe filtro por situação de manifestação — todas as situações
+// vêm na resposta e o front filtra/categoriza.
+export async function buscarNotaManifestacao(
+  apiKey,
+  { empresaCodigo, dataInicial, dataFinal, compraCodigo, manifestacaoCodigo, noCache = false } = {},
+  urlBase = DEFAULT_URL_BASE,
+) {
+  const params = { limite: LIMITE_PADRAO };
+  if (empresaCodigo != null && empresaCodigo !== '')         params.empresaCodigo       = empresaCodigo;
+  if (dataInicial)                                            params.dataInicial         = dataInicial;
+  if (dataFinal)                                              params.dataFinal           = dataFinal;
+  if (compraCodigo != null && compraCodigo !== '')           params.compraCodigo        = compraCodigo;
+  if (manifestacaoCodigo != null && manifestacaoCodigo !== '') params.manifestacaoCodigo = manifestacaoCodigo;
+
+  if (noCache) {
+    const key = cacheKey('NOTA_MANIFESTACAO', params, apiKey);
+    memCache.delete(key);
+    try { localStorage.removeItem(`${LOCAL_CACHE_PREFIX}${key}`); } catch { /* ignore */ }
+  }
+  return fetchCatalogo(urlBase, 'NOTA_MANIFESTACAO', apiKey, params);
 }
 
 // Endpoints com filtro de data - paralelos + cached em memoria (5 min)
