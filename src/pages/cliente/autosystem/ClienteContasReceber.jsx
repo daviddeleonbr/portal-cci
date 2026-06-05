@@ -4,8 +4,12 @@ import {
   Loader2, AlertCircle, Search, RefreshCw, ChevronRight, ChevronDown,
   Clock, AlertTriangle, CheckCircle2, Calendar,
   DollarSign, Building2, CreditCard, FileText, Receipt, Wallet, LayoutGrid, MoreHorizontal,
+  PieChart as PieChartIcon, BarChart3,
 } from 'lucide-react';
-import PageHeader from '../../../components/ui/PageHeader';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
+  PieChart, Pie,
+} from 'recharts';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
@@ -56,23 +60,53 @@ const toNumber = (v) => {
   return isNaN(n) ? 0 : n;
 };
 
-// ─── Categorias por código da conta de crédito ─────────────────
-// Ordem importa: mais específico primeiro (1.3.03.1 antes de 1.3.03).
-// `null` em prefixo = catch-all.
+// ─── Categorias renderizadas (abas/KPIs) ────────────────────────
+// "Outros" é derivada: tudo 1.3.* que não casa com prefixo cadastrado.
 const CATEGORIAS = [
-  { key: 'CARTOES',     label: 'Cartões',           prefixo: '1.3.01',   icone: CreditCard,     cor: 'cyan'    },
-  { key: 'NOTAS_PRAZO', label: 'Notas a prazo',     prefixo: '1.3.03.1', icone: Receipt,        cor: 'violet'  },
-  { key: 'FATURAS',     label: 'Faturas a receber', prefixo: '1.3.03.2', icone: Wallet,         cor: 'indigo'  },
-  { key: 'CHEQUES',     label: 'Cheques',           prefixo: '1.3.02',   icone: FileText,       cor: 'teal'    },
-  { key: 'OUTROS',      label: 'Outros',            prefixo: null,       icone: MoreHorizontal, cor: 'gray'    },
+  { key: 'CARTOES',     label: 'Cartões',           icone: CreditCard,     cor: 'cyan'    },
+  { key: 'NOTAS_PRAZO', label: 'Notas a prazo',     icone: Receipt,        cor: 'violet'  },
+  { key: 'FATURAS',     label: 'Faturas a receber', icone: Wallet,         cor: 'indigo'  },
+  { key: 'CHEQUES',     label: 'Cheques',           icone: FileText,       cor: 'teal'    },
+  { key: 'OUTROS',      label: 'Outros',            icone: MoreHorizontal, cor: 'gray'    },
 ];
 
-function classificarConta(codigoDebito) {
+// Cores hex para gráficos (Recharts não aceita classes Tailwind).
+const CATEGORIA_COR_HEX = {
+  CARTOES:     '#0ea5e9',  // sky-500
+  NOTAS_PRAZO: '#8b5cf6',  // violet-500
+  FATURAS:     '#6366f1',  // indigo-500
+  CHEQUES:     '#14b8a6',  // teal-500
+  OUTROS:      '#94a3b8',  // slate-400
+};
+
+// Fallback usado quando a rede ainda não cadastrou nenhum prefixo no admin.
+// Mantém o comportamento histórico até a rede ser configurada.
+const PREFIXOS_FALLBACK = new Map([
+  ['1.3.01',   'cartoes'],
+  ['1.3.02',   'cheques'],
+  ['1.3.03.1', 'notas_prazo'],
+  ['1.3.03.2', 'faturas'],
+]);
+
+// Classifica a conta por PREFIXO. Casa quando o código é igual ao prefixo
+// ou começa com `${prefixo}.` (cobre as analíticas). Quando vários prefixos
+// casam, vence o mais longo (mais específico).
+function classificarConta(codigoDebito, mapaPrefixos) {
   if (codigoDebito == null) return 'OUTROS';
   const c = String(codigoDebito);
-  for (const cat of CATEGORIAS) {
-    if (cat.prefixo && c.startsWith(cat.prefixo)) return cat.key;
+  const mapa = (mapaPrefixos && mapaPrefixos.size > 0) ? mapaPrefixos : PREFIXOS_FALLBACK;
+
+  let bestPrefix = '';
+  let bestCat = null;
+  for (const [prefix, cat] of mapa) {
+    if (c === prefix || c.startsWith(prefix + '.')) {
+      if (prefix.length > bestPrefix.length) {
+        bestPrefix = prefix;
+        bestCat = cat;
+      }
+    }
   }
+  if (bestCat) return String(bestCat).toUpperCase();
   return 'OUTROS';
 }
 
@@ -92,8 +126,8 @@ const TAB_CLASSES = {
 // ─── Cache em memória ───────────────────────────────────────────
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const _cacheContasReceber = { data: null, key: null, timestamp: 0 };
-function chaveCache(empresaIds, venctoDe, venctoAte) {
-  return `${[...empresaIds].sort().join(',')}|${venctoDe}|${venctoAte}`;
+function chaveCache(empresaIds, venctoDe, venctoAte, ignorarPeriodo) {
+  return `${[...empresaIds].sort().join(',')}|${ignorarPeriodo ? 'ALL' : `${venctoDe}|${venctoAte}`}`;
 }
 function cacheValido(key) {
   return _cacheContasReceber.data
@@ -106,6 +140,18 @@ export default function ClienteContasReceber() {
   const session = useClienteSession();
   const asRede = session?.asRede;
   const clientesRede = useMemo(() => session?.clientesRede || [], [session]);
+
+  // Mapa prefixo→categoria configurado pelo admin para esta rede.
+  // null = não configurado → ClienteContasReceber usa fallback hardcoded.
+  const [mapaPrefixos, setMapaPrefixos] = useState(null);
+  useEffect(() => {
+    if (!asRede?.id) return;
+    let cancel = false;
+    autosystemService.mapearPrefixosCategoria(asRede.id)
+      .then(m => { if (!cancel) setMapaPrefixos(m); })
+      .catch(() => { /* mantém null → fallback */ });
+    return () => { cancel = true; };
+  }, [asRede?.id]);
 
   const empresasDisponiveis = useMemo(
     () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
@@ -133,21 +179,30 @@ export default function ClienteContasReceber() {
 
   const [venctoDe, setVenctoDe] = useState(inicioMesAtual());
   const [venctoAte, setVenctoAte] = useState(fimMesAtual());
+  const [ignorarPeriodo, setIgnorarPeriodo] = useState(true);
 
-  const cacheKeyInicial = chaveCache(empresasSelIds, venctoDe, venctoAte);
+  const cacheKeyInicial = chaveCache(empresasSelIds, venctoDe, venctoAte, ignorarPeriodo);
   const cacheInicial = cacheValido(cacheKeyInicial) ? _cacheContasReceber.data : null;
 
   const [loading, setLoading] = useState(!cacheInicial);
   const [titulos, setTitulos] = useState(cacheInicial || []);
   const [error, setError] = useState(null);
   const [busca, setBusca] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState('hoje');
   const [filtroCategoria, setFiltroCategoria] = useState('TODAS');
+  const [filtroStatus, setFiltroStatus] = useState('todos');
+
+  // Visão Geral mostra tudo; ao escolher uma categoria foca em vencidos.
+  // Comportamento explícito a cada troca de categoria — usuário pode mudar
+  // o status manualmente depois.
+  useEffect(() => {
+    setFiltroStatus(filtroCategoria === 'TODAS' ? 'todos' : 'vencidos');
+  }, [filtroCategoria]);
   const [expandedDates, setExpandedDates] = useState(new Set());
   const [expandedClientes, setExpandedClientes] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
   const [expandedCats, setExpandedCats] = useState(new Set());
   const [empresasExpandidas, setEmpresasExpandidas] = useState(new Set());
+  const [modalDia, setModalDia] = useState(null);
 
   // Categorias que ganham o nível "Cliente" extra na hierarquia.
   // Nessas abas, escondemos as colunas Cliente/Conta da tabela porque já
@@ -165,7 +220,7 @@ export default function ClienteContasReceber() {
       setLoading(false);
       return;
     }
-    const key = chaveCache(empresasSelIds, venctoDe, venctoAte);
+    const key = chaveCache(empresasSelIds, venctoDe, venctoAte, ignorarPeriodo);
     if (!force && cacheValido(key)) {
       setTitulos(_cacheContasReceber.data);
       setError(null);
@@ -178,8 +233,8 @@ export default function ClienteContasReceber() {
       const results = await Promise.allSettled(
         empresasSel.map(emp =>
           autosystemService.buscarContasReceber(redeId, emp.empresa_codigo, {
-            vencto_de: venctoDe || null,
-            vencto_ate: venctoAte || null,
+            vencto_de: ignorarPeriodo ? null : (venctoDe || null),
+            vencto_ate: ignorarPeriodo ? null : (venctoAte || null),
           }).then(contas => contas.map(c => ({
             ...c,
             _empresaId: emp.id,
@@ -206,7 +261,7 @@ export default function ClienteContasReceber() {
     } finally {
       setLoading(false);
     }
-  }, [redeId, empresasSel, empresasSelIds, venctoDe, venctoAte]);
+  }, [redeId, empresasSel, empresasSelIds, venctoDe, venctoAte, ignorarPeriodo]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -231,13 +286,13 @@ export default function ClienteContasReceber() {
         contaCodigo: t.debito_codigo || '',
         contaNome: t.debito_nome || '',
         clienteNome: t.pessoa_nome || 'Cliente',
-        categoria: classificarConta(t.debito_codigo),
+        categoria: classificarConta(t.debito_codigo, mapaPrefixos),
         empresaId: t._empresaId,
         empresaNome: t._empresaNome,
         empresaCnpj: t._empresaCnpj,
       };
     });
-  }, [titulos]);
+  }, [titulos, mapaPrefixos]);
 
   // "Hoje" considera próximo dia útil
   const datasHoje = useMemo(() => {
@@ -295,6 +350,84 @@ export default function ClienteContasReceber() {
       qtdFuturos: futuros.length,
       porCat, qtdPorCat,
     };
+  }, [enriched]);
+
+  // Participação por categoria — usado no gráfico de pizza da Visão Geral.
+  const participacaoCategorias = useMemo(() => {
+    return CATEGORIAS
+      .map(c => ({
+        key: c.key,
+        label: c.label,
+        valor: totais.porCat[c.key] || 0,
+        qtd: totais.qtdPorCat[c.key] || 0,
+        cor: CATEGORIA_COR_HEX[c.key] || '#94a3b8',
+      }))
+      .filter(c => c.valor > 0);
+  }, [totais]);
+
+  // Próximos 14 dias — soma por dia (inclui fins de semana com valor 0).
+  const proximos14dias = useMemo(() => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const dias = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(hoje);
+      d.setDate(d.getDate() + i);
+      const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const dow = d.getDay();
+      dias.push({
+        iso,
+        label: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+        diaSemana: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][dow],
+        ehFimSemana: dow === 0 || dow === 6,
+        valor: 0,
+        qtd: 0,
+      });
+    }
+    const mapaDias = new Map(dias.map(d => [d.iso, d]));
+    enriched.forEach(t => {
+      const efet = t.vencimentoEfetivo;
+      if (!efet) return;
+      const g = mapaDias.get(efet);
+      if (g) { g.valor += t.valor; g.qtd++; }
+    });
+    return dias;
+  }, [enriched]);
+
+  // Top 5 clientes — agrega por clienteNome dentro de uma categoria.
+  // `filtroExtra` permite restringir (ex: só vencidos).
+  const topClientesPorCategoria = (catKey, filtroExtra) => {
+    const mapa = new Map();
+    enriched.forEach(t => {
+      if (t.categoria !== catKey) return;
+      if (filtroExtra && !filtroExtra(t)) return;
+      const nome = t.clienteNome || '—';
+      let g = mapa.get(nome);
+      if (!g) { g = { nome, valor: 0, qtd: 0 }; mapa.set(nome, g); }
+      g.valor += t.valor; g.qtd++;
+    });
+    return Array.from(mapa.values())
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 5);
+  };
+  // Faturas e notas a prazo: só vencidas (t.vencido é diasAteVenc < 0,
+  // já exclui hoje) — foco em cobrança/faturamento atrasado.
+  const topClientesFaturas    = useMemo(() => topClientesPorCategoria('FATURAS',     (t) => t.vencido), [enriched]);
+  const topClientesNotasPrazo = useMemo(() => topClientesPorCategoria('NOTAS_PRAZO', (t) => t.vencido), [enriched]);
+
+  // Cartões vencidos agrupados por conta (adquirente/bandeira) — onde está
+  // concentrado o atraso (ex: STONE-VISA, STONE-MASTER, PIX etc).
+  const cartoesVencidosPorConta = useMemo(() => {
+    const mapa = new Map();
+    enriched.forEach(t => {
+      if (!t.vencido || t.categoria !== 'CARTOES') return;
+      const codigo = t.contaCodigo || '—';
+      const nome = t.contaNome || '—';
+      const key = `${codigo}|${nome}`;
+      let g = mapa.get(key);
+      if (!g) { g = { codigo, nome, valor: 0, qtd: 0 }; mapa.set(key, g); }
+      g.valor += t.valor; g.qtd++;
+    });
+    return Array.from(mapa.values()).sort((a, b) => b.valor - a.valor);
   }, [enriched]);
 
   // Agrupa por data
@@ -507,7 +640,6 @@ export default function ClienteContasReceber() {
   if (empresasDisponiveis.length === 0) {
     return (
       <div>
-        <PageHeader title="Contas a Receber" description="Títulos a receber em aberto" />
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <p>
@@ -520,35 +652,52 @@ export default function ClienteContasReceber() {
 
   return (
     <div>
-      <PageHeader title="Contas a Receber" description="Títulos, duplicatas e cartões em aberto">
-        <div className="hidden md:flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
-            <Calendar className="h-3 w-3" /> Vencimento entre
-          </span>
-          <input type="date" value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
-          <span className="text-[10px] text-gray-400">e</span>
-          <input type="date" value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+      {/* Barra sticky de filtros — colada no topo do conteúdo, logo abaixo do ClienteHeader (h-16) */}
+      <div className="sticky top-16 z-20 -mt-6 lg:-mt-8 -mx-6 lg:-mx-8 mb-4 bg-white/60 backdrop-blur-md backdrop-saturate-150 border-b border-gray-200/60">
+        <div className="flex flex-wrap items-center justify-end gap-2 px-6 lg:px-8 py-3">
+          <div className="hidden md:flex items-center gap-2">
+            <span className={`text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap transition-colors ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-500'}`}>
+              <Calendar className="h-3 w-3" /> Vencimento entre
+            </span>
+            <input type="date" value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
+              disabled={ignorarPeriodo}
+              className="h-9 rounded-lg border border-gray-200 bg-white/70 px-2 text-xs focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-gray-50/70 disabled:text-gray-300 disabled:cursor-not-allowed" />
+            <span className={`text-[10px] ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-400'}`}>e</span>
+            <input type="date" value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
+              disabled={ignorarPeriodo}
+              className="h-9 rounded-lg border border-gray-200 bg-white/70 px-2 text-xs focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-gray-50/70 disabled:text-gray-300 disabled:cursor-not-allowed" />
+            <label
+              title="Ignora o filtro de vencimento e busca todos os títulos em aberto"
+              className={`inline-flex items-center gap-1.5 h-9 rounded-lg border px-2.5 text-xs font-medium cursor-pointer select-none transition-colors ${
+                ignorarPeriodo
+                  ? 'border-emerald-300 bg-emerald-50/80 text-emerald-700'
+                  : 'border-gray-200 bg-white/70 text-gray-600 hover:bg-white'
+              }`}>
+              <input type="checkbox" checked={ignorarPeriodo}
+                onChange={e => setIgnorarPeriodo(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400" />
+              Todo o período
+            </label>
+          </div>
+          {podeFiltrarEmpresa && (
+            <EmpresaMultiSelect
+              clientesRede={empresasDisponiveis}
+              selecionadas={empresasSelIds}
+              onToggle={(id) => setEmpresasSelIds(prev => toggleSet(prev, id))}
+              onToggleTodas={() => setEmpresasSelIds(prev =>
+                prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
+              )}
+            />
+          )}
+          <button onClick={() => carregar({ force: true })}
+            disabled={loading || empresasSel.length === 0}
+            title="Força recarga ignorando o cache"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white/70 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white transition-colors disabled:opacity-50">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </button>
         </div>
-        {podeFiltrarEmpresa && (
-          <EmpresaMultiSelect
-            clientesRede={empresasDisponiveis}
-            selecionadas={empresasSelIds}
-            onToggle={(id) => setEmpresasSelIds(prev => toggleSet(prev, id))}
-            onToggleTodas={() => setEmpresasSelIds(prev =>
-              prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
-            )}
-          />
-        )}
-        <button onClick={() => carregar({ force: true })}
-          disabled={loading || empresasSel.length === 0}
-          title="Força recarga ignorando o cache"
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
-        </button>
-      </PageHeader>
+      </div>
 
       {/* Resumo */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -603,6 +752,51 @@ export default function ClienteContasReceber() {
           })}
         </div>
       </div>
+
+      {/* Gráficos da Visão Geral — só aparecem em TODAS */}
+      {filtroCategoria === 'TODAS' && enriched.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <GraficoParticipacaoCategorias dados={participacaoCategorias} total={totais.total} onClickCategoria={(key) => setFiltroCategoria(key)} />
+            <GraficoProximos14Dias dados={proximos14dias}
+              onClickDia={(iso, label, diaSemana) => {
+                const titulos = enriched
+                  .filter(t => t.vencimentoEfetivo === iso)
+                  .sort((a, b) => Number(b.valor || 0) - Number(a.valor || 0));
+                if (titulos.length === 0) return;
+                setModalDia({ iso, label, diaSemana, titulos });
+              }} />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <CardTopClientes
+              titulo="Top 5 — Faturas vencidas"
+              clientes={topClientesFaturas}
+              cor={CATEGORIA_COR_HEX.FATURAS}
+              icone={Wallet}
+              corBgIcone="bg-indigo-50"
+              corTextIcone="text-indigo-600"
+              onClickCliente={(nome) => {
+                setFiltroCategoria('FATURAS'); setBusca(nome);
+              }} />
+            <CardTopClientes
+              titulo="Top 5 — Notas a prazo vencidas"
+              clientes={topClientesNotasPrazo}
+              cor={CATEGORIA_COR_HEX.NOTAS_PRAZO}
+              icone={Receipt}
+              corBgIcone="bg-violet-50"
+              corTextIcone="text-violet-600"
+              onClickCliente={(nome) => {
+                setFiltroCategoria('NOTAS_PRAZO'); setBusca(nome);
+              }} />
+          </div>
+          {cartoesVencidosPorConta.length > 0 && (
+            <TabelaCartoesVencidosPorConta contas={cartoesVencidosPorConta}
+              onClickConta={(conta) => {
+                setFiltroCategoria('CARTOES'); setBusca(conta.codigo);
+              }} />
+          )}
+        </>
+      )}
 
       {/* Filtros: busca + status */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
@@ -751,8 +945,459 @@ export default function ClienteContasReceber() {
           </div>
         </div>
       )}
+      {modalDia && (
+        <ModalRecebimentosDia detalhe={modalDia} onClose={() => setModalDia(null)} />
+      )}
     </div>
   );
+}
+
+// ─── Modal: detalhe dos recebimentos do dia ───────────────────
+function ModalRecebimentosDia({ detalhe, onClose }) {
+  const [catsAbertas, setCatsAbertas] = useState(() => new Set());
+  const [contasAbertas, setContasAbertas] = useState(() => new Set());
+  const toggleCat   = (k) => setCatsAbertas(prev   => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const toggleConta = (k) => setContasAbertas(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  const { titulos, label, diaSemana } = detalhe;
+  const total = titulos.reduce((s, t) => s + Number(t.valor || 0), 0);
+
+  // Agrupa: categoria → conta (codigo+nome) → títulos
+  const grupos = useMemo(() => {
+    const porCat = new Map(CATEGORIAS.map(c => [c.key, { cat: c, valor: 0, qtd: 0, contas: new Map() }]));
+    titulos.forEach(t => {
+      const g = porCat.get(t.categoria) || porCat.get('OUTROS');
+      g.valor += t.valor; g.qtd++;
+      const codChave = `${t.contaCodigo || '—'}|${t.contaNome || ''}`;
+      let c = g.contas.get(codChave);
+      if (!c) { c = { codigo: t.contaCodigo || '—', nome: t.contaNome || '—', valor: 0, qtd: 0, titulos: [] }; g.contas.set(codChave, c); }
+      c.valor += t.valor; c.qtd++; c.titulos.push(t);
+    });
+    return Array.from(porCat.values())
+      .map(g => ({ ...g, contas: Array.from(g.contas.values()).sort((a, b) => b.valor - a.valor) }))
+      .filter(g => g.valor > 0)
+      .sort((a, b) => b.valor - a.valor);
+  }, [titulos]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start gap-3 px-6 py-4 border-b border-gray-100">
+          <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+            <Calendar className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-900">Recebimentos · {diaSemana}, {label}</h2>
+            <p className="text-xs text-gray-500 mt-0.5 font-mono tabular-nums">
+              {titulos.length} {titulos.length === 1 ? 'título' : 'títulos'} · {formatCurrency(total)}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100" aria-label="Fechar">
+            <ChevronDown className="h-5 w-5 text-gray-500 rotate-180" />
+          </button>
+        </div>
+
+        {/* Cards de categoria */}
+        <div className="px-6 pt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {CATEGORIAS.map(c => {
+            const g = grupos.find(x => x.cat.key === c.key);
+            const val = g?.valor || 0;
+            const qtd = g?.qtd || 0;
+            const Icon = c.icone;
+            const cor = CATEGORIA_COR_HEX[c.key] || '#94a3b8';
+            const ativo = val > 0;
+            return (
+              <div key={c.key}
+                className={`rounded-xl border p-2.5 ${ativo ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50/60 opacity-60'}`}
+                style={ativo ? { borderLeftColor: cor, borderLeftWidth: 3 } : undefined}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Icon className="h-3.5 w-3.5" style={{ color: cor }} />
+                  <p className="text-[11px] font-medium text-gray-700 truncate">{c.label}</p>
+                </div>
+                <p className="text-[13px] font-bold text-gray-900 font-mono tabular-nums leading-tight">{formatCurrency(val)}</p>
+                <p className="text-[10px] text-gray-400">{qtd} {qtd === 1 ? 'tit.' : 'tits.'}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Tree — altura fixa, scroll apenas dentro da tabela */}
+        <div className="px-6 py-4 min-h-0">
+          {grupos.length === 0 ? (
+            <p className="text-center py-8 text-sm text-gray-400">Sem títulos.</p>
+          ) : (
+            <div className="rounded-xl border border-gray-200 overflow-hidden flex flex-col" style={{ height: '55vh' }}>
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                      <th className="px-3 py-2 bg-gray-100">Detalhamento</th>
+                      <th className="px-3 py-2 text-right w-16 bg-gray-100">Qtd</th>
+                      <th className="px-3 py-2 text-right w-28 bg-gray-100">Valor</th>
+                    </tr>
+                  </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {grupos.map(g => {
+                    const catKey = g.cat.key;
+                    const aberta = catsAbertas.has(catKey);
+                    const Icon = g.cat.icone;
+                    const cor = CATEGORIA_COR_HEX[catKey];
+                    return (
+                      <React.Fragment key={catKey}>
+                        <tr onClick={() => toggleCat(catKey)}
+                          className="cursor-pointer hover:bg-gray-50/60">
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <motion.div animate={{ rotate: aberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                              </motion.div>
+                              <div className="h-6 w-6 rounded-md flex items-center justify-center" style={{ backgroundColor: cor + '22', color: cor }}>
+                                <Icon className="h-3 w-3" />
+                              </div>
+                              <div>
+                                <p className="text-[12.5px] font-semibold text-gray-800">{g.cat.label}</p>
+                                <p className="text-[10px] text-gray-400">{g.contas.length} {g.contas.length === 1 ? 'conta' : 'contas'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-700">{g.qtd}</td>
+                          <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold text-gray-900">{formatCurrency(g.valor)}</td>
+                        </tr>
+                        {aberta && g.contas.map(conta => {
+                          const contaKey = `${catKey}|${conta.codigo}|${conta.nome}`;
+                          const cAberta = contasAbertas.has(contaKey);
+                          return (
+                            <React.Fragment key={contaKey}>
+                              <tr onClick={() => toggleConta(contaKey)}
+                                className="cursor-pointer hover:bg-gray-50/40 bg-gray-50/30">
+                                <td className="px-3 py-1.5" style={{ paddingLeft: 48 }}>
+                                  <div className="flex items-center gap-2">
+                                    <motion.div animate={{ rotate: cAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                                      <ChevronRight className="h-3 w-3 text-gray-400" />
+                                    </motion.div>
+                                    <div className="min-w-0">
+                                      <p className="text-[11.5px] text-gray-800 truncate max-w-[380px]">{conta.nome}</p>
+                                      <p className="text-[10px] text-gray-400 font-mono">{conta.codigo}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11px] text-gray-700">{conta.qtd}</td>
+                                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[11.5px] font-medium text-gray-800">{formatCurrency(conta.valor)}</td>
+                              </tr>
+                              {cAberta && conta.titulos.map((t, i) => (
+                                <tr key={`${contaKey}-${i}`} className="hover:bg-gray-50/30">
+                                  <td className="px-3 py-1" style={{ paddingLeft: 80 }}>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <p className="text-[11px] text-gray-700 truncate max-w-[260px]">{t.clienteNome}</p>
+                                      {t.documento && <span className="text-[10px] text-gray-400 font-mono">· {t.documento}</span>}
+                                    </div>
+                                    {t.empresaNome && (
+                                      <p className="text-[10px] text-gray-400 truncate max-w-[260px]" style={{ marginLeft: 0 }}>{t.empresaNome}</p>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-1"></td>
+                                  <td className="px-3 py-1 text-right font-mono tabular-nums text-[11px] text-gray-700">{formatCurrency(t.valor)}</td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+                </table>
+              </div>
+              {/* Footer fora do scroll — sempre visível */}
+              <table className="w-full text-xs bg-gray-50/80 border-t-2 border-gray-200 flex-shrink-0">
+                <tbody>
+                  <tr className="font-semibold">
+                    <td className="px-3 py-2 text-[11.5px] text-gray-700">Total</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-[11px] text-gray-700 w-16">{titulos.length}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900 w-28">{formatCurrency(total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Gráficos da Visão Geral ──────────────────────────────────
+function GraficoParticipacaoCategorias({ dados, total, onClickCategoria }) {
+  const totalQtd = dados.reduce((s, d) => s + d.qtd, 0);
+  if (!dados.length) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600">
+            <PieChartIcon className="h-4 w-4" />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-800">Participação por categoria</h3>
+        </div>
+        <div className="px-6 py-10 text-center text-sm text-gray-500">Sem dados</div>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 flex-shrink-0">
+          <PieChartIcon className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800">Participação por categoria</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {totalQtd} {totalQtd === 1 ? 'título' : 'títulos'} · {formatCurrency(total)}
+          </p>
+        </div>
+      </div>
+      <div className="p-3 grid grid-cols-[1fr_auto] items-center gap-2" style={{ height: 240 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={dados} dataKey="valor" nameKey="label"
+              cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={2}
+              onClick={(d) => onClickCategoria?.(d.key)}
+              style={{ cursor: 'pointer' }}>
+              {dados.map((d, i) => <Cell key={i} fill={d.cor} stroke="white" strokeWidth={2} />)}
+            </Pie>
+            <Tooltip content={<TooltipPie total={total} />} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="flex flex-col gap-1 pr-3 max-w-[180px]">
+          {dados.map(d => {
+            const pct = total > 0 ? ((d.valor / total) * 100) : 0;
+            return (
+              <button key={d.key} onClick={() => onClickCategoria?.(d.key)}
+                className="flex items-center gap-2 text-left hover:bg-gray-50 rounded px-1.5 py-0.5 transition-colors">
+                <span className="h-2.5 w-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: d.cor }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-gray-700 truncate">{d.label}</p>
+                  <p className="text-[10px] text-gray-400 font-mono tabular-nums">
+                    {pct.toFixed(1)}% · {formatCurrency(d.valor)}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TooltipPie({ active, payload, total }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const pct = total > 0 ? ((d.valor / total) * 100) : 0;
+  return (
+    <div className="rounded-lg bg-white border border-gray-200 shadow-md px-3 py-2 text-xs">
+      <p className="font-semibold text-gray-900">{d.label}</p>
+      <p className="text-gray-600 mt-0.5">{formatCurrency(d.valor)} · {d.qtd} {d.qtd === 1 ? 'título' : 'títulos'}</p>
+      <p className="text-gray-400 text-[10.5px]">{pct.toFixed(1)}% do total</p>
+    </div>
+  );
+}
+
+function GraficoProximos14Dias({ dados, onClickDia }) {
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  const totalQtd = dados.reduce((s, d) => s + d.qtd, 0);
+  const handleBarClick = (data) => {
+    if (!onClickDia || !data?.qtd) return;
+    onClickDia(data.iso, data.label, data.diaSemana);
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
+          <BarChart3 className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800">A receber nos próximos 14 dias</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {totalQtd} {totalQtd === 1 ? 'título' : 'títulos'} · {formatCurrency(total)}
+          </p>
+        </div>
+      </div>
+      {totalQtd === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <Calendar className="h-7 w-7 text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Nenhum recebimento nos próximos 14 dias</p>
+        </div>
+      ) : (
+        <div className="p-3" style={{ height: 240 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={dados} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval={0} />
+              <YAxis tick={{ fontSize: 10.5, fill: '#94a3b8' }} axisLine={false} tickLine={false}
+                tickFormatter={(v) => formatCompactBR(v)} />
+              <Tooltip content={<TooltipDia />} cursor={{ fill: 'rgba(16, 185, 129, 0.06)' }} />
+              <Bar dataKey="valor" radius={[6, 6, 0, 0]} onClick={handleBarClick} style={{ cursor: 'pointer' }}>
+                {dados.map((d, i) => (
+                  <Cell key={i} fill={d.ehFimSemana ? '#cbd5e1' : '#10b981'}
+                    cursor={d.qtd > 0 ? 'pointer' : 'default'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {totalQtd > 0 && (
+        <p className="px-5 pb-3 text-[10.5px] text-gray-400 italic">Clique em uma barra para detalhar o dia</p>
+      )}
+    </div>
+  );
+}
+
+function TooltipDia({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="rounded-lg bg-white border border-gray-200 shadow-md px-3 py-2 text-xs">
+      <p className="font-semibold text-gray-900">{d.diaSemana}, {d.label}</p>
+      <p className="text-gray-600 mt-0.5">{formatCurrency(d.valor)}</p>
+      <p className="text-gray-400 text-[10.5px]">{d.qtd} {d.qtd === 1 ? 'título' : 'títulos'}</p>
+    </div>
+  );
+}
+
+function TabelaCartoesVencidosPorConta({ contas, onClickConta }) {
+  const total = contas.reduce((s, c) => s + c.valor, 0);
+  const totalQtd = contas.reduce((s, c) => s + c.qtd, 0);
+  const maior = contas[0]?.valor || 1;
+  const corCartoes = CATEGORIA_COR_HEX.CARTOES;
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 flex-shrink-0">
+          <CreditCard className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800">Cartões vencidos por conta</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {contas.length} {contas.length === 1 ? 'conta' : 'contas'} · {totalQtd} {totalQtd === 1 ? 'recebível' : 'recebíveis'} · {formatCurrency(total)}
+          </p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+              <th className="px-4 py-2 bg-gray-100">Conta</th>
+              <th className="px-3 py-2 bg-gray-100">Participação</th>
+              <th className="px-3 py-2 text-right w-20 bg-gray-100">Recebíveis</th>
+              <th className="px-3 py-2 text-right w-32 bg-gray-100">Valor vencido</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {contas.map((c) => {
+              const pct = total > 0 ? (c.valor / total) * 100 : 0;
+              const pctRel = maior > 0 ? (c.valor / maior) * 100 : 0;
+              return (
+                <tr key={`${c.codigo}|${c.nome}`}
+                  onClick={() => onClickConta?.(c)}
+                  className="hover:bg-sky-50/30 cursor-pointer transition-colors">
+                  <td className="px-4 py-2">
+                    <p className="text-[12.5px] font-medium text-gray-900 truncate max-w-[420px]" title={c.nome}>{c.nome}</p>
+                    <p className="text-[10px] text-gray-400 font-mono">{c.codigo}</p>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden min-w-[80px]">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pctRel}%`, backgroundColor: corCartoes }} />
+                      </div>
+                      <span className="text-[10.5px] text-gray-500 font-mono tabular-nums w-12 text-right">{pct.toFixed(1)}%</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-700">{c.qtd}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(c.valor)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-gray-50/80 border-t-2 border-gray-200">
+            <tr className="font-semibold">
+              <td className="px-4 py-2 text-[11.5px] text-gray-700">Total</td>
+              <td className="px-3 py-2"></td>
+              <td className="px-3 py-2 text-right font-mono tabular-nums text-[11px] text-gray-700">{totalQtd}</td>
+              <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900">{formatCurrency(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CardTopClientes({ titulo, clientes, cor, icone: Icone, corBgIcone, corTextIcone, onClickCliente }) {
+  const total = clientes.reduce((s, c) => s + c.valor, 0);
+  const totalQtd = clientes.reduce((s, c) => s + c.qtd, 0);
+  const maior = clientes[0]?.valor || 1;
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className={`h-8 w-8 rounded-lg ${corBgIcone} flex items-center justify-center ${corTextIcone} flex-shrink-0`}>
+          <Icone className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800">{titulo}</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {totalQtd} {totalQtd === 1 ? 'título' : 'títulos'} · {formatCurrency(total)}
+          </p>
+        </div>
+      </div>
+      {clientes.length === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <CheckCircle2 className="h-7 w-7 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Nenhum título nesta categoria</p>
+        </div>
+      ) : (
+        <div className="px-3 py-2 divide-y divide-gray-50">
+          {clientes.map((c, i) => {
+            const pct = maior > 0 ? (c.valor / maior) * 100 : 0;
+            return (
+              <button key={c.nome} onClick={() => onClickCliente?.(c.nome)}
+                className="w-full text-left py-2 px-2 hover:bg-gray-50/60 rounded-lg transition-colors group">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-gray-100 text-[10px] font-bold text-gray-600 flex-shrink-0">
+                    {i + 1}
+                  </span>
+                  <p className="text-[12.5px] font-medium text-gray-800 truncate flex-1" title={c.nome}>{c.nome}</p>
+                  <p className="text-[12px] font-mono tabular-nums font-semibold text-gray-900 flex-shrink-0">{formatCurrency(c.valor)}</p>
+                </div>
+                <div className="flex items-center gap-2 pl-7">
+                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: cor }} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-mono tabular-nums flex-shrink-0">
+                    {c.qtd} {c.qtd === 1 ? 'tit.' : 'tits.'}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatCompactBR(v) {
+  if (v == null) return '';
+  const n = Number(v);
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
+  return String(Math.round(n));
 }
 
 // ─── Helpers ────────────────────────────────────────────────────

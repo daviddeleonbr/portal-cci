@@ -7,10 +7,13 @@
 //   SELECT empresa, data, motivo, conta_debitar, conta_creditar,
 //          pessoa, documento, vencto, valor, obs
 //     FROM movto
-//    WHERE conta_debitar LIKE '1.3%'
+//    WHERE (conta_debitar = '1.3' OR conta_debitar LIKE '1.3.%')
 //      AND child = 0
 //      AND empresa = $empresa_codigo
 //      AND (vencto entre $vencto_de e $vencto_ate, se informados)
+//
+// O filtro `LIKE '1.3.%'` (com ponto) é estrito ao grupo 1.3.x — sem
+// o ponto, '1.3%' também pega '1.30', '1.31' indevidamente.
 //
 // Em partidas dobradas, o direito a receber é o lançamento que DEBITA
 // uma conta do grupo 1.3.x (ativo circulante). O `conta_creditar` aparece
@@ -122,7 +125,7 @@ serve(async (req) => {
     failedStep = 'select_contas_receber';
     const params: unknown[] = [empresaCodigo];
     const conds: string[] = [
-      "m.conta_debitar like '1.3%'",
+      "(m.conta_debitar = '1.3' or m.conta_debitar like '1.3.%')",
       'm.child = 0',
       'm.empresa = $1',
     ];
@@ -190,7 +193,7 @@ serve(async (req) => {
       vencto_de: vencto_de || null,
       vencto_ate: vencto_ate || null,
       total_debito_1_3: await fazContagem(
-        "select count(*)::int as n from movto where conta_debitar like '1.3%' and empresa = $1",
+        "select count(*)::int as n from movto where (conta_debitar = '1.3' or conta_debitar like '1.3.%') and empresa = $1",
         [empresaCodigo],
       ),
       total_debito_1_3_03_2: await fazContagem(

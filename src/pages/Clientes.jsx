@@ -4,7 +4,7 @@ import {
   Search, Plus, Building2, Mail, Phone, MapPin, Users as UsersIcon,
   Loader2, AlertCircle, Pencil, Trash2, ChevronRight, ChevronDown,
   Check, Zap, ArrowLeft, RefreshCw, Key, Network, Landmark, Wallet, Coins, Boxes,
-  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock,
+  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock, CreditCard, X,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -55,6 +55,7 @@ export default function Clientes() {
   const [modalEmpresasAS, setModalEmpresasAS] = useState({ open: false, rede: null });
   const [modalGruposAS, setModalGruposAS] = useState({ open: false, rede: null });
   const [modalContasAS, setModalContasAS] = useState({ open: false, rede: null });
+  const [modalContasReceberAS, setModalContasReceberAS] = useState({ open: false, rede: null });
 
   const showToast = (type, message) => {
     setToast({ show: true, type, message });
@@ -405,6 +406,7 @@ export default function Clientes() {
         onImportar={(rede) => setModalEmpresasAS({ open: true, rede })}
         onClassificarGrupos={(rede) => setModalGruposAS({ open: true, rede })}
         onClassificarContas={(rede) => setModalContasAS({ open: true, rede })}
+        onClassificarContasReceber={(rede) => setModalContasReceberAS({ open: true, rede })}
         onExcluir={(rede) => setModalConfirm({
           open: true,
           message: `Excluir a rede "${rede.nome}"? Esta ação não pode ser desfeita.`,
@@ -473,6 +475,13 @@ export default function Clientes() {
         onClose={() => setModalContasAS({ open: false, rede: null })}
         showToast={showToast}
       />
+
+      <ModalContasReceberAutosystem
+        open={modalContasReceberAS.open}
+        rede={modalContasReceberAS.rede}
+        onClose={() => setModalContasReceberAS({ open: false, rede: null })}
+        showToast={showToast}
+      />
     </div>
   );
 }
@@ -480,7 +489,7 @@ export default function Clientes() {
 // ═══════════════════════════════════════════════════════════
 // Seção: Redes Autosystem (listagem + ações)
 // ═══════════════════════════════════════════════════════════
-function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio, onNova, onEditar, onImportar, onClassificarGrupos, onClassificarContas, onExcluir }) {
+function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio, onNova, onEditar, onImportar, onClassificarGrupos, onClassificarContas, onClassificarContasReceber, onExcluir }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       className="bg-white dark:bg-slate-900/40 rounded-xl border border-gray-200/60 dark:border-white/10 overflow-hidden shadow-sm mt-6">
@@ -576,6 +585,10 @@ function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio
                       <button onClick={() => onClassificarContas(rede)} title="Classificar contas (formas de recebimento)"
                         className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
                         <Wallet className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => onClassificarContasReceber(rede)} title="Classificar contas a receber (cartões, cheques, notas, faturas)"
+                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
+                        <CreditCard className="h-3.5 w-3.5" />
                       </button>
                       <button onClick={() => onEditar(rede)} title="Editar credenciais"
                         className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
@@ -3084,5 +3097,202 @@ function ModalConfirm({ open, message, onClose, onConfirm }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Modal: Classificar contas a receber por PREFIXO (Autosystem)
+// ═══════════════════════════════════════════════════════════
+const CAT_CONTA_RECEBER = [
+  { key: 'cartoes',     label: 'Cartões',           cor: 'blue'   },
+  { key: 'cheques',     label: 'Cheques',           cor: 'teal'   },
+  { key: 'notas_prazo', label: 'Notas a prazo',     cor: 'violet' },
+  { key: 'faturas',     label: 'Faturas a receber', cor: 'amber'  },
+];
+const CAT_RECEBER_CLASSES = {
+  blue:   'bg-blue-50  text-blue-700  border-blue-200',
+  teal:   'bg-teal-50  text-teal-700  border-teal-200',
+  violet: 'bg-violet-50 text-violet-700 border-violet-200',
+  amber:  'bg-amber-50 text-amber-700 border-amber-200',
+};
+const CAT_RECEBER_CHIP = {
+  blue:   'bg-blue-100  text-blue-800  border-blue-300',
+  teal:   'bg-teal-100  text-teal-800  border-teal-300',
+  violet: 'bg-violet-100 text-violet-800 border-violet-300',
+  amber:  'bg-amber-100 text-amber-800 border-amber-300',
+};
+
+function ModalContasReceberAutosystem({ open, rede, onClose, showToast }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [prefixos, setPrefixos] = useState([]);
+  const [salvandoId, setSalvandoId] = useState(null);
+
+  useEffect(() => {
+    if (!open || !rede?.id) return;
+    (async () => {
+      try {
+        setLoading(true); setError(null);
+        const lista = await autosystemService.listarPrefixosCategoriaRede(rede.id);
+        setPrefixos(lista);
+      } catch (err) { setError(err.message); }
+      finally { setLoading(false); }
+    })();
+  }, [open, rede?.id]);
+
+  const adicionarPrefixo = async (categoria, prefixo, descricao) => {
+    if (!prefixo) return;
+    const p = String(prefixo).trim();
+    if (!p) return;
+    if (!/^1\.3(\.|$)/.test(p)) {
+      showToast?.('error', `Prefixo "${p}" inválido. Deve começar com "1.3".`);
+      return;
+    }
+    if (prefixos.some(x => x.prefixo === p)) {
+      showToast?.('error', `Prefixo "${p}" já está cadastrado.`);
+      return;
+    }
+    try {
+      const novo = await autosystemService.criarPrefixoCategoria({
+        as_rede_id: rede.id, categoria, prefixo: p, descricao: descricao?.trim() || null,
+      });
+      setPrefixos(prev => [...prev, novo].sort((a, b) =>
+        a.categoria.localeCompare(b.categoria) || a.prefixo.localeCompare(b.prefixo)
+      ));
+      showToast?.('success', `Prefixo "${p}" adicionado em ${CAT_CONTA_RECEBER.find(c => c.key === categoria)?.label}.`);
+    } catch (err) {
+      showToast?.('error', 'Erro ao adicionar: ' + err.message);
+    }
+  };
+
+  const removerPrefixo = async (item) => {
+    try {
+      setSalvandoId(item.id);
+      await autosystemService.excluirPrefixoCategoria(item.id);
+      setPrefixos(prev => prev.filter(p => p.id !== item.id));
+    } catch (err) {
+      showToast?.('error', 'Erro ao remover: ' + err.message);
+    } finally { setSalvandoId(null); }
+  };
+
+  const toggleAtivo = async (item) => {
+    try {
+      setSalvandoId(item.id);
+      const atualizado = await autosystemService.atualizarPrefixoCategoria(item.id, { ativo: !item.ativo });
+      setPrefixos(prev => prev.map(p => p.id === item.id ? atualizado : p));
+    } catch (err) {
+      showToast?.('error', 'Erro ao salvar: ' + err.message);
+    } finally { setSalvandoId(null); }
+  };
+
+  const porCategoria = useMemo(() => {
+    const mapa = new Map(CAT_CONTA_RECEBER.map(c => [c.key, []]));
+    for (const p of prefixos) {
+      if (mapa.has(p.categoria)) mapa.get(p.categoria).push(p);
+    }
+    return mapa;
+  }, [prefixos]);
+
+  if (!open || !rede) return null;
+  const redeNome = rede.nome;
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Classificar contas a receber por prefixo — ${redeNome}`} size="xl">
+      <div className="space-y-4">
+        <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 text-[11.5px] text-blue-800 leading-relaxed">
+          Cadastre os <strong>prefixos</strong> de cada categoria. Qualquer conta cujo código <em>comece</em> com
+          um prefixo cadastrado será classificada naquela categoria. Ex.: o prefixo <code className="font-mono bg-white/60 px-1 rounded">1.3.01</code> classifica <code className="font-mono bg-white/60 px-1 rounded">1.3.01</code>, <code className="font-mono bg-white/60 px-1 rounded">1.3.01.05</code>, <code className="font-mono bg-white/60 px-1 rounded">1.3.01.06</code> etc.
+          <br />Contas <code className="font-mono bg-white/60 px-1 rounded">1.3.*</code> que não casam com nenhum prefixo cadastrado caem em <strong>Outros</strong> automaticamente.
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-red-700">{error}</p>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {CAT_CONTA_RECEBER.map(cat => (
+              <CardCategoriaPrefixo
+                key={cat.key}
+                categoria={cat}
+                prefixos={porCategoria.get(cat.key) || []}
+                salvandoId={salvandoId}
+                onAdicionar={(prefixo, descricao) => adicionarPrefixo(cat.key, prefixo, descricao)}
+                onRemover={removerPrefixo}
+                onToggleAtivo={toggleAtivo}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function CardCategoriaPrefixo({ categoria, prefixos, salvandoId, onAdicionar, onRemover, onToggleAtivo }) {
+  const [novoPrefixo, setNovoPrefixo] = useState('');
+  const [novaDescricao, setNovaDescricao] = useState('');
+  const classes = CAT_RECEBER_CLASSES[categoria.cor];
+  const chipClasses = CAT_RECEBER_CHIP[categoria.cor];
+
+  const submeter = (e) => {
+    e?.preventDefault();
+    if (!novoPrefixo.trim()) return;
+    onAdicionar(novoPrefixo, novaDescricao);
+    setNovoPrefixo(''); setNovaDescricao('');
+  };
+
+  return (
+    <div className={`rounded-xl border p-3 ${classes}`}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[13px] font-semibold">{categoria.label}</h3>
+        <span className="text-[10.5px] opacity-70">
+          {prefixos.length} {prefixos.length === 1 ? 'prefixo' : 'prefixos'}
+        </span>
+      </div>
+
+      {/* Chips de prefixos cadastrados */}
+      <div className="flex flex-wrap gap-1.5 mb-3 min-h-[40px]">
+        {prefixos.length === 0 ? (
+          <p className="text-[11px] opacity-60 italic">Nenhum prefixo cadastrado.</p>
+        ) : prefixos.map(p => (
+          <div key={p.id}
+            className={`group inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${chipClasses} ${!p.ativo ? 'opacity-50' : ''}`}>
+            <button onClick={() => onToggleAtivo(p)} disabled={salvandoId === p.id}
+              title={p.ativo ? 'Desativar' : 'Ativar'}
+              className="font-mono hover:underline">
+              {p.prefixo}
+            </button>
+            {p.descricao && <span className="opacity-70 text-[10px]">· {p.descricao}</span>}
+            <button onClick={() => onRemover(p)} disabled={salvandoId === p.id}
+              title="Remover"
+              className="ml-0.5 opacity-50 hover:opacity-100">
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Form de adicionar */}
+      <form onSubmit={submeter} className="flex items-center gap-1.5">
+        <input type="text" value={novoPrefixo} onChange={e => setNovoPrefixo(e.target.value)}
+          placeholder="1.3.XX" maxLength={20}
+          className="w-20 h-8 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        <input type="text" value={novaDescricao} onChange={e => setNovaDescricao(e.target.value)}
+          placeholder="Descrição (opcional)" maxLength={60}
+          className="flex-1 min-w-0 h-8 rounded-md border border-gray-200 bg-white px-2 text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        <button type="submit"
+          className="inline-flex items-center justify-center h-8 px-2.5 rounded-md bg-white border border-gray-200 text-[11px] font-medium hover:bg-gray-50">
+          + Adicionar
+        </button>
+      </form>
+    </div>
   );
 }

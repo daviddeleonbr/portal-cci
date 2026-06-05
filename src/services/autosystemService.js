@@ -234,6 +234,84 @@ export async function salvarContasCategoria(redeId, contas) {
   }
 }
 
+// ─── Classificação de contas a receber por PREFIXO ──────────
+// O admin cadastra prefixos por categoria (cartões/cheques/notas/faturas).
+// Qualquer conta debitar que comece com o prefixo é classificada nessa
+// categoria. Contas 1.3.* que não casam com nenhum prefixo cadastrado
+// caem em "outros" no front (não precisa cadastrar).
+
+export const CATEGORIAS_CONTA_RECEBER = [
+  { key: 'cartoes',     label: 'Cartões' },
+  { key: 'cheques',     label: 'Cheques' },
+  { key: 'notas_prazo', label: 'Notas a prazo' },
+  { key: 'faturas',     label: 'Faturas a receber' },
+];
+
+// Lista todos os prefixos cadastrados da rede.
+export async function listarPrefixosCategoriaRede(redeId) {
+  if (!redeId) return [];
+  const { data, error } = await supabase
+    .from('as_rede_categoria_prefixo')
+    .select('*')
+    .eq('as_rede_id', redeId)
+    .order('categoria', { ascending: true })
+    .order('prefixo', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// Cria um novo prefixo na categoria informada.
+export async function criarPrefixoCategoria({ as_rede_id, categoria, prefixo, descricao }) {
+  if (!as_rede_id || !categoria || !prefixo) throw new Error('as_rede_id, categoria e prefixo são obrigatórios');
+  const { data, error } = await supabase
+    .from('as_rede_categoria_prefixo')
+    .insert({ as_rede_id, categoria, prefixo: String(prefixo).trim(), descricao: descricao || null, ativo: true })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Atualiza um prefixo (categoria, descrição ou ativo).
+export async function atualizarPrefixoCategoria(id, campos) {
+  const payload = { ...campos };
+  delete payload.id;
+  delete payload.as_rede_id;
+  delete payload.created_at;
+  delete payload.updated_at;
+  const { data, error } = await supabase
+    .from('as_rede_categoria_prefixo')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Remove um prefixo.
+export async function excluirPrefixoCategoria(id) {
+  const { error } = await supabase
+    .from('as_rede_categoria_prefixo')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Retorna Map<prefixo, categoria> só com prefixos ATIVOS.
+// Usado pelo cliente Autosystem na tela de Contas a Receber.
+// Retorna null se a rede não tem nada cadastrado.
+export async function mapearPrefixosCategoria(redeId) {
+  if (!redeId) return null;
+  const lista = await listarPrefixosCategoriaRede(redeId);
+  if (!lista || lista.length === 0) return null;
+  const m = new Map();
+  for (const r of lista) {
+    if (r.ativo) m.set(String(r.prefixo), r.categoria);
+  }
+  return m.size > 0 ? m : null;
+}
+
 // ─── Contas caixa/banco (base do fluxo de caixa) ─────────────
 // Marca quais contas do plano de contas Autosystem representam caixa/banco.
 // O relatório de fluxo de caixa considera apenas lançamentos onde uma dessas
