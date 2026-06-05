@@ -349,27 +349,30 @@ export default function ClienteDashboard() {
   return (
     <div>
       <PageHeader title="Visão Geral" description={asRede?.nome || 'Indicadores principais'}>
-        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+        <span className="hidden sm:inline-flex text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
           Mês corrente
         </span>
         {empresasDisponiveis.length > 1 && (
-          <EmpresaMultiSelect
-            clientesRede={empresasDisponiveis}
-            selecionadas={empresasSelIds}
-            onToggle={(id) => setEmpresasSelIds(prev => {
-              const next = new Set(prev);
-              if (next.has(id)) next.delete(id); else next.add(id);
-              return next;
-            })}
-            onToggleTodas={() => setEmpresasSelIds(prev =>
-              prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
-            )}
-          />
+          <div className="flex-1 sm:flex-initial min-w-0">
+            <EmpresaMultiSelect
+              clientesRede={empresasDisponiveis}
+              selecionadas={empresasSelIds}
+              onToggle={(id) => setEmpresasSelIds(prev => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id); else next.add(id);
+                return next;
+              })}
+              onToggleTodas={() => setEmpresasSelIds(prev =>
+                prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
+              )}
+            />
+          </div>
         )}
         <button onClick={carregar} disabled={loading || empresasSel.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+          aria-label="Atualizar"
+          className="flex-shrink-0 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 min-w-[44px] justify-center">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
+          <span className="hidden sm:inline">Atualizar</span>
         </button>
       </PageHeader>
 
@@ -896,16 +899,19 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
     ? clientesRede.find(c => selecionadas.has(c.id))?.nome || '1 selecionada'
     : `${selecionadas.size} empresas`;
   return (
-    <div ref={ref} className="relative">
-      <label className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+    <div ref={ref} className="relative w-full sm:w-auto">
+      <label className="flex items-center gap-2 w-full">
+        <span className="hidden sm:flex text-[10px] font-semibold text-gray-500 uppercase tracking-wider items-center gap-1 flex-shrink-0">
           <Building2 className="h-3 w-3" /> Empresas
         </span>
         <button type="button" onClick={() => setAberto(o => !o)}
-          className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[180px] max-w-[260px] ${
+          className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors w-full sm:w-auto sm:min-w-[180px] sm:max-w-[260px] ${
             aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
           }`}>
-          <span className="truncate">{label}</span>
+          <span className="sm:hidden flex items-center gap-1.5 flex-shrink-0 text-gray-500">
+            <Building2 className="h-3.5 w-3.5" />
+          </span>
+          <span className="truncate flex-1 text-left">{label}</span>
           <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
         </button>
       </label>

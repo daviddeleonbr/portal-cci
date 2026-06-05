@@ -868,8 +868,82 @@ function HeatmapBicosDia({ dados, contagemDias }) {
   const fmt = (n) => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
 
   return (
-    <div className="p-4">
-      <div className="overflow-x-auto">
+    <div className="p-3 sm:p-4">
+      {/* Mobile (<md): lista de cards por bico — heatmap em linha de 7 pílulas */}
+      <div className="md:hidden space-y-2">
+        {dados.map(p => (
+          <div key={p.chave} className="rounded-xl border border-gray-200 bg-white p-3">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <Droplet className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-gray-900 truncate">{p.nome}</p>
+                  {p.bombaCodigo != null && (
+                    <p className="text-[10px] text-gray-400 truncate">
+                      Bomba #{p.bombaCodigo}{p.bombaModelo ? ` · ${p.bombaModelo}` : ''}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-[13px] font-bold text-gray-900 font-mono tabular-nums leading-tight">{fmt(p.total)} L</p>
+                {totalDias > 0 && (
+                  <p className="text-[9.5px] text-gray-500 leading-tight">média {fmt(media(p.total, totalDias))}/dia</p>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {p.porDia.map((v, idx) => {
+                const c = corHeatmap(v, max);
+                const cnt = porDiaCount[idx];
+                return (
+                  <div key={idx}
+                    className="rounded-md text-center px-0.5 py-1 font-mono tabular-nums"
+                    style={{ background: c.bg, color: c.text }}>
+                    <div className="text-[9px] uppercase tracking-wider font-semibold opacity-70 leading-tight">{DIAS_SEMANA_HEAT[idx]}</div>
+                    <div className="text-[10px] font-semibold leading-tight mt-0.5">
+                      {v > 0 ? fmt(v) : '—'}
+                    </div>
+                    {v > 0 && cnt > 0 && (
+                      <div className="text-[8.5px] opacity-60 leading-tight">{fmt(media(v, cnt))}/d</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        {/* Card de Total geral */}
+        <div className="rounded-xl border-2 border-blue-200 bg-blue-50/40 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-bold text-blue-900 uppercase tracking-wider">Total</p>
+            <div className="text-right">
+              <p className="text-[14px] font-bold text-blue-900 font-mono tabular-nums leading-tight">{fmt(totalGeral)} L</p>
+              {totalDias > 0 && (
+                <p className="text-[10px] text-blue-700">média {fmt(media(totalGeral, totalDias))}/dia</p>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {totalPorDia.map((v, idx) => {
+              const cnt = porDiaCount[idx];
+              return (
+                <div key={idx} className="rounded-md text-center px-0.5 py-1 font-mono tabular-nums bg-white border border-blue-100">
+                  <div className="text-[9px] uppercase tracking-wider font-semibold text-blue-700 leading-tight">{DIAS_SEMANA_HEAT[idx]}</div>
+                  <div className="text-[10px] font-bold text-gray-800 leading-tight mt-0.5">{v > 0 ? fmt(v) : '—'}</div>
+                  {v > 0 && cnt > 0 && (
+                    <div className="text-[8.5px] text-gray-500 leading-tight">{fmt(media(v, cnt))}/d</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop (md+): heatmap tabular original */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full border-separate table-fixed" style={{ borderSpacing: '4px' }}>
           <colgroup>
             <col style={{ width: '24%' }} />

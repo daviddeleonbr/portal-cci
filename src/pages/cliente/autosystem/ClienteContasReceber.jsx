@@ -4,7 +4,7 @@ import {
   Loader2, AlertCircle, Search, RefreshCw, ChevronRight, ChevronDown,
   Clock, AlertTriangle, CheckCircle2, Calendar,
   DollarSign, Building2, CreditCard, FileText, Receipt, Wallet, LayoutGrid, MoreHorizontal,
-  PieChart as PieChartIcon, BarChart3,
+  PieChart as PieChartIcon, BarChart3, SlidersHorizontal, X,
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
@@ -63,11 +63,11 @@ const toNumber = (v) => {
 // ─── Categorias renderizadas (abas/KPIs) ────────────────────────
 // "Outros" é derivada: tudo 1.3.* que não casa com prefixo cadastrado.
 const CATEGORIAS = [
-  { key: 'CARTOES',     label: 'Cartões',           icone: CreditCard,     cor: 'cyan'    },
-  { key: 'NOTAS_PRAZO', label: 'Notas a prazo',     icone: Receipt,        cor: 'violet'  },
-  { key: 'FATURAS',     label: 'Faturas a receber', icone: Wallet,         cor: 'indigo'  },
-  { key: 'CHEQUES',     label: 'Cheques',           icone: FileText,       cor: 'teal'    },
-  { key: 'OUTROS',      label: 'Outros',            icone: MoreHorizontal, cor: 'gray'    },
+  { key: 'CARTOES',     label: 'Cartões',           labelCurto: 'Cartões', icone: CreditCard,     cor: 'cyan'    },
+  { key: 'NOTAS_PRAZO', label: 'Notas a prazo',     labelCurto: 'Notas',   icone: Receipt,        cor: 'violet'  },
+  { key: 'FATURAS',     label: 'Faturas a receber', labelCurto: 'Faturas', icone: Wallet,         cor: 'indigo'  },
+  { key: 'CHEQUES',     label: 'Cheques',           labelCurto: 'Cheques', icone: FileText,       cor: 'teal'    },
+  { key: 'OUTROS',      label: 'Outros',            labelCurto: 'Outros',  icone: MoreHorizontal, cor: 'gray'    },
 ];
 
 // Cores hex para gráficos (Recharts não aceita classes Tailwind).
@@ -203,6 +203,7 @@ export default function ClienteContasReceber() {
   const [expandedCats, setExpandedCats] = useState(new Set());
   const [empresasExpandidas, setEmpresasExpandidas] = useState(new Set());
   const [modalDia, setModalDia] = useState(null);
+  const [drawerFiltros, setDrawerFiltros] = useState(false);
 
   // Categorias que ganham o nível "Cliente" extra na hierarquia.
   // Nessas abas, escondemos as colunas Cliente/Conta da tabela porque já
@@ -653,8 +654,9 @@ export default function ClienteContasReceber() {
   return (
     <div>
       {/* Barra sticky de filtros — colada no topo do conteúdo, logo abaixo do ClienteHeader (h-16) */}
-      <div className="sticky top-16 z-20 -mt-6 lg:-mt-8 -mx-6 lg:-mx-8 mb-4 bg-white/60 backdrop-blur-md backdrop-saturate-150 border-b border-gray-200/60">
-        <div className="flex flex-wrap items-center justify-end gap-2 px-6 lg:px-8 py-3">
+      <div className="sticky top-16 z-20 -mt-6 lg:-mt-8 -mx-4 sm:-mx-6 lg:-mx-8 mb-4 bg-white/60 backdrop-blur-md backdrop-saturate-150 border-b border-gray-200/60">
+        <div className="flex flex-wrap items-center justify-end gap-2 px-4 sm:px-6 lg:px-8 py-2.5">
+          {/* Desktop (md+): filtros inline */}
           <div className="hidden md:flex items-center gap-2">
             <span className={`text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap transition-colors ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-500'}`}>
               <Calendar className="h-3 w-3" /> Vencimento entre
@@ -680,27 +682,58 @@ export default function ClienteContasReceber() {
             </label>
           </div>
           {podeFiltrarEmpresa && (
-            <EmpresaMultiSelect
-              clientesRede={empresasDisponiveis}
-              selecionadas={empresasSelIds}
-              onToggle={(id) => setEmpresasSelIds(prev => toggleSet(prev, id))}
-              onToggleTodas={() => setEmpresasSelIds(prev =>
-                prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
-              )}
-            />
+            <div className="hidden md:block">
+              <EmpresaMultiSelect
+                clientesRede={empresasDisponiveis}
+                selecionadas={empresasSelIds}
+                onToggle={(id) => setEmpresasSelIds(prev => toggleSet(prev, id))}
+                onToggleTodas={() => setEmpresasSelIds(prev =>
+                  prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
+                )}
+              />
+            </div>
           )}
+
+          {/* Mobile (<md): botão Filtros que abre drawer */}
+          <button onClick={() => setDrawerFiltros(true)}
+            className="md:hidden inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white/70 px-3 h-10 text-sm font-medium text-gray-700 hover:bg-white transition-colors min-w-[44px]">
+            <SlidersHorizontal className="h-4 w-4" />
+            <span>Filtros</span>
+            {(() => {
+              const n = (ignorarPeriodo ? 1 : 0)
+                + (empresasSel.length !== empresasDisponiveis.length ? 1 : 0);
+              return n > 0 ? (
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-emerald-500 text-white text-[10px] font-bold px-1">{n}</span>
+              ) : null;
+            })()}
+          </button>
+
           <button onClick={() => carregar({ force: true })}
             disabled={loading || empresasSel.length === 0}
             title="Força recarga ignorando o cache"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white/70 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white transition-colors disabled:opacity-50">
+            aria-label="Atualizar"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white/70 px-3 md:px-4 h-10 md:h-auto md:py-2 text-sm font-medium text-gray-700 hover:bg-white transition-colors disabled:opacity-50 min-w-[44px]">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
+            <span className="hidden sm:inline">Atualizar</span>
           </button>
         </div>
       </div>
 
+      {/* Drawer de filtros (mobile) */}
+      <FiltrosDrawer open={drawerFiltros} onClose={() => setDrawerFiltros(false)}
+        venctoDe={venctoDe} setVenctoDe={setVenctoDe}
+        venctoAte={venctoAte} setVenctoAte={setVenctoAte}
+        ignorarPeriodo={ignorarPeriodo} setIgnorarPeriodo={setIgnorarPeriodo}
+        empresas={empresasDisponiveis} empresasSelIds={empresasSelIds}
+        onToggleEmpresa={(id) => setEmpresasSelIds(prev => toggleSet(prev, id))}
+        onToggleTodasEmpresas={() => setEmpresasSelIds(prev =>
+          prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
+        )}
+        podeFiltrarEmpresa={podeFiltrarEmpresa} />
+
+
       {/* Resumo */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4">
         <ResumoCard icon={DollarSign} iconBg="bg-emerald-50" iconColor="text-emerald-600"
           label="Total em aberto" valor={formatCurrency(totais.total)}
           sub={`${totais.qtd} ${totais.qtd === 1 ? 'lancamento' : 'lancamentos'}`} highlight />
@@ -716,42 +749,78 @@ export default function ClienteContasReceber() {
       </div>
 
       {/* Abas por categoria */}
-      <div className="bg-white rounded-xl border border-gray-100 dark:border-white/10 mb-4 overflow-hidden">
-        <div className="flex items-center gap-1 px-2 border-b border-gray-100 dark:border-white/10 overflow-x-auto">
-          {[
-            { k: 'TODAS', label: 'Visão Geral', icon: LayoutGrid, qtd: totais.qtd, valor: totais.total, cor: 'emerald' },
-            ...CATEGORIAS.map(c => ({
-              k: c.key, label: c.label, icon: c.icone,
-              qtd: totais.qtdPorCat[c.key] || 0,
-              valor: totais.porCat[c.key] || 0,
-              cor: c.cor,
-            })),
-          ].map(a => {
-            const Icon = a.icon;
-            const ativo = filtroCategoria === a.k;
-            const pal = TAB_CLASSES[a.cor] || TAB_CLASSES.gray;
-            return (
-              <button key={a.k} onClick={() => setFiltroCategoria(a.k)}
-                className={`flex flex-col items-start gap-0.5 px-4 py-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap min-w-[140px] ${
-                  ativo ? pal.borda : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
-                }`}>
-                <span className="flex items-center gap-2 w-full">
-                  <Icon className="h-4 w-4" />
-                  {a.label}
-                  <span className={`ml-auto text-[10.5px] px-1.5 py-0.5 rounded-full ${
-                    ativo ? pal.badgeAtivo : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {a.qtd}
-                  </span>
-                </span>
-                <span className="font-mono tabular-nums text-[12px] font-semibold text-gray-800">
-                  {formatCurrency(a.valor)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {(() => {
+        const tabs = [
+          { k: 'TODAS', label: 'Visão Geral', labelCurto: 'Geral', icon: LayoutGrid, qtd: totais.qtd, valor: totais.total, cor: 'emerald' },
+          ...CATEGORIAS.map(c => ({
+            k: c.key, label: c.label, labelCurto: c.labelCurto, icon: c.icone,
+            qtd: totais.qtdPorCat[c.key] || 0,
+            valor: totais.porCat[c.key] || 0,
+            cor: c.cor,
+          })),
+        ];
+        return (
+          <div className="bg-white rounded-xl border border-gray-100 dark:border-white/10 mb-4 overflow-hidden">
+            {/* Mobile: grid 2x3 sem scroll */}
+            <div className="sm:hidden grid grid-cols-2 gap-1 p-1.5">
+              {tabs.map(a => {
+                const Icon = a.icon;
+                const ativo = filtroCategoria === a.k;
+                const pal = TAB_CLASSES[a.cor] || TAB_CLASSES.gray;
+                return (
+                  <button key={a.k} onClick={() => setFiltroCategoria(a.k)}
+                    className={`flex flex-col items-start gap-1 px-2.5 py-2 rounded-lg text-left transition-all min-h-[60px] ${
+                      ativo
+                        ? `${pal.badgeAtivo} ring-1 ring-current/20`
+                        : 'bg-gray-50/60 text-gray-600 active:bg-gray-100'
+                    }`}>
+                    <span className="flex items-center gap-1.5 w-full min-w-0">
+                      <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span className="text-[11.5px] font-medium truncate flex-1">{a.labelCurto}</span>
+                      <span className={`text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                        ativo ? 'bg-white/70' : 'bg-white text-gray-600'
+                      }`}>
+                        {a.qtd}
+                      </span>
+                    </span>
+                    <span className="font-mono tabular-nums text-[12px] font-semibold w-full truncate">
+                      {formatCurrency(a.valor)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Desktop (sm+): linha horizontal com scroll se passar */}
+            <div className="hidden sm:flex items-stretch px-2 border-b border-gray-100 dark:border-white/10 overflow-x-auto">
+              {tabs.map(a => {
+                const Icon = a.icon;
+                const ativo = filtroCategoria === a.k;
+                const pal = TAB_CLASSES[a.cor] || TAB_CLASSES.gray;
+                return (
+                  <button key={a.k} onClick={() => setFiltroCategoria(a.k)}
+                    className={`flex flex-col items-start gap-0.5 px-4 py-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 min-w-[140px] ${
+                      ativo ? pal.borda : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60'
+                    }`}>
+                    <span className="flex items-center gap-1.5">
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      <span>{a.label}</span>
+                      <span className={`text-[10.5px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                        ativo ? pal.badgeAtivo : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {a.qtd}
+                      </span>
+                    </span>
+                    <span className="font-mono tabular-nums text-[12px] font-semibold text-gray-800">
+                      {formatCurrency(a.valor)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Gráficos da Visão Geral — só aparecem em TODAS */}
       {filtroCategoria === 'TODAS' && enriched.length > 0 && (
@@ -806,7 +875,7 @@ export default function ClienteContasReceber() {
             placeholder="Buscar por cliente, documento ou histórico..."
             className="w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 py-2.5 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-colors" />
         </div>
-        <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">
+        <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0.5">
           {[
             { k: 'todos', label: 'Todos' },
             { k: 'hoje', label: 'Hoje' },
@@ -815,7 +884,7 @@ export default function ClienteContasReceber() {
             { k: 'futuros', label: 'A vencer' },
           ].map(tab => (
             <button key={tab.k} onClick={() => setFiltroStatus(tab.k)}
-              className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
+              className={`rounded-md px-2.5 sm:px-3 py-1.5 text-[12px] font-medium transition-all whitespace-nowrap flex-shrink-0 ${
                 filtroStatus === tab.k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}>
               {tab.label}
@@ -852,22 +921,24 @@ export default function ClienteContasReceber() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-emerald-500" />
-            <h3 className="text-sm font-semibold text-gray-800">Lançamentos por vencimento</h3>
-            <span className="text-[11px] text-gray-400">
+          <div className="px-4 sm:px-5 py-3 border-b border-gray-100 dark:border-white/10 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <Calendar className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+              <h3 className="text-sm font-semibold text-gray-800">Lançamentos por vencimento</h3>
+            </div>
+            <span className="text-[11px] text-gray-400 truncate">
               {multiEmpresa
                 ? `· ${empresasComCategorias.length} ${empresasComCategorias.length === 1 ? 'empresa' : 'empresas'} · ${filtrados.length} ${filtrados.length === 1 ? 'titulo' : 'titulos'}`
                 : `· ${categoriasSingle.length} ${categoriasSingle.length === 1 ? 'categoria' : 'categorias'} · ${filtrados.length} ${filtrados.length === 1 ? 'titulo' : 'titulos'}`}
             </span>
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={expandirTodos} className="text-[11px] text-emerald-600 hover:text-emerald-800 font-medium transition-colors">Expandir todos</button>
+              <button onClick={expandirTodos} className="text-[11px] text-emerald-600 hover:text-emerald-800 font-medium transition-colors whitespace-nowrap">Expandir</button>
               <span className="text-[11px] text-gray-300">|</span>
-              <button onClick={colapsarTodos} className="text-[11px] text-emerald-600 hover:text-emerald-800 font-medium transition-colors">Colapsar todos</button>
+              <button onClick={colapsarTodos} className="text-[11px] text-emerald-600 hover:text-emerald-800 font-medium transition-colors whitespace-nowrap">Colapsar</button>
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[640px]">
               <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="px-4 py-2.5">{multiEmpresa ? 'Empresa / Data / Documento' : 'Vencimento / Documento'}</th>
@@ -980,31 +1051,31 @@ function ModalRecebimentosDia({ detalhe, onClose }) {
   }, [titulos]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start gap-3 px-6 py-4 border-b border-gray-100">
-          <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-            <Calendar className="h-5 w-5 text-emerald-600" />
+        <div className="flex items-start gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100">
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+            <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-gray-900">Recebimentos · {diaSemana}, {label}</h2>
-            <p className="text-xs text-gray-500 mt-0.5 font-mono tabular-nums">
+            <h2 className="text-sm sm:text-base font-semibold text-gray-900">Recebimentos · {diaSemana}, {label}</h2>
+            <p className="text-[11px] sm:text-xs text-gray-500 mt-0.5 font-mono tabular-nums">
               {titulos.length} {titulos.length === 1 ? 'título' : 'títulos'} · {formatCurrency(total)}
             </p>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100" aria-label="Fechar">
-            <ChevronDown className="h-5 w-5 text-gray-500 rotate-180" />
+          <button onClick={onClose} className="p-2 -mr-1 rounded-lg hover:bg-gray-100 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Fechar">
+            <X className="h-5 w-5 text-gray-500" />
           </button>
         </div>
 
         {/* Cards de categoria */}
-        <div className="px-6 pt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        <div className="px-4 sm:px-6 pt-3 sm:pt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {CATEGORIAS.map(c => {
             const g = grupos.find(x => x.cat.key === c.key);
             const val = g?.valor || 0;
@@ -1028,13 +1099,13 @@ function ModalRecebimentosDia({ detalhe, onClose }) {
         </div>
 
         {/* Tree — altura fixa, scroll apenas dentro da tabela */}
-        <div className="px-6 py-4 min-h-0">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 min-h-0">
           {grupos.length === 0 ? (
             <p className="text-center py-8 text-sm text-gray-400">Sem títulos.</p>
           ) : (
-            <div className="rounded-xl border border-gray-200 overflow-hidden flex flex-col" style={{ height: '55vh' }}>
+            <div className="rounded-xl border border-gray-200 overflow-hidden flex flex-col h-[50vh] sm:h-[55vh]">
               <div className="flex-1 overflow-auto">
-                <table className="w-full text-xs">
+                <table className="w-full text-xs min-w-[480px]">
                   <thead className="sticky top-0 z-10">
                     <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
                       <th className="px-3 py-2 bg-gray-100">Detalhamento</th>
@@ -1271,6 +1342,115 @@ function TooltipDia({ active, payload }) {
   );
 }
 
+// ─── Drawer de filtros (mobile) ─────────────────────────────────
+function FiltrosDrawer({
+  open, onClose,
+  venctoDe, setVenctoDe, venctoAte, setVenctoAte,
+  ignorarPeriodo, setIgnorarPeriodo,
+  empresas, empresasSelIds, onToggleEmpresa, onToggleTodasEmpresas,
+  podeFiltrarEmpresa,
+}) {
+  const todasSelecionadas = empresasSelIds.size === empresas.length;
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 bg-black/40" onClick={onClose} />
+          <motion.div
+            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+            className="absolute inset-x-0 bottom-0 max-h-[85vh] bg-white rounded-t-2xl shadow-2xl flex flex-col">
+            <div className="flex-shrink-0 px-4 pt-3 pb-2">
+              <div className="mx-auto w-10 h-1 rounded-full bg-gray-300 mb-3" />
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-semibold text-gray-900">Filtros</h3>
+                <button onClick={onClose} className="p-2 -mr-2 rounded-lg hover:bg-gray-100" aria-label="Fechar">
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-5">
+              {/* Período */}
+              <section>
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">Vencimento</h4>
+                <label className={`flex items-center gap-2 h-12 rounded-xl border px-3 mb-2 cursor-pointer ${
+                  ignorarPeriodo ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 bg-white'
+                }`}>
+                  <input type="checkbox" checked={ignorarPeriodo}
+                    onChange={e => setIgnorarPeriodo(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400" />
+                  <span className={`text-sm font-medium ${ignorarPeriodo ? 'text-emerald-700' : 'text-gray-700'}`}>
+                    Todo o período
+                  </span>
+                </label>
+                <div className={`grid grid-cols-2 gap-2 ${ignorarPeriodo ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <label className="block">
+                    <span className="text-[11px] text-gray-500 mb-1 block">De</span>
+                    <input type="date" value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
+                      disabled={ignorarPeriodo}
+                      className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                  </label>
+                  <label className="block">
+                    <span className="text-[11px] text-gray-500 mb-1 block">Até</span>
+                    <input type="date" value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
+                      disabled={ignorarPeriodo}
+                      className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                  </label>
+                </div>
+              </section>
+
+              {/* Empresas */}
+              {podeFiltrarEmpresa && (
+                <section>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                      Empresas <span className="text-gray-400">({empresasSelIds.size}/{empresas.length})</span>
+                    </h4>
+                    <button onClick={onToggleTodasEmpresas}
+                      className="text-[12px] font-medium text-emerald-600 hover:text-emerald-700">
+                      {todasSelecionadas ? 'Limpar' : 'Todas'}
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {empresas.map(emp => {
+                      const sel = empresasSelIds.has(emp.id);
+                      return (
+                        <label key={emp.id}
+                          className={`flex items-center gap-3 min-h-[48px] rounded-xl border px-3 py-2 cursor-pointer transition-colors ${
+                            sel ? 'border-emerald-300 bg-emerald-50/60' : 'border-gray-200 bg-white'
+                          }`}>
+                          <input type="checkbox" checked={sel}
+                            onChange={() => onToggleEmpresa(emp.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{emp.nome}</p>
+                            {emp.cnpj && <p className="text-[11px] text-gray-500 font-mono truncate">{emp.cnpj}</p>}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 p-4 border-t border-gray-100 bg-white">
+              <button onClick={onClose}
+                className="w-full h-12 rounded-xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-colors">
+                Aplicar filtros
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function TabelaCartoesVencidosPorConta({ contas, onClickConta }) {
   const total = contas.reduce((s, c) => s + c.valor, 0);
   const totalQtd = contas.reduce((s, c) => s + c.qtd, 0);
@@ -1278,7 +1458,7 @@ function TabelaCartoesVencidosPorConta({ contas, onClickConta }) {
   const corCartoes = CATEGORIA_COR_HEX.CARTOES;
   return (
     <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
-      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+      <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex items-center gap-2">
         <div className="h-8 w-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 flex-shrink-0">
           <CreditCard className="h-4 w-4" />
         </div>
@@ -1289,7 +1469,41 @@ function TabelaCartoesVencidosPorConta({ contas, onClickConta }) {
           </p>
         </div>
       </div>
-      <div className="overflow-x-auto">
+
+      {/* Mobile: cards verticais */}
+      <ul className="md:hidden divide-y divide-gray-100">
+        {contas.map((c) => {
+          const pct = total > 0 ? (c.valor / total) * 100 : 0;
+          const pctRel = maior > 0 ? (c.valor / maior) * 100 : 0;
+          return (
+            <li key={`${c.codigo}|${c.nome}`}>
+              <button onClick={() => onClickConta?.(c)}
+                className="w-full text-left px-4 py-3 hover:bg-sky-50/30 active:bg-sky-50/50 transition-colors min-h-[68px]">
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium text-gray-900 truncate" title={c.nome}>{c.nome}</p>
+                    <p className="text-[10.5px] text-gray-400 font-mono">{c.codigo} · {c.qtd} {c.qtd === 1 ? 'recebível' : 'recebíveis'}</p>
+                  </div>
+                  <p className="text-[14px] font-bold text-gray-900 font-mono tabular-nums flex-shrink-0">{formatCurrency(c.valor)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pctRel}%`, backgroundColor: corCartoes }} />
+                  </div>
+                  <span className="text-[10.5px] text-gray-500 font-mono tabular-nums w-12 text-right">{pct.toFixed(1)}%</span>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+        <li className="px-4 py-3 bg-gray-50/80 border-t-2 border-gray-200 flex items-center justify-between font-semibold">
+          <span className="text-[12px] text-gray-700">Total ({totalQtd} {totalQtd === 1 ? 'recebível' : 'recebíveis'})</span>
+          <span className="text-[14px] text-gray-900 font-mono tabular-nums">{formatCurrency(total)}</span>
+        </li>
+      </ul>
+
+      {/* Desktop: tabela */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
@@ -1619,15 +1833,15 @@ function renderGrupoTree(g, prefix, empresaIndent, ctx) {
 
 function ResumoCard({ icon: Icon, iconBg, iconColor, label, valor, sub, highlight }) {
   return (
-    <div className={`bg-white rounded-xl border p-5 ${highlight ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white' : 'border-gray-100'}`}>
-      <div className="flex items-start gap-3">
-        <div className={`rounded-lg ${iconBg} p-2.5 flex-shrink-0`}>
-          <Icon className={`h-5 w-5 ${iconColor}`} />
+    <div className={`bg-white rounded-xl border p-3 sm:p-5 ${highlight ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white' : 'border-gray-100'}`}>
+      <div className="flex items-start gap-2 sm:gap-3">
+        <div className={`rounded-lg ${iconBg} p-2 sm:p-2.5 flex-shrink-0`}>
+          <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${iconColor}`} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-          <p className="text-lg font-semibold text-gray-900 tracking-tight truncate">{valor}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>
+          <p className="text-[11px] sm:text-xs text-gray-500 mb-0.5 truncate">{label}</p>
+          <p className="text-base sm:text-lg font-semibold text-gray-900 tracking-tight truncate">{valor}</p>
+          <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5 truncate">{sub}</p>
         </div>
       </div>
     </div>

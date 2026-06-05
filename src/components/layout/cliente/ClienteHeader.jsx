@@ -50,24 +50,25 @@ export default function ClienteHeader({ onMenuClick }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-md px-6">
-      <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-md px-3 sm:px-6">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
-          className="lg:hidden rounded p-2 text-gray-500 hover:bg-gray-100 transition-colors"
+          aria-label="Abrir menu"
+          className="lg:hidden rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
         >
           <Menu className="h-5 w-5" />
         </button>
         {podeTrocarEmpresa ? (
-          <div ref={empresaRef} className="relative hidden sm:block">
+          <div ref={empresaRef} className="relative min-w-0 flex-1 sm:flex-initial">
             <button onClick={() => setEmpresaMenuOpen(!empresaMenuOpen)}
-              className="flex items-center gap-2.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 hover:border-blue-300 hover:shadow-sm transition-all">
+              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-1.5 hover:border-blue-300 hover:shadow-sm transition-all w-full sm:w-auto">
               <Building2 className="h-4 w-4 text-blue-500 flex-shrink-0" />
-              <div className="text-left min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate max-w-[200px]">{nomeCliente}</p>
-                <p className="text-[10px] text-gray-500 truncate max-w-[200px]">{cnpjCliente}</p>
+              <div className="text-left min-w-0 flex-1">
+                <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate max-w-[140px] sm:max-w-[200px]">{nomeCliente}</p>
+                <p className="hidden sm:block text-[10px] text-gray-500 truncate max-w-[200px]">{cnpjCliente}</p>
               </div>
-              <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${empresaMenuOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform flex-shrink-0 ${empresaMenuOpen ? 'rotate-180' : ''}`} />
             </button>
 
             <AnimatePresence>
@@ -77,7 +78,7 @@ export default function ClienteHeader({ onMenuClick }) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.12 }}
-                  className="absolute left-0 top-full mt-2 w-80 bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden"
+                  className="absolute left-0 top-full mt-2 w-[calc(100vw-1.5rem)] sm:w-80 max-w-sm bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden"
                 >
                   <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/60">
                     <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Empresas da rede</p>
@@ -111,24 +112,24 @@ export default function ClienteHeader({ onMenuClick }) {
             </AnimatePresence>
           </div>
         ) : tipoCliente === 'autosystem' ? (
-          <div className="hidden sm:flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
               <Building2 className="h-4 w-4" />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{session?.asRede?.nome || 'Rede Autosystem'}</p>
-              <p className="text-[10px] text-gray-500">{clientesRede.length} empresa{clientesRede.length === 1 ? '' : 's'} na rede</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate max-w-[160px] sm:max-w-none">{session?.asRede?.nome || 'Rede Autosystem'}</p>
+              <p className="hidden sm:block text-[10px] text-gray-500">{clientesRede.length} empresa{clientesRede.length === 1 ? '' : 's'} na rede</p>
             </div>
           </div>
         ) : (
-          <div className="hidden sm:block">
-            <p className="text-sm font-semibold text-gray-900">{nomeCliente}</p>
-            <p className="text-xs text-gray-500">{cnpjCliente}</p>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate max-w-[180px] sm:max-w-none">{nomeCliente}</p>
+            <p className="hidden sm:block text-xs text-gray-500 truncate">{cnpjCliente}</p>
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
         {/* Theme toggle */}
         <button onClick={alternar}
           title={escuro ? 'Mudar para tema claro' : 'Mudar para tema escuro'}

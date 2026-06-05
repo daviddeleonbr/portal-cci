@@ -8,7 +8,9 @@ import { useClienteSession } from '../../../hooks/useAuth';
 import { registrarPageview } from '../../../services/usoPortalService';
 
 export default function ClienteLayout() {
+  // collapsed: controla largura no desktop (≥lg). mobileOpen: drawer overlay no mobile.
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Telemetria: 1 pageview a cada mudança de rota (fire-and-forget).
   // Painel admin consulta em /admin/uso-portal.
@@ -26,6 +28,9 @@ export default function ClienteLayout() {
     });
   }, [location.pathname, session?.usuario?.id, session?.cliente?.id]);
 
+  // Fecha drawer mobile ao navegar
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+
   return (
     <div className="min-h-screen relative app-bg">
       {/* Decorative background - gradient mesh */}
@@ -38,14 +43,26 @@ export default function ClienteLayout() {
       </div>
 
       <ModalNovidades />
-      <ClienteSidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+
+      {/* Backdrop mobile */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-30 bg-black/40"
+          onClick={() => setMobileOpen(false)} aria-hidden="true" />
+      )}
+
+      <ClienteSidebar
+        collapsed={collapsed}
+        mobileOpen={mobileOpen}
+        onToggle={() => setCollapsed(!collapsed)}
+        onMobileClose={() => setMobileOpen(false)}
+      />
       <div
         className={`relative transition-all duration-300 ${
           collapsed ? 'lg:ml-[72px]' : 'lg:ml-[260px]'
         }`}
       >
-        <ClienteHeader onMenuClick={() => setCollapsed(!collapsed)} />
-        <main className="p-6 lg:p-8">
+        <ClienteHeader onMenuClick={() => setMobileOpen(true)} />
+        <main className="p-4 sm:p-6 lg:p-8">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}

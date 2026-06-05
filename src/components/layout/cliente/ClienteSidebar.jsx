@@ -100,7 +100,9 @@ function isSubtreeActive(item, pathname) {
   return false;
 }
 
-export default function ClienteSidebar({ collapsed, onToggle }) {
+export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, onToggle, onMobileClose }) {
+  // No mobile com drawer aberto, sempre renderiza expandido — collapsed só vale no desktop.
+  const collapsed = mobileOpen ? false : collapsedProp;
   const location = useLocation();
   const navigate = useNavigate();
   const session = useClienteSession();
@@ -151,19 +153,31 @@ export default function ClienteSidebar({ collapsed, onToggle }) {
   const cnpjCliente = cliente?.cnpj || '';
   const initials = nomeCliente.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
+  // Mobile (<lg): drawer overlay com slide; usa SEMPRE largura full (260px) — collapsed
+  // só vale em desktop. Desktop (≥lg): sidebar fixa.
   return (
     <aside
-      className={`group fixed left-0 top-0 z-40 flex h-screen flex-col bg-white border-r border-gray-200/70 transition-all duration-300 ${
-        collapsed ? 'w-[72px]' : 'w-[260px]'
-      }`}
+      className={`group fixed left-0 top-0 z-40 flex h-screen flex-col bg-white border-r border-gray-200/70 transition-all duration-300
+        ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        w-[260px] ${collapsed ? 'lg:w-[72px]' : 'lg:w-[260px]'}
+      `}
     >
-      {/* Floating toggle */}
+      {/* Floating toggle (desktop only) */}
       <button
         onClick={onToggle}
         title={collapsed ? 'Expandir' : 'Recolher'}
-        className="absolute -right-3 top-20 z-50 flex h-6 w-6 items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:shadow transition-all opacity-0 group-hover:opacity-100"
+        className="hidden lg:flex absolute -right-3 top-20 z-50 h-6 w-6 items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:shadow transition-all opacity-0 group-hover:opacity-100"
       >
         {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+      </button>
+
+      {/* Close button (mobile only) */}
+      <button
+        onClick={onMobileClose}
+        aria-label="Fechar menu"
+        className="lg:hidden absolute right-2 top-2 z-50 flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+      >
+        <ChevronLeft className="h-4 w-4" />
       </button>
 
       {/* Logo */}

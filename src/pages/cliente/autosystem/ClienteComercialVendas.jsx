@@ -88,10 +88,10 @@ function subtrairDias(iso, dias) {
 }
 // Abas exibidas no topo da página. "geral" agrega todas as categorias.
 const ABAS = [
-  { key: 'geral',        label: 'Visão geral',  icone: LayoutGrid, categoria: null          },
-  { key: 'combustivel',  label: 'Combustíveis', icone: Fuel,       categoria: 'combustivel' },
-  { key: 'automotivos',  label: 'Automotivos',  icone: Package,    categoria: 'automotivos' },
-  { key: 'conveniencia', label: 'Conveniências',icone: Store,      categoria: 'conveniencia'},
+  { key: 'geral',        label: 'Visão geral',   labelCurto: 'Geral',       icone: LayoutGrid, categoria: null          },
+  { key: 'combustivel',  label: 'Combustíveis',  labelCurto: 'Combustível', icone: Fuel,       categoria: 'combustivel' },
+  { key: 'automotivos',  label: 'Automotivos',   labelCurto: 'Auto',        icone: Package,    categoria: 'automotivos' },
+  { key: 'conveniencia', label: 'Conveniências', labelCurto: 'Conveniência',icone: Store,      categoria: 'conveniencia'},
 ];
 import PageHeader from '../../../components/ui/PageHeader';
 import Modal from '../../../components/ui/Modal';
@@ -1826,7 +1826,35 @@ export default function ClienteComercialVendas() {
 
       {/* Abas */}
       <div className="bg-white rounded-xl border border-gray-100 mb-4 overflow-hidden">
-        <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto">
+        {/* Mobile: grid 2x2 sem scroll */}
+        <div className="sm:hidden grid grid-cols-2 gap-1 p-1.5">
+          {ABAS.map(a => {
+            const Icon = a.icone;
+            const ativo = aba === a.key;
+            const qtd = a.categoria
+              ? (totaisGerais.porCat[a.categoria]?.itens || 0)
+              : totaisGerais.totalItens;
+            return (
+              <button key={a.key} onClick={() => setAba(a.key)}
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-left transition-all min-h-[44px] ${
+                  ativo
+                    ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
+                    : 'bg-gray-50/60 text-gray-600 active:bg-gray-100'
+                }`}>
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                <span className="text-[12px] font-medium truncate flex-1">{a.labelCurto}</span>
+                <span className={`text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                  ativo ? 'bg-white/70' : 'bg-white text-gray-500'
+                }`}>
+                  {formatNumero(qtd)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Desktop (sm+): linha horizontal */}
+        <div className="hidden sm:flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto">
           {ABAS.map(a => {
             const Icon = a.icone;
             const ativo = aba === a.key;
