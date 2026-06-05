@@ -287,6 +287,19 @@ export default function AdminNfManifestacaoDetalhe() {
         <BlocoAnexos titulo="Boletos"     arquivos={arquivosBol} icone={File}     cor="emerald" onBaixar={baixar} />
       </div>
 
+      {/* Motivo da ausência de boleto (quando informado) */}
+      {nota.motivo_sem_boleto && (
+        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] uppercase tracking-wider text-amber-800 dark:text-amber-300/80 font-semibold">
+              {arquivosBol.length > 0 ? 'Observação do cliente sobre boletos' : 'Cliente informou que não há boleto'}
+            </p>
+            <p className="text-sm text-amber-900 dark:text-amber-200 mt-1">{nota.motivo_sem_boleto}</p>
+          </div>
+        </div>
+      )}
+
       {/* Ações */}
       {podeAgir && (
         <div className="sticky bottom-4 bg-white dark:bg-slate-900 rounded-2xl border-2 border-blue-300 dark:border-blue-500/40 shadow-lg p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">

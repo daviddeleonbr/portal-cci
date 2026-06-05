@@ -206,6 +206,17 @@ export default function ClienteNotaFiscalDetalhe() {
   const totalProdutos = produtosLocal.reduce((s, p) =>
     s + (Number(p.quantidade || 0) * Number(p.valor_unitario || 0)), 0);
 
+  // Pendências para envio à CCI — o botão só habilita quando lista está vazia.
+  const pendencias = [];
+  if (!nota.tipo_destinacao)              pendencias.push('Tipo de destinação');
+  if (produtosLocal.length === 0)         pendencias.push('Ao menos 1 produto');
+  if (arquivosNF.length === 0)            pendencias.push('Nota fiscal anexada');
+  const motivoSemBoletoOk = !!(nota.motivo_sem_boleto && nota.motivo_sem_boleto.trim());
+  if (arquivosBol.length === 0 && !motivoSemBoletoOk) {
+    pendencias.push('Boleto anexado ou motivo da ausência');
+  }
+  const podeEnviar = pendencias.length === 0;
+
   return (
     <div className="space-y-4">
       {/* Voltar */}
@@ -382,15 +393,48 @@ export default function ClienteNotaFiscalDetalhe() {
           onRemove={removerArquivo} onBaixar={baixarArquivo} />
       </div>
 
+      {/* Motivo da ausência de boleto — alternativa ao anexo */}
+      <MotivoSemBoleto
+        valor={nota.motivo_sem_boleto || ''}
+        temBoletos={arquivosBol.length > 0}
+        readonly={readonly}
+        onSalvar={async (texto) => {
+          try {
+            const atualizada = await nfService.atualizar(nota.id, {
+              motivo_sem_boleto: texto || null,
+              status_portal: nota.status_portal === 'pendente' ? 'em_preenchimento' : nota.status_portal,
+            });
+            setNota(prev => ({ ...prev, ...atualizada }));
+          } catch (err) {
+            setToast({ tipo: 'error', mensagem: 'Erro ao salvar: ' + err.message });
+          }
+        }}
+      />
+
       {/* Botão enviar pra CCI */}
       {!readonly && (
-        <div className="sticky bottom-4 bg-white dark:bg-slate-900 rounded-2xl border-2 border-blue-300 dark:border-blue-500/40 shadow-lg p-4 flex items-center gap-3">
+        <div className={`sticky bottom-4 rounded-2xl shadow-lg p-4 flex items-center gap-3 border-2 transition-colors ${
+          podeEnviar
+            ? 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-500/40'
+            : 'bg-amber-50/80 dark:bg-amber-500/[0.08] border-amber-300 dark:border-amber-500/30'
+        }`}>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Pronto pra enviar?</p>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">Você precisa: tipo de destinação · ao menos 1 produto · 1 nota fiscal · 1 boleto.</p>
+            {podeEnviar ? (
+              <>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Pronto pra enviar à CCI</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Todas as informações obrigatórias estão preenchidas.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Faltam itens obrigatórios:</p>
+                <ul className="text-[11px] text-amber-700 dark:text-amber-300/90 mt-0.5 space-y-0.5">
+                  {pendencias.map(p => <li key={p}>· {p}</li>)}
+                </ul>
+              </>
+            )}
           </div>
-          <button onClick={enviarParaCci} disabled={enviando}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 text-white px-4 py-2.5 text-sm font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 flex-shrink-0">
+          <button onClick={enviarParaCci} disabled={enviando || !podeEnviar}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 text-white px-4 py-2.5 text-sm font-bold hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Enviar à CCI
           </button>
@@ -590,6 +634,90 @@ function ZonaArquivos({ titulo, subtitulo, tipo, icone: Icon, cor, arquivos, rea
 // ─── Modal de scan / busca por código de barras ───────────────
 // Usa o cache de PRODUTO da Quality. Compatível com leitor USB (que digita
 // rápido e dispara Enter no final) ou digitação manual.
+// ─── Bloco "Sem boleto?" — alternativa ao anexo ───────────────
+// Quando a nota não tem boleto (paga em dinheiro, sem cobrança formal,
+// fornecedor não emitiu boleto etc) o cliente pode justificar no lugar
+// de anexar. Service exige boleto OU motivo.
+const SUGESTOES_SEM_BOLETO = [
+  'Nota fiscal paga em dinheiro',
+  'Nota fiscal veio sem boleto',
+  'Pagamento via PIX direto ao fornecedor',
+  'Compra à vista',
+];
+
+function MotivoSemBoleto({ valor, temBoletos, readonly, onSalvar }) {
+  const [aberto, setAberto] = useState(!!valor && !temBoletos);
+  const [texto, setTexto] = useState(valor || '');
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => { setTexto(valor || ''); }, [valor]);
+
+  const salvar = async (novoTexto) => {
+    if (readonly) return;
+    setSalvando(true);
+    try { await onSalvar(novoTexto); }
+    finally { setSalvando(false); }
+  };
+
+  const escolherSugestao = (s) => {
+    setTexto(s);
+    salvar(s);
+  };
+
+  // Se já tem boletos anexados E não há motivo preenchido, esconde o bloco
+  // (a regra está satisfeita; mantém UI limpa).
+  if (temBoletos && !valor && !aberto) return null;
+
+  const corBg = valor && !temBoletos
+    ? 'border-amber-300 dark:border-amber-500/30 bg-amber-50/40 dark:bg-amber-500/[0.06]'
+    : 'border-gray-200/60 dark:border-white/10 bg-white dark:bg-slate-900';
+
+  return (
+    <div className={`rounded-2xl border shadow-sm overflow-hidden ${corBg}`}>
+      <div className="px-4 sm:px-5 py-3 flex items-center gap-2">
+        <AlertCircle className={`h-4 w-4 flex-shrink-0 ${valor && !temBoletos ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {temBoletos ? 'Observação sobre boletos (opcional)' : 'Não há boleto pra anexar?'}
+          </p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400">
+            {temBoletos
+              ? 'Caso queira complementar com alguma informação para a CCI.'
+              : 'Justifique a ausência. Pode usar uma das sugestões abaixo ou descrever.'}
+          </p>
+        </div>
+        {!readonly && !aberto && !valor && (
+          <button onClick={() => setAberto(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-3 py-1.5 text-xs font-medium hover:bg-gray-50 dark:hover:bg-white/[0.04]">
+            Informar motivo
+          </button>
+        )}
+      </div>
+
+      {(aberto || valor) && (
+        <div className="px-4 sm:px-5 pb-4 space-y-2">
+          {!readonly && !temBoletos && (
+            <div className="flex flex-wrap gap-1.5">
+              {SUGESTOES_SEM_BOLETO.map(s => (
+                <button key={s} onClick={() => escolherSugestao(s)} disabled={salvando}
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-300 dark:border-amber-500/30 bg-white dark:bg-amber-500/[0.08] text-amber-800 dark:text-amber-300 px-2.5 py-1 text-[11px] font-medium hover:bg-amber-50 dark:hover:bg-amber-500/[0.15]">
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+          <textarea value={texto} onChange={e => setTexto(e.target.value)}
+            onBlur={e => salvar(e.target.value.trim())}
+            disabled={readonly} rows={2}
+            placeholder='Ex: "Nota fiscal paga em dinheiro"'
+            className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 p-3 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40 disabled:opacity-60" />
+          {salvando && <p className="text-[10px] text-gray-400 dark:text-gray-500">Salvando...</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // BarcodeDetector é nativa no Chrome Android/Edge. iOS Safari não tem suporte
 // — nele o botão de câmera não aparece e o usuário usa o input manual.
 const CAMERA_DISPONIVEL = typeof window !== 'undefined'
@@ -702,9 +830,17 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
   const [quantidade, setQuantidade] = useState('1');
   const [modoCamera, setModoCamera] = useState(false);
   const inputRef = useRef(null);
+  const cameraButtonRef = useRef(null);
 
+  // Detecta dispositivo touch (mobile/tablet). Em touch + câmera disponível,
+  // o foco vai pro botão "Escanear" — evita teclado virtual saltando ao abrir.
+  // No desktop ou sem câmera, mantém foco no input (UX de leitor USB).
   useEffect(() => {
-    if (!modoCamera) setTimeout(() => inputRef.current?.focus(), 50);
+    if (modoCamera) return;
+    const isTouch = typeof window !== 'undefined'
+      && (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
+    const alvo = (isTouch && CAMERA_DISPONIVEL) ? cameraButtonRef.current : inputRef.current;
+    setTimeout(() => alvo?.focus(), 50);
   }, [modoCamera]);
 
   // Fecha ao ESC.
@@ -801,8 +937,8 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
           /* Modo input manual / leitor USB */
           <div className="px-5 pt-4">
             {CAMERA_DISPONIVEL && (
-              <button onClick={() => setModoCamera(true)}
-                className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-3.5 text-sm font-bold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all ring-1 ring-blue-400/40">
+              <button ref={cameraButtonRef} onClick={() => setModoCamera(true)}
+                className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-3.5 text-sm font-bold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all ring-1 ring-blue-400/40 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-400">
                 <Camera className="h-5 w-5" />
                 Escanear com a câmera
               </button>

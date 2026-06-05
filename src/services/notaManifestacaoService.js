@@ -287,8 +287,12 @@ function sanitizarNomeArquivo(nome) {
 
 // ─── Transições de status ────────────────────────────────────
 
-// Cliente envia para CCI. Exige tipo_destinacao + ao menos 1 produto +
-// ao menos 1 arquivo NF + ao menos 1 boleto.
+// Cliente envia para CCI. Exige:
+//   - tipo_destinacao
+//   - ao menos 1 produto
+//   - ao menos 1 arquivo Nota Fiscal (PDF/XML/foto)
+//   - boleto: ao menos 1 arquivo OU motivo_sem_boleto preenchido
+//     (ex: "paga em dinheiro", "veio sem boleto")
 export async function enviarParaCci(id) {
   const nf = await obter(id);
   if (!nf) throw new Error('Nota não encontrada');
@@ -296,7 +300,11 @@ export async function enviarParaCci(id) {
   if (!nf.produtos || nf.produtos.length === 0) throw new Error('Cadastre ao menos 1 produto');
   const arqs = nf.arquivos || [];
   if (!arqs.some(a => a.tipo === 'nota_fiscal')) throw new Error('Anexe ao menos 1 arquivo de Nota Fiscal');
-  if (!arqs.some(a => a.tipo === 'boleto'))      throw new Error('Anexe ao menos 1 Boleto');
+  const temBoleto = arqs.some(a => a.tipo === 'boleto');
+  const temMotivo = !!(nf.motivo_sem_boleto && nf.motivo_sem_boleto.trim());
+  if (!temBoleto && !temMotivo) {
+    throw new Error('Anexe pelo menos um boleto ou informe o motivo da ausência (ex: "paga em dinheiro").');
+  }
 
   return atualizar(id, { status_portal: 'enviada', enviada_em: new Date().toISOString() });
 }
