@@ -15,6 +15,7 @@ import { useClienteSession } from '../../../hooks/useAuth';
 import * as mapService from '../../../services/mapeamentoService';
 import * as nfService from '../../../services/notaManifestacaoService';
 import { formatCurrency } from '../../../utils/format';
+import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../../../utils/nfe';
 
 const STATUS_PILLS = {
   pendente:         { label: 'Pendente',      bg: 'bg-gray-100 dark:bg-white/[0.06]',      text: 'text-gray-700 dark:text-gray-300 dark:text-gray-600',    dot: 'bg-gray-400' },
@@ -278,7 +279,7 @@ export default function ClienteNotasFiscais() {
                   <tr className="text-left text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     <th className="px-4 py-2.5">Emissão</th>
                     <th className="px-3 py-2.5">Fornecedor</th>
-                    <th className="px-3 py-2.5">Chave / Doc</th>
+                    <th className="px-3 py-2.5">Nº NF / Série</th>
                     <th className="px-3 py-2.5 text-center">Produtos</th>
                     <th className="px-3 py-2.5 text-center">Anexos</th>
                     <th className="px-3 py-2.5 text-right">Valor</th>
@@ -295,7 +296,22 @@ export default function ClienteNotasFiscais() {
                         <p className="text-[12.5px] font-medium text-gray-900 dark:text-gray-100 truncate max-w-[280px]" title={n.razao_social_fornecedor}>{n.razao_social_fornecedor || '—'}</p>
                         <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-mono">{n.cnpj_fornecedor || '—'}</p>
                       </td>
-                      <td className="px-3 py-3 font-mono text-[11px] text-gray-600 dark:text-gray-400">{chaveAbreviada(n.chave_documento)}</td>
+                      <td className="px-3 py-3">
+                        {(() => {
+                          const num = numeroNotaDaChave(n.chave_documento);
+                          const ser = serieDaChave(n.chave_documento);
+                          return (
+                            <>
+                              <p className="font-mono tabular-nums text-[13px] font-semibold text-gray-900 dark:text-gray-100">
+                                {num != null ? formatNumeroNota(num) : '—'}
+                              </p>
+                              <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
+                                {ser != null ? `série ${ser}` : '—'}
+                              </p>
+                            </>
+                          );
+                        })()}
+                      </td>
                       <td className="px-3 py-3 text-center font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300 dark:text-gray-600">{n.qtdProdutos}</td>
                       <td className="px-3 py-3 text-center text-[11px] text-gray-700 dark:text-gray-300 dark:text-gray-600">
                         <span className="inline-flex items-center gap-1">
@@ -360,7 +376,18 @@ function CardNota({ nota, onClick }) {
           {formatCurrency(nota.valor)}
         </span>
       </div>
-      <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate">{chaveAbreviada(nota.chave_documento)}</p>
+      {(() => {
+        const num = numeroNotaDaChave(nota.chave_documento);
+        const ser = serieDaChave(nota.chave_documento);
+        return num != null ? (
+          <p className="text-[10.5px] text-gray-500 dark:text-gray-400">
+            <span className="font-mono tabular-nums font-semibold text-gray-700 dark:text-gray-300">NF nº {formatNumeroNota(num)}</span>
+            {ser != null && <span className="ml-1">· série {ser}</span>}
+          </p>
+        ) : (
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate">{chaveAbreviada(nota.chave_documento)}</p>
+        );
+      })()}
     </motion.button>
   );
 }

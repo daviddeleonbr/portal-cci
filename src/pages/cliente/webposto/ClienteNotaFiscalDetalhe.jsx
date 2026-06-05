@@ -2,14 +2,14 @@
 // (cod barras, cod interno, qtd, valor unit), anexa NF/boletos e
 // envia pra CCI.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, Loader2, AlertCircle, Save, Plus, Trash2,
   Upload, File, FileText, Download, Send, CheckCircle2,
   Package, Briefcase, Building2, Calendar, Hash, ScanLine, X, Search,
-  Camera, Keyboard,
+  Camera, Keyboard, PackagePlus, ImagePlus, Image as ImageIcon,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import Toast from '../../../components/ui/Toast';
@@ -17,6 +17,7 @@ import * as nfService from '../../../services/notaManifestacaoService';
 import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
 import { formatCurrency } from '../../../utils/format';
+import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../../../utils/nfe';
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -48,6 +49,7 @@ export default function ClienteNotaFiscalDetalhe() {
   // Edição em memória dos produtos (commit no banco no blur ou Enter).
   const [produtosLocal, setProdutosLocal] = useState([]);
   const [modalScan, setModalScan] = useState(false);
+  const [modalNovoProduto, setModalNovoProduto] = useState(false);
 
   const carregar = useCallback(async () => {
     if (!id) return;
@@ -238,24 +240,33 @@ export default function ClienteNotaFiscalDetalhe() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold flex items-center gap-1"><Calendar className="h-3 w-3" /> Emissão</p>
-            <p className="font-mono tabular-nums text-gray-800 dark:text-gray-200 mt-0.5">{fmtData(nota.data_emissao)}</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold flex items-center gap-1"><Hash className="h-3 w-3" /> Cód Quality</p>
-            <p className="font-mono tabular-nums text-gray-800 dark:text-gray-200 mt-0.5">{nota.codigo_quality || '—'}</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold flex items-center gap-1"><Building2 className="h-3 w-3" /> Empresa</p>
-            <p className="font-mono tabular-nums text-gray-800 dark:text-gray-200 mt-0.5">{nota.empresa_codigo || '—'}</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold">Valor NF</p>
-            <p className="font-mono tabular-nums font-bold text-gray-900 dark:text-gray-100 mt-0.5">{formatCurrency(nota.valor)}</p>
-          </div>
-        </div>
+        {(() => {
+          const numNF = numeroNotaDaChave(nota.chave_documento);
+          const serie = serieDaChave(nota.chave_documento);
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold flex items-center gap-1"><Hash className="h-3 w-3" /> Nº NF / Série</p>
+                <p className="font-mono tabular-nums font-bold text-gray-900 dark:text-gray-100 mt-0.5">
+                  {numNF != null ? formatNumeroNota(numNF) : '—'}
+                  {serie != null && <span className="ml-1.5 text-[11px] font-normal text-gray-500 dark:text-gray-400">/ {serie}</span>}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold flex items-center gap-1"><Calendar className="h-3 w-3" /> Emissão</p>
+                <p className="font-mono tabular-nums text-gray-800 dark:text-gray-200 mt-0.5">{fmtData(nota.data_emissao)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold flex items-center gap-1"><Building2 className="h-3 w-3" /> Empresa</p>
+                <p className="font-mono tabular-nums text-gray-800 dark:text-gray-200 mt-0.5">{nota.empresa_codigo || '—'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold">Valor NF</p>
+                <p className="font-mono tabular-nums font-bold text-gray-900 dark:text-gray-100 mt-0.5">{formatCurrency(nota.valor)}</p>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/10">
           <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold">Chave NF-e</p>
@@ -311,10 +322,10 @@ export default function ClienteNotaFiscalDetalhe() {
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-blue-700">
                 <ScanLine className="h-3.5 w-3.5" /> Escanear / buscar
               </button>
-              <button onClick={() => adicionarProduto()}
-                title="Adicionar linha em branco"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2.5 py-1.5 text-xs font-medium hover:bg-gray-50 dark:hover:bg-white/[0.04]">
-                <Plus className="h-3.5 w-3.5" /> Manual
+              <button onClick={() => setModalNovoProduto(true)}
+                title="Informar produto que ainda não está cadastrado no Webposto"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-500/20">
+                <PackagePlus className="h-3.5 w-3.5" /> Novo produto
               </button>
             </div>
           )}
@@ -323,7 +334,7 @@ export default function ClienteNotaFiscalDetalhe() {
         {produtosLocal.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
             Nenhum produto adicionado.
-            {!readonly && <span className="block text-[11px] text-gray-400 dark:text-gray-500 mt-1">Use "Escanear / buscar" para localizar pelo código de barras, ou "Manual" para preencher do zero.</span>}
+            {!readonly && <span className="block text-[11px] text-gray-400 dark:text-gray-500 mt-1">Use "Escanear / buscar" para localizar pelo código de barras, ou "Novo produto" se ele ainda não estiver cadastrado no Webposto.</span>}
           </div>
         ) : (
           <>
@@ -413,10 +424,10 @@ export default function ClienteNotaFiscalDetalhe() {
 
       {/* Botão enviar pra CCI */}
       {!readonly && (
-        <div className={`sticky bottom-4 rounded-2xl shadow-lg p-4 flex items-center gap-3 border-2 transition-colors ${
+        <div className={`sticky bottom-4 rounded-2xl shadow-lg p-4 flex items-center gap-3 border-2 transition-colors backdrop-blur-md backdrop-saturate-150 ${
           podeEnviar
-            ? 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-500/40'
-            : 'bg-amber-50/80 dark:bg-amber-500/[0.08] border-amber-300 dark:border-amber-500/30'
+            ? 'bg-white/80 dark:bg-slate-900/70 border-blue-300 dark:border-blue-500/40'
+            : 'bg-amber-50/70 dark:bg-amber-500/[0.12] border-amber-300 dark:border-amber-500/40'
         }`}>
           <div className="flex-1 min-w-0">
             {podeEnviar ? (
@@ -453,6 +464,30 @@ export default function ClienteNotaFiscalDetalhe() {
         />
       )}
 
+      {modalNovoProduto && (
+        <ModalNovoProduto
+          onClose={() => setModalNovoProduto(false)}
+          onAdicionar={async (dados) => {
+            try {
+              await nfService.adicionarProdutoNovo({
+                nfId: nota.id,
+                clienteId: cliente.id,
+                ...dados,
+                ordem: produtosLocal.length,
+              });
+              if (nota.status_portal === 'pendente') {
+                await nfService.atualizar(nota.id, { status_portal: 'em_preenchimento' });
+              }
+              await carregar();
+              setModalNovoProduto(false);
+              setToast({ tipo: 'success', mensagem: 'Produto novo adicionado à nota — CCI cadastrará no Webposto' });
+            } catch (err) {
+              setToast({ tipo: 'error', mensagem: err.message });
+            }
+          }}
+        />
+      )}
+
       {toast && <Toast tipo={toast.tipo} mensagem={toast.mensagem} onClose={() => setToast(null)} />}
     </div>
   );
@@ -462,26 +497,42 @@ export default function ClienteNotaFiscalDetalhe() {
 function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
   const subtotal = Number(produto.quantidade || 0) * Number(produto.valor_unitario || 0);
   return (
-    <tr className="hover:bg-gray-50/40 dark:hover:bg-white/[0.04]">
+    <tr className={produto.produto_novo
+      ? 'bg-amber-50/40 dark:bg-amber-500/[0.06] hover:bg-amber-50/70 dark:hover:bg-amber-500/[0.1]'
+      : 'hover:bg-gray-50/40 dark:hover:bg-white/[0.04]'}>
       <td className="px-3 py-1.5 text-gray-400 font-mono">{idx + 1}</td>
       <td className="px-3 py-1.5">
-        <input type="text" value={produto.codigo_barras || ''} disabled={readonly}
+        <input type="text" value={produto.codigo_barras || ''} disabled={readonly || produto.produto_novo}
           onChange={e => onEdit({ codigo_barras: e.target.value })}
           onBlur={e => onCommit({ codigo_barras: e.target.value })}
           className="w-full h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[11.5px] font-mono text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
       </td>
       <td className="px-3 py-1.5">
-        <input type="text" value={produto.codigo_interno || ''} disabled={readonly}
-          onChange={e => onEdit({ codigo_interno: e.target.value })}
-          onBlur={e => onCommit({ codigo_interno: e.target.value })}
-          className="w-full h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[11.5px] font-mono text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+        {produto.produto_novo ? (
+          <span className="inline-flex items-center justify-center w-full h-8 px-2 rounded text-[10.5px] font-semibold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">
+            a cadastrar
+          </span>
+        ) : (
+          <input type="text" value={produto.codigo_interno || ''} disabled={readonly}
+            onChange={e => onEdit({ codigo_interno: e.target.value })}
+            onBlur={e => onCommit({ codigo_interno: e.target.value })}
+            className="w-full h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[11.5px] font-mono text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+        )}
       </td>
       <td className="px-3 py-1.5">
-        <input type="text" value={produto.descricao || ''} disabled={readonly}
-          onChange={e => onEdit({ descricao: e.target.value })}
-          onBlur={e => onCommit({ descricao: e.target.value })}
-          placeholder="Descrição (opcional)"
-          className="w-full h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[12px] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+        <div className="flex items-center gap-1.5">
+          <input type="text" value={produto.descricao || ''} disabled={readonly}
+            onChange={e => onEdit({ descricao: e.target.value })}
+            onBlur={e => onCommit({ descricao: e.target.value })}
+            placeholder="Descrição (opcional)"
+            className="flex-1 h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[12px] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+          {produto.produto_novo && (
+            <span title="Produto não cadastrado no Webposto — CCI cadastrará"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 flex-shrink-0">
+              <PackagePlus className="h-2.5 w-2.5" /> Novo
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-3 py-1.5">
         <input type="number" step="0.0001" min="0" value={produto.quantidade ?? ''} disabled={readonly}
@@ -515,7 +566,15 @@ function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
 function ProdutoCard({ produto, readonly, onEdit, onCommit, onRemove }) {
   const subtotal = Number(produto.quantidade || 0) * Number(produto.valor_unitario || 0);
   return (
-    <div className="p-3 space-y-2">
+    <div className={`p-3 space-y-2 ${produto.produto_novo ? 'bg-amber-50/40 dark:bg-amber-500/[0.06]' : ''}`}>
+      {produto.produto_novo && (
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">
+            <PackagePlus className="h-3 w-3" /> Produto novo
+          </span>
+          <span className="text-[10px] text-amber-700 dark:text-amber-300/80">CCI cadastrará no Webposto</span>
+        </div>
+      )}
       <div className="flex items-start gap-2">
         <input type="text" value={produto.descricao || ''} disabled={readonly}
           onChange={e => onEdit({ descricao: e.target.value })}
@@ -531,16 +590,22 @@ function ProdutoCard({ produto, readonly, onEdit, onCommit, onRemove }) {
         )}
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <input type="text" value={produto.codigo_barras || ''} disabled={readonly}
+        <input type="text" value={produto.codigo_barras || ''} disabled={readonly || produto.produto_novo}
           onChange={e => onEdit({ codigo_barras: e.target.value })}
           onBlur={e => onCommit({ codigo_barras: e.target.value })}
           placeholder="Código de barras"
           className="h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-xs font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
-        <input type="text" value={produto.codigo_interno || ''} disabled={readonly}
-          onChange={e => onEdit({ codigo_interno: e.target.value })}
-          onBlur={e => onCommit({ codigo_interno: e.target.value })}
-          placeholder="Cód. interno"
-          className="h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-xs font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+        {produto.produto_novo ? (
+          <span className="h-10 px-3 rounded-lg flex items-center justify-center text-[10.5px] font-semibold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">
+            cód a cadastrar
+          </span>
+        ) : (
+          <input type="text" value={produto.codigo_interno || ''} disabled={readonly}
+            onChange={e => onEdit({ codigo_interno: e.target.value })}
+            onBlur={e => onCommit({ codigo_interno: e.target.value })}
+            placeholder="Cód. interno"
+            className="h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-xs font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+        )}
       </div>
       <div className="grid grid-cols-3 gap-2 items-end">
         <label className="block">
@@ -713,6 +778,177 @@ function MotivoSemBoleto({ valor, temBoletos, readonly, onSalvar }) {
             className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 p-3 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40 disabled:opacity-60" />
           {salvando && <p className="text-[10px] text-gray-400 dark:text-gray-500">Salvando...</p>}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Modal de cadastro de produto NOVO (não existe no Webposto) ──
+// Cliente preenche descrição, qtd, valor unit e anexa 2 fotos (produto +
+// código de barras). CCI usa as fotos pra cadastrar antes de lançar.
+function ModalNovoProduto({ onClose, onAdicionar }) {
+  const [descricao, setDescricao] = useState('');
+  const [codigoBarras, setCodigoBarras] = useState('');
+  const [quantidade, setQuantidade] = useState('1');
+  const [valorUnit, setValorUnit] = useState('');
+  const [fotoProduto, setFotoProduto] = useState(null);
+  const [fotoCodigoBarras, setFotoCodigoBarras] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape' && !salvando) onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose, salvando]);
+
+  const podeSalvar = descricao.trim() && fotoProduto && fotoCodigoBarras
+    && Number(quantidade) > 0;
+
+  const submit = async (e) => {
+    e?.preventDefault();
+    if (!podeSalvar || salvando) return;
+    setSalvando(true);
+    try {
+      await onAdicionar({
+        descricao: descricao.trim(),
+        codigoBarras: codigoBarras.trim(),
+        quantidade: Number(quantidade) || 1,
+        valorUnitario: Number(valorUnit) || 0,
+        fotoProduto, fotoCodigoBarras,
+      });
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={salvando ? undefined : onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100 dark:border-white/10">
+          <div className="h-10 w-10 rounded-lg bg-amber-50 dark:bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+            <PackagePlus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Adicionar produto novo à nota</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Esse produto ainda não está cadastrado no Webposto. Envie as informações e fotos — a CCI usa para cadastrar antes de lançar a nota.
+            </p>
+          </div>
+          <button onClick={onClose} disabled={salvando}
+            className="p-2 -mr-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 dark:text-gray-400 disabled:opacity-50" aria-label="Fechar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={submit} className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Descrição do produto <span className="text-rose-500">*</span>
+            </span>
+            <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)}
+              placeholder="Ex: Óleo lubrificante Shell Helix 5W30 1L"
+              className="w-full h-11 px-3 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
+          </label>
+
+          {/* 2 uploads de foto */}
+          <div className="grid grid-cols-2 gap-2">
+            <UploadFoto label="Foto do produto" obrigatorio file={fotoProduto} onChange={setFotoProduto} />
+            <UploadFoto label="Foto do cód. barras" obrigatorio file={fotoCodigoBarras} onChange={setFotoCodigoBarras} />
+          </div>
+
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Código de barras <span className="text-gray-400">(opcional, se souber)</span>
+            </span>
+            <input type="text" value={codigoBarras} onChange={e => setCodigoBarras(e.target.value)}
+              placeholder="789..."
+              className="w-full h-11 px-3 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
+          </label>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Quantidade <span className="text-rose-500">*</span>
+              </span>
+              <input type="number" step="0.0001" min="0" value={quantidade}
+                onChange={e => setQuantidade(e.target.value)}
+                className="w-full h-11 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Valor unit. (R$) <span className="text-rose-500">*</span>
+              </span>
+              <input type="number" step="0.01" min="0" value={valorUnit}
+                onChange={e => setValorUnit(e.target.value)}
+                className="w-full h-11 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
+            </label>
+          </div>
+
+          {/* Subtotal preview */}
+          <div className="rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 p-2.5 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Subtotal</span>
+            <span className="font-mono tabular-nums text-sm font-bold text-gray-900 dark:text-gray-100">
+              {formatCurrency((Number(quantidade) || 0) * (Number(valorUnit) || 0))}
+            </span>
+          </div>
+        </form>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/[0.02] flex items-center gap-2">
+          <button onClick={onClose} disabled={salvando}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-50">
+            Cancelar
+          </button>
+          <div className="flex-1" />
+          <button onClick={submit} disabled={!podeSalvar || salvando}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 text-white px-4 py-2 text-sm font-semibold hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-3.5 w-3.5" />}
+            Adicionar à nota
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// Upload de 1 foto com preview. `capture="environment"` abre câmera traseira
+// direto no mobile; desktop cai pro picker normal.
+function UploadFoto({ label, obrigatorio, file, onChange }) {
+  const inputRef = useRef(null);
+  const previewUrl = useMemo(() => file ? URL.createObjectURL(file) : null, [file]);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  return (
+    <div>
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 block mb-1">
+        {label} {obrigatorio && <span className="text-rose-500">*</span>}
+      </span>
+      <button type="button" onClick={() => inputRef.current?.click()}
+        className={`w-full aspect-square rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden transition-colors ${
+          file
+            ? 'border-emerald-300 dark:border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-500/[0.06]'
+            : 'border-gray-300 dark:border-white/15 bg-gray-50/50 dark:bg-white/[0.02] hover:border-amber-400 dark:hover:border-amber-500/40 hover:bg-amber-50/40 dark:hover:bg-amber-500/[0.06]'
+        }`}>
+        {previewUrl ? (
+          <img src={previewUrl} alt={label} className="w-full h-full object-cover" />
+        ) : (
+          <div className="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 p-2">
+            <ImagePlus className="h-6 w-6" />
+            <span className="text-[10px] text-center">Tocar para tirar foto / escolher</span>
+          </div>
+        )}
+      </button>
+      <input ref={inputRef} type="file" className="hidden"
+        accept="image/*" capture="environment"
+        onChange={e => onChange(e.target.files?.[0] || null)} />
+      {file && (
+        <button type="button" onClick={() => onChange(null)}
+          className="mt-1 text-[10px] text-rose-600 dark:text-rose-400 hover:underline">
+          Remover
+        </button>
       )}
     </div>
   );

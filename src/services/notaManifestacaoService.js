@@ -17,7 +17,8 @@ import { supabase } from '../lib/supabase';
 import * as qualityApi from './qualityApiService';
 
 const BUCKET = 'nfs-manifestacao';
-const TIPOS_ARQUIVO = ['nota_fiscal', 'boleto'];
+const TIPOS_ARQUIVO = ['nota_fiscal', 'boleto', 'foto_produto', 'foto_codigo_barras'];
+const TIPOS_NIVEL_PRODUTO = new Set(['foto_produto', 'foto_codigo_barras']);
 
 export const STATUS_PORTAL = [
   { key: 'pendente',        label: 'Pendente',         cor: 'gray'    },
@@ -192,6 +193,7 @@ export async function adicionarProduto(nfId, produto) {
     quantidade: Number(produto.quantidade) || 1,
     valor_unitario: Number(produto.valor_unitario) || 0,
     ordem: produto.ordem ?? 0,
+    produto_novo: !!produto.produto_novo,
   };
   const { data, error } = await supabase
     .from('nf_manifestacao_produto')
@@ -200,6 +202,54 @@ export async function adicionarProduto(nfId, produto) {
     .single();
   if (error) throw error;
   return data;
+}
+
+// Cria um produto NOVO (não cadastrado no Webposto) com 2 fotos obrigatórias:
+// o produto em si + o código de barras. A CCI usa pra cadastrar no Webposto
+// antes do lançamento. Faz tudo numa transação lógica: se qualquer upload
+// falhar, remove o produto pra não deixar estado inconsistente.
+export async function adicionarProdutoNovo({
+  nfId, clienteId, descricao, codigoBarras, quantidade, valorUnitario, ordem,
+  fotoProduto, fotoCodigoBarras,
+}) {
+  if (!nfId || !clienteId) throw new Error('nfId e clienteId obrigatórios');
+  if (!descricao || !descricao.trim()) throw new Error('Descrição do produto é obrigatória');
+  if (!fotoProduto)       throw new Error('Anexe uma foto do produto');
+  if (!fotoCodigoBarras)  throw new Error('Anexe uma foto do código de barras');
+
+  // 1) Cria o produto. Mensagem amigável se a migration 063 ainda não foi aplicada.
+  let produto;
+  try {
+    produto = await adicionarProduto(nfId, {
+      codigo_barras: codigoBarras || null,
+      codigo_interno: null,                       // CCI define ao cadastrar
+      descricao: descricao.trim(),
+      quantidade, valor_unitario: valorUnitario,
+      ordem,
+      produto_novo: true,
+    });
+  } catch (err) {
+    if (/produto_novo|column.*does not exist/i.test(err.message || '')) {
+      throw new Error('Banco desatualizado: migration 063 não foi aplicada. Rode `supabase db push`.');
+    }
+    throw err;
+  }
+
+  // 2) Sobe as duas fotos. Rollback do produto se algo falhar.
+  try {
+    await adicionarArquivo({ nfId, clienteId, tipo: 'foto_produto',        file: fotoProduto,       produtoId: produto.id });
+    await adicionarArquivo({ nfId, clienteId, tipo: 'foto_codigo_barras', file: fotoCodigoBarras,  produtoId: produto.id });
+  } catch (err) {
+    await excluirProduto(produto.id).catch(() => {});
+    if (/produto_id|column.*does not exist/i.test(err.message || '')) {
+      throw new Error('Banco desatualizado: migration 063 não foi aplicada. Rode `supabase db push`.');
+    }
+    if (/check constraint/i.test(err.message || '')) {
+      throw new Error('Erro de validação no banco. Verifique se a migration 063 foi aplicada completamente. Detalhe: ' + err.message);
+    }
+    throw err;
+  }
+  return produto;
 }
 
 export async function atualizarProduto(id, campos) {
@@ -227,13 +277,22 @@ export async function excluirProduto(id) {
 // ─── Arquivos (upload / download / delete) ────────────────────
 
 // Faz upload de arquivo no bucket privado e registra na tabela.
-export async function adicionarArquivo({ nfId, clienteId, tipo, file }) {
-  if (!TIPOS_ARQUIVO.includes(tipo)) throw new Error('Tipo inválido (use nota_fiscal ou boleto)');
+// `produtoId` é obrigatório para tipos foto_produto/foto_codigo_barras e
+// inválido para nota_fiscal/boleto.
+export async function adicionarArquivo({ nfId, clienteId, tipo, file, produtoId = null }) {
+  if (!TIPOS_ARQUIVO.includes(tipo)) throw new Error(`Tipo inválido: ${tipo}`);
   if (!file) throw new Error('Arquivo obrigatório');
+  if (TIPOS_NIVEL_PRODUTO.has(tipo) && !produtoId) {
+    throw new Error('produtoId é obrigatório para fotos de produto');
+  }
+  if (!TIPOS_NIVEL_PRODUTO.has(tipo) && produtoId) {
+    throw new Error('produtoId não deve ser informado para nota_fiscal/boleto');
+  }
 
   const ts = Date.now();
   const seguro = sanitizarNomeArquivo(file.name);
-  const path = `${clienteId}/${nfId}/${tipo}/${ts}-${seguro}`;
+  const subpasta = produtoId ? `${tipo}/${produtoId}` : tipo;
+  const path = `${clienteId}/${nfId}/${subpasta}/${ts}-${seguro}`;
 
   const { error: errUp } = await supabase.storage
     .from(BUCKET)
@@ -244,6 +303,7 @@ export async function adicionarArquivo({ nfId, clienteId, tipo, file }) {
     .from('nf_manifestacao_arquivo')
     .insert({
       nf_manifestacao_id: nfId,
+      produto_id: produtoId,
       tipo,
       storage_path: path,
       nome_original: file.name,
@@ -253,7 +313,6 @@ export async function adicionarArquivo({ nfId, clienteId, tipo, file }) {
     .select()
     .single();
   if (error) {
-    // rollback do upload pra não deixar arquivo órfão
     await supabase.storage.from(BUCKET).remove([path]).catch(() => {});
     throw error;
   }

@@ -12,6 +12,7 @@ import {
 import PageHeader from '../components/ui/PageHeader';
 import * as nfService from '../services/notaManifestacaoService';
 import { formatCurrency } from '../utils/format';
+import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -159,12 +160,13 @@ export default function AdminNfManifestacao() {
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1000px]">
+            <table className="w-full text-sm min-w-[1100px]">
               <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   <th className="px-4 py-2.5">{tab === 'enviada' ? 'Enviada em' : tab === 'lancada' ? 'Lançada em' : 'Devolvida em'}</th>
                   <th className="px-3 py-2.5">Cliente</th>
                   <th className="px-3 py-2.5">Fornecedor</th>
+                  <th className="px-3 py-2.5">Nº NF</th>
                   <th className="px-3 py-2.5">Emissão</th>
                   <th className="px-3 py-2.5">Situação NFe</th>
                   <th className="px-3 py-2.5 text-center">Destinação</th>
@@ -189,6 +191,22 @@ export default function AdminNfManifestacao() {
                       <td className="px-3 py-3">
                         <p className="text-[12.5px] text-gray-800 dark:text-gray-200 truncate max-w-[200px]" title={n.razao_social_fornecedor}>{n.razao_social_fornecedor || '—'}</p>
                         <p className="text-[10.5px] text-gray-400 dark:text-gray-500 dark:text-gray-500 font-mono">{n.cnpj_fornecedor || '—'}</p>
+                      </td>
+                      <td className="px-3 py-3">
+                        {(() => {
+                          const num = numeroNotaDaChave(n.chave_documento);
+                          const ser = serieDaChave(n.chave_documento);
+                          return (
+                            <>
+                              <p className="font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
+                                {num != null ? formatNumeroNota(num) : '—'}
+                              </p>
+                              <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
+                                {ser != null ? `série ${ser}` : '—'}
+                              </p>
+                            </>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-3 font-mono tabular-nums text-[12px] text-gray-700">{fmtData(n.data_emissao)}</td>
                       <td className="px-3 py-3">
@@ -230,7 +248,7 @@ export default function AdminNfManifestacao() {
               </tbody>
               <tfoot className="bg-gray-50/60 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
                 <tr className="font-semibold">
-                  <td colSpan={8} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
+                  <td colSpan={9} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
                     Total: {filtradas.length} {filtradas.length === 1 ? 'nota' : 'notas'}
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900">{formatCurrency(totalValor)}</td>

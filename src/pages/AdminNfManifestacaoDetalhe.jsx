@@ -6,13 +6,14 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, AlertCircle, Download, File, FileText,
   CheckCircle2, XCircle, Package, Briefcase, Building2,
-  Calendar, Hash, Clock,
+  Calendar, Hash, Clock, PackagePlus, Image as ImageIcon,
 } from 'lucide-react';
 import Toast from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
 import { useAdminSession } from '../hooks/useAuth';
 import * as nfService from '../services/notaManifestacaoService';
 import { formatCurrency } from '../utils/format';
+import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -156,13 +157,22 @@ export default function AdminNfManifestacaoDetalhe() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <Field label="Fornecedor" value={nota.razao_social_fornecedor} sub={nota.cnpj_fornecedor} fullSpan />
-          <Field icon={Calendar} label="Emissão" value={fmtData(nota.data_emissao)} />
-          <Field icon={Hash} label="Cód Quality" value={nota.codigo_quality || '—'} />
-          <Field icon={Building2} label="Empresa" value={nota.empresa_codigo || '—'} />
-          <Field label="Valor da NF" value={formatCurrency(nota.valor)} highlight />
-        </div>
+        {(() => {
+          const numNF = numeroNotaDaChave(nota.chave_documento);
+          const serie = serieDaChave(nota.chave_documento);
+          const numeroFmt = numNF != null
+            ? `${formatNumeroNota(numNF)}${serie != null ? ` / ${serie}` : ''}`
+            : '—';
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <Field label="Fornecedor" value={nota.razao_social_fornecedor} sub={nota.cnpj_fornecedor} fullSpan />
+              <Field icon={Hash} label="Nº NF / Série" value={numeroFmt} highlight />
+              <Field icon={Calendar} label="Emissão" value={fmtData(nota.data_emissao)} />
+              <Field icon={Building2} label="Empresa" value={nota.empresa_codigo || '—'} />
+              <Field label="Valor da NF" value={formatCurrency(nota.valor)} highlight />
+            </div>
+          );
+        })()}
 
         <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/10 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-start">
           <div className="min-w-0">
@@ -251,17 +261,37 @@ export default function AdminNfManifestacaoDetalhe() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/10">
-                {(nota.produtos || []).map((p, idx) => (
-                  <tr key={p.id}>
-                    <td className="px-3 py-2 text-gray-400 dark:text-gray-500 font-mono">{idx + 1}</td>
-                    <td className="px-3 py-2 font-mono text-[11.5px] text-gray-700 dark:text-gray-300">{p.codigo_barras || '—'}</td>
-                    <td className="px-3 py-2 font-mono text-[11.5px] text-gray-700 dark:text-gray-300">{p.codigo_interno || '—'}</td>
-                    <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{p.descricao || <span className="text-gray-400 dark:text-gray-500 italic">sem descrição</span>}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">{p.quantidade}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCurrency(p.valor_unitario)}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(p.subtotal)}</td>
-                  </tr>
-                ))}
+                {(nota.produtos || []).map((p, idx) => {
+                  const fotos = (nota.arquivos || []).filter(a => a.produto_id === p.id);
+                  return (
+                    <tr key={p.id} className={p.produto_novo ? 'bg-amber-50/40 dark:bg-amber-500/[0.05]' : ''}>
+                      <td className="px-3 py-2 text-gray-400 dark:text-gray-500 font-mono">{idx + 1}</td>
+                      <td className="px-3 py-2 font-mono text-[11.5px] text-gray-700 dark:text-gray-300">{p.codigo_barras || '—'}</td>
+                      <td className="px-3 py-2 font-mono text-[11.5px] text-gray-700 dark:text-gray-300">{p.codigo_interno || (p.produto_novo ? <span className="text-amber-700 dark:text-amber-400">a cadastrar</span> : '—')}</td>
+                      <td className="px-3 py-2 text-gray-800 dark:text-gray-200">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{p.descricao || <span className="text-gray-400 dark:text-gray-500 italic">sem descrição</span>}</span>
+                          {p.produto_novo && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">
+                              <PackagePlus className="h-2.5 w-2.5" /> Novo
+                            </span>
+                          )}
+                          {fotos.map(f => (
+                            <button key={f.id} onClick={() => baixar(f)}
+                              title={`Ver ${f.tipo === 'foto_produto' ? 'foto do produto' : 'foto do código de barras'}`}
+                              className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 text-[9.5px] font-semibold hover:bg-amber-200 dark:hover:bg-amber-500/25">
+                              <ImageIcon className="h-2.5 w-2.5" />
+                              {f.tipo === 'foto_produto' ? 'Produto' : 'Cód barras'}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{p.quantidade}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCurrency(p.valor_unitario)}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(p.subtotal)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot className="bg-gray-50/80 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
                 <tr className="font-semibold">
