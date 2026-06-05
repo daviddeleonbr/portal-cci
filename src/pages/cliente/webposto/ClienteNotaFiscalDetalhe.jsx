@@ -9,6 +9,7 @@ import {
   ArrowLeft, Loader2, AlertCircle, Save, Plus, Trash2,
   Upload, File, FileText, Download, Send, CheckCircle2,
   Package, Briefcase, Building2, Calendar, Hash, ScanLine, X, Search,
+  Camera, Keyboard,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import Toast from '../../../components/ui/Toast';
@@ -589,6 +590,109 @@ function ZonaArquivos({ titulo, subtitulo, tipo, icone: Icon, cor, arquivos, rea
 // ─── Modal de scan / busca por código de barras ───────────────
 // Usa o cache de PRODUTO da Quality. Compatível com leitor USB (que digita
 // rápido e dispara Enter no final) ou digitação manual.
+// BarcodeDetector é nativa no Chrome Android/Edge. iOS Safari não tem suporte
+// — nele o botão de câmera não aparece e o usuário usa o input manual.
+const CAMERA_DISPONIVEL = typeof window !== 'undefined'
+  && 'BarcodeDetector' in window
+  && typeof navigator !== 'undefined'
+  && !!navigator.mediaDevices?.getUserMedia;
+
+// Formatos suportados em PDV (EAN13/EAN8 cobre quase tudo; UPC pra
+// importados; code128/code39 pra etiquetas internas).
+const FORMATOS_BARRA = [
+  'ean_13', 'ean_8', 'upc_a', 'upc_e',
+  'code_128', 'code_39', 'itf',
+];
+
+// Câmera traseira em loop, detecta o código e dispara onDetectado.
+function CameraScanner({ onDetectado, onErro }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const detectorRef = useRef(null);
+  const rafRef = useRef(null);
+  const detectadoRef = useRef(false); // evita disparar onDetectado duas vezes
+
+  useEffect(() => {
+    let cancelado = false;
+
+    const start = async () => {
+      try {
+        // Instancia detector com formatos suportados pela engine
+        const Det = window.BarcodeDetector;
+        const suportados = await Det.getSupportedFormats?.() || FORMATOS_BARRA;
+        const formats = FORMATOS_BARRA.filter(f => suportados.includes(f));
+        detectorRef.current = new Det({ formats: formats.length ? formats : FORMATOS_BARRA });
+
+        // Câmera traseira preferida
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+        if (cancelado) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
+        // Loop de detecção
+        const tick = async () => {
+          if (cancelado || detectadoRef.current || !videoRef.current) return;
+          try {
+            const barcodes = await detectorRef.current.detect(videoRef.current);
+            if (barcodes && barcodes.length > 0) {
+              const raw = String(barcodes[0].rawValue || '').trim();
+              if (raw) {
+                detectadoRef.current = true;
+                // Feedback haptico (mobile)
+                try { navigator.vibrate?.(50); } catch { /* ignore */ }
+                onDetectado?.(raw);
+                return;
+              }
+            }
+          } catch { /* alguns frames falham — segue tentando */ }
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      } catch (err) {
+        onErro?.(
+          err?.name === 'NotAllowedError'
+            ? 'Permissão de câmera negada. Habilite nas configurações do navegador.'
+            : 'Não foi possível acessar a câmera: ' + (err?.message || err)
+        );
+      }
+    };
+    start();
+
+    return () => {
+      cancelado = true;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+    };
+  }, [onDetectado, onErro]);
+
+  return (
+    <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3] sm:aspect-video">
+      <video ref={videoRef} playsInline muted
+        className="absolute inset-0 w-full h-full object-cover" />
+      {/* Overlay com viewfinder */}
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+        <div className="w-[80%] h-[35%] border-2 border-white/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-full h-0.5 bg-blue-400/80 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
   const [codigo, setCodigo] = useState('');
   const [buscando, setBuscando] = useState(false);
@@ -596,9 +700,12 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
   const [naoEncontrado, setNaoEncontrado] = useState(false);
   const [valorUnit, setValorUnit] = useState('');
   const [quantidade, setQuantidade] = useState('1');
+  const [modoCamera, setModoCamera] = useState(false);
   const inputRef = useRef(null);
 
-  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, []);
+  useEffect(() => {
+    if (!modoCamera) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [modoCamera]);
 
   // Fecha ao ESC.
   useEffect(() => {
@@ -607,8 +714,8 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const buscar = async () => {
-    const cb = codigo.trim();
+  const buscar = async (codigoArg) => {
+    const cb = String(codigoArg ?? codigo).trim();
     if (!cb) return;
     if (!cliente?.chave_api_id) {
       onErro?.('Integração Webposto não configurada');
@@ -671,21 +778,50 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
           </button>
         </div>
 
-        {/* Input */}
-        <div className="px-5 pt-4">
-          <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Código de barras</label>
-          <form onSubmit={e => { e.preventDefault(); buscar(); }} className="flex gap-2">
-            <input ref={inputRef} type="text" value={codigo}
-              onChange={e => { setCodigo(e.target.value); setProduto(null); setNaoEncontrado(false); }}
-              placeholder="Escaneie ou digite o código..."
-              className="flex-1 h-11 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-base font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
-            <button type="submit" disabled={!codigo.trim() || buscando}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-4 h-11 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-              {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              Buscar
-            </button>
-          </form>
-        </div>
+        {/* Modo câmera (mobile com BarcodeDetector) */}
+        {modoCamera ? (
+          <div className="px-5 pt-4">
+            <CameraScanner
+              onDetectado={(cb) => {
+                setCodigo(cb);
+                setModoCamera(false);
+                buscar(cb);
+              }}
+              onErro={(msg) => { onErro?.(msg); setModoCamera(false); }}
+            />
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">Aponte o código de barras para a câmera</p>
+              <button onClick={() => setModoCamera(false)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
+                <Keyboard className="h-3.5 w-3.5" /> Digitar
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Modo input manual / leitor USB */
+          <div className="px-5 pt-4">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Código de barras</label>
+              {CAMERA_DISPONIVEL && (
+                <button onClick={() => setModoCamera(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
+                  <Camera className="h-3.5 w-3.5" /> Usar câmera
+                </button>
+              )}
+            </div>
+            <form onSubmit={e => { e.preventDefault(); buscar(); }} className="flex gap-2">
+              <input ref={inputRef} type="text" value={codigo}
+                onChange={e => { setCodigo(e.target.value); setProduto(null); setNaoEncontrado(false); }}
+                placeholder="Escaneie ou digite o código..."
+                className="flex-1 h-11 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-base font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+              <button type="submit" disabled={!codigo.trim() || buscando}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-4 h-11 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+                {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Buscar
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* Resultado */}
         <div className="px-5 pb-4 pt-3 min-h-[180px]">
