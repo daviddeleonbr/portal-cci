@@ -20,7 +20,10 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
-        start_url: '/',
+        // Quando instalado no celular, o PWA abre direto na tela de login do
+        // cliente — não faz sentido jogar o user na landing pública. No
+        // browser normal, "/" continua sendo a home (start_url só vale pro PWA).
+        start_url: '/cliente/login',
         lang: 'pt-BR',
         icons: [
           { src: 'pwa-64x64.png',           sizes: '64x64',   type: 'image/png' },
