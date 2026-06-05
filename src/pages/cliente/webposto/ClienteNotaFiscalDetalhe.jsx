@@ -800,15 +800,21 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
         ) : (
           /* Modo input manual / leitor USB */
           <div className="px-5 pt-4">
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Código de barras</label>
-              {CAMERA_DISPONIVEL && (
-                <button onClick={() => setModoCamera(true)}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
-                  <Camera className="h-3.5 w-3.5" /> Usar câmera
-                </button>
-              )}
-            </div>
+            {CAMERA_DISPONIVEL && (
+              <button onClick={() => setModoCamera(true)}
+                className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-3.5 text-sm font-bold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all ring-1 ring-blue-400/40">
+                <Camera className="h-5 w-5" />
+                Escanear com a câmera
+              </button>
+            )}
+            {CAMERA_DISPONIVEL && (
+              <div className="flex items-center gap-2 my-3">
+                <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold">ou digite</span>
+                <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
+              </div>
+            )}
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Código de barras</label>
             <form onSubmit={e => { e.preventDefault(); buscar(); }} className="flex gap-2">
               <input ref={inputRef} type="text" value={codigo}
                 onChange={e => { setCodigo(e.target.value); setProduto(null); setNaoEncontrado(false); }}
