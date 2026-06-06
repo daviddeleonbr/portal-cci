@@ -66,6 +66,7 @@ import WpUsuarios from './pages/cliente/webposto/ClienteUsuarios';
 import WpComercialVendas from './pages/cliente/webposto/ClienteComercialVendas';
 import WpComercialOperacao from './pages/cliente/webposto/ClienteComercialOperacao';
 import WpComercialProdutividade from './pages/cliente/webposto/ClienteComercialProdutividade';
+import WpEstoques from './pages/cliente/webposto/ClienteEstoques';
 import WpNotasFiscais from './pages/cliente/webposto/ClienteNotasFiscais';
 import WpNotaFiscalDetalhe from './pages/cliente/webposto/ClienteNotaFiscalDetalhe';
 import AdminNfManifestacao from './pages/AdminNfManifestacao';
@@ -88,6 +89,7 @@ import AsUsuarios from './pages/cliente/autosystem/ClienteUsuarios';
 import AsComercialVendas from './pages/cliente/autosystem/ClienteComercialVendas';
 import AsComercialOperacao from './pages/cliente/autosystem/ClienteComercialOperacao';
 import AsComercialProdutividade from './pages/cliente/autosystem/ClienteComercialProdutividade';
+import AsEstoques from './pages/cliente/autosystem/ClienteEstoques';
 import AsConfiguracoes from './pages/cliente/autosystem/ClienteConfiguracoes';
 
 // Auth
@@ -206,6 +208,7 @@ export default function App() {
           <Route path="/cliente/webposto/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><WpComercialVendas /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial/operacao" element={<RequirePermissaoCliente permissao="comercial_operacao"><WpComercialOperacao /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial/produtividade" element={<RequirePermissaoCliente permissao="comercial_produtividade"><WpComercialProdutividade /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/comercial/estoques" element={<RequirePermissaoCliente permissao="comercial_estoques"><WpEstoques /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/configuracoes" element={<WpConfiguracoes />} />
           <Route path="/cliente/webposto/relatorios-bi" element={<ClienteRelatoriosBi />} />
 
@@ -226,6 +229,7 @@ export default function App() {
           <Route path="/cliente/autosystem/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><AsComercialVendas /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/comercial/operacao" element={<RequirePermissaoCliente permissao="comercial_operacao"><AsComercialOperacao /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/comercial/produtividade" element={<RequirePermissaoCliente permissao="comercial_produtividade"><AsComercialProdutividade /></RequirePermissaoCliente>} />
+          <Route path="/cliente/autosystem/comercial/estoques" element={<RequirePermissaoCliente permissao="comercial_estoques"><AsEstoques /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/relatorios-bi" element={<ClienteRelatoriosBi />} />
           <Route path="/cliente/autosystem/configuracoes" element={<AsConfiguracoes />} />
         </Route>

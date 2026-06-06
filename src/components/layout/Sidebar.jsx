@@ -114,6 +114,23 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   const navigation = useMemo(() => filtrarNavegacao(usuario?.permissoes), [usuario?.permissoes]);
 
+  // Determina o href "mais específico" que case com a URL atual — apenas esse
+  // item fica destacado. Evita rotas pai (ex: /admin/bpo) ativarem junto com
+  // rotas filhas (ex: /admin/bpo/outras-contas).
+  const hrefAtivo = useMemo(() => {
+    const todos = [];
+    navigation.forEach(s => s.items.forEach(it => {
+      if (it.href) todos.push(it.href);
+      if (it.children) it.children.forEach(c => { if (c.href) todos.push(c.href); });
+    }));
+    let melhor = '';
+    todos.forEach(href => {
+      const bate = location.pathname === href || location.pathname.startsWith(href + '/');
+      if (bate && href.length > melhor.length) melhor = href;
+    });
+    return melhor;
+  }, [navigation, location.pathname]);
+
   const TOP_LEVEL_EXPANDABLE = useMemo(() => navigation
     .flatMap(s => s.items)
     .filter(i => i.children)
@@ -221,7 +238,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
                 // Simple link
                 if (!item.children) {
-                  const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+                  const isActive = item.href === hrefAtivo;
                   return (
                     <NavLink
                       key={item.name}

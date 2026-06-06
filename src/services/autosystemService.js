@@ -972,3 +972,50 @@ export async function buscarEmpresasAutosystem(redeId) {
   }
   return Array.isArray(data?.empresas) ? data.empresas : [];
 }
+
+// ─── Estoque por produto (snapshot atual) ────────────────────
+// Reproduz a consulta usada pelos relatórios:
+//   max(data), empresa, produto, grupo, subgrupo, sum(estoque)
+// Acrescenta nome do produto. Filtros opcionais: empresa, data_corte
+// (default = amanhã, inclui lançamentos de hoje).
+export async function buscarEstoqueProduto(redeId, { empresaCodigo, dataCorte } = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const { data, error } = await supabase.functions.invoke('autosystem-estoque-produto', {
+    body: {
+      rede_id: redeId,
+      empresa_codigo: empresaCodigo ?? null,
+      data_corte:     dataCorte     ?? null,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar estoque');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return {
+    itens: Array.isArray(data?.itens) ? data.itens : [],
+    dataCorte: data?.data_corte || null,
+  };
+}
+
+// Análise completa de estoque: cruza snapshot atual com vendas do período
+// (janela default 90 dias). Retorna por produto×empresa o estoque atual,
+// custo unitário (calculado), vendas no período e dias sem venda. Cálculos
+// (ABC, cobertura, status, quadrante) são feitos no FRONT pra permitir
+// parâmetros configuráveis sem novo request.
+export async function buscarEstoqueAnalise(redeId, { empresaCodigo, janelaDias, dataCorte } = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const { data, error } = await supabase.functions.invoke('autosystem-estoque-analise', {
+    body: {
+      rede_id: redeId,
+      empresa_codigo: empresaCodigo ?? null,
+      janela_dias:    janelaDias    ?? 90,
+      data_corte:     dataCorte     ?? null,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar análise de estoque');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return {
+    itens:      Array.isArray(data?.itens) ? data.itens : [],
+    janelaDias: data?.janela_dias || 90,
+    dataDe:     data?.data_de     || null,
+    dataCorte:  data?.data_corte  || null,
+  };
+}

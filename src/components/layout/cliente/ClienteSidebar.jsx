@@ -7,6 +7,7 @@ import {
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
   ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet, Receipt,
+  Boxes,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
@@ -35,6 +36,7 @@ function buildNavigation(prefix) {
         { name: 'Vendas', href: `${prefix}/comercial/vendas`, icon: ShoppingCart, permissao: 'comercial_vendas' },
         { name: 'Operação', href: `${prefix}/comercial/operacao`, icon: Activity, permissao: 'comercial_operacao' },
         { name: 'Produtividade', href: `${prefix}/comercial/produtividade`, icon: Gauge, permissao: 'comercial_produtividade' },
+        { name: 'Análise de Estoques', href: `${prefix}/comercial/estoques`, icon: Boxes, permissao: 'comercial_estoques' },
       ],
     },
     {
@@ -120,6 +122,23 @@ export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, o
     () => filtrarNavegacao(buildNavigation(prefix), usuario?.permissoes, flagSource),
     [prefix, usuario?.permissoes, flagSource],
   );
+
+  // Calcula o href "mais específico" que case com a URL atual. Evita o bug
+  // de "/bpo" e "/bpo/outras-contas" ativarem simultaneamente — apenas o
+  // mais longo (o que melhor identifica a página) fica destacado.
+  const hrefAtivo = useMemo(() => {
+    const todos = [];
+    navigation.forEach(s => s.items.forEach(it => {
+      if (it.href) todos.push(it.href);
+      if (it.children) it.children.forEach(c => { if (c.href) todos.push(c.href); });
+    }));
+    let melhor = '';
+    todos.forEach(href => {
+      const bate = location.pathname === href || location.pathname.startsWith(href + '/');
+      if (bate && href.length > melhor.length) melhor = href;
+    });
+    return melhor;
+  }, [navigation, location.pathname]);
 
   const [expanded, setExpanded] = useState(() => {
     const open = new Set();
@@ -213,7 +232,7 @@ export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, o
 
                 // Simple link (no children)
                 if (!item.children) {
-                  const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+                  const isActive = item.href === hrefAtivo;
                   return (
                     <NavLink
                       key={item.name}

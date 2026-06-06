@@ -27,7 +27,7 @@ export async function registrarPageview({ usuario, tipoCliente, chaveApi, asRede
 
 // ─── Consultas (lado admin) ──────────────────────────────────
 
-function pickFiltros({ usuarioId, redeFiltro }) {
+function pickFiltros({ usuarioId, usuarioIds, redeFiltro }) {
   // redeFiltro: 'wp:<id>' | 'as:<id>' | null
   let p_chave_api_id = null;
   let p_as_rede_id   = null;
@@ -36,11 +36,15 @@ function pickFiltros({ usuarioId, redeFiltro }) {
     if (tipo === 'wp') p_chave_api_id = id;
     if (tipo === 'as') p_as_rede_id   = id;
   }
-  return {
-    p_usuario_id:   usuarioId || null,
-    p_chave_api_id,
-    p_as_rede_id,
-  };
+  // Os RPCs aceitam apenas 1 usuário (single). Quando o front seleciona 1
+  // usuário, passa pro RPC; com 0 ou múltiplos, manda null (KPIs ficam
+  // agregados do filtro de rede/período). As queries diretas — acessosRecentes
+  // e rankingRedes — aplicam .in() na lista completa de usuarioIds.
+  let p_usuario_id = usuarioId || null;
+  if (!p_usuario_id && Array.isArray(usuarioIds) && usuarioIds.length === 1) {
+    p_usuario_id = usuarioIds[0];
+  }
+  return { p_usuario_id, p_chave_api_id, p_as_rede_id };
 }
 
 export async function resumo({ de, ate, usuarioId, redeFiltro }) {
@@ -59,6 +63,47 @@ export async function serieDiaria({ de, ate, usuarioId, redeFiltro }) {
   return data || [];
 }
 
+// Ranking de redes por acessos no período (somente usuários TIPO CLIENTE).
+// Retorna agregado pronto pra renderizar como lista: [{ nome, tipo, acessos,
+// usuarios_unicos }], ordenado por acessos desc.
+export async function rankingRedes({ de, ate, usuarioId, usuarioIds, redeFiltro }) {
+  let q = supabase
+    .from('cci_uso_portal')
+    .select(`usuario_id, chave_api_id, as_rede_id,
+             chaves_api(nome), as_rede(nome),
+             usuario:cci_usuarios_sistema!inner(tipo)`)
+    .eq('usuario.tipo', 'cliente')
+    .gte('created_at', `${de}T00:00:00`)
+    .lte('created_at', `${ate}T23:59:59`)
+    .limit(50000);
+  if (usuarioId)                                  q = q.eq('usuario_id', usuarioId);
+  else if (usuarioIds && usuarioIds.length > 0)   q = q.in('usuario_id', usuarioIds);
+  if (redeFiltro) {
+    const [tipo, id] = String(redeFiltro).split(':');
+    if (tipo === 'wp') q = q.eq('chave_api_id', id);
+    if (tipo === 'as') q = q.eq('as_rede_id',   id);
+  }
+  const { data, error } = await q;
+  if (error) throw error;
+
+  // Agrega no front por (nome, tipo).
+  const mapa = new Map(); // chave → { nome, tipo, acessos, usuarios }
+  (data || []).forEach(r => {
+    let nome, tipo;
+    if (r.chave_api_id)    { nome = r.chaves_api?.nome || 'Webposto'; tipo = 'webposto'; }
+    else if (r.as_rede_id) { nome = r.as_rede?.nome    || 'Autosystem'; tipo = 'autosystem'; }
+    else                   { nome = '— sem rede';        tipo = null; }
+    const chave = `${tipo}:${nome}`;
+    let g = mapa.get(chave);
+    if (!g) { g = { nome, tipo, acessos: 0, usuarios: new Set() }; mapa.set(chave, g); }
+    g.acessos++;
+    if (r.usuario_id) g.usuarios.add(r.usuario_id);
+  });
+  return Array.from(mapa.values())
+    .map(g => ({ nome: g.nome, tipo: g.tipo, acessos: g.acessos, usuarios_unicos: g.usuarios.size }))
+    .sort((a, b) => b.acessos - a.acessos);
+}
+
 export async function topPaginas({ de, ate, usuarioId, redeFiltro }) {
   const { data, error } = await supabase.rpc('uso_portal_top_paginas', {
     p_de: de, p_ate: ate, ...pickFiltros({ usuarioId, redeFiltro }),
@@ -69,21 +114,23 @@ export async function topPaginas({ de, ate, usuarioId, redeFiltro }) {
 
 // Lista bruta de acessos (paginada) — para a tabela "Últimos acessos".
 // Usa SELECT direto com JOIN no usuário/rede pra mostrar nomes.
-export async function acessosRecentes({ de, ate, usuarioId, redeFiltro, limit = 100 }) {
+export async function acessosRecentes({ de, ate, usuarioId, usuarioIds, redeFiltro, limit = 100 }) {
   let query = supabase
     .from('cci_uso_portal')
     .select(`
       id, path, tipo_portal, created_at,
-      usuario:cci_usuarios_sistema(id, nome, email),
+      usuario:cci_usuarios_sistema!inner(id, nome, email, tipo),
       chaves_api(id, nome),
       as_rede(id, nome),
       cliente:clientes(id, nome)
     `)
+    .eq('usuario.tipo', 'cliente')
     .gte('created_at', `${de}T00:00:00`)
     .lte('created_at', `${ate}T23:59:59`)
     .order('created_at', { ascending: false })
     .limit(limit);
-  if (usuarioId) query = query.eq('usuario_id', usuarioId);
+  if (usuarioId)                                  query = query.eq('usuario_id', usuarioId);
+  else if (usuarioIds && usuarioIds.length > 0)   query = query.in('usuario_id', usuarioIds);
   if (redeFiltro) {
     const [tipo, id] = String(redeFiltro).split(':');
     if (tipo === 'wp') query = query.eq('chave_api_id', id);

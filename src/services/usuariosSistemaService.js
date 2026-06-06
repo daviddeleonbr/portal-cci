@@ -38,6 +38,7 @@ export const PERMISSOES_CLIENTE = [
   { key: 'comercial_vendas', label: 'Comercial · Vendas', grupo: 'Comercial' },
   { key: 'comercial_operacao', label: 'Comercial · Operação', grupo: 'Comercial' },
   { key: 'comercial_produtividade', label: 'Comercial · Produtividade', grupo: 'Comercial' },
+  { key: 'comercial_estoques', label: 'Comercial · Análise de Estoques', grupo: 'Comercial' },
   { key: 'sangrias', label: 'Sangrias', grupo: 'Operacional' },
   { key: 'bpo', label: 'Serviços BPO', grupo: 'Operacional' },
   { key: 'documentos', label: 'Documentos', grupo: 'Operacional' },

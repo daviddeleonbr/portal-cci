@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import {
   FileSearch, Upload, Loader2, AlertCircle, RefreshCw, FileText, Link2,
-  Trash2, AlertTriangle,
+  Trash2, AlertTriangle, Search, ChevronRight,
 } from 'lucide-react';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
@@ -122,6 +123,12 @@ export function BpoValidacaoOfxView() {
   const [correlacoes, setCorrelacoes] = useState([]);
   const [selOfx, setSelOfx] = useState(() => new Set()); // Set<fitid>
   const [selSistema, setSelSistema] = useState(() => new Set()); // Set<movimento_codigo>
+  const [buscaSistema, setBuscaSistema] = useState('');
+  const [buscaOfx, setBuscaOfx] = useState('');
+  // Tree colapsada por default: o set armazena apenas dias EXPANDIDOS;
+  // vazio = todos recolhidos.
+  const [diasAbertosSistema, setDiasAbertosSistema] = useState(() => new Set());
+  const [diasAbertosOfx, setDiasAbertosOfx] = useState(() => new Set());
   const [loadingInicial, setLoadingInicial] = useState(true);
   const [loadingContas, setLoadingContas] = useState(false);
   const [loadingDados, setLoadingDados] = useState(false);
@@ -452,6 +459,105 @@ export function BpoValidacaoOfxView() {
     return n;
   });
 
+  // ─── Filtros de busca (histórico + documento) ────────────
+  const movsSistemaFiltrados = useMemo(() => {
+    const q = buscaSistema.trim().toLowerCase();
+    if (!q) return movsSistema;
+    return movsSistema.filter(m =>
+      String(m.descricao || '').toLowerCase().includes(q) ||
+      String(m.documento || '').toLowerCase().includes(q),
+    );
+  }, [movsSistema, buscaSistema]);
+
+  const ofxTransacoesFiltradas = useMemo(() => {
+    const q = buscaOfx.trim().toLowerCase();
+    const lista = ofx?.transacoes || [];
+    if (!q) return lista;
+    return lista.filter(t =>
+      String(t.memo || '').toLowerCase().includes(q) ||
+      String(t.name || '').toLowerCase().includes(q) ||
+      String(t.fitid || '').toLowerCase().includes(q),
+    );
+  }, [ofx, buscaOfx]);
+
+  // Agrupa lançamentos por dia em ordem CRESCENTE (mais antigo no topo) —
+  // facilita conciliação porque ambos os lados seguem a mesma linha do tempo.
+  const sistemaPorDia = useMemo(() => {
+    const mapa = new Map(); // diaISO → { dia, label, itens }
+    movsSistemaFiltrados.forEach(m => {
+      const dia = String(m.data || '').slice(0, 10) || 'sem-data';
+      if (!mapa.has(dia)) mapa.set(dia, { dia, label: formatDataBR(dia), itens: [] });
+      mapa.get(dia).itens.push(m);
+    });
+    return Array.from(mapa.values()).sort((a, b) => a.dia.localeCompare(b.dia));
+  }, [movsSistemaFiltrados]);
+
+  const ofxPorDia = useMemo(() => {
+    const mapa = new Map();
+    ofxTransacoesFiltradas.forEach(t => {
+      const dia = String(t.data || '').slice(0, 10) || 'sem-data';
+      if (!mapa.has(dia)) mapa.set(dia, { dia, label: formatDataBR(dia), itens: [] });
+      mapa.get(dia).itens.push(t);
+    });
+    return Array.from(mapa.values()).sort((a, b) => a.dia.localeCompare(b.dia));
+  }, [ofxTransacoesFiltradas]);
+
+  // Toggles: clica → adiciona ao set se não estiver; remove se estiver.
+  const toggleDiaSistema = (dia) => setDiasAbertosSistema(prev => {
+    const n = new Set(prev);
+    if (n.has(dia)) n.delete(dia); else n.add(dia);
+    return n;
+  });
+  const abrirTodosSistema  = () => setDiasAbertosSistema(new Set(sistemaPorDia.map(g => g.dia)));
+  const fecharTodosSistema = () => setDiasAbertosSistema(new Set());
+
+  const toggleDiaOfx = (dia) => setDiasAbertosOfx(prev => {
+    const n = new Set(prev);
+    if (n.has(dia)) n.delete(dia); else n.add(dia);
+    return n;
+  });
+  const abrirTodosOfx  = () => setDiasAbertosOfx(new Set(ofxPorDia.map(g => g.dia)));
+  const fecharTodosOfx = () => setDiasAbertosOfx(new Set());
+
+  // Seleção em massa baseada na lista FILTRADA — mantém os já selecionados
+  // que estiverem fora do filtro.
+  const selecionarTodosSistemaFiltrados = () => setSelSistema(prev => {
+    const next = new Set(prev);
+    movsSistemaFiltrados.forEach(m => next.add(Number(m.id)));
+    return next;
+  });
+  const limparSistemaFiltrados = () => setSelSistema(prev => {
+    const next = new Set(prev);
+    movsSistemaFiltrados.forEach(m => next.delete(Number(m.id)));
+    return next;
+  });
+  const selecionarTodosOfxFiltrados = () => setSelOfx(prev => {
+    const next = new Set(prev);
+    ofxTransacoesFiltradas.forEach(t => { if (t.fitid) next.add(String(t.fitid)); });
+    return next;
+  });
+  const limparOfxFiltrados = () => setSelOfx(prev => {
+    const next = new Set(prev);
+    ofxTransacoesFiltradas.forEach(t => { if (t.fitid) next.delete(String(t.fitid)); });
+    return next;
+  });
+  // Estado da seleção de massa (none/some/all) para alternar o checkbox master.
+  const stateMassaSistema = (() => {
+    if (movsSistemaFiltrados.length === 0) return 'none';
+    const marcados = movsSistemaFiltrados.filter(m => selSistema.has(Number(m.id))).length;
+    if (marcados === 0) return 'none';
+    if (marcados === movsSistemaFiltrados.length) return 'all';
+    return 'some';
+  })();
+  const stateMassaOfx = (() => {
+    const elegiveis = ofxTransacoesFiltradas.filter(t => t.fitid);
+    if (elegiveis.length === 0) return 'none';
+    const marcados = elegiveis.filter(t => selOfx.has(String(t.fitid))).length;
+    if (marcados === 0) return 'none';
+    if (marcados === elegiveis.length) return 'all';
+    return 'some';
+  })();
+
   if (loadingInicial) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
   }
@@ -557,30 +663,40 @@ export function BpoValidacaoOfxView() {
         </div>
       )}
 
-      {/* Toolbar de vínculo: aparece quando há seleção em qualquer lado */}
+      {/* Toolbar de vínculo: sticky quando há seleção em qualquer lado.
+          Verde quando os totais batem e tipos coincidem (pronto pra vincular);
+          amber quando há divergência. */}
       {movsSistema.length > 0 && (selOfx.size > 0 || selSistema.size > 0) && (
-        <div className="sticky top-0 z-20 bg-white rounded-xl border border-blue-200 shadow-sm mb-3 p-3 flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2 text-[12px] text-gray-700">
-            <Link2 className="h-4 w-4 text-blue-500" />
-            <span className="font-semibold">Selecionado:</span>
+        <div className={`sticky top-20 z-20 rounded-xl border shadow-lg mb-3 p-3 flex items-center gap-4 flex-wrap transition-colors ${
+          validacaoVincular.ok
+            ? 'bg-emerald-100 border-emerald-400'
+            : 'bg-amber-100 border-amber-400'
+        }`}>
+          <div className="flex items-center gap-2 text-[12px]">
+            {validacaoVincular.ok
+              ? <Link2 className="h-4 w-4 text-emerald-600" />
+              : <AlertCircle className="h-4 w-4 text-amber-600" />}
+            <span className={`font-semibold ${validacaoVincular.ok ? 'text-emerald-900' : 'text-amber-900'}`}>
+              {validacaoVincular.ok ? 'Pronto para vincular' : 'Selecionado:'}
+            </span>
           </div>
           <div className="text-[12px]">
-            <span className="text-gray-500">Sistema</span>{' '}
+            <span className="text-gray-600">Sistema</span>{' '}
             <span className="font-semibold text-gray-900">{totaisSelecionados.sistema.qtd}</span>
-            {totaisSelecionados.sistema.creditos > 0 && <span className="text-emerald-700 ml-1">+{formatCurrency(totaisSelecionados.sistema.creditos)}</span>}
-            {totaisSelecionados.sistema.debitos > 0 && <span className="text-red-700 ml-1">-{formatCurrency(totaisSelecionados.sistema.debitos)}</span>}
+            {totaisSelecionados.sistema.creditos > 0 && <span className="text-emerald-700 ml-1 font-mono tabular-nums">+{formatCurrency(totaisSelecionados.sistema.creditos)}</span>}
+            {totaisSelecionados.sistema.debitos > 0 && <span className="text-red-700 ml-1 font-mono tabular-nums">-{formatCurrency(totaisSelecionados.sistema.debitos)}</span>}
           </div>
-          <div className="text-gray-300">|</div>
+          <div className="text-gray-300">↔</div>
           <div className="text-[12px]">
-            <span className="text-gray-500">OFX</span>{' '}
+            <span className="text-gray-600">OFX</span>{' '}
             <span className="font-semibold text-gray-900">{totaisSelecionados.ofx.qtd}</span>
-            {totaisSelecionados.ofx.creditos > 0 && <span className="text-emerald-700 ml-1">+{formatCurrency(totaisSelecionados.ofx.creditos)}</span>}
-            {totaisSelecionados.ofx.debitos > 0 && <span className="text-red-700 ml-1">-{formatCurrency(totaisSelecionados.ofx.debitos)}</span>}
+            {totaisSelecionados.ofx.creditos > 0 && <span className="text-emerald-700 ml-1 font-mono tabular-nums">+{formatCurrency(totaisSelecionados.ofx.creditos)}</span>}
+            {totaisSelecionados.ofx.debitos > 0 && <span className="text-red-700 ml-1 font-mono tabular-nums">-{formatCurrency(totaisSelecionados.ofx.debitos)}</span>}
           </div>
           <div className="flex-1" />
           {!validacaoVincular.ok && (
-            <span className="text-[11.5px] text-amber-700 flex items-center gap-1">
-              <AlertCircle className="h-3.5 w-3.5" /> {validacaoVincular.motivo}
+            <span className="text-[11.5px] text-amber-800 flex items-center gap-1">
+              {validacaoVincular.motivo}
             </span>
           )}
           <button onClick={() => { setSelOfx(new Set()); setSelSistema(new Set()); }}
@@ -598,91 +714,219 @@ export function BpoValidacaoOfxView() {
       {/* Layout 2 colunas: Sistema (esq) | OFX (dir) */}
       {movsSistema.length > 0 && ofx && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-          {/* ─── Coluna Sistema (esquerda) ─── */}
+          {/* ─── Coluna Sistema (esquerda) — tree por dia + busca ─── */}
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-gray-100 bg-blue-50/40 flex items-center gap-2">
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-blue-50/40 flex items-center gap-2 flex-wrap">
               <h3 className="text-[13px] font-semibold text-gray-800">Sistema</h3>
-              <span className="text-[11px] text-gray-400">· {movsSistema.length} movimento(s) · {selSistema.size} selec.</span>
+              <span className="text-[11px] text-gray-400">
+                · {movsSistemaFiltrados.length}{buscaSistema && movsSistema.length !== movsSistemaFiltrados.length ? `/${movsSistema.length}` : ''} movimento(s) · {selSistema.size} selec.
+              </span>
+              {sistemaPorDia.length > 1 && (
+                <div className="ml-auto flex items-center gap-1">
+                  <button onClick={abrirTodosSistema}
+                    className="text-[10.5px] text-blue-600 hover:text-blue-800 font-medium">Expandir</button>
+                  <span className="text-[10.5px] text-gray-300">|</span>
+                  <button onClick={fecharTodosSistema}
+                    className="text-[10.5px] text-blue-600 hover:text-blue-800 font-medium">Recolher</button>
+                </div>
+              )}
             </div>
-            <div className="max-h-[640px] overflow-y-auto divide-y divide-gray-100">
-              {movsSistema.length === 0 ? (
-                <p className="px-4 py-10 text-center text-[12px] text-gray-400">Nenhum movimento no período</p>
-              ) : movsSistema.map(m => {
-                const correl = correlPorSistema.get(Number(m.id));
-                const cor = correl ? corDaCorrelacao(correl.id) : null;
-                const drift = driftPorSistema.get(Number(m.id));
-                const checked = selSistema.has(Number(m.id));
-                return (
-                  <label key={m.id}
-                    className={`flex items-start gap-2 px-4 py-2 cursor-pointer transition-colors ${
-                      checked ? 'bg-blue-50/60' : 'hover:bg-gray-50/60'
-                    } ${correl ? `ring-1 ${cor.ring} ring-inset` : ''}`}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleSistema(m.id)}
-                      className="mt-1 h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-[11px] text-gray-500 tabular-nums">{formatDataBR(m.data)}</span>
-                        {correl && (
-                          <span className={`inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 ${cor.bg} ${cor.text}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${cor.dot}`} />
-                            {correl.label || 'vínculo'}
-                          </span>
-                        )}
-                        {drift && (
-                          <span className="inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 bg-amber-50 text-amber-700"
-                            title={drift.ausente ? `Movimento removido. Snapshot: R$ ${drift.snapshot.valor} em ${formatDataBR(drift.snapshot.data)}` : `Alteração em: ${drift.diffCampos.join(', ')}. Snapshot: R$ ${drift.snapshot.valor} em ${formatDataBR(drift.snapshot.data)}`}>
-                            <AlertTriangle className="h-2.5 w-2.5" /> {drift.ausente ? 'removido' : 'alterado'}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[12px] text-gray-800 truncate">{m.descricao}</p>
-                      {m.documento && <p className="text-[10px] text-gray-400 font-mono">doc {m.documento}</p>}
-                    </div>
-                    <span className={`text-right font-mono text-[12px] tabular-nums whitespace-nowrap font-semibold ${m.tipo === 'credito' ? 'text-emerald-700' : 'text-red-700'}`}>
-                      {m.tipo === 'credito' ? '+' : '-'}{formatCurrency(m.valor)}
+            <div className="px-3 py-2 border-b border-gray-100 bg-white space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                <input value={buscaSistema} onChange={e => setBuscaSistema(e.target.value)}
+                  placeholder="Buscar por histórico ou documento..."
+                  className="w-full h-8 pl-7 pr-2 text-xs rounded border border-gray-200 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+              {movsSistemaFiltrados.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                    <input type="checkbox"
+                      checked={stateMassaSistema === 'all'}
+                      ref={el => { if (el) el.indeterminate = stateMassaSistema === 'some'; }}
+                      onChange={() => stateMassaSistema === 'all' ? limparSistemaFiltrados() : selecionarTodosSistemaFiltrados()}
+                      className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                    <span className="text-[11px] font-medium text-gray-700">
+                      {stateMassaSistema === 'all' ? 'Desmarcar todos' : 'Selecionar todos'}
+                      {buscaSistema && <span className="text-gray-400"> ({movsSistemaFiltrados.length})</span>}
                     </span>
                   </label>
+                </div>
+              )}
+            </div>
+            <div className="max-h-[640px] overflow-y-auto">
+              {sistemaPorDia.length === 0 ? (
+                <p className="px-4 py-10 text-center text-[12px] text-gray-400">
+                  {buscaSistema ? 'Nenhum movimento corresponde à busca' : 'Nenhum movimento no período'}
+                </p>
+              ) : sistemaPorDia.map(grupo => {
+                const aberto = diasAbertosSistema.has(grupo.dia);
+                let credito = 0, debito = 0;
+                grupo.itens.forEach(m => {
+                  if (m.tipo === 'credito') credito += Number(m.valor || 0);
+                  else                       debito  += Number(m.valor || 0);
+                });
+                return (
+                  <div key={grupo.dia} className="border-b border-gray-100 last:border-b-0">
+                    <button onClick={() => toggleDiaSistema(grupo.dia)}
+                      className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50/60 hover:bg-gray-100/60 transition-colors text-left">
+                      <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                        <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                      </motion.div>
+                      <span className="font-mono text-[12px] text-gray-700 tabular-nums">{grupo.label}</span>
+                      <span className="text-[10.5px] text-gray-400">· {grupo.itens.length} item{grupo.itens.length === 1 ? '' : 'ns'}</span>
+                      <span className="ml-auto flex items-center gap-2 text-[10.5px] font-mono tabular-nums">
+                        {credito > 0 && <span className="text-emerald-700">+{formatCurrency(credito)}</span>}
+                        {debito  > 0 && <span className="text-red-700">-{formatCurrency(debito)}</span>}
+                      </span>
+                    </button>
+                    {aberto && (
+                      <div className="divide-y divide-gray-100">
+                        {grupo.itens.map(m => {
+                          const correl = correlPorSistema.get(Number(m.id));
+                          const cor = correl ? corDaCorrelacao(correl.id) : null;
+                          const drift = driftPorSistema.get(Number(m.id));
+                          const checked = selSistema.has(Number(m.id));
+                          return (
+                            <label key={m.id}
+                              className={`flex items-start gap-2 px-4 py-2 cursor-pointer transition-colors ${
+                                checked ? 'bg-blue-50/60' : 'hover:bg-gray-50/60'
+                              } ${correl ? `ring-1 ${cor.ring} ring-inset` : ''}`}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleSistema(m.id)}
+                                className="mt-1 h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                  {correl && (
+                                    <span className={`inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 ${cor.bg} ${cor.text}`}>
+                                      <span className={`h-1.5 w-1.5 rounded-full ${cor.dot}`} />
+                                      {correl.label || 'vínculo'}
+                                    </span>
+                                  )}
+                                  {drift && (
+                                    <span className="inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 bg-amber-50 text-amber-700"
+                                      title={drift.ausente ? `Movimento removido. Snapshot: R$ ${drift.snapshot.valor} em ${formatDataBR(drift.snapshot.data)}` : `Alteração em: ${drift.diffCampos.join(', ')}. Snapshot: R$ ${drift.snapshot.valor} em ${formatDataBR(drift.snapshot.data)}`}>
+                                      <AlertTriangle className="h-2.5 w-2.5" /> {drift.ausente ? 'removido' : 'alterado'}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[12px] text-gray-800 truncate">{m.descricao}</p>
+                                {m.documento && <p className="text-[10px] text-gray-400 font-mono">doc {m.documento}</p>}
+                              </div>
+                              <span className={`text-right font-mono text-[12px] tabular-nums whitespace-nowrap font-semibold ${m.tipo === 'credito' ? 'text-emerald-700' : 'text-red-700'}`}>
+                                {m.tipo === 'credito' ? '+' : '-'}{formatCurrency(m.valor)}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
 
-          {/* ─── Coluna OFX (direita) ─── */}
+          {/* ─── Coluna OFX (direita) — tree por dia + busca ─── */}
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-gray-100 bg-blue-50/40 flex items-center gap-2">
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-blue-50/40 flex items-center gap-2 flex-wrap">
               <h3 className="text-[13px] font-semibold text-gray-800">OFX</h3>
-              <span className="text-[11px] text-gray-400">· {ofx.transacoes.length} transação(ões) · {selOfx.size} selec.</span>
+              <span className="text-[11px] text-gray-400">
+                · {ofxTransacoesFiltradas.length}{buscaOfx && ofx.transacoes.length !== ofxTransacoesFiltradas.length ? `/${ofx.transacoes.length}` : ''} transação(ões) · {selOfx.size} selec.
+              </span>
+              {ofxPorDia.length > 1 && (
+                <div className="ml-auto flex items-center gap-1">
+                  <button onClick={abrirTodosOfx}
+                    className="text-[10.5px] text-blue-600 hover:text-blue-800 font-medium">Expandir</button>
+                  <span className="text-[10.5px] text-gray-300">|</span>
+                  <button onClick={fecharTodosOfx}
+                    className="text-[10.5px] text-blue-600 hover:text-blue-800 font-medium">Recolher</button>
+                </div>
+              )}
             </div>
-            <div className="max-h-[640px] overflow-y-auto divide-y divide-gray-100">
-              {ofx.transacoes.map((t, i) => {
-                const correl = t.fitid ? correlPorOfx.get(String(t.fitid)) : null;
-                const cor = correl ? corDaCorrelacao(correl.id) : null;
-                const checked = selOfx.has(String(t.fitid));
-                return (
-                  <label key={t.fitid || i}
-                    className={`flex items-start gap-2 px-4 py-2 cursor-pointer transition-colors ${
-                      checked ? 'bg-blue-50/60' : 'hover:bg-gray-50/60'
-                    } ${correl ? `ring-1 ${cor.ring} ring-inset` : ''}`}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleOfx(t.fitid)}
-                      disabled={!t.fitid}
-                      className="mt-1 h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400 disabled:opacity-30" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-[11px] text-gray-500 tabular-nums">{formatDataBR(t.data)}</span>
-                        {correl && (
-                          <span className={`inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 ${cor.bg} ${cor.text}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${cor.dot}`} />
-                            {correl.label || 'vínculo'}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[12px] text-gray-800 truncate">{t.memo || '—'}</p>
-                      {t.name && <p className="text-[10px] text-gray-400 truncate">{t.name}</p>}
-                    </div>
-                    <span className={`text-right font-mono text-[12px] tabular-nums whitespace-nowrap font-semibold ${t.tipo === 'credito' ? 'text-emerald-700' : 'text-red-700'}`}>
-                      {t.tipo === 'credito' ? '+' : '-'}{formatCurrency(t.valor)}
+            <div className="px-3 py-2 border-b border-gray-100 bg-white space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                <input value={buscaOfx} onChange={e => setBuscaOfx(e.target.value)}
+                  placeholder="Buscar no histórico OFX (memo, nome ou ID)..."
+                  className="w-full h-8 pl-7 pr-2 text-xs rounded border border-gray-200 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+              {ofxTransacoesFiltradas.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                    <input type="checkbox"
+                      checked={stateMassaOfx === 'all'}
+                      ref={el => { if (el) el.indeterminate = stateMassaOfx === 'some'; }}
+                      onChange={() => stateMassaOfx === 'all' ? limparOfxFiltrados() : selecionarTodosOfxFiltrados()}
+                      className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                    <span className="text-[11px] font-medium text-gray-700">
+                      {stateMassaOfx === 'all' ? 'Desmarcar todos' : 'Selecionar todos'}
+                      {buscaOfx && <span className="text-gray-400"> ({ofxTransacoesFiltradas.filter(t => t.fitid).length})</span>}
                     </span>
                   </label>
+                </div>
+              )}
+            </div>
+            <div className="max-h-[640px] overflow-y-auto">
+              {ofxPorDia.length === 0 ? (
+                <p className="px-4 py-10 text-center text-[12px] text-gray-400">
+                  {buscaOfx ? 'Nenhuma transação corresponde à busca' : 'Nenhuma transação no arquivo'}
+                </p>
+              ) : ofxPorDia.map(grupo => {
+                const aberto = diasAbertosOfx.has(grupo.dia);
+                let credito = 0, debito = 0;
+                grupo.itens.forEach(t => {
+                  if (t.tipo === 'credito') credito += Number(t.valor || 0);
+                  else                       debito  += Number(t.valor || 0);
+                });
+                return (
+                  <div key={grupo.dia} className="border-b border-gray-100 last:border-b-0">
+                    <button onClick={() => toggleDiaOfx(grupo.dia)}
+                      className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50/60 hover:bg-gray-100/60 transition-colors text-left">
+                      <motion.div animate={{ rotate: aberto ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                        <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                      </motion.div>
+                      <span className="font-mono text-[12px] text-gray-700 tabular-nums">{grupo.label}</span>
+                      <span className="text-[10.5px] text-gray-400">· {grupo.itens.length} item{grupo.itens.length === 1 ? '' : 'ns'}</span>
+                      <span className="ml-auto flex items-center gap-2 text-[10.5px] font-mono tabular-nums">
+                        {credito > 0 && <span className="text-emerald-700">+{formatCurrency(credito)}</span>}
+                        {debito  > 0 && <span className="text-red-700">-{formatCurrency(debito)}</span>}
+                      </span>
+                    </button>
+                    {aberto && (
+                      <div className="divide-y divide-gray-100">
+                        {grupo.itens.map((t, i) => {
+                          const correl = t.fitid ? correlPorOfx.get(String(t.fitid)) : null;
+                          const cor = correl ? corDaCorrelacao(correl.id) : null;
+                          const checked = selOfx.has(String(t.fitid));
+                          return (
+                            <label key={t.fitid || `${grupo.dia}-${i}`}
+                              className={`flex items-start gap-2 px-4 py-2 cursor-pointer transition-colors ${
+                                checked ? 'bg-blue-50/60' : 'hover:bg-gray-50/60'
+                              } ${correl ? `ring-1 ${cor.ring} ring-inset` : ''}`}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleOfx(t.fitid)}
+                                disabled={!t.fitid}
+                                className="mt-1 h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400 disabled:opacity-30" />
+                              <div className="flex-1 min-w-0">
+                                {correl && (
+                                  <div className="mb-0.5">
+                                    <span className={`inline-flex items-center gap-1 text-[9.5px] font-medium rounded-full px-1.5 py-0.5 ${cor.bg} ${cor.text}`}>
+                                      <span className={`h-1.5 w-1.5 rounded-full ${cor.dot}`} />
+                                      {correl.label || 'vínculo'}
+                                    </span>
+                                  </div>
+                                )}
+                                <p className="text-[12px] text-gray-800 truncate">{t.memo || '—'}</p>
+                                {t.name && <p className="text-[10px] text-gray-400 truncate">{t.name}</p>}
+                              </div>
+                              <span className={`text-right font-mono text-[12px] tabular-nums whitespace-nowrap font-semibold ${t.tipo === 'credito' ? 'text-emerald-700' : 'text-red-700'}`}>
+                                {t.tipo === 'credito' ? '+' : '-'}{formatCurrency(t.valor)}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

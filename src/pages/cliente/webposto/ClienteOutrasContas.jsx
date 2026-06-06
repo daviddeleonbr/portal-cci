@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import {
   Receipt, Plus, Loader2, AlertCircle, Search, RefreshCw,
   Calendar, Trash2, Upload, File, Download, X, CheckCircle2,
+  Info, Clock,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import Toast from '../../../components/ui/Toast';
@@ -101,6 +102,33 @@ export default function ClienteOutrasContas() {
           <span className="hidden sm:inline">Atualizar</span>
         </button>
       </PageHeader>
+
+      {/* Aviso operacional */}
+      <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-2xl p-4 mb-4 flex items-start gap-3">
+        <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+          <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Antes de enviar — informações importantes</p>
+          <ul className="text-[12.5px] text-blue-900/85 dark:text-blue-200/90 mt-1.5 space-y-1.5 leading-relaxed">
+            <li className="flex items-start gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-blue-700 dark:text-blue-300 flex-shrink-0 mt-0.5" />
+              <span>
+                Se sua empresa contratou o serviço de <strong>inclusão de pagamentos no banco pela CCI</strong>,
+                as informações precisam ser registradas <strong>até 16:00</strong> do dia da solicitação.
+                Envios após esse horário serão incluídos apenas <strong>no próximo dia útil</strong>.
+              </span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <CheckCircle2 className="h-3.5 w-3.5 text-blue-700 dark:text-blue-300 flex-shrink-0 mt-0.5" />
+              <span>
+                Pagou uma conta por conta própria, <em>sem</em> a inclusão da CCI?
+                <strong> Preencha o formulário mesmo assim</strong> — a CCI precisa saber o destino do valor para registrar corretamente.
+              </span>
+            </li>
+          </ul>
+        </div>
+      </div>
 
       {/* Tabs */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 mb-4 overflow-hidden">
