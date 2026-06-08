@@ -5,6 +5,7 @@ import { Eye, EyeOff, ArrowRight, Building2, AlertCircle, ArrowLeft, X, Mail, Co
 import { loginCliente, getClienteSession } from '../../lib/auth';
 import * as authResetService from '../../services/authResetService';
 import { verificarPrimeiroAcesso } from '../../services/userImportService';
+import { primeiraPaginaPermitida } from '../../utils/clientePrimeiraPagina';
 
 export default function ClienteLogin() {
   const navigate = useNavigate();
@@ -18,8 +19,9 @@ export default function ClienteLogin() {
   useEffect(() => {
     const s = getClienteSession();
     if (s) {
-      const dest = `/cliente/${s.tipoCliente || 'webposto'}/dashboard`;
-      navigate(dest, { replace: true });
+      // Decide o destino baseado nas permissões do usuário (ele pode
+      // não ter `dashboard` e precisar abrir em outra página).
+      navigate(primeiraPaginaPermitida(s), { replace: true });
     }
   }, [navigate]);
 
@@ -37,8 +39,7 @@ export default function ClienteLogin() {
         return;
       }
       const session = await loginCliente(email, senha);
-      const dest = `/cliente/${session.tipoCliente || 'webposto'}/dashboard`;
-      navigate(dest, { replace: true });
+      navigate(primeiraPaginaPermitida(session), { replace: true });
     } catch (err) {
       setErro(err.message || 'Falha ao entrar.');
     } finally {

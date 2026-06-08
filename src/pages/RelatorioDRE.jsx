@@ -46,7 +46,7 @@ function formatDuracao(ms) {
 // redeContexto (opcional): { nomeRede, chaveApiId, empresaCodigos: number[] }
 // Quando passado, a DRE agrega as empresas da rede usando o mesmo mapeamento
 // (mapeamento_empresa_contas e sempre por chave_api_id).
-export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto } = {}) {
+export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto, seletorEmpresas } = {}) {
   const { labelEmpresa, labelCnpj } = useAnonimizador();
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
@@ -1475,48 +1475,48 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
       {/* Filters bar (no-print) */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-xl border border-gray-200/60 p-4 mb-5 shadow-sm no-print">
-        <div className="flex flex-wrap items-end gap-3">
+        className="bg-white rounded-xl border border-gray-200/60 px-3 py-2.5 mb-5 shadow-sm no-print">
+        <div className="flex flex-wrap items-end gap-2.5">
           {/* Mascara */}
-          <div className="min-w-[220px]">
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Máscara DRE</label>
+          <div className="min-w-[180px]">
+            <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Máscara DRE</label>
             <select value={mascaraSelecionada?.id || ''}
               onChange={(e) => setMascaraSelecionada(mascaras.find(m => m.id === e.target.value))}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
+              className="w-full h-8 rounded-lg border border-gray-200 px-2 text-[11px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
               {mascaras.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
           </div>
 
           {/* Mes final (selecionado) — sistema busca 2 meses anteriores automaticamente */}
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
-            <div className="flex items-center gap-1 h-10 rounded-lg border border-gray-200 bg-white px-1">
-              <button onClick={() => navMes(-1)} className="rounded-md p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
-                <ChevLeft className="h-3.5 w-3.5" />
+            <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
+            <div className="flex items-center gap-0.5 h-8 rounded-lg border border-gray-200 bg-white px-0.5">
+              <button onClick={() => navMes(-1)} className="rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
+                <ChevLeft className="h-3 w-3" />
               </button>
               <select value={mesFinal.mes}
                 onChange={(e) => setMesFinal(p => ({ ...p, mes: Number(e.target.value) }))}
-                className="text-sm border-0 focus:outline-none bg-transparent">
+                className="text-[11px] border-0 focus:outline-none bg-transparent">
                 {MESES_NOMES.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
               </select>
               <select value={mesFinal.ano}
                 onChange={(e) => setMesFinal(p => ({ ...p, ano: Number(e.target.value) }))}
-                className="text-sm border-0 focus:outline-none bg-transparent">
+                className="text-[11px] border-0 focus:outline-none bg-transparent">
                 {[today.getFullYear() - 2, today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
-              <button onClick={() => navMes(1)} className="rounded-md p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
-                <ChevronRight className="h-3.5 w-3.5" />
+              <button onClick={() => navMes(1)} className="rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
+                <ChevronRight className="h-3 w-3" />
               </button>
             </div>
           </div>
 
           {/* Quantidade de meses (1 ou 3) */}
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
-            <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5 h-10">
+            <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
+            <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
               {[1, 3].map(q => (
                 <button key={q} onClick={() => setQtdMeses(q)}
-                  className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
                     qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
                   {q === 1 ? '1 mês' : '3 meses'}
@@ -1525,35 +1525,40 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             </div>
           </div>
 
+          {/* Seletor de empresas (injetado pelo wrapper cliente) */}
+          {seletorEmpresas && (
+            <div className="h-8 flex items-end">{seletorEmpresas}</div>
+          )}
+
           {/* Montar DRE */}
           <div>
             <button onClick={handleMontarDRE} disabled={loadingDados || !mascaraSelecionada}
-              className="flex items-center gap-2 h-10 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileBarChart className="h-4 w-4" />}
+              className="flex items-center gap-1.5 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 text-[11px] font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              {loadingDados ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileBarChart className="h-3.5 w-3.5" />}
               Montar DRE
             </button>
           </div>
 
-          {/* Toggles */}
-          <div className="flex items-center gap-2 ml-auto">
+          {/* Toggles — ficam à direita, na mesma linha quando couber */}
+          <div className="flex items-center gap-1.5 ml-auto h-8">
             <button onClick={() => setOcultarZeradas(!ocultarZeradas)}
               title={ocultarZeradas ? 'Mostrar contas zeradas' : 'Ocultar contas zeradas'}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
+              className={`flex items-center gap-1 h-8 rounded-lg px-2.5 text-[10.5px] font-medium transition-all border ${
                 ocultarZeradas ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}>
-              {ocultarZeradas ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {ocultarZeradas ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
               Ocultar zeradas
             </button>
             <button onClick={() => setShowAH(!showAH)}
               title={showAH ? 'Ocultar AH (ano anterior)' : 'Mostrar AH (ano anterior)'}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
+              className={`flex items-center gap-1 h-8 rounded-lg px-2.5 text-[10.5px] font-medium transition-all border ${
                 showAH ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}>
               AH
             </button>
             <button onClick={() => setMostrarTotal(!mostrarTotal)}
               title={mostrarTotal ? 'Ocultar coluna Total' : 'Mostrar coluna Total'}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
+              className={`flex items-center gap-1 h-8 rounded-lg px-2.5 text-[10.5px] font-medium transition-all border ${
                 mostrarTotal ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}>
               Total

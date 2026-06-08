@@ -5,7 +5,11 @@ import {
   Clock, AlertTriangle, CheckCircle2, Calendar,
   DollarSign, Building2,
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+} from 'recharts';
 import PageHeader from '../../../components/ui/PageHeader';
+import Modal from '../../../components/ui/Modal';
 import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as mapService from '../../../services/mapeamentoService';
@@ -237,10 +241,22 @@ export default function ClienteContasPagar() {
         || (fornCod != null ? fornecedoresMap.get(`${chaveApiId}:${fornCod}`) : '')
         || (fornCod != null ? fornecedoresMap.get(fornCod) : '')
         || 'Fornecedor';
+      // Vencimento efetivo: se cair em fim de semana, antecipa pro
+      // próximo dia útil (data em que o título efetivamente "vence" no
+      // caixa, pra agrupar no gráfico).
+      let vencEfetivo = null;
+      if (venc) {
+        const [y, m, d] = String(venc).slice(0, 10).split('-').map(Number);
+        if (y && m && d) {
+          const dt = new Date(y, m - 1, d);
+          vencEfetivo = ehDiaUtil(dt) ? venc : isoDateUtil(proximoDiaUtil(dt));
+        }
+      }
       return {
         raw: t,
         valor,
         vencimento: venc,
+        vencimentoEfetivo: vencEfetivo,
         emissao: extrairEmissao(t),
         documento: extrairDocumento(t),
         parcela: extrairParcela(t),
@@ -255,6 +271,38 @@ export default function ClienteContasPagar() {
       };
     });
   }, [titulos, fornecedoresMap]);
+
+  // Próximos 15 dias — buckets diários (hoje + 14) com valor e qtd,
+  // alimentando o gráfico de barras. Usa `vencimentoEfetivo` pra evitar
+  // contagem em fim de semana (antecipa pro próximo útil).
+  const proximos15dias = useMemo(() => {
+    const buckets = new Map();
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    for (let i = 0; i < 15; i++) {
+      const d = new Date(hoje); d.setDate(d.getDate() + i);
+      buckets.set(isoDateUtil(d), { valor: 0, qtd: 0 });
+    }
+    for (const t of enriched) {
+      if (!t.vencimentoEfetivo) continue;
+      const cur = buckets.get(t.vencimentoEfetivo);
+      if (cur) { cur.valor += t.valor; cur.qtd++; }
+    }
+    return Array.from(buckets.entries()).map(([iso, v]) => {
+      const d = new Date(iso + 'T00:00:00');
+      const diaSem = ['dom','seg','ter','qua','qui','sex','sáb'][d.getDay()];
+      const ehFimSemana = d.getDay() === 0 || d.getDay() === 6;
+      return {
+        iso,
+        label: `${diaSem} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`,
+        labelLongo: `${diaSemana(iso)} · ${formatDataBR(iso)}`,
+        valor: v.valor,
+        qtd:   v.qtd,
+        ehFimSemana,
+      };
+    });
+  }, [enriched]);
+
+  const [modalDetalhe, setModalDetalhe] = useState(null);
 
   // "Hoje" considera o proximo dia util quando hoje nao e util — quando hoje
   // for fim de semana/feriado, antecipa para o proximo util e inclui as datas
@@ -509,6 +557,18 @@ export default function ClienteContasPagar() {
           sub={`${totais.qtdFuturos} ${totais.qtdFuturos === 1 ? 'titulo' : 'titulos'}`} />
       </div>
 
+      {/* Gráfico Próximos 15 dias */}
+      <GraficoProximos15Dias
+        dados={proximos15dias}
+        onClickDia={(iso, labelData) => {
+          const titulos = enriched
+            .filter(t => t.vencimentoEfetivo === iso)
+            .sort((a, b) => Number(b.valor || 0) - Number(a.valor || 0));
+          if (titulos.length === 0) return;
+          setModalDetalhe({ tipo: 'dia', titulo: `Vencimentos em ${labelData}`, titulos });
+        }}
+      />
+
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
         <div className="relative flex-1">
@@ -658,6 +718,9 @@ export default function ClienteContasPagar() {
           </div>
         </div>
       )}
+
+      {/* Modal de detalhe dos títulos do dia (disparado pelo gráfico) */}
+      <ModalDetalheTitulos detalhe={modalDetalhe} onClose={() => setModalDetalhe(null)} />
     </div>
   );
 }
@@ -828,6 +891,191 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ─── Formatadores e componentes do gráfico ───────────────────────
+
+function formatCompact(v) {
+  const n = Number(v) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(1).replace('.', ',')}M`;
+  if (abs >= 1e3) return `${Math.round(n / 1e3).toLocaleString('pt-BR')}k`;
+  return n.toLocaleString('pt-BR');
+}
+
+function TooltipDinheiro({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div className="bg-white rounded-lg border border-gray-200/70 shadow-lg p-2.5">
+      <p className="text-[11px] font-semibold text-gray-800">{d.labelLongo || d.label}</p>
+      <p className="text-[11px] text-gray-500 mt-0.5">
+        {d.qtd} {d.qtd === 1 ? 'título vence' : 'títulos vencem'}
+      </p>
+      <p className="text-[12.5px] font-bold text-amber-700 font-mono tabular-nums mt-0.5">
+        {formatCurrency(d.valor)}
+      </p>
+    </div>
+  );
+}
+
+// Gráfico de barras com vencimentos dos próximos 15 dias. Clique numa
+// barra dispara `onClickDia(iso, label)` pra abrir o modal de detalhe.
+// Barras de fim de semana ficam cinza (vencimento antecipa pro próximo
+// dia útil via `vencimentoEfetivo`, então normalmente vêm zeradas).
+function GraficoProximos15Dias({ dados, onClickDia }) {
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  const totalQtd = dados.reduce((s, d) => s + d.qtd, 0);
+  const handleBarClick = (data) => {
+    if (!onClickDia || !data?.qtd) return;
+    onClickDia(data.iso, data.label);
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 flex-shrink-0">
+          <Calendar className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800">Próximos 15 dias</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {totalQtd} {totalQtd === 1 ? 'título' : 'títulos'} · {formatCurrency(total)}
+          </p>
+        </div>
+      </div>
+      {totalQtd === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <CheckCircle2 className="h-7 w-7 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Nenhum vencimento nos próximos 15 dias</p>
+        </div>
+      ) : (
+        <div className="p-3" style={{ height: 260 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={dados} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }}
+                axisLine={false} tickLine={false}
+                interval={0} angle={-30} textAnchor="end" height={50} />
+              <YAxis tick={{ fontSize: 10.5, fill: '#94a3b8' }}
+                axisLine={false} tickLine={false}
+                tickFormatter={(v) => formatCompact(v)} />
+              <Tooltip content={<TooltipDinheiro />} cursor={{ fill: 'rgba(245, 158, 11, 0.06)' }} />
+              <Bar dataKey="valor" radius={[6, 6, 0, 0]} onClick={handleBarClick}
+                style={{ cursor: 'pointer' }}>
+                {dados.map((d, i) => (
+                  <Cell key={i} fill={d.ehFimSemana ? '#cbd5e1' : '#f59e0b'}
+                    cursor={d.qtd > 0 ? 'pointer' : 'default'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {totalQtd > 0 && (
+        <p className="px-5 pb-3 text-[10.5px] text-gray-400 italic">
+          Clique em uma barra para ver os títulos do dia
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Modal com lista detalhada dos títulos do dia, agrupada por empresa.
+// Disparado por click no gráfico de "Próximos 15 dias".
+function ModalDetalheTitulos({ detalhe, onClose }) {
+  if (!detalhe) return null;
+  const { titulo, titulos } = detalhe;
+  const total = titulos.reduce((s, t) => s + Number(t.valor || 0), 0);
+
+  // Agrupa títulos por empresa (preserva ordem por valor decrescente
+  // dentro de cada grupo) e calcula total por empresa.
+  const porEmpresa = (() => {
+    const m = new Map();
+    titulos.forEach(t => {
+      const k = t.empresaNome || 'Sem empresa';
+      let cur = m.get(k);
+      if (!cur) { cur = { empresaNome: k, titulos: [], total: 0 }; m.set(k, cur); }
+      cur.titulos.push(t);
+      cur.total += Number(t.valor || 0);
+    });
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
+  })();
+
+  return (
+    <Modal open={!!detalhe} onClose={onClose} title={titulo} size="xl">
+      <div>
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
+          <p className="text-[12px] text-gray-500">
+            {titulos.length} {titulos.length === 1 ? 'título' : 'títulos'} · {porEmpresa.length} {porEmpresa.length === 1 ? 'empresa' : 'empresas'}
+          </p>
+          <p className="text-lg font-bold text-gray-900 font-mono tabular-nums">
+            {formatCurrency(total)}
+          </p>
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col style={{ width: '36%' }} />{/* Fornecedor */}
+              <col style={{ width: '18%' }} />{/* Documento (compacto) */}
+              <col style={{ width: '30%' }} />{/* Histórico */}
+              <col style={{ width: '16%' }} />{/* Valor */}
+            </colgroup>
+            <thead className="bg-gray-100 border-b border-gray-200 sticky top-0 z-10">
+              <tr className="text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="px-3 py-2">Fornecedor</th>
+                <th className="px-3 py-2">Documento</th>
+                <th className="px-3 py-2">Histórico</th>
+                <th className="px-3 py-2 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {porEmpresa.map((grupo, gi) => (
+                <React.Fragment key={`g${gi}`}>
+                  {/* Cabeçalho da empresa */}
+                  <tr className="bg-blue-50/70 border-y border-blue-100">
+                    <td colSpan={3} className="px-3 py-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Building2 className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+                        <p className="text-[12.5px] font-bold text-blue-900 truncate min-w-0">{grupo.empresaNome}</p>
+                        <span className="text-[10.5px] text-blue-600 flex-shrink-0">
+                          · {grupo.titulos.length} {grupo.titulos.length === 1 ? 'título' : 'títulos'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] font-bold text-blue-900 whitespace-nowrap">
+                      {formatCurrency(grupo.total)}
+                    </td>
+                  </tr>
+                  {/* Linhas dos títulos da empresa */}
+                  {grupo.titulos.map((t, i) => (
+                    <tr key={`g${gi}-t${i}`} className="border-b border-gray-100 hover:bg-gray-50/60">
+                      <td className="pl-6 pr-3 py-2 text-[12px]">
+                        <p className="text-gray-900 truncate" title={t.fornecedorNome}>{t.fornecedorNome}</p>
+                        {t.fornecedorCodigo != null && (
+                          <p className="text-[10px] text-gray-400 font-mono truncate">cód {t.fornecedorCodigo}</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-[11px]">
+                        {t.documento && <p className="text-gray-800 font-mono truncate" title={t.documento}>{t.documento}</p>}
+                        {t.parcela && <p className="text-[10px] text-gray-400 font-mono truncate">parc {t.parcela}</p>}
+                      </td>
+                      <td className="px-3 py-2 text-[11.5px] text-gray-600 truncate" title={t.historico}>
+                        {t.historico || '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 whitespace-nowrap">
+                        {formatCurrency(t.valor)}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

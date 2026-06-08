@@ -37,6 +37,13 @@ export function logoutAdmin() {
 
 export function logoutCliente() {
   localStorage.removeItem(CLIENTE_KEY);
+  // Limpa cache de páginas Webposto pra evitar vazamento entre sessões
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('webposto-cache-v1:'))
+      .forEach(k => localStorage.removeItem(k));
+    sessionStorage.removeItem('webposto-paginas-visitadas-v1');
+  } catch { /* noop */ }
   emitSessionChange();
 }
 

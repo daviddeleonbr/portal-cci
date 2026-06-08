@@ -7,9 +7,10 @@
 
 import { Navigate } from 'react-router-dom';
 import { AlertCircle, Building2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import PageHeader from '../../../components/ui/PageHeader';
 import RelatorioDRE from '../../RelatorioDRE';
+import EmpresaMultiSelect from '../../../components/vendas/EmpresaMultiSelect';
 import { useClienteSession } from '../../../hooks/useAuth';
 
 export default function ClienteDRE() {
@@ -17,11 +18,21 @@ export default function ClienteDRE() {
   const asRede = session?.asRede;
   const clientesRede = session?.clientesRede || [];
 
-  // Empresas da rede com integração Autosystem válida (empresa_codigo populado).
-  // Esse `clientesRede` já vem filtrado pelas empresas_permitidas no login.
   const empresas = useMemo(
     () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
     [clientesRede],
+  );
+
+  const [empresasSelIds, setEmpresasSelIds] = useState(() => new Set(empresas.map(c => c.id)));
+  useEffect(() => {
+    setEmpresasSelIds(prev => {
+      if (prev.size === 0 && empresas.length > 0) return new Set(empresas.map(c => c.id));
+      return prev;
+    });
+  }, [empresas]);
+  const empresasSel = useMemo(
+    () => empresas.filter(c => empresasSelIds.has(c.id)),
+    [empresas, empresasSelIds],
   );
 
   const redeContexto = useMemo(() => {
@@ -29,10 +40,10 @@ export default function ClienteDRE() {
     return {
       asRedeId: asRede.id,
       nomeRede: asRede.nome,
-      empresaCodigos: empresas.map(e => Number(e.empresa_codigo)),
-      empresas,
+      empresaCodigos: empresasSel.map(e => Number(e.empresa_codigo)),
+      empresas: empresasSel,
     };
-  }, [asRede, empresas]);
+  }, [asRede, empresasSel]);
 
   if (!asRede?.id) return <Navigate to="/cliente/autosystem/dashboard" replace />;
 
@@ -73,5 +84,24 @@ export default function ClienteDRE() {
     );
   }
 
-  return <RelatorioDRE redeContexto={redeContexto} backHref="/cliente/autosystem/dashboard" />;
+  return (
+    <RelatorioDRE
+      redeContexto={redeContexto}
+      backHref="/cliente/autosystem/dashboard"
+      seletorEmpresas={empresas.length > 1 ? (
+        <EmpresaMultiSelect
+          clientesRede={empresas}
+          selecionadas={empresasSelIds}
+          onToggle={(id) => setEmpresasSelIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+          })}
+          onToggleTodas={() => setEmpresasSelIds(prev =>
+            prev.size === empresas.length ? new Set() : new Set(empresas.map(c => c.id))
+          )}
+        />
+      ) : null}
+    />
+  );
 }

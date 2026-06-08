@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import ClienteSidebar from './ClienteSidebar';
 import ClienteHeader from './ClienteHeader';
 import ModalNovidades from '../../ui/ModalNovidades';
+import PrefetcherWebposto from './PrefetcherWebposto';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { registrarPageview } from '../../../services/usoPortalService';
 
@@ -43,6 +44,7 @@ export default function ClienteLayout() {
       </div>
 
       <ModalNovidades />
+      <PrefetcherWebposto />
 
       {/* Backdrop mobile */}
       {mobileOpen && (

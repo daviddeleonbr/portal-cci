@@ -368,11 +368,21 @@ export async function buscarTitulosPagar(apiKey, { dataInicial, dataFinal, empre
   });
 }
 
-export async function buscarTitulosReceber(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
+// IMPORTANTE: TITULO_RECEBER aceita `convertido`:
+//   true  → títulos que JÁ FORAM convertidos em Duplicata
+//   false → títulos que AINDA NÃO foram convertidos
+//   null  → todos
+// Sem esse filtro, o front contava DUAS VEZES o mesmo crédito: 1x em
+// TITULO_RECEBER (já convertido) + 1x em DUPLICATA (a própria conversão).
+// Por padrão filtramos `convertido=false` pra trazer só os títulos
+// "originais" ainda não convertidos — o crédito convertido aparece
+// integralmente na fonte DUPLICATA.
+export async function buscarTitulosReceber(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente, convertido = false } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'TITULO_RECEBER', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
     chunkDays: CHUNK_PENDENTES,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
+    ...(convertido !== null && convertido !== undefined ? { convertido } : {}),
   });
 }
 
@@ -413,6 +423,241 @@ export async function buscarVendaItens(apiKey, { dataInicial, dataFinal, empresa
   return fetchPagParalelo(urlBase, 'VENDA_ITEM', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo, situacao,
   });
+}
+
+// ─── Híbrido: cache Supabase + Quality ────────────────────────
+//
+// Estratégia: dias com data > hoje-2d (frescos, podem ter cancelamentos
+// retroativos) vêm da Quality em tempo real; dias mais antigos vêm da
+// tabela `cci_webposto_venda` / `cci_webposto_venda_item` no Supabase
+// (sincronizada pelo cron noturno + backfill manual).
+//
+// O retorno tem o MESMO shape de buscarVendas/buscarVendaItens — o front
+// (e os agregadores) não percebem diferença.
+//
+// Pra fazer isso funcionar:
+//  - chave_api_id: ID em chaves_api (Supabase). Quando ausente, cai pra
+//    busca 100% Quality (modo "compatibilidade").
+
+import { supabase } from '../lib/supabase';
+
+const DIAS_FRESCOS = 2; // últimos N dias vêm da Quality
+
+function isoHojeMenos(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+function maxIso(a, b) { return a > b ? a : b; }
+function minIso(a, b) { return a < b ? a : b; }
+
+// Supabase-js retorna no máximo 1000 rows por default. Estratégia
+// usada antes (OFFSET sequencial/paralelo) sofre porque OFFSET grande
+// no Postgres exige scan e o servidor retorna 500 quando vários requests
+// paralelos batem com offset alto ao mesmo tempo.
+//
+// Estratégia atual: divide o período em CHUNKS DE DIAS (7 por chunk).
+// Cada chunk em geral cabe em 1 página com offset zero. Os chunks
+// são consultados em paralelo via Promise.all — ganho de latência sem
+// risco de offset alto.
+const PAGE = 1000;
+const DIAS_POR_CHUNK_CACHE = 7;
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function dataIso(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+
+// Divide [dataInicial, dataFinal] em chunks de N dias cada.
+function dividirEmChunksDias(dataInicial, dataFinal, diasPorChunk = DIAS_POR_CHUNK_CACHE) {
+  const out = [];
+  const start = new Date(dataInicial + 'T00:00:00');
+  const end   = new Date(dataFinal + 'T00:00:00');
+  if (isNaN(start) || isNaN(end) || start > end) return [{ de: dataInicial, ate: dataFinal }];
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setDate(chunkEnd.getDate() + diasPorChunk - 1);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    out.push({ de: dataIso(cursor), ate: dataIso(chunkEnd) });
+    cursor = new Date(chunkEnd);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
+
+// Semáforo global pra limitar concorrência de queries no Supabase.
+// Sem isso, 4 empresas × 3 períodos × 5 chunks × 2 (itens+vendas) = 120
+// queries paralelas — saturam o PostgREST e disparam 500.
+const MAX_QUERIES_PARALELAS = 8;
+let _emVoo = 0;
+const _fila = [];
+function _adquirir() {
+  return new Promise((resolve) => {
+    const tentativa = () => {
+      if (_emVoo < MAX_QUERIES_PARALELAS) {
+        _emVoo++;
+        resolve(() => { _emVoo--; const proximo = _fila.shift(); if (proximo) proximo(); });
+      } else {
+        _fila.push(tentativa);
+      }
+    };
+    tentativa();
+  });
+}
+async function comSemaforo(fn) {
+  const liberar = await _adquirir();
+  try { return await fn(); } finally { liberar(); }
+}
+
+// Esgota TODAS as páginas de UM chunk pequeno (poucos ofsets). Como o
+// chunk é de 7 dias só raríssimo passa de 2-3 páginas — offset baixo
+// não causa erro 500.
+async function esgotarChunk(queryBuilder, chunk) {
+  const all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await comSemaforo(
+      () => queryBuilder(chunk).range(from, from + PAGE - 1),
+    );
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+    // Safety guard: em 7 dias é IMPOSSÍVEL ter mais que 10k rows
+    // (uma empresa Webposto normal). Se atingir, abortamos pra evitar
+    // loop em alguma anomalia.
+    if (from > 10000) break;
+  }
+  return all;
+}
+
+// Recebe uma função que monta a query Supabase pra um chunk de período,
+// divide o período em chunks de 7 dias e roda todos em paralelo.
+//
+// queryBuilder(chunk) deve retornar a query JÁ COM filtros (eq, gte/lte,
+// order, etc.) — esta função só aplica .range() no final.
+async function lerComPaginacaoPorChunks(dataInicial, dataFinal, queryBuilder) {
+  const chunks = dividirEmChunksDias(dataInicial, dataFinal);
+  const resultados = await Promise.all(chunks.map(c => esgotarChunk(queryBuilder, c)));
+  return resultados.flat();
+}
+
+// Lê do cache Supabase as VENDAs no período, devolvendo objetos com o
+// mesmo shape do payload da Quality (campos esperados pelo agregador:
+// vendaCodigo, cancelada, dataHora/dataVenda/dataEmissao/dataMovimento).
+async function lerCacheVendas({ chaveApiId, empresaCodigo, dataInicial, dataFinal }) {
+  if (!chaveApiId || !empresaCodigo || !dataInicial || !dataFinal) return [];
+  // Chunks de 7 dias em paralelo; cada chunk usa offset baixo (0-2).
+  const data = await lerComPaginacaoPorChunks(dataInicial, dataFinal, (chunk) =>
+    supabase
+      .from('cci_webposto_venda')
+      .select('venda_codigo, data, cancelada, raw')
+      .eq('chave_api_id', chaveApiId)
+      .eq('empresa_codigo', empresaCodigo)
+      .gte('data', chunk.de)
+      .lte('data', chunk.ate)
+      .order('venda_codigo', { ascending: true }),
+  );
+  return data.map(row => ({
+    ...(row.raw || {}),
+    vendaCodigo: Number(row.venda_codigo),
+    cancelada: row.cancelada,
+    // O agregador olha por `dataHora`/`dataVenda`/`dataEmissao`. Mantemos
+    // o que vem do raw e suplementamos com `data` (denormalizada) pra
+    // garantir que sempre exista um campo de data válido.
+    dataHora:  row.raw?.dataHora  || row.data,
+    dataVenda: row.raw?.dataVenda || row.data,
+  }));
+}
+
+async function lerCacheVendaItens({ chaveApiId, empresaCodigo, dataInicial, dataFinal }) {
+  if (!chaveApiId || !empresaCodigo || !dataInicial || !dataFinal) return [];
+  const data = await lerComPaginacaoPorChunks(dataInicial, dataFinal, (chunk) =>
+    supabase
+      .from('cci_webposto_venda_item')
+      .select('venda_codigo, item_sequencia, produto_codigo, data, quantidade, total_venda, total_custo, total_desconto, total_acrescimo, icms_valor, valor_pis, valor_cofins, valor_cbs, valor_ibs, raw')
+      .eq('chave_api_id', chaveApiId)
+      .eq('empresa_codigo', empresaCodigo)
+      .gte('data', chunk.de)
+      .lte('data', chunk.ate)
+      .order('venda_codigo', { ascending: true })
+      .order('item_sequencia', { ascending: true }),
+  );
+  return data.map(row => ({
+    ...(row.raw || {}),
+    vendaCodigo:    Number(row.venda_codigo),
+    itemSequencia:  Number(row.item_sequencia),
+    produtoCodigo:  row.produto_codigo,
+    quantidade:     row.quantidade,
+    totalVenda:     row.total_venda,
+    totalCusto:     row.total_custo,
+    totalDesconto:  row.total_desconto,
+    totalAcrescimo: row.total_acrescimo,
+    icmsValor:      row.icms_valor,
+    valorPis:       row.valor_pis,
+    valorCofins:    row.valor_cofins,
+    valorCbs:       row.valor_cbs,
+    valorIbs:       row.valor_ibs,
+  }));
+}
+
+// Calcula janela cache vs janela API a partir do período pedido.
+function dividirPeriodoHibrido(dataInicial, dataFinal) {
+  const corte = isoHojeMenos(DIAS_FRESCOS); // tudo a partir desta data vem da Quality
+  if (dataFinal < corte) {
+    // Tudo histórico → só cache
+    return { cacheDe: dataInicial, cacheAte: dataFinal, apiDe: null, apiAte: null };
+  }
+  if (dataInicial >= corte) {
+    // Tudo recente → só API
+    return { cacheDe: null, cacheAte: null, apiDe: dataInicial, apiAte: dataFinal };
+  }
+  // Mix: cache até corte-1, API a partir de corte
+  const corteMenos1 = (() => {
+    const d = new Date(corte + 'T00:00:00');
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  return {
+    cacheDe: dataInicial,
+    cacheAte: minIso(corteMenos1, dataFinal),
+    apiDe: maxIso(corte, dataInicial),
+    apiAte: dataFinal,
+  };
+}
+
+// Versão híbrida de buscarVendas. Aceita os mesmos parâmetros + `chaveApiId`
+// (UUID em `chaves_api`) e `empresaCodigo`. Se `chaveApiId` for ausente, faz
+// fallback pra `buscarVendas` original (modo compatibilidade).
+export async function buscarVendasHibrido(apiKey, params = {}, urlBase = DEFAULT_URL_BASE) {
+  const { dataInicial, dataFinal, empresaCodigo, situacao, chaveApiId } = params;
+  if (!chaveApiId || !empresaCodigo) {
+    return buscarVendas(apiKey, { dataInicial, dataFinal, empresaCodigo, situacao }, urlBase);
+  }
+  const div = dividirPeriodoHibrido(dataInicial, dataFinal);
+  const [cache, api] = await Promise.all([
+    div.cacheDe ? lerCacheVendas({ chaveApiId, empresaCodigo, dataInicial: div.cacheDe, dataFinal: div.cacheAte }) : [],
+    div.apiDe   ? buscarVendas(apiKey, { dataInicial: div.apiDe, dataFinal: div.apiAte, empresaCodigo, situacao }, urlBase) : [],
+  ]);
+  // eslint-disable-next-line no-console
+  console.info('[hibrido vendas]', { empresa: empresaCodigo, periodo: `${dataInicial}→${dataFinal}`, cache: cache.length, api: api.length, total: cache.length + api.length });
+  return [...cache, ...api];
+}
+
+export async function buscarVendaItensHibrido(apiKey, params = {}, urlBase = DEFAULT_URL_BASE) {
+  const { dataInicial, dataFinal, empresaCodigo, situacao, chaveApiId } = params;
+  if (!chaveApiId || !empresaCodigo) {
+    return buscarVendaItens(apiKey, { dataInicial, dataFinal, empresaCodigo, situacao }, urlBase);
+  }
+  const div = dividirPeriodoHibrido(dataInicial, dataFinal);
+  const [cache, api] = await Promise.all([
+    div.cacheDe ? lerCacheVendaItens({ chaveApiId, empresaCodigo, dataInicial: div.cacheDe, dataFinal: div.cacheAte }) : [],
+    div.apiDe   ? buscarVendaItens(apiKey, { dataInicial: div.apiDe, dataFinal: div.apiAte, empresaCodigo, situacao }, urlBase) : [],
+  ]);
+  // eslint-disable-next-line no-console
+  console.info('[hibrido itens]', { empresa: empresaCodigo, periodo: `${dataInicial}→${dataFinal}`, cache: cache.length, api: api.length, total: cache.length + api.length });
+  return [...cache, ...api];
 }
 
 // Movimentacoes das contas bancarias - base do Fluxo de Caixa

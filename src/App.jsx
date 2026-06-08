@@ -73,6 +73,8 @@ import AdminNfManifestacao from './pages/AdminNfManifestacao';
 import AdminNfManifestacaoDetalhe from './pages/AdminNfManifestacaoDetalhe';
 import WpOutrasContas from './pages/cliente/webposto/ClienteOutrasContas';
 import AdminOutrasContas from './pages/AdminOutrasContas';
+import AdminSuporte from './pages/AdminSuporte';
+import AdminWebpostoSync from './pages/AdminWebpostoSync';
 import WpConfiguracoes from './pages/cliente/webposto/ClienteConfiguracoes';
 import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
 // Cliente Autosystem (esqueletos — implementados página a página)
@@ -93,7 +95,8 @@ import AsEstoques from './pages/cliente/autosystem/ClienteEstoques';
 import AsConfiguracoes from './pages/cliente/autosystem/ClienteConfiguracoes';
 
 // Auth
-import { RequireAdmin, RequireCliente, RequirePermissaoCliente } from './components/auth/RequireAuth';
+import { RequireAdmin, RequireCliente, RequirePermissaoCliente, RequireDashboardCliente } from './components/auth/RequireAuth';
+import ErrorBoundary from './components/ui/ErrorBoundary';
 
 export default function App() {
   return (
@@ -143,6 +146,8 @@ export default function App() {
           <Route path="/admin/fiscal/manifestacao" element={<AdminNfManifestacao />} />
           <Route path="/admin/fiscal/manifestacao/:id" element={<AdminNfManifestacaoDetalhe />} />
           <Route path="/admin/bpo/outras-contas" element={<AdminOutrasContas />} />
+          <Route path="/admin/suporte" element={<AdminSuporte />} />
+          <Route path="/admin/webposto-sync" element={<AdminWebpostoSync />} />
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
           <Route path="/admin/fiscal/agendamento" element={<NotasFiscais />} />
 
@@ -189,7 +194,7 @@ export default function App() {
 
         {/* Cliente Webposto */}
         <Route element={<RequireCliente><ClienteLayout /></RequireCliente>}>
-          <Route path="/cliente/webposto/dashboard" element={<WpDashboard />} />
+          <Route path="/cliente/webposto/dashboard" element={<RequireDashboardCliente><WpDashboard /></RequireDashboardCliente>} />
           <Route path="/cliente/webposto/dre" element={<RequirePermissaoCliente permissao="dre"><WpDRE /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/fluxo-caixa" element={<RequirePermissaoCliente permissao="fluxo_caixa"><WpFluxoCaixa /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/bpo" element={<WpBPO />} />
@@ -205,7 +210,7 @@ export default function App() {
           <Route path="/cliente/webposto/melhorias" element={<ClienteMelhorias />} />
           <Route path="/cliente/webposto/usuarios" element={<WpUsuarios />} />
           <Route path="/cliente/webposto/comercial" element={<Navigate to="/cliente/webposto/comercial/vendas" replace />} />
-          <Route path="/cliente/webposto/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><WpComercialVendas /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><ErrorBoundary><WpComercialVendas /></ErrorBoundary></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial/operacao" element={<RequirePermissaoCliente permissao="comercial_operacao"><WpComercialOperacao /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial/produtividade" element={<RequirePermissaoCliente permissao="comercial_produtividade"><WpComercialProdutividade /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial/estoques" element={<RequirePermissaoCliente permissao="comercial_estoques"><WpEstoques /></RequirePermissaoCliente>} />
@@ -213,7 +218,7 @@ export default function App() {
           <Route path="/cliente/webposto/relatorios-bi" element={<ClienteRelatoriosBi />} />
 
           {/* Cliente Autosystem */}
-          <Route path="/cliente/autosystem/dashboard" element={<AsDashboard />} />
+          <Route path="/cliente/autosystem/dashboard" element={<RequireDashboardCliente><AsDashboard /></RequireDashboardCliente>} />
           <Route path="/cliente/autosystem/dre" element={<RequirePermissaoCliente permissao="dre"><AsDRE /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/fluxo-caixa" element={<RequirePermissaoCliente permissao="fluxo_caixa"><AsFluxoCaixa /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/bpo" element={<AsBPO />} />

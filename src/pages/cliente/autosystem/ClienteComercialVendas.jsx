@@ -6,7 +6,7 @@ import {
   Building2, ChevronDown, ChevronRight, LayoutGrid,
   TrendingUp, TrendingDown, Minus, LineChart as LineChartIcon,
   Percent, Coins, CalendarDays, Droplet, CalendarRange, Construction,
-  BarChart3, Clock,
+  BarChart3, Clock, DollarSign, PieChart,
 } from 'lucide-react';
 
 // Sub-abas exibidas dentro da aba "Combustíveis".
@@ -503,8 +503,11 @@ export default function ClienteComercialVendas() {
   }, [aba, subAbaConveniencia, redeId, empresasSel, mapaGrupos, carrinhoGruposSelConv, carrinhoPeriodoDiasConv]);
 
   // Evolução 12m POR produto (Conveniência · Linha do tempo).
+  // Carrega também na Visão geral pra alimentar o sparkline de margem
+  // nos cards de Lucro bruto.
   useEffect(() => {
-    if (aba !== 'conveniencia' || subAbaConveniencia !== 'tempo') return;
+    if (aba !== 'conveniencia' && aba !== 'geral') return;
+    if (aba === 'conveniencia' && subAbaConveniencia !== 'tempo') return;
     if (!redeId || empresasSel.length === 0) { setEvolucao12mConv([]); return; }
     const gruposCat = [];
     mapaGrupos.forEach((cat, grid) => { if (cat === 'conveniencia') gruposCat.push(grid); });
@@ -567,8 +570,11 @@ export default function ClienteComercialVendas() {
   // Evolução 12m POR produto (Automotivos · Linha do tempo).
   // Filtra grupos de automotivos via `grupos_filtro`. Independente do
   // filtro de período (sempre últimos 12 meses).
+  // Carrega também na Visão geral pra alimentar o sparkline de margem
+  // nos cards de Lucro bruto.
   useEffect(() => {
-    if (aba !== 'automotivos' || subAbaAutomotivos !== 'tempo') return;
+    if (aba !== 'automotivos' && aba !== 'geral') return;
+    if (aba === 'automotivos' && subAbaAutomotivos !== 'tempo') return;
     if (!redeId || empresasSel.length === 0) { setEvolucao12mAuto([]); return; }
     const gruposAuto = [];
     mapaGrupos.forEach((cat, grid) => { if (cat === 'automotivos') gruposAuto.push(grid); });
@@ -1740,9 +1746,17 @@ export default function ClienteComercialVendas() {
   // Reutilizamos os states já carregados: evolucao12m (combustíveis), Auto, Conv.
   // Cada série é normalizada para 12 meses com lucro, margem% e faturamento.
   const seriesEvolucaoPorCategoria = useMemo(() => {
+    // `rows` pode vir agregado por (ano_mes, produto) — então somamos
+    // valor e valor_custo no mesmo ano_mes em vez de sobrescrever.
     const buildSerie = (rows) => {
       const idx = new Map();
-      (rows || []).forEach(r => idx.set(String(r.ano_mes), r));
+      (rows || []).forEach(r => {
+        const k = String(r.ano_mes);
+        const cur = idx.get(k) || { valor: 0, valor_custo: 0 };
+        cur.valor       += Number(r.valor)       || 0;
+        cur.valor_custo += Number(r.valor_custo) || 0;
+        idx.set(k, cur);
+      });
       const hoje = new Date();
       const out = [];
       for (let i = 11; i >= 0; i--) {
@@ -1877,15 +1891,32 @@ export default function ClienteComercialVendas() {
         </div>
       </div>
 
-      {/* Cards de lucro bruto (apenas na Visão geral) */}
+      {/* Cards de lucro bruto + Projeção (apenas na Visão geral) */}
       {aba === 'geral' && (() => {
         const projetar = (total) => {
           if (!projParams?.dec || projParams.dec <= 0) return total;
           return total * (projParams.diasAtual / projParams.dec);
         };
+        const cats3 = CATEGORIAS.filter(c => ['combustivel', 'automotivos', 'conveniencia'].includes(c.key));
+        // Série Global de margem 12m: agrega fat e lucro das 3 categorias
+        // por ano_mes e recalcula margem (não dá pra somar margens).
+        const serieGlobalMargem = (() => {
+          const mapa = new Map();
+          ['combustivel', 'automotivos', 'conveniencia'].forEach(k => {
+            (seriesEvolucaoPorCategoria?.[k] || []).forEach(p => {
+              const cur = mapa.get(p.ano_mes) || { ano_mes: p.ano_mes, rotulo: p.rotulo, faturamento: 0, lucro: 0 };
+              cur.faturamento += Number(p.faturamento) || 0;
+              cur.lucro       += Number(p.lucro)       || 0;
+              mapa.set(p.ano_mes, cur);
+            });
+          });
+          return Array.from(mapa.values())
+            .sort((a, b) => a.ano_mes.localeCompare(b.ano_mes))
+            .map(p => ({ ...p, margemPct: p.faturamento > 0 ? (p.lucro / p.faturamento) * 100 : 0 }));
+        })();
         return (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            {CATEGORIAS.filter(c => ['combustivel', 'automotivos', 'conveniencia'].includes(c.key)).map(c => {
+            {cats3.map(c => {
               const dados = totaisGerais.porCat[c.key] || { lucro: 0, valor: 0, custo: 0 };
               const dadosAA = totaisAnoAnterior.porCat[c.key] || { lucro: 0, valor: 0, custo: 0 };
               const margem = dados.valor > 0 ? dados.lucro / dados.valor : 0;
@@ -1895,6 +1926,10 @@ export default function ClienteComercialVendas() {
                   lucroProjecao={projetar(dados.lucro)}
                   margem={margem}
                   lucroAnoAnterior={dadosAA.lucro}
+                  faturamento={dados.valor}
+                  faturamentoProjecao={projetar(dados.valor)}
+                  qtd={c.key === 'combustivel' ? dados.qtd : (dados.itens || dados.qtd)}
+                  serieMargem={seriesEvolucaoPorCategoria?.[c.key]}
                 />
               );
             })}
@@ -1903,6 +1938,9 @@ export default function ClienteComercialVendas() {
               lucroProjecao={projetar(totaisGerais.totalLucro)}
               margem={totaisGerais.totalValor > 0 ? totaisGerais.totalLucro / totaisGerais.totalValor : 0}
               lucroAnoAnterior={totaisAnoAnterior.totalLucro}
+              faturamento={totaisGerais.totalValor}
+              faturamentoProjecao={projetar(totaisGerais.totalValor)}
+              serieMargem={serieGlobalMargem}
             />
           </div>
         );
@@ -1917,7 +1955,16 @@ export default function ClienteComercialVendas() {
         />
       )}
 
-      {/* Cards específicos da aba Combustíveis */}
+      {/* Detalhamento de informações por setor — só Visão geral.
+          Toggle entre Combustíveis / Automotivos / Conveniência,
+          tabela ranqueada por posto com KPIs lado a lado. */}
+      {aba === 'geral' && arvoreVisivel.length > 0 && (
+        <DetalhamentoSetor arvore={arvoreVisivel} />
+      )}
+
+      {/* Cards específicos da aba Combustíveis — layout estilo dashboard:
+          4 KPIs + card lateral "Resumo geral do mês" com tabela de
+          combustíveis (Litros, Lucro bruto, L.B./litro). */}
       {aba === 'combustivel' && (() => {
         const d  = totaisGerais.porCat.combustivel       || { qtd: 0, valor: 0, lucro: 0 };
         const aa = totaisAnoAnterior.porCat.combustivel  || { qtd: 0, valor: 0, lucro: 0 };
@@ -1925,106 +1972,212 @@ export default function ClienteComercialVendas() {
         const margemAA    = aa.valor > 0 ? aa.lucro / aa.valor : 0;
         const luPorL      = d.qtd    > 0 ? d.lucro  / d.qtd    : 0;
         const luPorLAA    = aa.qtd   > 0 ? aa.lucro / aa.qtd   : 0;
+        // Projeção do mês (mesmo fator usado na Visão geral) — escopo local
+        // pra esse IIFE.
+        const projetar = (total) => {
+          if (!projParams?.dec || projParams.dec <= 0) return total;
+          return total * (projParams.diasAtual / projParams.dec);
+        };
+
+        // Resumo por produto de combustível — agrega todos os produtos da
+        // categoria 'combustivel' a partir da árvore (todas as empresas).
+        const produtosCombustivel = (() => {
+          const mapa = new Map();
+          arvoreVisivel.forEach(emp => {
+            (emp.categorias || []).forEach(cat => {
+              if (cat.categoria.key !== 'combustivel') return;
+              (cat.grupos || []).forEach(grupo => {
+                (grupo.produtos || []).forEach(p => {
+                  const cur = mapa.get(p.codigo) || { codigo: p.codigo, nome: p.nome, qtd: 0, valor: 0, lucro: 0 };
+                  cur.qtd   += Number(p.qtd?.atual)   || 0;
+                  cur.valor += Number(p.fat?.atual)   || 0;
+                  cur.lucro += Number(p.lucro?.atual) || 0;
+                  mapa.set(p.codigo, cur);
+                });
+              });
+            });
+          });
+          return Array.from(mapa.values())
+            .filter(p => p.qtd > 0 || p.valor > 0)
+            .map(p => ({
+              ...p,
+              margem: p.valor > 0 ? p.lucro / p.valor : 0,
+              lbL:    p.qtd   > 0 ? p.lucro / p.qtd   : 0,
+              nomeCurto: abreviarCombustivel(p.nome),
+            }));
+        })();
+
+        // Top 3 produtos ordenados por cada métrica (cada KPI tem seu pódio).
+        const topPorLitros  = [...produtosCombustivel].sort((a, b) => b.qtd    - a.qtd   ).slice(0, 3);
+        const topPorLucro   = [...produtosCombustivel].sort((a, b) => b.lucro  - a.lucro ).slice(0, 3);
+        const topPorMargem  = [...produtosCombustivel].sort((a, b) => b.margem - a.margem).slice(0, 3);
+        const topPorLbL     = [...produtosCombustivel].sort((a, b) => b.lbL    - a.lbL   ).slice(0, 3);
+
+        // Séries 12m extraídas do serieEvolucao (já carregado pra Combustível).
+        const serieLitros   = (serieEvolucao || []).map(p => p.litros);
+        const serieLucroBr  = (serieEvolucao || []).map(p => p.lucro);
+        const serieMargemPct= (serieEvolucao || []).map(p => p.margemPct);
+        const serieLbL      = (serieEvolucao || []).map(p => p.lucroPorLitro);
+
         return (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-            <KpiMetrica icone={Fuel}        label="Litros vendidos"
-              valor={`${formatNumero(d.qtd, 2)} L`}
-              atual={d.qtd}   anoAnterior={aa.qtd} />
-            <KpiMetrica icone={ShoppingCart} label="Faturamento"
-              valor={formatCurrency(d.valor)}
-              atual={d.valor} anoAnterior={aa.valor} />
-            <KpiMetrica icone={TrendingUp}   label="Lucro bruto"
-              valor={formatCurrency(d.lucro)}
-              negativo={d.lucro < 0}
-              atual={d.lucro} anoAnterior={aa.lucro} />
-            <KpiMetrica icone={Percent}      label="Margem"
-              valor={`${(margem * 100).toFixed(1)}%`}
-              atual={margem}  anoAnterior={margemAA} />
-            <KpiMetrica icone={Coins}        label="Lucro por litro"
-              valor={formatCurrency(luPorL)}
-              negativo={luPorL < 0}
-              atual={luPorL}  anoAnterior={luPorLAA} />
-          </div>
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+              <KpiCombustivelDashboard
+                label="Litros vendidos" icone={Fuel} cor="amber"
+                valor={formatNumero(d.qtd, 0)}
+                valorAA={formatNumero(aa.qtd, 0)}
+                valorProj={formatNumero(projetar(d.qtd), 0)}
+                atual={d.qtd} anoAnterior={aa.qtd}
+                temProj={Math.abs(projetar(d.qtd) - d.qtd) > 1}
+                serie={serieLitros}
+              />
+              <KpiCombustivelDashboard
+                label="Lucro bruto" icone={DollarSign} cor="emerald"
+                valor={formatCurrency(d.lucro)}
+                valorAA={formatCurrency(aa.lucro)}
+                valorProj={formatCurrency(projetar(d.lucro))}
+                negativo={d.lucro < 0}
+                atual={d.lucro} anoAnterior={aa.lucro}
+                temProj={Math.abs(projetar(d.lucro) - d.lucro) > 0.01}
+                serie={serieLucroBr}
+              />
+              <KpiCombustivelDashboard
+                label="Margem" icone={PieChart} cor="violet"
+                valor={`${(margem * 100).toFixed(2)}%`}
+                valorAA={`${(margemAA * 100).toFixed(2)}%`}
+                atual={margem} anoAnterior={margemAA}
+                serie={serieMargemPct}
+              />
+              <KpiCombustivelDashboard
+                label="Lucro bruto por litro" icone={Droplet} cor="rose"
+                valor={formatCurrency(luPorL)}
+                valorAA={formatCurrency(luPorLAA)}
+                negativo={luPorL < 0}
+                atual={luPorL} anoAnterior={luPorLAA}
+                serie={serieLbL}
+              />
+            </div>
+            <TabelaProjecaoCombustivel
+              produtos={produtosCombustivel}
+              totais={{ qtd: d.qtd, valor: d.valor, lucro: d.lucro, margem, luPorL }}
+              projetar={projetar}
+            />
+          </>
         );
       })()}
 
-      {/* Cards específicos da aba Automotivos */}
+      {/* Cards específicos da aba Automotivos — mesmo estilo dos Combustíveis */}
       {aba === 'automotivos' && (() => {
         const d   = totaisGerais.porCat.automotivos       || { valor: 0, lucro: 0, itens: 0 };
         const aa  = totaisAnoAnterior.porCat.automotivos  || { valor: 0, lucro: 0, itens: 0 };
-        const ma  = totaisMesAnterior.porCat.automotivos  || { valor: 0, lucro: 0, itens: 0 };
         const margem    = d.valor   > 0 ? d.lucro  / d.valor   : 0;
         const margemAA  = aa.valor  > 0 ? aa.lucro / aa.valor  : 0;
         const ticket    = d.itens   > 0 ? d.valor  / d.itens   : 0;
         const ticketAA  = aa.itens  > 0 ? aa.valor / aa.itens  : 0;
-        const projetar  = (v, dias) => projParams.dec > 0 ? v * (dias / projParams.dec) : v;
-        const projAtual = projetar(d.valor,  projParams.diasAtual);
-        const projMA    = projetar(ma.valor, projParams.diasMA);
+        const projetar  = (total) => {
+          if (!projParams?.dec || projParams.dec <= 0) return total;
+          return total * (projParams.diasAtual / projParams.dec);
+        };
+        const serieCat = seriesEvolucaoPorCategoria?.automotivos || [];
+        const serieFat    = serieCat.map(p => p.faturamento);
+        const serieLucro  = serieCat.map(p => p.lucro);
+        const serieMargem = serieCat.map(p => p.margemPct);
+        // Agrega por GRUPO (Lubrificantes, Aditivos, etc) pra alimentar a tabela
+        const gruposAuto = agregarGruposDaCategoria(arvoreVisivel, 'automotivos');
         return (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-            <KpiComAA cor="blue" icone={ShoppingCart} label="Faturamento"
-              valor={formatCurrency(d.valor)} valorBase={formatCurrency(aa.valor)}
-              prefixoBase="Ano anterior" rotuloBase="AA"
-              atual={d.valor} base={aa.valor} />
-            <KpiComAA cor="blue" icone={TrendingUp} label="Lucro bruto"
-              valor={formatCurrency(d.lucro)} valorBase={formatCurrency(aa.lucro)}
-              prefixoBase="Ano anterior" rotuloBase="AA"
-              negativo={d.lucro < 0}
-              atual={d.lucro} base={aa.lucro} />
-            <KpiComAA cor="blue" icone={Percent} label="Margem"
-              valor={`${(margem * 100).toFixed(1)}%`}
-              valorBase={`${(margemAA * 100).toFixed(1)}%`}
-              prefixoBase="Ano anterior" rotuloBase="AA"
-              atual={margem} base={margemAA} />
-            <KpiComAA cor="blue" icone={Coins} label="Ticket médio"
-              valor={formatCurrency(ticket)} valorBase={formatCurrency(ticketAA)}
-              prefixoBase="Ano anterior" rotuloBase="AA"
-              atual={ticket} base={ticketAA} />
-            <KpiComAA cor="blue" icone={LineChartIcon} label="Projeção faturamento"
-              valor={formatCurrency(projAtual)} valorBase={formatCurrency(projMA)}
-              prefixoBase="Mês anterior" rotuloBase="MA"
-              atual={projAtual} base={projMA} />
-          </div>
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+              <KpiCombustivelDashboard
+                label="Faturamento" icone={ShoppingCart} cor="amber"
+                valor={formatCurrency(d.valor)}
+                valorAA={formatCurrency(aa.valor)}
+                valorProj={formatCurrency(projetar(d.valor))}
+                atual={d.valor} anoAnterior={aa.valor}
+                temProj={Math.abs(projetar(d.valor) - d.valor) > 0.01}
+                serie={serieFat}
+              />
+              <KpiCombustivelDashboard
+                label="Lucro bruto" icone={DollarSign} cor="emerald"
+                valor={formatCurrency(d.lucro)}
+                valorAA={formatCurrency(aa.lucro)}
+                valorProj={formatCurrency(projetar(d.lucro))}
+                negativo={d.lucro < 0}
+                atual={d.lucro} anoAnterior={aa.lucro}
+                temProj={Math.abs(projetar(d.lucro) - d.lucro) > 0.01}
+                serie={serieLucro}
+              />
+              <KpiCombustivelDashboard
+                label="Margem" icone={PieChart} cor="violet"
+                valor={`${(margem * 100).toFixed(2)}%`}
+                valorAA={`${(margemAA * 100).toFixed(2)}%`}
+                atual={margem} anoAnterior={margemAA}
+                serie={serieMargem}
+              />
+              <KpiCombustivelDashboard
+                label="Ticket médio" icone={Coins} cor="rose"
+                valor={formatCurrency(ticket)}
+                valorAA={formatCurrency(ticketAA)}
+                atual={ticket} anoAnterior={ticketAA}
+              />
+            </div>
+          </>
         );
       })()}
 
-      {/* Cards específicos da aba Conveniência */}
+      {/* Cards específicos da aba Conveniência — mesmo estilo dos Combustíveis */}
       {aba === 'conveniencia' && (() => {
         const d   = totaisGerais.porCat.conveniencia       || { valor: 0, lucro: 0, itens: 0 };
         const aa  = totaisAnoAnterior.porCat.conveniencia  || { valor: 0, lucro: 0, itens: 0 };
-        const ma  = totaisMesAnterior.porCat.conveniencia  || { valor: 0, lucro: 0, itens: 0 };
         const margem    = d.valor   > 0 ? d.lucro  / d.valor   : 0;
         const margemAA  = aa.valor  > 0 ? aa.lucro / aa.valor  : 0;
         const ticket    = d.itens   > 0 ? d.valor  / d.itens   : 0;
         const ticketAA  = aa.itens  > 0 ? aa.valor / aa.itens  : 0;
-        const projetar  = (v, dias) => projParams.dec > 0 ? v * (dias / projParams.dec) : v;
-        const projAtual = projetar(d.valor,  projParams.diasAtual);
-        const projMA    = projetar(ma.valor, projParams.diasMA);
+        const projetar  = (total) => {
+          if (!projParams?.dec || projParams.dec <= 0) return total;
+          return total * (projParams.diasAtual / projParams.dec);
+        };
+        const serieCat = seriesEvolucaoPorCategoria?.conveniencia || [];
+        const serieFat    = serieCat.map(p => p.faturamento);
+        const serieLucro  = serieCat.map(p => p.lucro);
+        const serieMargem = serieCat.map(p => p.margemPct);
+        const gruposConv = agregarGruposDaCategoria(arvoreVisivel, 'conveniencia');
         return (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-            <KpiComAA cor="emerald" icone={ShoppingCart} label="Faturamento"
-              valor={formatCurrency(d.valor)} valorBase={formatCurrency(aa.valor)}
-              prefixoBase="Ano anterior" rotuloBase="AA"
-              atual={d.valor} base={aa.valor} />
-            <KpiComAA cor="emerald" icone={TrendingUp} label="Lucro bruto"
-              valor={formatCurrency(d.lucro)} valorBase={formatCurrency(aa.lucro)}
-              prefixoBase="Ano anterior" rotuloBase="AA"
-              negativo={d.lucro < 0}
-              atual={d.lucro} base={aa.lucro} />
-            <KpiComAA cor="emerald" icone={Percent} label="Margem"
-              valor={`${(margem * 100).toFixed(1)}%`}
-              valorBase={`${(margemAA * 100).toFixed(1)}%`}
-              prefixoBase="Ano anterior" rotuloBase="AA"
-              atual={margem} base={margemAA} />
-            <KpiComAA cor="emerald" icone={Coins} label="Ticket médio"
-              valor={formatCurrency(ticket)} valorBase={formatCurrency(ticketAA)}
-              prefixoBase="Ano anterior" rotuloBase="AA"
-              atual={ticket} base={ticketAA} />
-            <KpiComAA cor="emerald" icone={LineChartIcon} label="Projeção faturamento"
-              valor={formatCurrency(projAtual)} valorBase={formatCurrency(projMA)}
-              prefixoBase="Mês anterior" rotuloBase="MA"
-              atual={projAtual} base={projMA} />
-          </div>
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+              <KpiCombustivelDashboard
+                label="Faturamento" icone={ShoppingCart} cor="amber"
+                valor={formatCurrency(d.valor)}
+                valorAA={formatCurrency(aa.valor)}
+                valorProj={formatCurrency(projetar(d.valor))}
+                atual={d.valor} anoAnterior={aa.valor}
+                temProj={Math.abs(projetar(d.valor) - d.valor) > 0.01}
+                serie={serieFat}
+              />
+              <KpiCombustivelDashboard
+                label="Lucro bruto" icone={DollarSign} cor="emerald"
+                valor={formatCurrency(d.lucro)}
+                valorAA={formatCurrency(aa.lucro)}
+                valorProj={formatCurrency(projetar(d.lucro))}
+                negativo={d.lucro < 0}
+                atual={d.lucro} anoAnterior={aa.lucro}
+                temProj={Math.abs(projetar(d.lucro) - d.lucro) > 0.01}
+                serie={serieLucro}
+              />
+              <KpiCombustivelDashboard
+                label="Margem" icone={PieChart} cor="violet"
+                valor={`${(margem * 100).toFixed(2)}%`}
+                valorAA={`${(margemAA * 100).toFixed(2)}%`}
+                atual={margem} anoAnterior={margemAA}
+                serie={serieMargem}
+              />
+              <KpiCombustivelDashboard
+                label="Ticket médio" icone={Coins} cor="rose"
+                valor={formatCurrency(ticket)}
+                valorAA={formatCurrency(ticketAA)}
+                atual={ticket} anoAnterior={ticketAA}
+              />
+            </div>
+          </>
         );
       })()}
 
@@ -2611,6 +2764,62 @@ function ChipDelta({ atual, base, rotulo }) {
 //   'leve'  → borda à esquerda em gray-200 (separa sub-colunas dentro da métrica)
 //   undef.  → sem borda
 // `tomProj` quando true aplica um leve tom de fundo (zebrar projeção vs atual).
+// ─── Card de Projeção ──────────────────────────────────────
+// Tabela compacta lateral (5o card da Visão geral) mostrando a projeção
+// pro fechamento do mês: Faturamento, Lucro bruto e Margem por setor +
+// linha de Total. Os valores são projetados a partir do realizado no
+// período usando o mesmo fator do KpiLucro (diasAtual / diasDecorridos).
+function CardProjecao({ linhas, total }) {
+  return (
+    <div className="rounded-xl bg-white border border-gray-200/60 p-3 shadow-sm flex flex-col">
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[12px] font-semibold text-gray-800">Projeção do mês</p>
+        <LineChartIcon className="h-3.5 w-3.5 text-gray-400" />
+      </div>
+      {/* Cada linha: nome do setor + 3 métricas empilhadas em pares pra caber */}
+      <div className="flex flex-col divide-y divide-gray-100">
+        {linhas.map((l) => (
+          <LinhaProjecao key={l.label} label={l.label} {...l} />
+        ))}
+        <LinhaProjecao label="Total" total {...total} />
+      </div>
+    </div>
+  );
+}
+
+function LinhaProjecao({ label, faturamento, lucro, margem, total }) {
+  return (
+    <div className={`py-1.5 ${total ? 'border-t-2 border-gray-300 mt-1 pt-2' : ''}`}>
+      <p className={`text-[11px] truncate ${total ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>{label}</p>
+      <div className="grid grid-cols-3 gap-1 mt-0.5">
+        <MetricaProj label="Fat" valor={formatCurrencyCompact(faturamento)} negrito={total} />
+        <MetricaProj label="LB"  valor={formatCurrencyCompact(lucro)}        negrito={total} />
+        <MetricaProj label="MG"  valor={`${(margem * 100).toFixed(1)}%`}     negrito={total} />
+      </div>
+    </div>
+  );
+}
+
+function MetricaProj({ label, valor, negrito }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[8.5px] uppercase tracking-wider text-gray-400 leading-tight">{label}</p>
+      <p className={`text-[10.5px] font-mono tabular-nums truncate ${negrito ? 'font-bold text-gray-900' : 'text-gray-800'}`}
+        title={valor}>{valor}</p>
+    </div>
+  );
+}
+
+// Formato monetário compacto (R$ 8,5M / R$ 549k) — preserva legibilidade
+// em colunas estreitas como o card de Projeção.
+function formatCurrencyCompact(v) {
+  const n = Number(v) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e6) return `R$ ${(n / 1e6).toFixed(2).replace('.', ',')}M`;
+  if (abs >= 1e3) return `R$ ${Math.round(n / 1e3).toLocaleString('pt-BR')}k`;
+  return formatCurrency(n);
+}
+
 // ─── Resumo por posto (Lucro bruto por categoria) ─────────────
 // Tabela compacta com Posto + Lucro bruto realizado em Combustível,
 // Automotivos e Conveniência. Cada célula traz o valor e a variação
@@ -2704,6 +2913,184 @@ function TabelaPostoCategoria({ arvore, multiEmpresa, onAbrirDetalhe }) {
         </table>
       </div>
     </div>
+  );
+}
+
+// ─── Detalhamento de informações por setor ────────────────────
+// Bloco da Visão geral com tabs (Combustíveis / Automotivos / Conveniência)
+// e tabela ranqueada por posto com KPIs comparados ao ano anterior.
+// Cada linha mostra: Qtd, AA, Var · Lucro, AA, Var · Margem · Preço venda,
+// Preço custo, L.B./un — calculados a partir da árvore agregada por categoria.
+function DetalhamentoSetor({ arvore }) {
+  const SETORES = useMemo(
+    () => CATEGORIAS.filter(c => ['combustivel', 'automotivos', 'conveniencia'].includes(c.key)),
+    [],
+  );
+  const [setorAtivo, setSetorAtivo] = useState('combustivel');
+  const setor = SETORES.find(s => s.key === setorAtivo) || SETORES[0];
+  const sufixoQtd = setorAtivo === 'combustivel' ? ' L' : '';
+  const labelQtd  = setorAtivo === 'combustivel' ? 'Litros' : 'Quantidade';
+  const labelLbUn = setorAtivo === 'combustivel' ? 'L.B. por litro' : 'L.B. por un.';
+
+  // Linhas: 1 por posto, agregando apenas o setor ativo.
+  const linhas = useMemo(() => {
+    return arvore.map(emp => {
+      const cat = (emp.categorias || []).find(c => c.categoria.key === setorAtivo);
+      const s = cat?.stats || { qtd: { atual: 0, aa: 0 }, fat: { atual: 0, aa: 0 }, lucro: { atual: 0, aa: 0 } };
+      // Custo derivado: Fat - Lucro (em cada período).
+      const custoAtual = s.fat.atual - s.lucro.atual;
+      return {
+        empresa_codigo: emp.empresa_codigo,
+        nome: emp.nome,
+        qtdAtual:   s.qtd.atual,
+        qtdAA:      s.qtd.aa,
+        fatAtual:   s.fat.atual,
+        fatAA:      s.fat.aa,
+        lucroAtual: s.lucro.atual,
+        lucroAA:    s.lucro.aa,
+        margem:     s.fat.atual > 0 ? s.lucro.atual / s.fat.atual : 0,
+        precoVenda: s.qtd.atual > 0 ? s.fat.atual   / s.qtd.atual : 0,
+        precoCusto: s.qtd.atual > 0 ? custoAtual    / s.qtd.atual : 0,
+        lbUn:       s.qtd.atual > 0 ? s.lucro.atual / s.qtd.atual : 0,
+      };
+    })
+    .filter(l => l.fatAtual > 0 || l.lucroAtual !== 0)
+    .sort((a, b) => b.lucroAtual - a.lucroAtual);
+  }, [arvore, setorAtivo]);
+
+  const totais = useMemo(() => {
+    const tot = linhas.reduce((acc, l) => {
+      acc.qtdAtual += l.qtdAtual; acc.qtdAA += l.qtdAA;
+      acc.fatAtual += l.fatAtual; acc.fatAA += l.fatAA;
+      acc.lucroAtual += l.lucroAtual; acc.lucroAA += l.lucroAA;
+      return acc;
+    }, { qtdAtual: 0, qtdAA: 0, fatAtual: 0, fatAA: 0, lucroAtual: 0, lucroAA: 0 });
+    const custo = tot.fatAtual - tot.lucroAtual;
+    return {
+      ...tot,
+      margem:     tot.fatAtual > 0 ? tot.lucroAtual / tot.fatAtual : 0,
+      precoVenda: tot.qtdAtual > 0 ? tot.fatAtual   / tot.qtdAtual : 0,
+      precoCusto: tot.qtdAtual > 0 ? custo          / tot.qtdAtual : 0,
+      lbUn:       tot.qtdAtual > 0 ? tot.lucroAtual / tot.qtdAtual : 0,
+    };
+  }, [linhas]);
+
+  // Max de qtd e margem pra barras de proporção (referência visual).
+  const maxQtd = Math.max(...linhas.map(l => l.qtdAtual), 0);
+  const maxMargem = Math.max(...linhas.map(l => l.margem), 0);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+        <div>
+          <h3 className="text-[13px] font-semibold text-gray-800">Detalhamento de informações por setor</h3>
+          <p className="text-[10.5px] text-gray-500 mt-0.5">Vendas setorizadas com maior nível de detalhes — clique no setor para alternar</p>
+        </div>
+        <div className="ml-auto inline-flex items-center rounded-lg border border-blue-200 bg-blue-50/40 p-0.5">
+          {SETORES.map(s => {
+            const Icone = s.icone;
+            const ativo = setorAtivo === s.key;
+            return (
+              <button key={s.key} onClick={() => setSetorAtivo(s.key)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                  ativo
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
+                }`}>
+                <Icone className="h-3 w-3" />
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px] min-w-[1100px]">
+          <thead className="bg-gray-50/80 border-b border-gray-200">
+            <tr className="text-[9.5px] font-semibold text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left">Fantasia</th>
+              <th className="px-2 py-2 text-right">{labelQtd}</th>
+              <th className="px-2 py-2 text-right">Ano anterior</th>
+              <th className="px-2 py-2 text-right">Variação</th>
+              <th className="px-2 py-2 text-right border-l border-gray-200">Lucro Bruto</th>
+              <th className="px-2 py-2 text-right">Ano anterior</th>
+              <th className="px-2 py-2 text-right">Variação</th>
+              <th className="px-2 py-2 text-right border-l border-gray-200">Margem</th>
+              <th className="px-2 py-2 text-right border-l border-gray-200">Preço venda</th>
+              <th className="px-2 py-2 text-right">Preço custo</th>
+              <th className="px-2 py-2 text-right">{labelLbUn}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.length === 0 ? (
+              <tr><td colSpan={11} className="px-4 py-8 text-center text-[12px] text-gray-400">Sem vendas de {setor.label} no período.</td></tr>
+            ) : linhas.map((l) => (
+              <tr key={`emp:${l.empresa_codigo}`} className="border-t border-gray-100 hover:bg-blue-50/30 transition-colors">
+                <td className="px-4 py-2 text-[12.5px] text-gray-800 font-medium">{l.nome}</td>
+                <td className="px-2 py-2 text-right relative pb-3">
+                  <span className="font-mono tabular-nums">{formatNumero(l.qtdAtual, setorAtivo === 'combustivel' ? 0 : 2)}{sufixoQtd}</span>
+                  {maxQtd > 0 && l.qtdAtual > 0 && (
+                    <div className="absolute left-2 right-2 bottom-0.5 h-1 rounded-full overflow-hidden bg-blue-50">
+                      <div className="h-full bg-blue-400/70" style={{ width: `${Math.min(100, (l.qtdAtual / maxQtd) * 100)}%` }} />
+                    </div>
+                  )}
+                </td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-500">{formatNumero(l.qtdAA, setorAtivo === 'combustivel' ? 0 : 2)}{sufixoQtd}</td>
+                <td className="px-2 py-2 text-right"><ChipVarPct atual={l.qtdAtual} aa={l.qtdAA} /></td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums font-semibold text-gray-900 border-l border-gray-100">{formatCurrency(l.lucroAtual)}</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-500">{formatCurrency(l.lucroAA)}</td>
+                <td className="px-2 py-2 text-right"><ChipVarPct atual={l.lucroAtual} aa={l.lucroAA} /></td>
+                <td className="px-2 py-2 text-right relative pb-3 border-l border-gray-100">
+                  <span className="font-mono tabular-nums text-gray-800">{(l.margem * 100).toFixed(2)}%</span>
+                  {maxMargem > 0 && l.margem > 0 && (
+                    <div className="absolute left-2 right-2 bottom-0.5 h-1 rounded-full overflow-hidden bg-amber-50">
+                      <div className="h-full bg-amber-400/70" style={{ width: `${Math.min(100, (l.margem / maxMargem) * 100)}%` }} />
+                    </div>
+                  )}
+                </td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-700 border-l border-gray-100">{formatCurrency(l.precoVenda)}</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-700">{formatCurrency(l.precoCusto)}</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-700">{formatCurrency(l.lbUn)}</td>
+              </tr>
+            ))}
+          </tbody>
+          {linhas.length > 0 && (
+            <tfoot>
+              <tr className="bg-gray-50 border-t-2 border-gray-200 font-semibold">
+                <td className="px-4 py-2 text-[12.5px] text-gray-900">Total</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-900">{formatNumero(totais.qtdAtual, setorAtivo === 'combustivel' ? 0 : 2)}{sufixoQtd}</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-700">{formatNumero(totais.qtdAA, setorAtivo === 'combustivel' ? 0 : 2)}{sufixoQtd}</td>
+                <td className="px-2 py-2 text-right"><ChipVarPct atual={totais.qtdAtual} aa={totais.qtdAA} /></td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-100">{formatCurrency(totais.lucroAtual)}</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-700">{formatCurrency(totais.lucroAA)}</td>
+                <td className="px-2 py-2 text-right"><ChipVarPct atual={totais.lucroAtual} aa={totais.lucroAA} /></td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-100">{(totais.margem * 100).toFixed(2)}%</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-100">{formatCurrency(totais.precoVenda)}</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-900">{formatCurrency(totais.precoCusto)}</td>
+                <td className="px-2 py-2 text-right font-mono tabular-nums text-gray-900">{formatCurrency(totais.lbUn)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Chip de variação percentual (atual vs AA), com seta e cor por sinal.
+function ChipVarPct({ atual, aa }) {
+  if (!aa || aa === 0) {
+    return <span className="text-[10px] text-gray-400 tabular-nums">—</span>;
+  }
+  const pct = (atual - aa) / Math.abs(aa);
+  const positivo = pct > 0;
+  const Icone = positivo ? TrendingUp : TrendingDown;
+  const cor = positivo ? 'text-emerald-700' : 'text-red-600';
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[10.5px] font-semibold tabular-nums ${cor}`}>
+      <span>{positivo ? '+' : ''}{(pct * 100).toFixed(2)}%</span>
+      <Icone className="h-3 w-3" />
+    </span>
   );
 }
 
@@ -3518,33 +3905,254 @@ function TreeVendas({ arvore, multiEmpresa, expandidos, setExpandidos, onToggle,
   );
 }
 
-function KpiLucro({ cat, lucro, lucroProjecao, margem, lucroAnoAnterior }) {
+function KpiLucro({ cat, lucro, lucroProjecao, margem, lucroAnoAnterior, faturamento, faturamentoProjecao, qtd, serieMargem }) {
   const Icone = cat.icone;
   const Pal = CAT_PALETA[cat.cor];
   const temProj = lucroProjecao != null && Math.abs(lucroProjecao - lucro) > 0.01;
+  // Cor do sparkline acompanha a paleta da categoria.
+  const CORES_SPARK = { blue: '#3b82f6', amber: '#f59e0b', emerald: '#10b981' };
+  // Label da quantidade depende da categoria — só Combustível usa litros.
+  const qtdLabel = cat.key === 'combustivel' ? 'Litros' : 'Qtd';
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className={`rounded-lg ${Pal.bg} p-2.5 flex-shrink-0`}>
-          <Icone className={`h-5 w-5 ${Pal.icon}`} />
-        </div>
+    <KpiLucroLayout
+      icone={<Icone className={`h-4 w-4 ${Pal.icon}`} />}
+      bgIcone={Pal.bg}
+      label="Lucro bruto"
+      categoria={cat.label}
+      lucro={lucro}
+      lucroProjecao={lucroProjecao}
+      temProj={temProj}
+      margem={margem}
+      lucroAnoAnterior={lucroAnoAnterior}
+      faturamento={faturamento}
+      faturamentoProjecao={faturamentoProjecao}
+      qtd={qtd}
+      qtdLabel={qtdLabel}
+      serieMargem={serieMargem}
+      sparklineCor={CORES_SPARK[cat.cor] || '#3b82f6'}
+    />
+  );
+}
+
+// Layout compartilhado entre KpiLucro (por categoria) e KpiLucroGlobal.
+// Estrutura: header (ícone + label/categoria) ▸ valor principal + chip de
+// variação ▸ sparkline de margem 12m ▸ stripe inferior (margem | proj. mês).
+function KpiLucroLayout({ icone, bgIcone, label, categoria, lucro, lucroProjecao, temProj, margem, lucroAnoAnterior, faturamento, faturamentoProjecao, qtd, qtdLabel, serieMargem, sparklineCor = '#3b82f6', ring }) {
+  // Tendência da margem: compara o último ponto da série com a média dos
+  // demais 11 meses pra dar contexto ao número de margem atual.
+  const tendenciaMargem = (() => {
+    if (!serieMargem || serieMargem.length < 3) return null;
+    const ultimo = serieMargem[serieMargem.length - 1].margemPct;
+    const anteriores = serieMargem.slice(0, -1).filter(p => p.margemPct > 0);
+    if (anteriores.length === 0) return null;
+    const media = anteriores.reduce((s, p) => s + p.margemPct, 0) / anteriores.length;
+    if (media === 0) return null;
+    const diff = ultimo - media;
+    return { diff, sentido: diff > 0.1 ? 'up' : diff < -0.1 ? 'down' : 'flat' };
+  })();
+
+  return (
+    <div className={`bg-white rounded-xl border border-gray-200/70 ${ring || ''} shadow-sm flex flex-col h-full overflow-hidden`}>
+      {/* Header — ícone à direita pra equilibrar o peso visual */}
+      <div className="flex items-center gap-2 px-3 pt-3 pb-1">
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-gray-500 mb-0.5">Lucro bruto · {cat.label}</p>
-          <p className={`text-lg font-semibold tracking-tight truncate ${lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}>
-            {formatCurrency(lucro)}
-          </p>
-          {temProj && (
-            <p className="text-[11px] text-blue-700 truncate mt-0.5">
-              <span className="text-blue-500 mr-1">Proj. mês:</span>
-              <span className="font-semibold">{formatCurrency(lucroProjecao)}</span>
-            </p>
-          )}
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-[11px] text-gray-400">margem {(margem * 100).toFixed(1)}%</span>
-            <BadgeComparacaoAA atual={lucro} anoAnterior={lucroAnoAnterior} />
-          </div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 leading-tight truncate">{label}</p>
+          <p className="text-[10.5px] text-gray-700 leading-tight truncate font-medium">{categoria}</p>
+        </div>
+        <div className={`h-7 w-7 rounded-md ${bgIcone} flex items-center justify-center flex-shrink-0`}>
+          {icone}
         </div>
       </div>
+
+      {/* Valor principal + badge AA + contexto de faturamento (realizado + proj) */}
+      <div className="px-3 pt-3 pb-1.5 flex-1 flex flex-col justify-center">
+        <p className={`text-[22px] font-bold tracking-tight tabular-nums truncate leading-none ${lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}
+          title={formatCurrency(lucro)}>
+          {formatCurrency(lucro)}
+        </p>
+        <div className="mt-1">
+          <BadgeComparacaoAA atual={lucro} anoAnterior={lucroAnoAnterior} />
+        </div>
+        {faturamento != null && faturamento > 0 && (
+          <div className="mt-3 space-y-0.5">
+            <p className="text-[10.5px] text-gray-500 leading-tight truncate" title={`Faturamento: ${formatCurrency(faturamento)}`}>
+              <span className="text-gray-400">Faturamento </span>
+              <span className="font-semibold text-gray-700 tabular-nums">{formatCurrency(faturamento)}</span>
+            </p>
+            {faturamentoProjecao != null && Math.abs(faturamentoProjecao - faturamento) > 0.01 && (
+              <p className="text-[10.5px] leading-tight truncate" title={`Projeção do faturamento: ${formatCurrency(faturamentoProjecao)}`}>
+                <span className="text-blue-500/80">Proj. mês </span>
+                <span className="font-semibold text-blue-700 tabular-nums">{formatCurrency(faturamentoProjecao)}</span>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Sparkline de margem dos últimos 12 meses */}
+      {serieMargem && serieMargem.length >= 2 && (
+        <div className="px-3 pb-1">
+          <div className="flex items-center justify-between mb-0.5">
+            <span className="text-[8.5px] uppercase tracking-wider text-gray-400 font-semibold">Margem 12m</span>
+            {tendenciaMargem && tendenciaMargem.sentido !== 'flat' && (
+              <span className={`text-[9px] font-semibold tabular-nums inline-flex items-center gap-0.5 ${
+                tendenciaMargem.sentido === 'up' ? 'text-emerald-600' : 'text-red-600'
+              }`}>
+                {tendenciaMargem.sentido === 'up' ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+                {tendenciaMargem.diff > 0 ? '+' : ''}{tendenciaMargem.diff.toFixed(1)}pp
+              </span>
+            )}
+          </div>
+          <Sparkline serie={serieMargem} cor={sparklineCor} altura={28} />
+        </div>
+      )}
+
+      {/* Stripe inferior — 2 ou 3 colunas dependendo se tem qtd (litros etc.) */}
+      <div className={`grid ${qtd != null ? 'grid-cols-3' : 'grid-cols-2'} divide-x divide-gray-100 border-t border-gray-100 bg-gray-50/40`}>
+        {qtd != null && (
+          <div className="px-2.5 py-2 min-w-0">
+            <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold leading-tight">{qtdLabel || 'Qtd'}</p>
+            <p className="text-[11.5px] font-semibold tabular-nums text-gray-800 leading-tight truncate" title={`${formatNumero(qtd, 0)}`}>
+              {formatNumeroCompact(qtd)}
+            </p>
+          </div>
+        )}
+        <div className="px-2.5 py-2 min-w-0">
+          <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold leading-tight">Margem</p>
+          <p className="text-[11.5px] font-semibold tabular-nums text-gray-800 leading-tight truncate">{(margem * 100).toFixed(1)}%</p>
+        </div>
+        <div className="px-2.5 py-2 min-w-0">
+          <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold leading-tight">Proj. mês</p>
+          <p className={`text-[11.5px] font-semibold tabular-nums leading-tight truncate ${temProj ? 'text-blue-700' : 'text-gray-400'}`}
+            title={temProj ? formatCurrency(lucroProjecao) : '—'}>
+            {temProj ? formatCurrencyCompact(lucroProjecao) : '—'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Agrega os grupos de uma categoria (automotivos/conveniência) somando
+// faturamento, lucro e itens de cada produto na árvore. Ordenado por
+// faturamento desc. Retorna [{ codigo, nome, valor, lucro, itens, margem, ticket }].
+function agregarGruposDaCategoria(arvore, categoriaKey) {
+  const mapa = new Map();
+  (arvore || []).forEach(emp => {
+    (emp.categorias || []).forEach(cat => {
+      if (cat.categoria.key !== categoriaKey) return;
+      (cat.grupos || []).forEach(grupo => {
+        const k = String(grupo.codigo ?? grupo.nome);
+        let cur = mapa.get(k);
+        if (!cur) {
+          cur = { codigo: grupo.codigo, nome: grupo.nome, valor: 0, lucro: 0, itens: 0 };
+          mapa.set(k, cur);
+        }
+        (grupo.produtos || []).forEach(p => {
+          cur.valor += Number(p.fat?.atual)   || 0;
+          cur.lucro += Number(p.lucro?.atual) || 0;
+          cur.itens += 1;
+        });
+      });
+    });
+  });
+  return Array.from(mapa.values())
+    .filter(g => g.valor > 0 || g.lucro !== 0)
+    .map(g => ({
+      ...g,
+      margem: g.valor > 0 ? g.lucro / g.valor : 0,
+      ticket: g.itens > 0 ? g.valor / g.itens : 0,
+    }))
+    .sort((a, b) => b.valor - a.valor);
+}
+
+// Abrevia nome de produto de combustível pra caber na stripe inferior.
+// Mantém apenas a "essência" do nome (ex: "GASOLINA C COMUM ADITIVADA"
+// → "GASOLINA AD."; "OLEO DIESEL B S-10 COMUM" → "DIESEL S-10").
+function abreviarCombustivel(nome) {
+  if (!nome) return '—';
+  let n = String(nome).toUpperCase().trim();
+  n = n.replace(/\bOLEO\s+/g, '').replace(/\bHIDRATADO\b/g, 'HID.').replace(/\bCOMUM\b/g, '');
+  n = n.replace(/\bADITIVADO\b|\bADITIVADA\b/g, 'AD.');
+  n = n.replace(/\s+/g, ' ').trim();
+  // Se ainda for muito longo, corta nas primeiras 14 chars (cabe na stripe).
+  return n.length > 14 ? `${n.slice(0, 13)}…` : n;
+}
+
+// Formato compacto para quantidades: 12,3K · 1,5M
+function formatNumeroCompact(v) {
+  const n = Number(v) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(2).replace('.', ',')}M`;
+  if (abs >= 1e3) return `${Math.round(n / 1e3).toLocaleString('pt-BR')}k`;
+  return formatNumero(n, 0);
+}
+
+// Sparkline SVG — linha suave (Catmull-Rom convertida em cubic bézier) com
+// preenchimento em gradient vertical. Sem dependência de Recharts.
+function Sparkline({ serie, cor = '#3b82f6', altura = 28 }) {
+  // ID único do gradient pra cada instância (evita colisão se houver vários).
+  const gradId = useMemo(
+    () => `spark-grad-${Math.random().toString(36).slice(2, 9)}`,
+    [],
+  );
+
+  const pontos = serie.map(p => Number(p.margemPct) || 0);
+  const min = Math.min(...pontos);
+  const max = Math.max(...pontos);
+  const range = max - min || 1;
+  const W = 100;
+  const H = altura;
+  const stepX = pontos.length > 1 ? W / (pontos.length - 1) : 0;
+  const padTop = 2;
+  const padBot = 2;
+  const y = (v) => H - padBot - ((v - min) / range) * (H - padTop - padBot);
+  const coords = pontos.map((v, i) => [i * stepX, y(v)]);
+
+  // Catmull-Rom → cubic bézier. Tensão 0.5 dá uma curva visualmente suave
+  // sem "overshoot" que distorça a leitura da série.
+  function suavizar(pts) {
+    if (pts.length < 2) return '';
+    const T = 0.5;
+    let d = `M ${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+      const cp1x = p1[0] + (p2[0] - p0[0]) * T / 3;
+      const cp1y = p1[1] + (p2[1] - p0[1]) * T / 3;
+      const cp2x = p2[0] - (p3[0] - p1[0]) * T / 3;
+      const cp2y = p2[1] - (p3[1] - p1[1]) * T / 3;
+      d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2[0]} ${p2[1]}`;
+    }
+    return d;
+  }
+
+  const linha = suavizar(coords);
+  const area  = `${linha} L ${W} ${H} L 0 ${H} Z`;
+  const ultimo = coords[coords.length - 1];
+  const ultimoVal = pontos[pontos.length - 1];
+  const labelMargem = `${ultimoVal.toFixed(1)}%`;
+
+  return (
+    <div className="relative" title={`Margem últimos 12 meses · atual ${labelMargem}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none"
+        className="overflow-visible">
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={cor} stopOpacity={0.35} />
+            <stop offset="60%"  stopColor={cor} stopOpacity={0.12} />
+            <stop offset="100%" stopColor={cor} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <path d={area} fill={`url(#${gradId})`} />
+        <path d={linha} fill="none" stroke={cor} strokeWidth="1.4"
+          strokeLinejoin="round" strokeLinecap="round"
+          vectorEffect="non-scaling-stroke" />
+        <circle cx={ultimo[0]} cy={ultimo[1]} r="1.8" fill={cor}
+          stroke="white" strokeWidth="0.9" vectorEffect="non-scaling-stroke" />
+      </svg>
     </div>
   );
 }
@@ -3574,20 +4182,43 @@ function ChipVariacaoSemanal({ pct }) {
 }
 
 // Célula numérica simples (sem chips), para a tree de Realizado dia a dia.
-function CelulaNumero({ valor, moeda = true, decimais = 0, sufixo = '', sub, negativoBg = true, divisor = 'leve' }) {
+// Suporta barra de proporção interna (opt-in via `barraMax`): pinta uma
+// barrinha no rodapé da célula proporcional a (valor / barraMax) — ajuda a
+// comparar visualmente quem é maior na coluna sem precisar ler os números.
+const BARRA_CORES = {
+  blue:    'bg-blue-400/70 dark:bg-blue-500/60',
+  emerald: 'bg-emerald-400/70 dark:bg-emerald-500/60',
+  violet:  'bg-violet-400/70 dark:bg-violet-500/60',
+  amber:   'bg-amber-400/70 dark:bg-amber-500/60',
+};
+function CelulaNumero({ valor, moeda = true, decimais = 0, sufixo = '', sub, negativoBg = true, divisor = 'leve', barraMax, barraCor = 'blue', corTexto, onClick }) {
   const negativo = negativoBg && valor < 0;
   const txt = moeda ? formatCurrency(valor) : `${formatNumero(valor, decimais)}${sufixo}`;
+  const temBarra = barraMax != null && barraMax > 0 && valor > 0;
+  const pctBarra = temBarra ? Math.min(100, (Number(valor) / Number(barraMax)) * 100) : 0;
   const cls = [
     'px-2.5 py-2 text-right align-top whitespace-nowrap',
+    temBarra ? 'relative pb-3' : '',
     divisor === 'forte' ? 'border-l-2 border-gray-300' : '',
     divisor === 'leve'  ? 'border-l border-gray-100'   : '',
+    onClick ? 'cursor-pointer' : '',
   ].filter(Boolean).join(' ');
+  // Cor do texto: vermelho se negativo; caso contrário, usa corTexto se
+  // informada e valor > 0 (zero permanece cinza neutro pra não distrair).
+  const corValor = negativo
+    ? 'text-red-700'
+    : (corTexto && Number(valor) > 0 ? corTexto : 'text-gray-900');
   return (
-    <td className={cls}>
-      <p className={`font-mono tabular-nums text-[12px] font-semibold leading-tight ${negativo ? 'text-red-700' : 'text-gray-900'}`}>
+    <td className={cls} onClick={onClick}>
+      <p className={`font-mono tabular-nums text-[12px] font-semibold leading-tight ${corValor}`}>
         {txt}
       </p>
       {sub && <p className="text-[9px] text-gray-400 mt-0.5 leading-tight">{sub}</p>}
+      {temBarra && (
+        <div className="absolute left-2 right-2 bottom-1 h-1 rounded-full overflow-hidden bg-gray-100">
+          <div className={`h-full rounded-full ${BARRA_CORES[barraCor]}`} style={{ width: `${pctBarra}%` }} />
+        </div>
+      )}
     </td>
   );
 }
@@ -3596,6 +4227,13 @@ function CelulaNumero({ valor, moeda = true, decimais = 0, sufixo = '', sub, neg
 // Colunas: Dia da semana, Litros (+ ΔSemana), Faturamento, Lucro bruto,
 // Acréscimos, Descontos, Margem, Preço médio, Custo médio, Lucro/L.
 function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
+  // Linha de produto que o usuário "fixou" pra leitura horizontal dos dados.
+  // Click na mesma linha desseleciona.
+  const [linhaSelecionada, setLinhaSelecionada] = useState(null);
+  function toggleLinha(key) {
+    setLinhaSelecionada(prev => prev === key ? null : key);
+  }
+
   function calcAux(s) {
     const margem    = s.valor > 0 ? (s.valor - s.custo) / s.valor : 0;
     const precoMed  = s.qtd   > 0 ? s.valor / s.qtd : 0;
@@ -3603,6 +4241,18 @@ function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
     const lucroL    = s.qtd   > 0 ? (s.valor - s.custo) / s.qtd : 0;
     const lucro     = s.valor - s.custo;
     return { lucro, margem, precoMed, custoMed, lucroL };
+  }
+
+  // Pra produtos, calculamos o max dentro de cada dia — as barras de
+  // proporção aparecem APENAS nas linhas de produto (comparação intra-dia).
+  function maxProdutos(produtos) {
+    return produtos.reduce((acc, p) => {
+      const a = calcAux({ qtd: p.qtd, valor: p.valor, custo: p.custo });
+      acc.valor  = Math.max(acc.valor,  p.valor);
+      acc.lucro  = Math.max(acc.lucro,  a.lucro);
+      acc.margem = Math.max(acc.margem, a.margem * 100);
+      return acc;
+    }, { valor: 0, lucro: 0, margem: 0 });
   }
 
   return (
@@ -3651,38 +4301,48 @@ function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
                   </td>
                   <CelulaNumero valor={dNode.stats.valor} divisor="forte" />
                   <CelulaNumero valor={aux.lucro} divisor="forte" />
-                  <CelulaNumero valor={dNode.stats.acresc} divisor="forte" />
-                  <CelulaNumero valor={dNode.stats.desc} divisor="leve" />
+                  <CelulaNumero valor={dNode.stats.acresc} divisor="forte" corTexto="text-emerald-700" />
+                  <CelulaNumero valor={dNode.stats.desc}   divisor="leve"  corTexto="text-red-700" />
                   <CelulaNumero valor={aux.margem * 100} moeda={false} decimais={1} sufixo="%" divisor="forte" negativoBg={false} />
                   <CelulaNumero valor={aux.precoMed} divisor="forte" />
                   <CelulaNumero valor={aux.custoMed} divisor="leve" />
                   <CelulaNumero valor={aux.lucroL} divisor="leve" />
                 </tr>
-                {aberto && dNode.produtos.map((p, idx) => {
-                  const auxP = calcAux({ qtd: p.qtd, valor: p.valor, custo: p.custo });
-                  return (
-                    <tr key={`${diaKey}/p:${p.codigo}`}
-                      className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-amber-50/30 transition-colors`}>
-                      <td className="pl-10 pr-3 py-1.5">
-                        <p className="text-[12px] text-gray-700 truncate max-w-[360px]">{p.nome}</p>
-                        <p className="text-[9.5px] text-gray-400 font-mono">cód {p.codigo}</p>
-                      </td>
-                      <td className="px-2.5 py-1.5 border-l-2 border-gray-300"></td>
-                      <CelulaNumero valor={p.qtd} moeda={false} decimais={2} sufixo=" L" divisor="forte" />
-                      <td className="px-2.5 py-1.5 text-right border-l border-gray-100">
-                        <ChipVariacaoSemanal pct={p.varSemana} />
-                      </td>
-                      <CelulaNumero valor={p.valor} divisor="forte" />
-                      <CelulaNumero valor={auxP.lucro} divisor="forte" />
-                      <CelulaNumero valor={p.acresc} divisor="forte" />
-                      <CelulaNumero valor={p.desc} divisor="leve" />
-                      <CelulaNumero valor={auxP.margem * 100} moeda={false} decimais={1} sufixo="%" divisor="forte" negativoBg={false} />
-                      <CelulaNumero valor={auxP.precoMed} divisor="forte" />
-                      <CelulaNumero valor={auxP.custoMed} divisor="leve" />
-                      <CelulaNumero valor={auxP.lucroL} divisor="leve" />
-                    </tr>
-                  );
-                })}
+                {aberto && (() => {
+                  const maxP = maxProdutos(dNode.produtos);
+                  return dNode.produtos.map((p, idx) => {
+                    const auxP = calcAux({ qtd: p.qtd, valor: p.valor, custo: p.custo });
+                    const rowKey = `${diaKey}/p:${p.codigo}`;
+                    const selecionada = linhaSelecionada === rowKey;
+                    return (
+                      <tr key={rowKey}
+                        onClick={() => toggleLinha(rowKey)}
+                        className={`cursor-pointer transition-colors ${
+                          selecionada
+                            ? 'bg-yellow-100 hover:bg-yellow-100 ring-1 ring-inset ring-yellow-300'
+                            : `${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-amber-50/30`
+                        }`}>
+                        <td className="pl-10 pr-3 py-1.5">
+                          <p className="text-[12px] text-gray-700 truncate max-w-[360px]">{p.nome}</p>
+                          <p className="text-[9.5px] text-gray-400 font-mono">cód {p.codigo}</p>
+                        </td>
+                        <td className="px-2.5 py-1.5 border-l-2 border-gray-300"></td>
+                        <CelulaNumero valor={p.qtd} moeda={false} decimais={2} sufixo=" L" divisor="forte" />
+                        <td className="px-2.5 py-1.5 text-right border-l border-gray-100">
+                          <ChipVariacaoSemanal pct={p.varSemana} />
+                        </td>
+                        <CelulaNumero valor={p.valor}        divisor="forte" barraMax={maxP.valor}  barraCor="blue" />
+                        <CelulaNumero valor={auxP.lucro}     divisor="forte" barraMax={maxP.lucro}  barraCor="emerald" />
+                        <CelulaNumero valor={p.acresc} divisor="forte" corTexto="text-emerald-700" />
+                        <CelulaNumero valor={p.desc}   divisor="leve"  corTexto="text-red-700" />
+                        <CelulaNumero valor={auxP.margem * 100} moeda={false} decimais={1} sufixo="%" divisor="forte" negativoBg={false} barraMax={maxP.margem} barraCor="violet" />
+                        <CelulaNumero valor={auxP.precoMed} divisor="forte" />
+                        <CelulaNumero valor={auxP.custoMed} divisor="leve" />
+                        <CelulaNumero valor={auxP.lucroL} divisor="leve" />
+                      </tr>
+                    );
+                  });
+                })()}
               </React.Fragment>
             );
           })}
@@ -3696,6 +4356,13 @@ function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
 // Colunas: Qtd, Faturamento, Custo, Lucro bruto, Margem, Preço méd., Custo méd., Lucro méd.
 function TreeRealizadoAutoDia({ arvore, expandidos, onToggle, cor = 'blue' }) {
   const Pal = TREE_PALETAS_CATEGORIA[cor];
+  // Linha selecionada pelo usuário (grupo OU produto) — destacada em amarelo
+  // pra facilitar a leitura horizontal dos valores na mesma linha.
+  const [linhaSelecionada, setLinhaSelecionada] = useState(null);
+  function toggleLinha(key) {
+    setLinhaSelecionada(prev => prev === key ? null : key);
+  }
+
   function calc(s) {
     const lucro    = s.valor - s.custo;
     const margem   = s.valor > 0 ? lucro / s.valor : 0;
@@ -3705,18 +4372,36 @@ function TreeRealizadoAutoDia({ arvore, expandidos, onToggle, cor = 'blue' }) {
     return { lucro, margem, precoMed, custoMed, lucroMed };
   }
 
-  function LinhaStats({ s }) {
+  // Max de Faturamento, Lucro e Margem entre os produtos de um grupo —
+  // referência pras barras de proporção (só no nível de produto).
+  function maxProdutosDoGrupo(produtos) {
+    return produtos.reduce((acc, p) => {
+      const c = calc({ qtd: p.qtd, valor: p.valor, custo: p.custo });
+      acc.valor  = Math.max(acc.valor,  p.valor);
+      acc.lucro  = Math.max(acc.lucro,  c.lucro);
+      acc.margem = Math.max(acc.margem, c.margem * 100);
+      return acc;
+    }, { valor: 0, lucro: 0, margem: 0 });
+  }
+
+  // LinhaStats agora aceita:
+  //  - onClick: aplicado em cada td (quando passado, ativa seleção da linha
+  //    via click em qualquer célula numérica). A primeira td (nome) fica
+  //    livre pra continuar fazendo toggle de expansão.
+  //  - barras: { valor, lucro, margem } pra desenhar as barras de proporção
+  //    nas células Faturamento, Lucro bruto e Margem.
+  function LinhaStats({ s, onClick, barras }) {
     const c = calc(s);
     return (
       <>
-        <CelulaNumero valor={s.qtd}        moeda={false} decimais={2} divisor="forte" />
-        <CelulaNumero valor={s.valor}      divisor="forte" />
-        <CelulaNumero valor={s.custo}      divisor="leve" />
-        <CelulaNumero valor={c.lucro}      divisor="forte" />
-        <CelulaNumero valor={c.margem*100} moeda={false} decimais={1} sufixo="%" divisor="forte" negativoBg={false} />
-        <CelulaNumero valor={c.precoMed}   divisor="forte" />
-        <CelulaNumero valor={c.custoMed}   divisor="leve" />
-        <CelulaNumero valor={c.lucroMed}   divisor="leve" />
+        <CelulaNumero valor={s.qtd}        moeda={false} decimais={2} divisor="forte" onClick={onClick} />
+        <CelulaNumero valor={s.valor}      divisor="forte" onClick={onClick} barraMax={barras?.valor}  barraCor="blue" />
+        <CelulaNumero valor={s.custo}      divisor="leve"  onClick={onClick} />
+        <CelulaNumero valor={c.lucro}      divisor="forte" onClick={onClick} barraMax={barras?.lucro}  barraCor="emerald" />
+        <CelulaNumero valor={c.margem*100} moeda={false} decimais={1} sufixo="%" divisor="forte" negativoBg={false} onClick={onClick} barraMax={barras?.margem} barraCor="violet" />
+        <CelulaNumero valor={c.precoMed}   divisor="forte" onClick={onClick} />
+        <CelulaNumero valor={c.custoMed}   divisor="leve"  onClick={onClick} />
+        <CelulaNumero valor={c.lucroMed}   divisor="leve"  onClick={onClick} />
       </>
     );
   }
@@ -3759,11 +4444,18 @@ function TreeRealizadoAutoDia({ arvore, expandidos, onToggle, cor = 'blue' }) {
                 {dAberto && dNode.grupos.map(gNode => {
                   const gKey = `${dKey}/g:${gNode.codigo ?? 'none'}`;
                   const gAberto = expandidos.has(gKey);
+                  const gSelecionada = linhaSelecionada === gKey;
+                  // bg base do grupo + override quando selecionada (amarelo)
+                  const gRowBg = gSelecionada
+                    ? 'bg-yellow-100 ring-1 ring-inset ring-yellow-300'
+                    : 'bg-gray-50/50 hover:bg-gray-100/70';
+                  const maxP = maxProdutosDoGrupo(gNode.produtos);
                   return (
                     <React.Fragment key={gKey}>
-                      <tr className="cursor-pointer bg-gray-50/50 hover:bg-gray-100/70 transition-colors"
-                        onClick={() => onToggle(gKey)}>
-                        <td className="pl-10 pr-3 py-2">
+                      <tr className={`${gRowBg} transition-colors`}>
+                        {/* Primeira td: click expande/colapsa (não seleciona) */}
+                        <td className="pl-10 pr-3 py-2 cursor-pointer"
+                          onClick={() => onToggle(gKey)}>
                           <div className="flex items-center gap-2">
                             {gAberto
                               ? <ChevronDown className="h-3 w-3 text-gray-500 flex-shrink-0" />
@@ -3772,18 +4464,27 @@ function TreeRealizadoAutoDia({ arvore, expandidos, onToggle, cor = 'blue' }) {
                             <span className="text-[12px] font-medium text-gray-800 truncate">{gNode.nome}</span>
                           </div>
                         </td>
-                        <LinhaStats s={gNode.stats} />
+                        {/* Demais células: click seleciona/desseleciona a linha */}
+                        <LinhaStats s={gNode.stats} onClick={() => toggleLinha(gKey)} />
                       </tr>
-                      {gAberto && gNode.produtos.map((p, idx) => (
-                        <tr key={`${gKey}/p:${p.codigo}`}
-                          className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} ${Pal.hoverLeaf} transition-colors`}>
-                          <td className="pl-16 pr-3 py-1.5">
-                            <p className="text-[11.5px] text-gray-700 truncate max-w-[360px]">{p.nome}</p>
-                            <p className="text-[9.5px] text-gray-400 font-mono">cód {p.codigo}</p>
-                          </td>
-                          <LinhaStats s={{ qtd: p.qtd, valor: p.valor, custo: p.custo }} />
-                        </tr>
-                      ))}
+                      {gAberto && gNode.produtos.map((p, idx) => {
+                        const pKey = `${gKey}/p:${p.codigo}`;
+                        const pSelecionada = linhaSelecionada === pKey;
+                        const pRowBg = pSelecionada
+                          ? 'bg-yellow-100 hover:bg-yellow-100 ring-1 ring-inset ring-yellow-300'
+                          : `${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} ${Pal.hoverLeaf}`;
+                        return (
+                          <tr key={pKey}
+                            onClick={() => toggleLinha(pKey)}
+                            className={`cursor-pointer ${pRowBg} transition-colors`}>
+                            <td className="pl-16 pr-3 py-1.5">
+                              <p className="text-[11.5px] text-gray-700 truncate max-w-[360px]">{p.nome}</p>
+                              <p className="text-[9.5px] text-gray-400 font-mono">cód {p.codigo}</p>
+                            </td>
+                            <LinhaStats s={{ qtd: p.qtd, valor: p.valor, custo: p.custo }} barras={maxP} />
+                          </tr>
+                        );
+                      })}
                     </React.Fragment>
                   );
                 })}
@@ -5204,6 +5905,282 @@ function PlaceholderEmConstrucao({ titulo }) {
 // Card de métrica genérico: ícone (sempre âmbar/combustível), label, valor
 // principal e badge de comparação com o ano anterior. Reusado pelos 5 cards
 // da aba "Combustíveis".
+// KPI específico da aba Combustíveis — layout mais "executivo": label e
+// ícone no topo (com ícone à direita), valor grande no centro, e a métrica
+// "Ano anterior" + chip de variação no rodapé.
+// KPI estilo Visão geral, adaptado pra aba Combustíveis:
+//   - Header com label + ícone à direita
+//   - Valor principal + badge AA + linha "Ano anterior" + linha "Proj. mês"
+//   - Sparkline 12m da métrica (linha suave com gradient)
+//   - Stripe inferior com top 3 combustíveis e seus valores nessa métrica
+function KpiCombustivelDashboard({
+  label, icone: Icone, cor = 'amber',
+  valor, valorAA, valorProj,
+  atual, anoAnterior, temProj, negativo,
+  serie, // array de números (séria 12m da métrica)
+  produtos, // array [{ nome, valor }] top 3 combustíveis na métrica
+  formatProduto, // (n) => string — pra formatar o valor de cada produto na stripe
+}) {
+  const CORES = {
+    amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   ring: 'ring-amber-100',   spark: '#f59e0b' },
+    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', ring: 'ring-emerald-100', spark: '#10b981' },
+    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600',  ring: 'ring-violet-100',  spark: '#8b5cf6' },
+    rose:    { bg: 'bg-rose-50',    icon: 'text-rose-600',    ring: 'ring-rose-100',    spark: '#f43f5e' },
+  };
+  const C = CORES[cor] || CORES.amber;
+  const temAA = anoAnterior !== undefined && anoAnterior !== null;
+  const serieSpark = (serie || []).map(v => ({ margemPct: Number(v) || 0 }));
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200/70 shadow-sm flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 pt-3 pb-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 leading-tight truncate flex-1">{label}</p>
+        <div className={`h-7 w-7 rounded-md ${C.bg} ring-1 ${C.ring} flex items-center justify-center flex-shrink-0`}>
+          <Icone className={`h-3.5 w-3.5 ${C.icon}`} />
+        </div>
+      </div>
+
+      {/* Valor + badge AA + Ano anterior + Proj mês */}
+      <div className="px-3 pt-2 pb-1.5 flex-1 flex flex-col justify-center">
+        <p className={`text-[22px] font-bold tracking-tight tabular-nums truncate leading-none ${negativo ? 'text-red-700' : 'text-gray-900'}`}
+          title={valor}>
+          {valor}
+        </p>
+        {temAA && (
+          <div className="mt-1.5">
+            <BadgeComparacaoAA atual={atual} anoAnterior={anoAnterior} />
+          </div>
+        )}
+        {(temAA || temProj) && (
+          <div className="mt-3 space-y-0.5">
+            {temAA && (
+              <p className="text-[10.5px] text-gray-500 leading-tight truncate" title={`Ano anterior: ${valorAA}`}>
+                <span className="text-gray-400">Ano anterior </span>
+                <span className="font-semibold text-gray-700 tabular-nums">{valorAA}</span>
+              </p>
+            )}
+            {temProj && (
+              <p className="text-[10.5px] leading-tight truncate" title={`Projeção do mês: ${valorProj}`}>
+                <span className="text-blue-500/80">Proj. mês </span>
+                <span className="font-semibold text-blue-700 tabular-nums">{valorProj}</span>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Sparkline 12m */}
+      {serieSpark.length >= 2 && (
+        <div className="px-3 pb-1.5">
+          <Sparkline serie={serieSpark} cor={C.spark} altura={26} />
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// Tabela "Projeção por combustível" — exibe cada produto da categoria
+// 'combustivel' com Litros, Lucro bruto, Margem e L.B./litro nos modos
+// realizado e projetado para o fechamento do mês. Total no rodapé.
+function TabelaProjecaoCombustivel({ produtos, totais, projetar }) {
+  const linhas = produtos || [];
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 bg-gradient-to-b from-white to-gray-50/40">
+        <Fuel className="h-4 w-4 text-amber-500" />
+        <div className="min-w-0">
+          <h3 className="text-[13px] font-semibold text-gray-800 leading-tight">Projeção por combustível</h3>
+          <p className="text-[10.5px] text-gray-500 leading-tight">Valores realizados no período e projeção para o fechamento do mês</p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px] min-w-[900px]">
+          <thead className="bg-gray-50/80 border-b border-gray-200">
+            <tr className="text-left text-[9.5px] font-semibold text-gray-500 uppercase tracking-wider">
+              <th rowSpan={2} className="px-4 py-2 align-bottom">Combustível</th>
+              <th colSpan={2} className="px-3 py-1.5 text-center border-l border-gray-200">Litros</th>
+              <th colSpan={2} className="px-3 py-1.5 text-center border-l border-gray-200">Lucro bruto</th>
+              <th rowSpan={2} className="px-3 py-2 text-right align-bottom border-l border-gray-200">Margem</th>
+              <th rowSpan={2} className="px-3 py-2 text-right align-bottom border-l border-gray-200">L.B. / litro</th>
+            </tr>
+            <tr className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">
+              <th className="px-3 pb-1.5 text-right border-l border-gray-200">Realizado</th>
+              <th className="px-3 pb-1.5 text-right">Proj. mês</th>
+              <th className="px-3 pb-1.5 text-right border-l border-gray-200">Realizado</th>
+              <th className="px-3 pb-1.5 text-right">Proj. mês</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-[12px] text-gray-400">
+                  Nenhum combustível com vendas no período.
+                </td>
+              </tr>
+            ) : linhas.map(p => {
+              const litrosProj = projetar(p.qtd);
+              const lucroProj  = projetar(p.lucro);
+              return (
+                <tr key={p.codigo} className="border-t border-gray-100 hover:bg-amber-50/30 transition-colors">
+                  <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800 truncate" title={p.nome}>{p.nome}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-800 border-l border-gray-100">{formatNumero(p.qtd, 0)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-blue-700 font-semibold">{formatNumero(litrosProj, 0)}</td>
+                  <td className={`px-3 py-2 text-right font-mono tabular-nums border-l border-gray-100 ${p.lucro < 0 ? 'text-red-700' : 'text-gray-800'}`}>{formatCurrency(p.lucro)}</td>
+                  <td className={`px-3 py-2 text-right font-mono tabular-nums font-semibold ${lucroProj < 0 ? 'text-red-700' : 'text-blue-700'}`}>{formatCurrency(lucroProj)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-700 border-l border-gray-100">{(p.margem * 100).toFixed(2)}%</td>
+                  <td className={`px-3 py-2 text-right font-mono tabular-nums border-l border-gray-100 ${p.lbL < 0 ? 'text-red-700' : 'text-gray-700'}`}>{formatCurrency(p.lbL)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          {linhas.length > 0 && (
+            <tfoot>
+              <tr className="bg-gray-50 border-t-2 border-gray-300 font-semibold">
+                <td className="px-4 py-2 text-[12.5px] text-gray-900">Total</td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-200">{formatNumero(totais.qtd, 0)}</td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-blue-700">{formatNumero(projetar(totais.qtd), 0)}</td>
+                <td className={`px-3 py-2 text-right font-mono tabular-nums border-l border-gray-200 ${totais.lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}>{formatCurrency(totais.lucro)}</td>
+                <td className={`px-3 py-2 text-right font-mono tabular-nums ${projetar(totais.lucro) < 0 ? 'text-red-700' : 'text-blue-700'}`}>{formatCurrency(projetar(totais.lucro))}</td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-200">{(totais.margem * 100).toFixed(2)}%</td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-200">{formatCurrency(totais.luPorL)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Tabela "Projeção por grupo" (Automotivos/Conveniência) — exibe cada
+// grupo de produtos com Faturamento, Lucro bruto, Margem e Ticket médio
+// nos modos realizado e projetado para o fechamento do mês. Total no rodapé.
+function TabelaProjecaoCategoria({ titulo, descricao, icone: Icone = Package, cor = 'blue', linhas, totais, projetar }) {
+  const items = linhas || [];
+  const corHeader = {
+    blue:    'text-blue-500',
+    emerald: 'text-emerald-500',
+  }[cor] || 'text-blue-500';
+  const corProj = 'text-blue-700';
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 bg-gradient-to-b from-white to-gray-50/40">
+        <Icone className={`h-4 w-4 ${corHeader}`} />
+        <div className="min-w-0">
+          <h3 className="text-[13px] font-semibold text-gray-800 leading-tight">{titulo}</h3>
+          <p className="text-[10.5px] text-gray-500 leading-tight">{descricao}</p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px] min-w-[920px]">
+          <thead className="bg-gray-50/80 border-b border-gray-200">
+            <tr className="text-left text-[9.5px] font-semibold text-gray-500 uppercase tracking-wider">
+              <th rowSpan={2} className="px-4 py-2 align-bottom">Grupo</th>
+              <th colSpan={2} className="px-3 py-1.5 text-center border-l border-gray-200">Faturamento</th>
+              <th colSpan={2} className="px-3 py-1.5 text-center border-l border-gray-200">Lucro bruto</th>
+              <th rowSpan={2} className="px-3 py-2 text-right align-bottom border-l border-gray-200">Margem</th>
+              <th rowSpan={2} className="px-3 py-2 text-right align-bottom border-l border-gray-200">Ticket médio</th>
+            </tr>
+            <tr className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">
+              <th className="px-3 pb-1.5 text-right border-l border-gray-200">Realizado</th>
+              <th className="px-3 pb-1.5 text-right">Proj. mês</th>
+              <th className="px-3 pb-1.5 text-right border-l border-gray-200">Realizado</th>
+              <th className="px-3 pb-1.5 text-right">Proj. mês</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-[12px] text-gray-400">Sem vendas no período.</td>
+              </tr>
+            ) : items.map(g => {
+              const fatProj   = projetar(g.valor);
+              const lucroProj = projetar(g.lucro);
+              return (
+                <tr key={g.codigo ?? g.nome} className="border-t border-gray-100 hover:bg-blue-50/30 transition-colors">
+                  <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800 truncate" title={g.nome}>{g.nome}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-800 border-l border-gray-100">{formatCurrency(g.valor)}</td>
+                  <td className={`px-3 py-2 text-right font-mono tabular-nums font-semibold ${corProj}`}>{formatCurrency(fatProj)}</td>
+                  <td className={`px-3 py-2 text-right font-mono tabular-nums border-l border-gray-100 ${g.lucro < 0 ? 'text-red-700' : 'text-gray-800'}`}>{formatCurrency(g.lucro)}</td>
+                  <td className={`px-3 py-2 text-right font-mono tabular-nums font-semibold ${lucroProj < 0 ? 'text-red-700' : corProj}`}>{formatCurrency(lucroProj)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-700 border-l border-gray-100">{(g.margem * 100).toFixed(2)}%</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-700 border-l border-gray-100">{g.ticket > 0 ? formatCurrency(g.ticket) : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          {items.length > 0 && (
+            <tfoot>
+              <tr className="bg-gray-50 border-t-2 border-gray-300 font-semibold">
+                <td className="px-4 py-2 text-[12.5px] text-gray-900">Total</td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-200">{formatCurrency(totais.valor)}</td>
+                <td className={`px-3 py-2 text-right font-mono tabular-nums ${corProj}`}>{formatCurrency(projetar(totais.valor))}</td>
+                <td className={`px-3 py-2 text-right font-mono tabular-nums border-l border-gray-200 ${totais.lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}>{formatCurrency(totais.lucro)}</td>
+                <td className={`px-3 py-2 text-right font-mono tabular-nums ${projetar(totais.lucro) < 0 ? 'text-red-700' : corProj}`}>{formatCurrency(projetar(totais.lucro))}</td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-200">{(totais.margem * 100).toFixed(2)}%</td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-900 border-l border-gray-200">{totais.ticket > 0 ? formatCurrency(totais.ticket) : '—'}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Card "Resumo geral do mês" (Combustíveis) — tabela compacta com Litros,
+// Lucro bruto e L.B./litro por tipo de combustível + linha de total.
+function CardResumoCombustivel({ produtos, totais, luPorL }) {
+  const top = produtos.slice(0, 6);
+  return (
+    <div className="bg-white rounded-xl border border-gray-200/70 shadow-sm overflow-hidden lg:col-span-2 flex flex-col h-full">
+      <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b border-gray-100">
+        <p className="text-[12.5px] font-semibold text-blue-700 leading-tight flex-1">Resumo geral do mês</p>
+        <LineChartIcon className="h-3.5 w-3.5 text-blue-500" />
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-[9.5px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+              <th className="px-3 py-1.5 text-left">Combustível</th>
+              <th className="px-2 py-1.5 text-right">Litros</th>
+              <th className="px-2 py-1.5 text-right">Lucro bruto</th>
+              <th className="px-3 py-1.5 text-right">L.B. litro</th>
+            </tr>
+          </thead>
+          <tbody>
+            {top.length === 0 ? (
+              <tr><td colSpan={4} className="px-3 py-3 text-center text-[10.5px] text-gray-400">Sem dados no período</td></tr>
+            ) : top.map(p => {
+              const lbL = p.qtd > 0 ? p.lucro / p.qtd : 0;
+              return (
+                <tr key={p.codigo} className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/60 transition-colors">
+                  <td className="px-3 py-1.5 text-gray-700 truncate max-w-[160px]" title={p.nome}>{p.nome}</td>
+                  <td className="px-2 py-1.5 text-right font-mono tabular-nums text-gray-800">{formatNumero(p.qtd, 0)}</td>
+                  <td className="px-2 py-1.5 text-right font-mono tabular-nums text-gray-800">{formatCurrency(p.lucro)}</td>
+                  <td className="px-3 py-1.5 text-right font-mono tabular-nums text-gray-800">{formatCurrency(lbL)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          {top.length > 0 && (
+            <tfoot>
+              <tr className="bg-blue-50/40 border-t-2 border-blue-200 font-semibold">
+                <td className="px-3 py-1.5 text-blue-700">Total</td>
+                <td className="px-2 py-1.5 text-right font-mono tabular-nums text-blue-700">{formatNumero(totais.qtd, 0)}</td>
+                <td className="px-2 py-1.5 text-right font-mono tabular-nums text-blue-700">{formatCurrency(totais.lucro)}</td>
+                <td className="px-3 py-1.5 text-right font-mono tabular-nums text-blue-700">{formatCurrency(luPorL)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function KpiMetrica({ icone: Icone, label, valor, negativo, atual, anoAnterior }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -5256,32 +6233,25 @@ function KpiComAA({ cor = 'blue', icone: Icone, label, valor, valorBase, prefixo
   );
 }
 
-function KpiLucroGlobal({ lucro, lucroProjecao, margem, lucroAnoAnterior }) {
+function KpiLucroGlobal({ lucro, lucroProjecao, margem, lucroAnoAnterior, faturamento, faturamentoProjecao, serieMargem }) {
   const temProj = lucroProjecao != null && Math.abs(lucroProjecao - lucro) > 0.01;
   return (
-    <div className="bg-white rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/60 to-white p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-blue-50 p-2.5 flex-shrink-0">
-          <ShoppingCart className="h-5 w-5 text-blue-600" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs text-blue-700 font-semibold mb-0.5">Lucro bruto · Global</p>
-          <p className={`text-lg font-semibold tracking-tight truncate ${lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}>
-            {formatCurrency(lucro)}
-          </p>
-          {temProj && (
-            <p className="text-[11px] text-blue-700 truncate mt-0.5">
-              <span className="text-blue-500 mr-1">Proj. mês:</span>
-              <span className="font-semibold">{formatCurrency(lucroProjecao)}</span>
-            </p>
-          )}
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-[11px] text-gray-500">margem {(margem * 100).toFixed(1)}%</span>
-            <BadgeComparacaoAA atual={lucro} anoAnterior={lucroAnoAnterior} />
-          </div>
-        </div>
-      </div>
-    </div>
+    <KpiLucroLayout
+      icone={<ShoppingCart className="h-4 w-4 text-blue-600" />}
+      bgIcone="bg-blue-50"
+      label="Lucro bruto"
+      categoria="Global"
+      lucro={lucro}
+      lucroProjecao={lucroProjecao}
+      temProj={temProj}
+      margem={margem}
+      lucroAnoAnterior={lucroAnoAnterior}
+      faturamento={faturamento}
+      faturamentoProjecao={faturamentoProjecao}
+      serieMargem={serieMargem}
+      sparklineCor="#2563eb"
+      ring="ring-1 ring-blue-200"
+    />
   );
 }
 

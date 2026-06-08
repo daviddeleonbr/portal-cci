@@ -190,6 +190,9 @@ export default function ClienteContasReceber() {
   const [busca, setBusca] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('TODAS');
   const [filtroStatus, setFiltroStatus] = useState('todos');
+  // Mostra apenas títulos vencidos há N dias ou mais. 0 = sem filtro.
+  // Quando ativo, força o status pra "vencidos" (visualmente coerente).
+  const [diasVencidosMin, setDiasVencidosMin] = useState(0);
 
   // Visão Geral mostra tudo; ao escolher uma categoria foca em vencidos.
   // Comportamento explícito a cada troca de categoria — usuário pode mudar
@@ -312,12 +315,19 @@ export default function ClienteContasReceber() {
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
+    const minDias = Number(diasVencidosMin) || 0;
     return enriched.filter(t => {
       if (filtroCategoria !== 'TODAS' && t.categoria !== filtroCategoria) return false;
       if (filtroStatus === 'hoje' && !(t.vencimento && datasHoje.has(t.vencimento))) return false;
       if (filtroStatus === 'vencidos' && !t.vencido) return false;
       if (filtroStatus === 'proximos' && (t.vencido || !t.proximo)) return false;
       if (filtroStatus === 'futuros' && (t.vencido || t.proximo)) return false;
+      // Filtro "vencido há ≥ N dias" — só faz sentido pra títulos vencidos.
+      // diasAteVenc é negativo quando vencido, daí abs() pra ter dias atrás.
+      if (minDias > 0) {
+        if (!t.vencido) return false;
+        if (Math.abs(t.diasAteVenc) < minDias) return false;
+      }
       if (!q) return true;
       return (
         t.clienteNome.toLowerCase().includes(q) ||
@@ -326,7 +336,7 @@ export default function ClienteContasReceber() {
         (t.historico || '').toLowerCase().includes(q)
       );
     });
-  }, [enriched, busca, filtroStatus, filtroCategoria, datasHoje]);
+  }, [enriched, busca, filtroStatus, filtroCategoria, datasHoje, diasVencidosMin]);
 
   // Cards de resumo — sempre panorama completo (não filtra por aba/status/busca)
   const totais = useMemo(() => {
@@ -891,6 +901,24 @@ export default function ClienteContasReceber() {
             </button>
           ))}
         </div>
+        {/* Filtro "vencidos há ≥ N dias" — ativo quando > 0; clique no × pra limpar */}
+        <label className={`h-10 inline-flex items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium flex-shrink-0 ${
+          Number(diasVencidosMin) > 0
+            ? 'border-rose-300 bg-rose-50 text-rose-700'
+            : 'border-gray-200 bg-white text-gray-700'
+        }`} title="Mostra somente títulos vencidos há pelo menos X dias">
+          <span className="whitespace-nowrap">Vencidos há ≥</span>
+          <input type="number" min={0} step={1} value={diasVencidosMin}
+            onChange={e => setDiasVencidosMin(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            className="w-14 h-7 px-1 text-right font-mono tabular-nums rounded border border-gray-200 bg-white text-gray-900 focus:border-rose-400 focus:outline-none focus:ring-1 focus:ring-rose-200" />
+          <span className="text-gray-400">dias</span>
+          {Number(diasVencidosMin) > 0 && (
+            <button onClick={() => setDiasVencidosMin(0)} title="Limpar filtro"
+              className="text-rose-600 hover:text-rose-800 ml-0.5">
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </label>
       </div>
 
       {/* Tree */}

@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { useAdminSession, useClienteSession } from '../../hooks/useAuth';
+import { primeiraPaginaPermitida, temAcessoDashboard } from '../../utils/clientePrimeiraPagina';
 
 export function RequireAdmin({ children }) {
   const session = useAdminSession();
@@ -16,6 +17,20 @@ export function RequireCliente({ children }) {
   const location = useLocation();
   if (!session) {
     return <Navigate to="/cliente/login" replace state={{ from: location.pathname }} />;
+  }
+  return children;
+}
+
+// Wrapper específico pro Dashboard (Visão Geral): se o usuário não tem
+// a permissão `dashboard`, redireciona pra primeira página que ele tem
+// acesso (ex: Comercial → Vendas). Usado nas rotas `/cliente/{tipo}/dashboard`.
+export function RequireDashboardCliente({ children }) {
+  const session = useClienteSession();
+  if (!session) {
+    return <Navigate to="/cliente/login" replace />;
+  }
+  if (!temAcessoDashboard(session)) {
+    return <Navigate to={primeiraPaginaPermitida(session)} replace />;
   }
   return children;
 }

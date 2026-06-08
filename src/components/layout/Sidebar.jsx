@@ -5,6 +5,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Landmark, Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
+  MessageCircle, RefreshCw,
   Activity, FileSpreadsheet, Receipt,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
@@ -59,16 +60,6 @@ const navigationAll = [
     ],
   },
   {
-    section: 'Configurações',
-    items: [
-      { name: 'Geral', href: '/admin/configuracoes', icon: Settings, permissao: 'parametros' },
-      { name: 'Notificações', href: '/admin/notificacoes', icon: Bell, permissao: 'notificacoes' },
-      { name: 'Mensagens Iniciais', href: '/admin/mensagens-iniciais', icon: Megaphone, permissao: 'mensagens_iniciais' },
-      { name: 'Melhorias do Sistema', href: '/admin/melhorias', icon: Lightbulb, permissao: 'melhorias' },
-      { name: 'Uso do Portal', href: '/admin/uso-portal', icon: Activity, permissao: 'uso_portal' },
-    ],
-  },
-  {
     section: 'BPO',
     items: [
       { name: 'Conciliação Bancária', href: '/admin/bpo/conciliacao-bancaria', icon: Landmark, permissao: 'conciliacao_bancaria' },
@@ -76,6 +67,23 @@ const navigationAll = [
       { name: 'Caixa Administrativo', href: '/admin/bpo/caixa-administrativo', icon: WalletCards, permissao: 'caixa_administrativo' },
       { name: 'Manifestação de Notas', href: '/admin/fiscal/manifestacao', icon: FileSpreadsheet, permissao: 'notas_fiscais' },
       { name: 'Outras Contas a Pagar', href: '/admin/bpo/outras-contas', icon: Receipt, permissao: 'outras_contas' },
+    ],
+  },
+  {
+    section: 'Comunicações',
+    items: [
+      { name: 'Notificações', href: '/admin/notificacoes', icon: Bell, permissao: 'notificacoes' },
+      { name: 'Mensagens Iniciais', href: '/admin/mensagens-iniciais', icon: Megaphone, permissao: 'mensagens_iniciais' },
+      { name: 'Melhorias do Sistema', href: '/admin/melhorias', icon: Lightbulb, permissao: 'melhorias' },
+      { name: 'Suporte (chat)', href: '/admin/suporte', icon: MessageCircle, permissao: 'suporte_admin' },
+    ],
+  },
+  {
+    section: 'Configurações',
+    items: [
+      { name: 'Geral', href: '/admin/configuracoes', icon: Settings, permissao: 'parametros' },
+      { name: 'Uso do Portal', href: '/admin/uso-portal', icon: Activity, permissao: 'uso_portal' },
+      { name: 'Webposto · Sincronia', href: '/admin/webposto-sync', icon: RefreshCw, permissao: 'webposto_sync' },
     ],
   },
 ];

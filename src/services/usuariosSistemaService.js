@@ -28,6 +28,8 @@ export const PERMISSOES_ADMIN = [
   { key: 'mensagens_iniciais', label: 'Mensagens Iniciais (modal cliente)', grupo: 'Comunicação' },
   { key: 'melhorias', label: 'Melhorias de Sistema (sugestões clientes)', grupo: 'Comunicação' },
   { key: 'uso_portal', label: 'Uso do Portal (analytics)', grupo: 'Comunicação' },
+  { key: 'suporte_admin', label: 'Chat de Suporte (responder)', grupo: 'Comunicação' },
+  { key: 'webposto_sync', label: 'Webposto · Sincronia de vendas (cache)', grupo: 'Configurações' },
 ];
 
 export const PERMISSOES_CLIENTE = [

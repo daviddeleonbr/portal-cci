@@ -5,7 +5,12 @@ import {
   Users, Fuel, Package, Store,
   Search, Coins, Calendar, Droplet, Gauge,
 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import PageHeader from '../../../components/ui/PageHeader';
+import BannerCarregando from '../../../components/vendas/BannerCarregando';
+import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
+import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as qualityApi from '../../../services/qualityApiService';
 import * as mapService from '../../../services/mapeamentoService';
@@ -68,7 +73,15 @@ export default function ClienteComercialProdutividade() {
   const [dataDe, setDataDe] = useState(primeiroDiaDoMesIso());
   const [dataAte, setDataAte] = useState(isoHoje());
   const periodoDias = useMemo(() => diasEntre(dataDe, dataAte), [dataDe, dataAte]);
-  const [vendedores, setVendedores] = useState([]);
+  // Cache v2 — chave determinística (pagina + chaveApiId)
+  const chaveApiIdAtiva = chaveApi?.id || null;
+  const cacheInicialProd = useMemo(() => {
+    return chaveApiIdAtiva ? lerCacheV2('produtividade', chaveApiIdAtiva) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [vendedores, setVendedores] = useState(() => cacheInicialProd?.vendedores || []);
+  const [heatmapConv, setHeatmapConv] = useState(() =>
+    cacheInicialProd?.heatmapConv instanceof Map ? cacheInicialProd.heatmapConv : new Map());
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
@@ -95,15 +108,28 @@ export default function ClienteComercialProdutividade() {
   // a resposta antiga eh descartada (race protection).
   const fetchIdRef = useRef(0);
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async ({ force = false, silencioso = false } = {}) => {
     if (!chaveApi?.chave || empresasSel.length === 0) return;
     if (!dataDe || !dataAte || dataDe > dataAte) return;
     const myFetchId = ++fetchIdRef.current;
-    setLoading(true);
     setErro('');
-    // Limpa dados antigos imediatamente para evitar exibir vendedores que
-    // pertencem a uma seleção anterior enquanto o novo fetch está em andamento.
-    setVendedores([]);
+
+    if (!force) {
+      const cache = lerCacheV2('produtividade', chaveApiId);
+      // Valida estrutura: cache deve ter `heatmapConv` (Map) e vendedores
+      // com `convPorDia` — caso contrário, refaz fetch.
+      const temEstruturaNova = Array.isArray(cache?.vendedores)
+        && cache?.heatmapConv instanceof Map
+        && (cache.vendedores.length === 0
+            || cache.vendedores.some(v => v && (v.convPorDia instanceof Map)));
+      if (cache?.vendedores && temEstruturaNova) {
+        setVendedores(cache.vendedores);
+        setHeatmapConv(cache.heatmapConv);
+        setLoading(false);
+        return; // cache hit válido — não faz fetch
+      }
+    }
+    if (!silencioso) setLoading(true);
     try {
       const apiKey = chaveApi.chave;
       const filtros = { dataInicial: dataDe, dataFinal: dataAte };
@@ -162,19 +188,28 @@ export default function ClienteComercialProdutividade() {
             litros_aditivada: 0, litros_comum: 0,
             abastecimentos: 0,
             vendas_combustivel: 0,
+            convPorGrupo: new Map(),
+            // Vendas conv por dia (gráfico de linha acumulado por vendedor):
+            // dia_iso → fat conv naquele dia
+            convPorDia: new Map(),
           });
         }
         return agg.get(k);
       }
 
+      // Heatmap GLOBAL conv: "dow-hh" (0=domingo, 0-23) → fat. Não é por
+      // vendedor — agrega toda a rede.
+      const convHeatmap = new Map();
+
       blocos.forEach(({ emp, vendas, vendaItens, abastecimentos }) => {
         const empCod = Number(emp.empresa_codigo);
 
-        // Mapa vendaCodigo → cancelada para descartar vendas canceladas.
-        const cancStatus = new Map();
+        // Mapa vendaCodigo → objeto venda completo (pra pegar dataHora além
+        // do status cancelada).
+        const vendasMap = new Map();
         (vendas || []).forEach(v => {
           const vc = v.vendaCodigo ?? v.codigo;
-          if (vc != null) cancStatus.set(vc, v.cancelada || 'N');
+          if (vc != null) vendasMap.set(vc, v);
         });
 
         // ─── VENDA_ITEM: fonte única de fat/custo/qtd por (vendedor, categoria).
@@ -183,7 +218,8 @@ export default function ClienteComercialProdutividade() {
         // vendaCodigo → Map<vendedorCodigo, {comb:boolean, auto:boolean, conv:boolean}>
         (vendaItens || []).forEach(item => {
           // Descarta itens de vendas canceladas
-          if ((cancStatus.get(item.vendaCodigo) || 'N') !== 'N') return;
+          const vendaObj = vendasMap.get(item.vendaCodigo);
+          if (!vendaObj || (vendaObj.cancelada || 'N') !== 'N') return;
 
           const vendedorCodigo = item.funcionarioCodigo;
           if (vendedorCodigo == null) return;
@@ -210,6 +246,22 @@ export default function ClienteComercialProdutividade() {
           } else if (cat === 'conveniencia') {
             b.fat_conveniencia   += totalVenda;
             b.custo_conveniencia += totalCusto;
+            // Vendas por dia (gráfico de linha acumulado por vendedor)
+            const dataRaw = vendaObj.dataHora || vendaObj.dataVenda || vendaObj.data;
+            const diaIso = String(dataRaw || '').slice(0, 10);
+            if (diaIso) {
+              b.convPorDia.set(diaIso, (b.convPorDia.get(diaIso) || 0) + totalVenda);
+            }
+            // Heatmap GLOBAL: agrega por (dia_da_semana, hora) usando dataHora
+            if (vendaObj.dataHora) {
+              const d = new Date(vendaObj.dataHora);
+              if (!isNaN(d.getTime())) {
+                const dow = d.getDay();    // 0=domingo
+                const hh  = d.getHours();  // 0-23
+                const kHm = `${dow}-${hh}`;
+                convHeatmap.set(kHm, (convHeatmap.get(kHm) || 0) + totalVenda);
+              }
+            }
           }
 
           // Tags por (vendaCodigo, vendedorCodigo) para contar vendas distintas
@@ -246,7 +298,14 @@ export default function ClienteComercialProdutividade() {
       });
 
       if (myFetchId !== fetchIdRef.current) return; // resposta obsoleta
-      setVendedores(Array.from(agg.values()));
+      const novosVendedores = Array.from(agg.values());
+      setVendedores(novosVendedores);
+      setHeatmapConv(convHeatmap);
+      // Salva cache v2
+      salvarCacheV2('produtividade', chaveApiId, {
+        vendedores: novosVendedores,
+        heatmapConv: convHeatmap,
+      });
     } catch (err) {
       if (myFetchId !== fetchIdRef.current) return;
       setErro(err.message || 'Falha ao carregar produtividade');
@@ -256,7 +315,13 @@ export default function ClienteComercialProdutividade() {
     }
   }, [chaveApi, empresasSel, dataDe, dataAte, mapaMix]);
 
+  // Auto-fetch: carregar() já checa cache exato internamente.
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Auto-refresh em background a cada 10 min (silencioso — sem banner)
+  useAutoRefresh(() => {
+    if (chaveApi?.chave && empresasSel.length > 0) carregar({ force: true, silencioso: true });
+  });
 
   // Enriquece cada vendedor com totais escopados por aba (pista / conv).
   const vendedoresEnriquecidos = useMemo(() => {
@@ -299,6 +364,36 @@ export default function ClienteComercialProdutividade() {
       conv.margem = conv.fat > 0 ? (conv.lucro / conv.fat) * 100 : 0;
       conv.ticket = conv.vendas > 0 ? conv.fat / conv.vendas : 0;
 
+      // Árvore conv: grupo → produto. Cada nível com Vendas (fat), Custo,
+      // Lucro, Margem, Ticket, Atendimentos (vendas distintas via vendaCods).
+      const cpg = v.convPorGrupo;
+      const grupos = cpg ? Array.from(cpg.values()).map(g => {
+        const produtos = Array.from(g.produtos.values()).map(p => {
+          const atendimentos = p.vendaCods?.size || 0;
+          const lucro = p.fat - p.custo;
+          return {
+            produto_codigo: p.produto_codigo,
+            produto_nome:   p.produto_nome,
+            fat: p.fat, custo: p.custo, lucro,
+            margem: p.fat > 0 ? (lucro / p.fat) * 100 : 0,
+            atendimentos,
+            ticket: atendimentos > 0 ? p.fat / atendimentos : 0,
+          };
+        }).sort((a, b) => b.fat - a.fat);
+        const atendimentos = g.vendaCods?.size || 0;
+        const lucro = g.fat - g.custo;
+        return {
+          grupo_codigo: g.grupo_codigo,
+          grupo_nome:   g.grupo_nome,
+          fat: g.fat, custo: g.custo, lucro,
+          margem: g.fat > 0 ? (lucro / g.fat) * 100 : 0,
+          atendimentos,
+          ticket: atendimentos > 0 ? g.fat / atendimentos : 0,
+          produtos,
+        };
+      }).sort((a, b) => b.fat - a.fat) : [];
+      conv.grupos = grupos;
+
       return { ...v, pista, conv };
     });
   }, [vendedores]);
@@ -336,11 +431,14 @@ export default function ClienteComercialProdutividade() {
       vendas: totVendas, litros: totLitros, abastecimentos: totAbast,
       fatAutomotivos: totFatAuto, margemAutomotivos: margemAuto,
       mix, litrosAditivada: totAditiv, litrosComum: totComum,
+      atendimentosPorDia: periodoDias > 0 ? totVendas / periodoDias : 0,
     };
-  }, [vendedoresEnriquecidos, escopo]);
+  }, [vendedoresEnriquecidos, escopo, periodoDias]);
 
   // ─── Análise comparativa por vendedor ────────────────────────
-  const COLS_ANALISE = [
+  // Colunas mudam por aba — Pista mostra métricas de pista (combustíveis +
+  // automotivos), Conveniência mostra Vendas/Custo/Lucro/Margem/Ticket/Atend.
+  const COLS_PISTA = [
     { campo: 'automotivos',    titulo: 'Automotivos',       icone: Package, cor: 'blue',    fmt: (n) => formatCurrency(n) },
     { campo: 'mix',            titulo: 'Mix aditivada',     icone: Droplet, cor: 'violet',  fmt: (n) => n != null ? `${n.toFixed(1)}%` : '—' },
     { campo: 'abastecimentos', titulo: 'Abastecimentos',    icone: Coins,   cor: 'amber',   fmt: (n) => fmtNum(n) },
@@ -348,7 +446,28 @@ export default function ClienteComercialProdutividade() {
     { campo: 'ticketComb',     titulo: 'Ticket méd. comb.', icone: Fuel,    cor: 'amber',   fmt: (n) => formatCurrency(n) },
     { campo: 'ticketAuto',     titulo: 'Ticket méd. auto.', icone: Package, cor: 'blue',    fmt: (n) => formatCurrency(n) },
   ];
+  const COLS_CONV = [
+    { campo: 'fat',           titulo: 'Vendas',       icone: Coins,   cor: 'emerald', fmt: (n) => formatCurrency(n) },
+    { campo: 'custo',         titulo: 'Custo',        icone: Coins,   cor: 'amber',   fmt: (n) => formatCurrency(n) },
+    { campo: 'lucro',         titulo: 'Lucro bruto',  icone: Coins,   cor: 'emerald', fmt: (n) => formatCurrency(n) },
+    { campo: 'margem',        titulo: 'Margem',       icone: Gauge,   cor: 'violet',  fmt: (n) => Number.isFinite(n) ? `${n.toFixed(1)}%` : '—' },
+    { campo: 'ticket',        titulo: 'Ticket médio', icone: Coins,   cor: 'blue',    fmt: (n) => formatCurrency(n) },
+    { campo: 'atendimentos',  titulo: 'Atendimentos', icone: Users,   cor: 'amber',   fmt: (n) => fmtNum(n) },
+  ];
+  const COLS_ANALISE = escopo === 'conv' ? COLS_CONV : COLS_PISTA;
   function pegarValor(v, campo) {
+    if (escopo === 'conv') {
+      const s = v.conv || {};
+      switch (campo) {
+        case 'fat':           return s.fat;
+        case 'custo':         return s.custo;
+        case 'lucro':         return s.lucro;
+        case 'margem':        return s.margem;
+        case 'ticket':        return s.ticket;
+        case 'atendimentos':  return s.vendas;
+        default:              return 0;
+      }
+    }
     const s = v.pista;
     switch (campo) {
       case 'automotivos':    return s.fatAutomotivos;
@@ -360,8 +479,14 @@ export default function ClienteComercialProdutividade() {
       default:               return 0;
     }
   }
-  const [ordemCampo, setOrdemCampo] = useState('automotivos');
+  // Ordem inicial = primeira coluna da aba. Reseta quando troca de aba.
+  const [ordemCampo, setOrdemCampo] = useState(COLS_ANALISE[0].campo);
   const [ordemDir, setOrdemDir]     = useState('desc');
+  useEffect(() => {
+    setOrdemCampo(COLS_ANALISE[0].campo);
+    setOrdemDir('desc');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [escopo]);
   function clickHeader(campo) {
     if (campo === ordemCampo) {
       setOrdemDir(d => d === 'desc' ? 'asc' : 'desc');
@@ -385,9 +510,17 @@ export default function ClienteComercialProdutividade() {
 
   const tabelaVendedores = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    const filtrados = !q
-      ? vendedoresEnriquecidos
-      : vendedoresEnriquecidos.filter(v => (v.vendedor_nome || '').toLowerCase().includes(q));
+    // Filtra vendedores SEM ATIVIDADE no escopo atual: precisa ter fat OU
+    // vendas > 0 (ou abastecimentos > 0 na pista, pra incluir frentista
+    // que só abasteceu sem registrar venda).
+    const temAtividade = (v) => {
+      const s = v[escopo];
+      if ((s?.fat || 0) > 0 || (s?.vendas || 0) > 0) return true;
+      if (escopo === 'pista' && (s?.abastecimentos || 0) > 0) return true;
+      return false;
+    };
+    let filtrados = vendedoresEnriquecidos.filter(temAtividade);
+    if (q) filtrados = filtrados.filter(v => (v.vendedor_nome || '').toLowerCase().includes(q));
     return [...filtrados].sort((a, b) => {
       const va = pegarValor(a, ordemCampo);
       const vb = pegarValor(b, ordemCampo);
@@ -398,7 +531,7 @@ export default function ClienteComercialProdutividade() {
       if (nb) return -1;
       return ordemDir === 'asc' ? va - vb : vb - va;
     });
-  }, [vendedoresEnriquecidos, busca, ordemCampo, ordemDir]);
+  }, [vendedoresEnriquecidos, busca, ordemCampo, ordemDir, escopo]);
 
   if (empresasDisponiveis.length === 0) {
     return (
@@ -439,18 +572,18 @@ export default function ClienteComercialProdutividade() {
             )}
           />
         )}
-        <button onClick={carregar} disabled={loading || empresasSel.length === 0}
+        <IndicadorAtualizacao pagina="produtividade" chaveApiId={chaveApiIdAtiva} />
+        <button onClick={() => carregar({ force: true })} disabled={loading || empresasSel.length === 0}
           className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Atualizar
         </button>
       </PageHeader>
 
+      <BannerCarregando aberto={loading} mensagem="Carregando produtividade dos vendedores..." />
+
       {loading ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-          <span className="text-sm">Carregando produtividade...</span>
-        </div>
+        <div className="h-32" />
       ) : erro ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -493,7 +626,7 @@ export default function ClienteComercialProdutividade() {
           </div>
 
           {/* KPIs */}
-          <div className={`grid grid-cols-2 ${escopo === 'pista' ? 'lg:grid-cols-5' : 'lg:grid-cols-2'} gap-3 mb-5`}>
+          <div className={`grid grid-cols-2 ${escopo === 'pista' ? 'lg:grid-cols-5' : 'lg:grid-cols-5'} gap-3 mb-5`}>
             <Kpi icone={Users} cor="violet" label="Vendedores ativos" valor={fmtNum(kpis.totalVendedores)} />
             {escopo === 'pista' ? (
               <>
@@ -510,12 +643,23 @@ export default function ClienteComercialProdutividade() {
                   negativo={kpis.margemAutomotivos < 0} />
               </>
             ) : (
-              <Kpi icone={Coins} cor="blue" label="Vendas (linhas)" valor={fmtNum(kpis.vendas)} />
+              <>
+                <Kpi icone={Coins} cor="emerald" label="Faturamento" valor={formatCurrency(kpis.faturamento)} />
+                <Kpi icone={Gauge} cor="violet" label="Margem geral"
+                  valor={`${kpis.margem.toFixed(1)}%`}
+                  negativo={kpis.margem < 0} />
+                <Kpi icone={Coins} cor="blue" label="Ticket médio"
+                  valor={formatCurrency(kpis.vendas > 0 ? kpis.faturamento / kpis.vendas : 0)}
+                  sub={`${fmtNum(kpis.vendas)} atendimentos`} />
+                <Kpi icone={Calendar} cor="amber" label="Atendimentos/dia"
+                  valor={fmtNum(Math.round(kpis.atendimentosPorDia))}
+                  sub={`média em ${periodoDias} dia(s)`} />
+              </>
             )}
           </div>
 
-          {/* Análise comparativa (só na aba Pista) */}
-          {escopo === 'pista' && tabelaVendedores.length > 0 && (
+          {/* Análise comparativa — mesma UI nas 2 abas, colunas mudam por escopo */}
+          {tabelaVendedores.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-4">
               <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-wrap">
                 <Gauge className="h-4 w-4 text-blue-500" />
@@ -586,6 +730,14 @@ export default function ClienteComercialProdutividade() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Gráficos da aba Conv: vêm DEPOIS da tabela */}
+          {escopo === 'conv' && tabelaVendedores.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+              <GraficoLinhaAcumulado vendedoras={tabelaVendedores} dataDe={dataDe} dataAte={dataAte} />
+              <HeatmapHoraXDow heatmap={heatmapConv} />
             </div>
           )}
         </>
@@ -704,6 +856,169 @@ function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleToda
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Gráfico de linha acumulado por vendedora ─────────────────
+// Eixo X: dias do período. Eixo Y: faturamento acumulado conv.
+// Cada vendedora é uma linha com cor distinta.
+function GraficoLinhaAcumulado({ vendedoras, dataDe, dataAte }) {
+  const cores = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#ef4444', '#06b6d4', '#84cc16', '#f97316', '#14b8a6'];
+
+  const dados = useMemo(() => {
+    if (!dataDe || !dataAte) return { rows: [], series: [] };
+    // Lista todos os dias do período (inclusive)
+    const dias = [];
+    const ini = new Date(`${dataDe}T00:00:00`);
+    const fim = new Date(`${dataAte}T00:00:00`);
+    for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
+      dias.push(d.toISOString().slice(0, 10));
+    }
+    // Top 10 vendedoras por fat (gráfico fica ilegível com mais)
+    const top = [...vendedoras]
+      .sort((a, b) => (b.conv?.fat || 0) - (a.conv?.fat || 0))
+      .slice(0, 10);
+    const series = top.map((v, i) => ({
+      key: `v${v.empresa}_${v.vendedor_codigo}`,
+      nome: v.vendedor_nome || `Vendedor ${v.vendedor_codigo}`,
+      cor: cores[i % cores.length],
+      porDia: v.convPorDia instanceof Map ? v.convPorDia : new Map(),
+    }));
+    // Constrói rows pra Recharts — uma linha por dia, colunas por vendedora
+    const rows = dias.map(dia => {
+      const linha = { dia, label: dia.slice(8, 10) + '/' + dia.slice(5, 7) };
+      series.forEach(s => { linha[s.key] = 0; });
+      return linha;
+    });
+    // Preenche acumulado por vendedora
+    series.forEach(s => {
+      let acum = 0;
+      rows.forEach(row => {
+        acum += s.porDia.get(row.dia) || 0;
+        row[s.key] = Math.round(acum * 100) / 100;
+      });
+    });
+    return { rows, series };
+  }, [vendedoras, dataDe, dataAte]);
+
+  if (dados.rows.length === 0 || dados.series.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-8 text-center text-sm text-gray-400">
+        Sem dados pra gráfico.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
+        <Coins className="h-4 w-4 text-emerald-500" />
+        <h3 className="text-[13px] font-semibold text-gray-800">Vendas acumuladas por vendedora · diário</h3>
+        <span className="text-[11px] text-gray-400">top 10</span>
+      </div>
+      <div className="p-3" style={{ height: 320 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={dados.rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} />
+            <YAxis tick={{ fontSize: 10, fill: '#6b7280' }}
+              tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+            <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+              formatter={(v, nome) => [v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), nome]} />
+            <Legend wrapperStyle={{ fontSize: 10 }} iconType="line" />
+            {dados.series.map(s => (
+              <Line key={s.key} type="monotone" dataKey={s.key} name={s.nome}
+                stroke={s.cor} strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ─── Heatmap hora × dia da semana ─────────────────────────────
+// Grid 7 colunas (dom→sáb) × 24 linhas (0h→23h). Intensidade da cor =
+// faturamento na célula.
+function HeatmapHoraXDow({ heatmap }) {
+  const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  const { matriz, max } = useMemo(() => {
+    const m = Array.from({ length: 24 }, () => Array(7).fill(0));
+    let max = 0;
+    if (heatmap instanceof Map) {
+      heatmap.forEach((fat, k) => {
+        const [dow, hh] = String(k).split('-').map(Number);
+        if (Number.isFinite(dow) && Number.isFinite(hh) && dow >= 0 && dow < 7 && hh >= 0 && hh < 24) {
+          m[hh][dow] = fat;
+          if (fat > max) max = fat;
+        }
+      });
+    }
+    return { matriz: m, max };
+  }, [heatmap]);
+
+  const corCell = (valor) => {
+    if (!valor || max <= 0) return { backgroundColor: '#f9fafb', color: '#d1d5db' };
+    const intensity = valor / max;
+    const opacity = 0.12 + 0.78 * intensity;
+    return {
+      backgroundColor: `rgba(16, 185, 129, ${opacity})`,
+      color: intensity > 0.6 ? '#fff' : '#065f46',
+    };
+  };
+
+  if (max === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-8 text-center text-sm text-gray-400">
+        Sem dados de hora/dia da semana.
+      </div>
+    );
+  }
+
+  // Linhas só pras horas com vendas (evita 24 linhas vazias)
+  const horasComVendas = matriz
+    .map((row, h) => ({ h, soma: row.reduce((s, v) => s + v, 0) }))
+    .filter(r => r.soma > 0)
+    .map(r => r.h);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
+        <Calendar className="h-4 w-4 text-emerald-500" />
+        <h3 className="text-[13px] font-semibold text-gray-800">Vendas por hora × dia da semana</h3>
+        <span className="text-[11px] text-gray-400">intensidade = faturamento</span>
+      </div>
+      <div className="p-3 overflow-x-auto">
+        <table className="w-full text-[10.5px] tabular-nums">
+          <thead>
+            <tr>
+              <th className="px-2 py-1 text-right font-semibold text-gray-500">Hora</th>
+              {DOW_LABELS.map(d => (
+                <th key={d} className="px-1 py-1 text-center font-semibold text-gray-500">{d}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {horasComVendas.map(h => (
+              <tr key={h}>
+                <td className="px-2 py-0.5 text-right text-gray-500 font-mono">
+                  {String(h).padStart(2, '0')}h
+                </td>
+                {matriz[h].map((v, dow) => (
+                  <td key={dow} className="px-0.5 py-0.5">
+                    <div className="rounded text-center py-1 px-1 font-medium" style={corCell(v)}
+                      title={`${DOW_LABELS[dow]} ${String(h).padStart(2, '0')}h: ${v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`}>
+                      {v > 0 ? (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v >= 100 ? Math.round(v) : '·') : ''}
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -1,28 +1,21 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, LogOut, Moon, Sun, Building2, ChevronDown, Check } from 'lucide-react';
+import { Menu, LogOut, Moon, Sun, Building2 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import NotificacoesBell from '../../ui/NotificacoesBell';
-import { logoutCliente, trocarEmpresaAtiva } from '../../../lib/auth';
+import { logoutCliente } from '../../../lib/auth';
 import { useTheme } from '../../../hooks/useTheme';
 
 export default function ClienteHeader({ onMenuClick }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [empresaMenuOpen, setEmpresaMenuOpen] = useState(false);
   const userRef = useRef(null);
-  const empresaRef = useRef(null);
   const navigate = useNavigate();
   const session = useClienteSession();
   const cliente = session?.cliente;
   const clientesRede = session?.clientesRede || [];
   const usuario = session?.usuario;
   const tipoCliente = session?.tipoCliente || 'webposto';
-  // No portal Autosystem cada página agrega os dados de todas as empresas
-  // da rede (modo "tree"), então o seletor de empresa ativa é dispensável.
-  const podeTrocarEmpresa = tipoCliente !== 'autosystem'
-    && !!usuario?.permissoes?.includes('trocar_empresa')
-    && clientesRede.length > 1;
   const { tema, alternar } = useTheme();
   const escuro = tema === 'dark';
   const nomeCliente = cliente?.nome || 'Cliente';
@@ -35,15 +28,9 @@ export default function ClienteHeader({ onMenuClick }) {
     navigate('/cliente/login', { replace: true });
   };
 
-  const handleTrocarEmpresa = (empId) => {
-    trocarEmpresaAtiva(empId);
-    setEmpresaMenuOpen(false);
-  };
-
   useEffect(() => {
     const handler = (e) => {
       if (userRef.current && !userRef.current.contains(e.target)) setUserMenuOpen(false);
-      if (empresaRef.current && !empresaRef.current.contains(e.target)) setEmpresaMenuOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -59,59 +46,7 @@ export default function ClienteHeader({ onMenuClick }) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        {podeTrocarEmpresa ? (
-          <div ref={empresaRef} className="relative min-w-0 flex-1 sm:flex-initial">
-            <button onClick={() => setEmpresaMenuOpen(!empresaMenuOpen)}
-              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-1.5 hover:border-blue-300 hover:shadow-sm transition-all w-full sm:w-auto">
-              <Building2 className="h-4 w-4 text-blue-500 flex-shrink-0" />
-              <div className="text-left min-w-0 flex-1">
-                <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate max-w-[140px] sm:max-w-[200px]">{nomeCliente}</p>
-                <p className="hidden sm:block text-[10px] text-gray-500 truncate max-w-[200px]">{cnpjCliente}</p>
-              </div>
-              <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform flex-shrink-0 ${empresaMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            <AnimatePresence>
-              {empresaMenuOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.12 }}
-                  className="absolute left-0 top-full mt-2 w-[calc(100vw-1.5rem)] sm:w-80 max-w-sm bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden"
-                >
-                  <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/60">
-                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Empresas da rede</p>
-                    <p className="text-sm font-semibold text-gray-900 truncate mt-0.5">{session?.chaveApi?.nome || '—'}</p>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto">
-                    {clientesRede.map(emp => {
-                      const ativa = emp.id === cliente?.id;
-                      return (
-                        <button key={emp.id} onClick={() => handleTrocarEmpresa(emp.id)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${ativa ? 'bg-blue-50/60' : ''}`}>
-                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            ativa ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-sm'
-                                  : 'bg-gray-100 text-gray-500'
-                          }`}>
-                            <Building2 className="h-4 w-4" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium truncate ${ativa ? 'text-blue-900' : 'text-gray-800'}`}>
-                              {emp.nome}
-                            </p>
-                            {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
-                          </div>
-                          {ativa && <Check className="h-4 w-4 text-blue-600 flex-shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        ) : tipoCliente === 'autosystem' ? (
+        {tipoCliente === 'autosystem' ? (
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
               <Building2 className="h-4 w-4" />
@@ -122,9 +57,20 @@ export default function ClienteHeader({ onMenuClick }) {
             </div>
           </div>
         ) : (
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate max-w-[180px] sm:max-w-none">{nomeCliente}</p>
-            <p className="hidden sm:block text-xs text-gray-500 truncate">{cnpjCliente}</p>
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
+              <Building2 className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate max-w-[160px] sm:max-w-none">
+                {session?.chaveApi?.nome || nomeCliente}
+              </p>
+              <p className="hidden sm:block text-[10px] text-gray-500">
+                {clientesRede.length > 0
+                  ? `${clientesRede.length} empresa${clientesRede.length === 1 ? '' : 's'} na rede`
+                  : cnpjCliente}
+              </p>
+            </div>
           </div>
         )}
       </div>

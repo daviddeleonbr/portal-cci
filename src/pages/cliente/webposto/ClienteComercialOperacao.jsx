@@ -8,6 +8,46 @@ import {
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import BarraProgressoTopo from '../../../components/ui/BarraProgressoTopo';
+import BannerCarregando from '../../../components/vendas/BannerCarregando';
+import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
+import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
+
+// Serializa Map<empresaId, dadosObj> pra JSON-safe (Maps internos → arrays).
+function serializeDadosPorEmpresa(mapa) {
+  const out = [];
+  mapa.forEach((v, k) => {
+    out.push([k, {
+      empresa: v.empresa,
+      caixas: v.caixas, vendas: v.vendas, vendaItens: v.vendaItens,
+      formasPagto: v.formasPagto, abastecimentos: v.abastecimentos,
+      funcionariosArr: Array.from(v.funcionariosMap.entries()),
+      produtosArr:     Array.from(v.produtosMap.entries()),
+      gruposArr:       Array.from(v.gruposMap.entries()),
+      formasPagtoArr:  Array.from(v.formasPagtoMap.entries()),
+      bicosArr:        Array.from(v.bicosMap.entries()),
+      erro: v.erro || null,
+    }]);
+  });
+  return out;
+}
+function deserializeDadosPorEmpresa(arr) {
+  const mapa = new Map();
+  (arr || []).forEach(([k, v]) => {
+    mapa.set(k, {
+      empresa: v.empresa,
+      caixas: v.caixas || [], vendas: v.vendas || [], vendaItens: v.vendaItens || [],
+      formasPagto: v.formasPagto || [], abastecimentos: v.abastecimentos || [],
+      funcionariosMap: new Map(v.funcionariosArr || []),
+      produtosMap:     new Map(v.produtosArr     || []),
+      gruposMap:       new Map(v.gruposArr       || []),
+      formasPagtoMap:  new Map(v.formasPagtoArr  || []),
+      bicosMap:        new Map(v.bicosArr        || []),
+      erro: v.erro,
+    });
+  });
+  return mapa;
+}
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
@@ -70,8 +110,17 @@ export default function ClienteComercialOperacao() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState(null);
   // dadosPorEmpresa: Map<empresaId, { empresa, caixas, vendas, funcionariosMap }>
-  const [dadosPorEmpresa, setDadosPorEmpresa] = useState(new Map());
-  const [empresasExpandidas, setEmpresasExpandidas] = useState(new Set());
+  // Cache v2 — chave determinística (pagina + chaveApiId)
+  const chaveApiIdAtiva = clientesRede[0]?.chave_api_id || null;
+  const cacheInicialOperacao = useMemo(() => {
+    return chaveApiIdAtiva ? lerCacheV2('operacao', chaveApiIdAtiva) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const dadosInicialMap = cacheInicialOperacao?.dadosPorEmpresaArr
+    ? deserializeDadosPorEmpresa(cacheInicialOperacao.dadosPorEmpresaArr)
+    : new Map();
+  const [dadosPorEmpresa, setDadosPorEmpresa] = useState(() => dadosInicialMap);
+  const [empresasExpandidas, setEmpresasExpandidas] = useState(() => new Set(dadosInicialMap.keys()));
   const [turnosExpandidos, setTurnosExpandidos] = useState(new Set());
 
   const empresasSel = useMemo(
@@ -80,12 +129,24 @@ export default function ClienteComercialOperacao() {
   );
   const multiEmpresa = empresasSel.length > 1;
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async ({ force = false, silencioso = false } = {}) => {
     if (empresasSel.length === 0) {
       setErro('Selecione ao menos uma empresa.');
       return;
     }
-    setLoading(true);
+    const chaveApiIdCache = empresasSel[0].chave_api_id;
+    if (!force) {
+      const cache = lerCacheV2('operacao', chaveApiIdCache);
+      if (cache?.dadosPorEmpresaArr) {
+        const restored = deserializeDadosPorEmpresa(cache.dadosPorEmpresaArr);
+        setDadosPorEmpresa(restored);
+        setEmpresasExpandidas(new Set([...restored.keys()]));
+        setLoading(false);
+        setErro(null);
+        return; // cache hit — não faz fetch
+      }
+    }
+    if (!silencioso) setLoading(true);
     setErro(null);
     try {
       const chaves = await mapService.listarChavesApi();
@@ -158,8 +219,11 @@ export default function ClienteComercialOperacao() {
       const novoMap = new Map();
       resultados.forEach(r => novoMap.set(r.empresa.id, r));
       setDadosPorEmpresa(novoMap);
-      // Auto-expande todas as empresas selecionadas
       setEmpresasExpandidas(new Set(resultados.map(r => r.empresa.id)));
+      // Salva cache v2
+      salvarCacheV2('operacao', chaveApiIdCache, {
+        dadosPorEmpresaArr: serializeDadosPorEmpresa(novoMap),
+      });
     } catch (err) {
       setErro('Erro ao buscar operação: ' + (err.message || err));
     } finally {
@@ -167,14 +231,19 @@ export default function ClienteComercialOperacao() {
     }
   }, [empresasSel, dataInicial, dataFinal]);
 
-  // Auto-fetch quando muda empresa ou data — debounce simples
+  // Auto-fetch: o carregar() já checa cache exato internamente e só
+  // faz fetch se miss (ou se force=true). Banner topo mostra "Atualizando".
   useEffect(() => {
-    if (empresasSel.length > 0) {
-      const t = setTimeout(() => { carregar(); }, 100);
-      return () => clearTimeout(t);
-    }
+    if (empresasSel.length === 0) return;
+    const t = setTimeout(() => { carregar(); }, 100);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify([...empresasSelIds]), dataInicial, dataFinal]);
+
+  // Auto-refresh em background a cada 10 min (silencioso — sem banner)
+  useAutoRefresh(() => {
+    if (empresasSel.length > 0) carregar({ force: true, silencioso: true });
+  });
 
   // ─── Enriquecimento dos turnos por empresa ──────────────────
   const empresasComTurnos = useMemo(() => {
@@ -436,9 +505,16 @@ export default function ClienteComercialOperacao() {
     return next;
   });
 
+  // Detecta se é a PRIMEIRA carga (modal envolvente só aparece no inicial)
+  // Modal aparece quando está carregando E não há nada na tela (nenhum
+  // turno) — regra simples: tem dados, suprime; sem dados, mostra.
+  const primeiraCarga = loading && empresasComTurnos.every(e => e.turnos.length === 0);
+
   return (
     <div>
       <BarraProgressoTopo loading={loading} />
+
+      <BannerCarregando aberto={loading} mensagem="Carregando operações dos caixas..." />
 
       <PageHeader
         title="Operação"
@@ -470,7 +546,8 @@ export default function ClienteComercialOperacao() {
             onChange={(e) => e.target.value && setDataFinal(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </label>
-        <button onClick={carregar} disabled={loading || empresasSel.length === 0}
+        <IndicadorAtualizacao pagina="operacao" chaveApiId={chaveApiIdAtiva} />
+        <button onClick={() => carregar({ force: true })} disabled={loading || empresasSel.length === 0}
           className="flex items-center gap-2 h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           Atualizar
@@ -507,11 +584,8 @@ export default function ClienteComercialOperacao() {
               sub={`${totaisGerais.qtdVendas} vendas`} raw />
           </div>
 
-          {loading && empresasComTurnos.every(e => e.turnos.length === 0) ? (
-            <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-16 text-center shadow-sm">
-              <Loader2 className="h-6 w-6 text-blue-500 animate-spin mx-auto mb-3" />
-              <p className="text-sm text-gray-700">Buscando turnos e vendas…</p>
-            </div>
+          {primeiraCarga ? (
+            <div className="h-32" />
           ) : (
             <div className="space-y-4">
               {empresasComTurnos.map(({ empresa, turnos, totais }) => {
