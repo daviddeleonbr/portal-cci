@@ -84,7 +84,7 @@ const navigationAll = [
       { name: 'Geral', href: '/admin/configuracoes', icon: Settings, permissao: 'parametros' },
       { name: 'Uso do Portal', href: '/admin/uso-portal', icon: Activity, permissao: 'uso_portal' },
       { name: 'Webposto · Sincronia', href: '/admin/webposto-sync', icon: RefreshCw, permissao: 'webposto_sync' },
-      { name: 'Portal cliente · Demo', href: '/admin/portal-demo', icon: Eye, permissao: 'parametros' },
+      { name: 'Portal cliente · Demo', href: '/admin/portal-demo', icon: Eye },
     ],
   },
 ];
