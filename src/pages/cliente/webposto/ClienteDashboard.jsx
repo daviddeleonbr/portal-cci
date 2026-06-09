@@ -31,6 +31,7 @@ import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil } from '../../../util
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
+import { mascarar } from '../../../utils/demoMascarar';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -986,9 +987,14 @@ function CardAPagarHoje({ loading, info, multiEmpresa, infoHoje }) {
             {info.top6.map((c, i) => (
               <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/60">
                 <td className="px-3 py-1.5">
-                  <p className="text-gray-800 truncate max-w-[280px]" title={c.fornecedorNome || c.fornecedor || c.nomeFornecedor || c.razao || c.fantasia}>
-                    {c.fornecedorNome || c.fornecedor || c.nomeFornecedor || c.razao || c.fantasia || '—'}
-                  </p>
+                  {(() => {
+                    const nomeReal = c.fornecedorNome || c.fornecedor || c.nomeFornecedor || c.razao || c.fantasia;
+                    const codFornec = c.fornecedorCodigo ?? c.codigoFornecedor ?? c.codigo ?? nomeReal;
+                    const nome = mascarar('fornecedor', codFornec, nomeReal) || '—';
+                    return (
+                      <p className="text-gray-800 truncate max-w-[280px]" title={nome}>{nome}</p>
+                    );
+                  })()}
                   <p className="text-[10px] text-gray-400 font-mono truncate">
                     {c.documento ? `doc ${c.documento}` : ''}
                     {c.parcela ? ` · parc ${c.parcela}` : ''}

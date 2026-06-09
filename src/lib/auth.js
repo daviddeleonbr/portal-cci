@@ -166,6 +166,98 @@ async function autenticar(email, senha, tipoEsperado) {
   return { usuario: usuarioSemSenha, chaveApi, asRede, clientesRede, tipoCliente };
 }
 
+// ─── Acesso DEMO: admin vê o portal cliente com nomes fictícios ─────
+//
+// Cria uma sessão CLIENTE marcada com `_demo: true`, baseada nos dados
+// reais de uma chave_api (rede webposto). Nomes reais (rede, empresas,
+// vendedores, fornecedores) são substituídos por fictícios via
+// utils/demoMascarar.js. Valores numéricos (vendas, totais) são REAIS.
+//
+// Salva também `_adminOriginal` pra permitir voltar ao admin sem
+// re-fazer login.
+export async function acessarPortalDemo({ chaveApiId }) {
+  const sessaoAdmin = getAdminSession();
+  if (!sessaoAdmin?.usuario) throw new Error('Você precisa estar logado como admin pra usar o modo demo.');
+
+  // Importa lazy pra evitar ciclo
+  const { mascararRede, mascararEmpresa } = await import('../utils/demoMascarar');
+
+  // 1) Carrega a chave_api real
+  const { data: chaveApi, error: errCh } = await supabase
+    .from('chaves_api')
+    .select('*')
+    .eq('id', chaveApiId)
+    .single();
+  if (errCh || !chaveApi) throw new Error('Rede não encontrada: ' + (errCh?.message || ''));
+
+  // 2) Carrega empresas (clientes) reais dessa rede
+  const { data: emps, error: errEmps } = await supabase
+    .from('clientes')
+    .select('*')
+    .eq('chave_api_id', chaveApiId)
+    .eq('status', 'ativo')
+    .order('nome', { ascending: true });
+  if (errEmps) throw new Error('Falha ao carregar empresas: ' + errEmps.message);
+  if (!emps || emps.length === 0) {
+    throw new Error('Essa rede não tem empresas cadastradas.');
+  }
+
+  // 3) Mascara nomes
+  const chaveApiMasc   = mascararRede(chaveApi);
+  const empresasMasc   = emps.map(mascararEmpresa);
+  const clienteAtivo   = empresasMasc[0];
+
+  // 4) Monta usuario "cliente fictício" com todas as permissões
+  // pra ele ver todas as páginas. Mantém ID do admin pra logs.
+  const usuarioCliente = {
+    id: `demo-${sessaoAdmin.usuario.id}`,
+    nome: sessaoAdmin.usuario.nome || 'Demo',
+    email: sessaoAdmin.usuario.email,
+    tipo: 'cliente',
+    status: 'ativo',
+    permissoes: [
+      'dashboard', 'comercial_vendas', 'comercial_operacao',
+      'comercial_produtividade', 'comercial_estoques', 'financeiro',
+      'documentos', 'notas_fiscais',
+    ],
+    empresas_permitidas: null,
+  };
+
+  const sessionDemo = {
+    usuario: usuarioCliente,
+    cliente: clienteAtivo,
+    tipoCliente: 'webposto',
+    chaveApi: chaveApiMasc,
+    asRede: null,
+    clientesRede: empresasMasc,
+    loggedAt: new Date().toISOString(),
+    _demo: true,
+    _adminOriginal: {
+      usuarioId: sessaoAdmin.usuario.id,
+      nome:      sessaoAdmin.usuario.nome,
+      email:     sessaoAdmin.usuario.email,
+    },
+  };
+  setClienteSession(sessionDemo);
+  return sessionDemo;
+}
+
+// Volta da demo pro admin: limpa sessão cliente, mantém admin original.
+export function sairModoDemo() {
+  const session = getClienteSession();
+  if (!session?._demo) return;
+  localStorage.removeItem(CLIENTE_KEY);
+  // Limpa cache webposto pra evitar vazar dados entre redes demo
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('webposto-v2:') || k.startsWith('webposto-v3:') || k.startsWith('webposto-cache-v1:'))
+      .forEach(k => localStorage.removeItem(k));
+    sessionStorage.removeItem('webposto-paginas-visitadas-v1');
+    sessionStorage.removeItem('webposto-prefetched-v1');
+  } catch { /* noop */ }
+  emitSessionChange();
+}
+
 // Troca a empresa ativa na sessao (usado pelo seletor no header do cliente)
 export function trocarEmpresaAtiva(empresaId) {
   const session = getClienteSession();

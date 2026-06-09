@@ -75,6 +75,7 @@ import WpOutrasContas from './pages/cliente/webposto/ClienteOutrasContas';
 import AdminOutrasContas from './pages/AdminOutrasContas';
 import AdminSuporte from './pages/AdminSuporte';
 import AdminWebpostoSync from './pages/AdminWebpostoSync';
+import AdminPortalDemo from './pages/AdminPortalDemo';
 import WpConfiguracoes from './pages/cliente/webposto/ClienteConfiguracoes';
 import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
 // Cliente Autosystem (esqueletos — implementados página a página)
@@ -148,6 +149,7 @@ export default function App() {
           <Route path="/admin/bpo/outras-contas" element={<AdminOutrasContas />} />
           <Route path="/admin/suporte" element={<AdminSuporte />} />
           <Route path="/admin/webposto-sync" element={<AdminWebpostoSync />} />
+          <Route path="/admin/portal-demo" element={<AdminPortalDemo />} />
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
           <Route path="/admin/fiscal/agendamento" element={<NotasFiscais />} />
 

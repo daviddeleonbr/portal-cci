@@ -11,6 +11,7 @@ import BannerCarregando from '../../../components/vendas/BannerCarregando';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
+import { mascarar } from '../../../utils/demoMascarar';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as qualityApi from '../../../services/qualityApiService';
 import * as mapService from '../../../services/mapeamentoService';
@@ -179,9 +180,11 @@ export default function ClienteComercialProdutividade() {
           agg.set(k, {
             empresa: empresaCodigo,
             vendedor_codigo: vendedorCodigo,
-            vendedor_nome: funcionariosMap.get(Number(vendedorCodigo))?.nome
-                          || funcionariosMap.get(Number(vendedorCodigo))?.funcionarioNome
-                          || `Funcionário #${vendedorCodigo}`,
+            vendedor_nome: mascarar('funcionario', vendedorCodigo,
+              funcionariosMap.get(Number(vendedorCodigo))?.nome
+              || funcionariosMap.get(Number(vendedorCodigo))?.funcionarioNome
+              || `Funcionário #${vendedorCodigo}`
+            ),
             fat_combustivel: 0, custo_combustivel: 0, qtd_combustivel: 0,
             fat_automotivos: 0, custo_automotivos: 0, vendas_automotivos: 0,
             fat_conveniencia: 0, custo_conveniencia: 0, vendas_conveniencia: 0,

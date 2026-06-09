@@ -5,6 +5,7 @@ import ClienteSidebar from './ClienteSidebar';
 import ClienteHeader from './ClienteHeader';
 import ModalNovidades from '../../ui/ModalNovidades';
 import PrefetcherWebposto from './PrefetcherWebposto';
+import BannerModoDemo from './BannerModoDemo';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { registrarPageview } from '../../../services/usoPortalService';
 
@@ -34,6 +35,7 @@ export default function ClienteLayout() {
 
   return (
     <div className="min-h-screen relative app-bg">
+      <BannerModoDemo />
       {/* Decorative background - gradient mesh */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-blue-400/15 blur-[100px]" />
