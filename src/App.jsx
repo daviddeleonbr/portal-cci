@@ -64,6 +64,7 @@ import WpSuporte from './pages/cliente/webposto/ClienteSuporte';
 import WpSangrias from './pages/cliente/webposto/ClienteSangrias';
 import WpUsuarios from './pages/cliente/webposto/ClienteUsuarios';
 import WpComercialVendas from './pages/cliente/webposto/ClienteComercialVendas';
+import WpPendencias from './pages/cliente/webposto/ClientePendencias';
 import WpComercialOperacao from './pages/cliente/webposto/ClienteComercialOperacao';
 import WpComercialProdutividade from './pages/cliente/webposto/ClienteComercialProdutividade';
 import WpEstoques from './pages/cliente/webposto/ClienteEstoques';
@@ -76,6 +77,7 @@ import AdminOutrasContas from './pages/AdminOutrasContas';
 import AdminSuporte from './pages/AdminSuporte';
 import AdminWebpostoSync from './pages/AdminWebpostoSync';
 import AdminPortalDemo from './pages/AdminPortalDemo';
+import AdminPendencias from './pages/AdminPendencias';
 import WpConfiguracoes from './pages/cliente/webposto/ClienteConfiguracoes';
 import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
 // Cliente Autosystem (esqueletos — implementados página a página)
@@ -150,6 +152,7 @@ export default function App() {
           <Route path="/admin/suporte" element={<AdminSuporte />} />
           <Route path="/admin/webposto-sync" element={<AdminWebpostoSync />} />
           <Route path="/admin/portal-demo" element={<AdminPortalDemo />} />
+          <Route path="/admin/pendencias" element={<AdminPendencias />} />
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
           <Route path="/admin/fiscal/agendamento" element={<NotasFiscais />} />
 
@@ -209,6 +212,8 @@ export default function App() {
           <Route path="/cliente/webposto/bpo/outras-contas" element={<RequirePermissaoCliente permissao="outras_contas"><WpOutrasContas /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/sangrias" element={<RequirePermissaoCliente permissao="sangrias"><WpSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/suporte" element={<WpSuporte />} />
+          <Route path="/cliente/webposto/pendencias" element={<WpPendencias />} />
+          <Route path="/cliente/autosystem/pendencias" element={<WpPendencias />} />
           <Route path="/cliente/webposto/melhorias" element={<ClienteMelhorias />} />
           <Route path="/cliente/webposto/usuarios" element={<WpUsuarios />} />
           <Route path="/cliente/webposto/comercial" element={<Navigate to="/cliente/webposto/comercial/vendas" replace />} />

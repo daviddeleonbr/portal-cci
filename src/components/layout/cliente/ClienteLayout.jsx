@@ -6,6 +6,7 @@ import ClienteHeader from './ClienteHeader';
 import ModalNovidades from '../../ui/ModalNovidades';
 import PrefetcherWebposto from './PrefetcherWebposto';
 import BannerModoDemo from './BannerModoDemo';
+import ModalPendenciasLogin from './ModalPendenciasLogin';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { registrarPageview } from '../../../services/usoPortalService';
 
@@ -46,6 +47,7 @@ export default function ClienteLayout() {
       </div>
 
       <ModalNovidades />
+      <ModalPendenciasLogin />
       <PrefetcherWebposto />
 
       {/* Backdrop mobile */}

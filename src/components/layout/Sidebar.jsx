@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Landmark, Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
-  MessageCircle, RefreshCw, Eye,
+  MessageCircle, RefreshCw, Eye, AlertTriangle,
   Activity, FileSpreadsheet, Receipt,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
@@ -72,6 +72,7 @@ const navigationAll = [
   {
     section: 'Comunicações',
     items: [
+      { name: 'Pendências', href: '/admin/pendencias', icon: AlertTriangle },
       { name: 'Notificações', href: '/admin/notificacoes', icon: Bell, permissao: 'notificacoes' },
       { name: 'Mensagens Iniciais', href: '/admin/mensagens-iniciais', icon: Megaphone, permissao: 'mensagens_iniciais' },
       { name: 'Melhorias do Sistema', href: '/admin/melhorias', icon: Lightbulb, permissao: 'melhorias' },

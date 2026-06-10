@@ -7,7 +7,7 @@ import {
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
   ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet, Receipt,
-  Boxes,
+  Boxes, AlertTriangle,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { logoutCliente } from '../../../lib/auth';
@@ -58,6 +58,7 @@ function buildNavigation(prefix) {
     {
       section: 'Atendimento',
       items: [
+        { name: 'Pendências', href: `${prefix}/pendencias`, icon: AlertTriangle },
         { name: 'Suporte', href: `${prefix}/suporte`, icon: HelpCircle, permissao: 'suporte' },
         { name: 'Melhorias do Sistema', href: `${prefix}/melhorias`, icon: Lightbulb },
       ],
