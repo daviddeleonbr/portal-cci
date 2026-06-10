@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { carregarConfiguracaoIa } from '../../services/iaSharedHelpers';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, TrendingUp, TrendingDown, AlertTriangle, Lightbulb,
@@ -19,6 +20,18 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
   const [errorCode, setErrorCode] = useState(null);
   const [modalKey, setModalKey] = useState(false);
   const [apiKey, setApiKey] = useState(insightsService.carregarApiKey());
+
+  // Hidrata do Supabase (chave admin-managed em `configuracoes_ia`).
+  // Assim qualquer admin abre a página com a chave central da CCI já carregada.
+  useEffect(() => {
+    (async () => {
+      try {
+        const cfg = await carregarConfiguracaoIa();
+        if (cfg?.apiKey && cfg.apiKey !== apiKey) setApiKey(cfg.apiKey);
+      } catch { /* fallback no localStorage */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const gerarInsights = async () => {
     let key = apiKey;

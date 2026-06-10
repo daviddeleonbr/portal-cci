@@ -13,7 +13,7 @@ import * as vendasIA from '../services/vendasInsightsService';
 import * as dreIA from '../services/dreInsightsService';
 import * as fluxoIA from '../services/fluxoInsightsService';
 import * as geralIA from '../services/diagnosticoGeralService';
-import { carregarApiKey, salvarApiKey, limparApiKey } from '../services/iaSharedHelpers';
+import { carregarApiKey, salvarApiKey, limparApiKey, carregarConfiguracaoIa } from '../services/iaSharedHelpers';
 import { useAnonimizador } from '../services/anonimizarService';
 import { useAdminSession } from '../hooks/useAuth';
 import AnaliseIaView from '../components/ia/AnaliseIaView';
@@ -49,10 +49,22 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
   const [loadingAba, setLoadingAba] = useState(null);
   const [progress, setProgress] = useState('');
 
-  // API key
+  // API key — inicializa do localStorage (sync) e hidrata do Supabase
+  // (chave admin-managed em `configuracoes_ia`) ao montar. Assim qualquer
+  // admin que abrir a página já tem a chave configurada pela CCI.
   const [apiKey, setApiKey] = useState(() => carregarApiKey());
   const [modalKey, setModalKey] = useState(false);
   const [tempKey, setTempKey] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const cfg = await carregarConfiguracaoIa();
+        if (cfg?.apiKey && cfg.apiKey !== apiKey) setApiKey(cfg.apiKey);
+      } catch { /* mantém o que veio do localStorage */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const mesKey = `${mesRef.ano}-${String(mesRef.mes).padStart(2, '0')}`;
 
