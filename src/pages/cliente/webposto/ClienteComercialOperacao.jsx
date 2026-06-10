@@ -9,8 +9,10 @@ import {
 import PageHeader from '../../../components/ui/PageHeader';
 import BarraProgressoTopo from '../../../components/ui/BarraProgressoTopo';
 import BannerCarregando from '../../../components/vendas/BannerCarregando';
+import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 
 // Serializa Map<empresaId, dadosObj> pra JSON-safe (Maps internos → arrays).
@@ -102,13 +104,16 @@ export default function ClienteComercialOperacao() {
   const hojeIso = ymd(new Date());
   const seteDiasAtrasIso = ymd(new Date(Date.now() - 6 * 86400000));
 
-  const [empresasSelIds, setEmpresasSelIds] = useState(() =>
-    new Set((session?.clientesRede || []).map(c => c.id))
+  // Seleção SINCRONIZADA entre páginas (persiste em localStorage)
+  const [empresasSelIds, setEmpresasSelIds] = useEmpresasSelecionadas(
+    session?.clientesRede || [], session?.chaveApi?.id
   );
   const [dataInicial, setDataInicial] = useState(seteDiasAtrasIso);
   const [dataFinal, setDataFinal] = useState(hojeIso);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState(null);
+  // Progresso do fetch
+  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
   // dadosPorEmpresa: Map<empresaId, { empresa, caixas, vendas, funcionariosMap }>
   // Cache v2 — chave determinística (pagina + chaveApiId)
   const chaveApiIdAtiva = clientesRede[0]?.chave_api_id || null;
@@ -148,6 +153,9 @@ export default function ClienteComercialOperacao() {
     }
     if (!silencioso) setLoading(true);
     setErro(null);
+    // Cada empresa = 1 etapa de progresso (interno é 10 endpoints paralelos)
+    if (!silencioso) setProgresso({ feitos: 0, total: empresasSel.length });
+    const tick = () => { if (!silencioso) setProgresso(p => ({ ...p, feitos: p.feitos + 1 })); };
     try {
       const chaves = await mapService.listarChavesApi();
       const filtros = { dataInicial, dataFinal };
@@ -207,6 +215,7 @@ export default function ClienteComercialOperacao() {
             codigoProduto: b.codigoProduto ?? b.produtoCodigo ?? null,
           });
         });
+        tick(); // empresa concluída
         return {
           empresa: emp,
           caixas: caixas || [], vendas: vendas || [], vendaItens: vendaItens || [],
@@ -514,7 +523,7 @@ export default function ClienteComercialOperacao() {
     <div>
       <BarraProgressoTopo loading={loading} />
 
-      <BannerCarregando aberto={loading} mensagem="Carregando operações dos caixas..." />
+      <BarraProgressoFetch loading={loading} feitos={progresso.feitos} total={progresso.total} label="Carregando operação..." />
 
       <PageHeader
         title="Operação"
@@ -547,11 +556,6 @@ export default function ClienteComercialOperacao() {
             className="h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </label>
         <IndicadorAtualizacao pagina="operacao" chaveApiId={chaveApiIdAtiva} />
-        <button onClick={() => carregar({ force: true })} disabled={loading || empresasSel.length === 0}
-          className="flex items-center gap-2 h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
-          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          Atualizar
-        </button>
       </PageHeader>
 
       {erro && (

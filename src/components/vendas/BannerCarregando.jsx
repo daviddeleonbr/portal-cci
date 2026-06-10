@@ -42,3 +42,40 @@ export function SkeletonKpi() {
     </div>
   );
 }
+
+// Card de gráfico (donut, pie, etc.) em skeleton
+export function SkeletonGrafico({ height = 'h-72' }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
+        <div className="h-4 w-4 rounded-full bg-gray-200 animate-pulse" />
+        <Skeleton height="h-3.5" className="w-40" />
+      </div>
+      <div className={`p-4 ${height} flex items-center justify-center`}>
+        <div className="rounded-full bg-gray-100 w-32 h-32 animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
+// Tabela em skeleton — N linhas com colunas variáveis
+export function SkeletonTabela({ linhas = 5, colunas = 5 }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
+        <div className="h-4 w-4 rounded bg-gray-200 animate-pulse" />
+        <Skeleton height="h-3.5" className="w-44" />
+      </div>
+      <div className="p-3 space-y-2">
+        {Array.from({ length: linhas }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Skeleton height="h-3" className="flex-[2]" />
+            {Array.from({ length: colunas - 1 }).map((_, j) => (
+              <Skeleton key={j} height="h-3" className="flex-1" />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

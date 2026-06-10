@@ -25,11 +25,13 @@ import {
 } from '../../../utils/vendasArvoreWebposto';
 import EmpresaMultiSelect from '../../../components/vendas/EmpresaMultiSelect';
 import { formatNumero } from '../../../components/vendas/VendasCompartilhado';
-import BannerCarregando from '../../../components/vendas/BannerCarregando';
+import BannerCarregando, { SkeletonKpi, SkeletonGrafico, SkeletonTabela } from '../../../components/vendas/BannerCarregando';
+import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { classificarItem } from '../../../services/mapeamentoVendasService';
 import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil } from '../../../utils/diasUteis';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 import { mascarar } from '../../../utils/demoMascarar';
 
@@ -78,17 +80,10 @@ export default function ClienteDashboard() {
     [clientesRede, cliente],
   );
 
-  const [empresasSelIds, setEmpresasSelIds] = useState(
-    () => new Set(empresasDisponiveis.map(c => c.id)),
+  // Seleção SINCRONIZADA entre páginas (persiste em localStorage)
+  const [empresasSelIds, setEmpresasSelIds] = useEmpresasSelecionadas(
+    empresasDisponiveis, session?.chaveApi?.id
   );
-  useEffect(() => {
-    setEmpresasSelIds(prev => {
-      if (prev.size === 0 && empresasDisponiveis.length > 0) {
-        return new Set(empresasDisponiveis.map(c => c.id));
-      }
-      return prev;
-    });
-  }, [empresasDisponiveis]);
   const empresasSel = useMemo(
     () => empresasDisponiveis.filter(c => empresasSelIds.has(c.id)),
     [empresasDisponiveis, empresasSelIds],
@@ -137,7 +132,15 @@ export default function ClienteDashboard() {
   // empresas. Hit = dados no primeiro render, sem delay.
   const chaveApiIdAtiva = empresasDisponiveis[0]?.chave_api_id || null;
   const cacheInicial = useMemo(() => {
-    return chaveApiIdAtiva ? lerCacheV2('dashboard', chaveApiIdAtiva) : null;
+    if (!chaveApiIdAtiva) return null;
+    // Tenta cache da combinação ATUAL primeiro. Se não houver (ex: trocou
+    // de seleção), tenta o cache de TODAS — mostra algo enquanto o
+    // useEffect dispara fetch da combinação correta.
+    const idsAtual = [...empresasSelIds].sort().join(',');
+    const idsTodas = empresasDisponiveis.map(e => e.id).sort().join(',');
+    return lerCacheV2(`dashboard:${idsAtual}`, chaveApiIdAtiva)
+        || lerCacheV2(`dashboard:${idsTodas}`, chaveApiIdAtiva)
+        || null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [agregado,   setAgregado]   = useState(() => cacheInicial?.agregado   || null);
@@ -151,6 +154,8 @@ export default function ClienteDashboard() {
     cacheInicial?.administradorasMap instanceof Map ? cacheInicial.administradorasMap : new Map());
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  // Progresso do fetch (etapas: catálogos + agregado + MA + AA)
+  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
 
   // Reseta catálogos quando troca o CONJUNTO de chaves_api (multi-rede).
   // PULA o primeiro mount pra preservar os Maps hidratados do cache.
@@ -171,9 +176,12 @@ export default function ClienteDashboard() {
   const carregar = useCallback(async ({ force = false, silencioso = false } = {}) => {
     if (empresasSel.length === 0) return;
     const chaveApiIdCache = empresasSel[0].chave_api_id;
-    // Cache v2 — chave determinística (pagina + chaveApiId)
+    // Chave do cache inclui as empresas selecionadas — assim cada
+    // combinação de seleção tem seu próprio cache, e mudanças de
+    // seleção forçam fetch novo automaticamente.
+    const chavePagina = `dashboard:${empresasSel.map(e => e.id).sort().join(',')}`;
     if (!force) {
-      const cache = lerCacheV2('dashboard', chaveApiIdCache);
+      const cache = lerCacheV2(chavePagina, chaveApiIdCache);
       if (cache?.agregado) {
         setProdutosMap(cache.produtosMap instanceof Map ? cache.produtosMap : new Map());
         setGruposMap(cache.gruposMap instanceof Map ? cache.gruposMap : new Map());
@@ -189,6 +197,9 @@ export default function ClienteDashboard() {
     // silencioso=true: não mostra banner (usado pelo auto-refresh em background)
     if (!silencioso) setLoading(true);
     setErro('');
+    // 5 etapas de fetch: catálogos + agregado + MA + AA + contas pagar/receber
+    if (!silencioso) setProgresso({ feitos: 0, total: 4 });
+    const tick = () => { if (!silencioso) setProgresso(p => ({ ...p, feitos: p.feitos + 1 })); };
     try {
       const chavesApi = await mapService.listarChavesApi();
       let apiKeyAlguma = chaveApiSessao;
@@ -206,14 +217,15 @@ export default function ClienteDashboard() {
       // híbrida cai pra Quality API direto quando o cache local está
       // vazio (rede recém-cadastrada / sem backfill).
       const [prods, grps, adms, ag] = await Promise.all([
-        precisaCatalogos ? qualityApi.buscarProdutos(apiKeyAlguma).catch(() => []) : Promise.resolve(null),
-        precisaCatalogos ? qualityApi.buscarGrupos(apiKeyAlguma).catch(() => [])   : Promise.resolve(null),
-        precisaCatalogos ? qualityApi.buscarAdministradoras(apiKeyAlguma).catch(() => []) : Promise.resolve(null),
+        (precisaCatalogos ? qualityApi.buscarProdutos(apiKeyAlguma).catch(() => []) : Promise.resolve(null)),
+        (precisaCatalogos ? qualityApi.buscarGrupos(apiKeyAlguma).catch(() => [])   : Promise.resolve(null)),
+        (precisaCatalogos ? qualityApi.buscarAdministradoras(apiKeyAlguma).catch(() => []) : Promise.resolve(null)),
         buscarVendasComercialHibridoWebposto({
           chaveApiId: chaveApiIdRede, empresasCodigos: empCodigos, dataDe, dataAte,
           apiKey: apiKeyAlguma, empresasInfo,
-        }),
+        }).finally(tick),
       ]);
+      tick(); // catálogos + agregado etapa 1 concluída (2/4)
 
       let pMapFinal = produtosMap;
       let gMapFinal = gruposMap;
@@ -253,18 +265,18 @@ export default function ClienteDashboard() {
           chaveApiId: chaveApiIdRede, empresasCodigos: empCodigos,
           dataDe: dataDeMA, dataAte: dataAteMA, produtosCombustivel,
           apiKey: apiKeyAlguma,
-        }).catch(() => null),
+        }).catch(() => null).finally(tick),
         buscarKpisPeriodoHibridoWebposto({
           chaveApiId: chaveApiIdRede, empresasCodigos: empCodigos,
           dataDe: dataDeAA, dataAte: dataAteAA, produtosCombustivel,
           apiKey: apiKeyAlguma,
-        }).catch(() => null),
+        }).catch(() => null).finally(tick),
       ]);
       setAgregadoMA(kpisMA);
       setAgregadoAA(kpisAA);
 
       // Salva cache v2 — service trata serialização de Maps automaticamente.
-      salvarCacheV2('dashboard', chaveApiIdCache, {
+      salvarCacheV2(chavePagina, chaveApiIdCache, {
         agregado:    ag,
         agregadoMA:  kpisMA,
         agregadoAA:  kpisAA,
@@ -279,12 +291,22 @@ export default function ClienteDashboard() {
     }
   }, [empresasSel, dataDe, dataAte, dataDeMA, dataAteMA, dataDeAA, dataAteAA, produtosMap, gruposMap, administradorasMap, chaveApiSessao, session?.chaveApi?.id]);
 
-  // Auto-carregar SEMPRE — mas o cache hidratado no mount mantém os dados
-  // visíveis na tela enquanto a busca acontece em background (banner topo).
-  // Sem fetch nunca, dados ficariam desatualizados; com este fetch dá pra
-  // navegar entre páginas sem perder dados nem ver tela vazia.
+  // Auto-carregar — quando mudam as empresas (após a 1ª carga), zera
+  // dados antigos imediatamente pra mostrar skeleton durante o fetch.
+  const ultimaCombRef = useRef(null);
   useEffect(() => {
-    if (empresasSel.length > 0) carregar();
+    if (empresasSel.length === 0) return;
+    const atual = [...empresasSelIds].sort().join(',');
+    if (ultimaCombRef.current !== null && ultimaCombRef.current !== atual) {
+      // Mudou de combinação → mostra skeleton zerando os dados.
+      // Se cache hit nessa combinação, será re-populado em ms; senão, fetch.
+      setAgregado(null);
+      setAgregadoMA(null);
+      setAgregadoAA(null);
+      setLoading(true);
+    }
+    ultimaCombRef.current = atual;
+    carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresasSelIds]);
 
@@ -618,14 +640,9 @@ export default function ClienteDashboard() {
           />
         )}
         <IndicadorAtualizacao pagina="dashboard" chaveApiId={chaveApiIdAtiva} />
-        <button onClick={() => carregar({ force: true })} disabled={loading || empresasSel.length === 0}
-          className="flex-shrink-0 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">Atualizar</span>
-        </button>
       </PageHeader>
 
-      <BannerCarregando aberto={loading} mensagem="Atualizando indicadores..." />
+      <BarraProgressoFetch loading={loading} feitos={progresso.feitos} total={progresso.total} />
 
       {loading && !agregado ? (
         <div className="h-32" />
@@ -650,47 +667,62 @@ export default function ClienteDashboard() {
 
           {/* 4 KPIs com comparação vs MA e AA */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <KpiComparativo
-              label="Lucro bruto" icone={TrendingUp} cor="emerald"
-              valor={formatCurrency(totaisMes.lucro)}
-              proj={formatCurrency(projecao.projetar(totaisMes.lucro))}
-              negativo={totaisMes.lucro < 0}
-              atual={totaisMes.lucro}
-              maValor={totaisMA?.lucro} aaValor={totaisAA?.lucro} formatBase={formatCurrency} />
-            <KpiComparativo
-              label="Litros vendidos" icone={Fuel} cor="amber"
-              valor={`${formatNumero(totaisMes.litros, 0)} L`}
-              proj={`${formatNumero(projecao.projetar(totaisMes.litros), 0)} L`}
-              atual={totaisMes.litros}
-              maValor={totaisMA?.litros} aaValor={totaisAA?.litros}
-              formatBase={(v) => `${formatNumero(v, 0)} L`} />
-            <KpiComparativo
-              label="Lucro bruto por litro" icone={Droplet} cor="rose"
-              valor={formatCurrency(lbPorLitro)}
-              negativo={lbPorLitro < 0}
-              atual={lbPorLitro}
-              maValor={totaisMA && totaisMA.litros > 0 ? totaisMA.lucro / totaisMA.litros : null}
-              aaValor={totaisAA && totaisAA.litros > 0 ? totaisAA.lucro / totaisAA.litros : null}
-              formatBase={formatCurrency} />
-            <KpiComparativo
-              label="Margem" icone={Percent} cor="violet"
-              valor={`${margem.toFixed(1)}%`}
-              negativo={margem < 0}
-              atual={margem}
-              maValor={totaisMA && totaisMA.fat > 0 ? (totaisMA.lucro / totaisMA.fat) * 100 : null}
-              aaValor={totaisAA && totaisAA.fat > 0 ? (totaisAA.lucro / totaisAA.fat) * 100 : null}
-              formatBase={(v) => `${v.toFixed(1)}%`} />
+            {loading ? (
+              <><SkeletonKpi /><SkeletonKpi /><SkeletonKpi /><SkeletonKpi /></>
+            ) : (
+              <>
+                <KpiComparativo
+                  label="Lucro bruto" icone={TrendingUp} cor="emerald"
+                  valor={formatCurrency(totaisMes.lucro)}
+                  proj={formatCurrency(projecao.projetar(totaisMes.lucro))}
+                  negativo={totaisMes.lucro < 0}
+                  atual={totaisMes.lucro}
+                  maValor={totaisMA?.lucro} aaValor={totaisAA?.lucro} formatBase={formatCurrency} />
+                <KpiComparativo
+                  label="Litros vendidos" icone={Fuel} cor="amber"
+                  valor={`${formatNumero(totaisMes.litros, 0)} L`}
+                  proj={`${formatNumero(projecao.projetar(totaisMes.litros), 0)} L`}
+                  atual={totaisMes.litros}
+                  maValor={totaisMA?.litros} aaValor={totaisAA?.litros}
+                  formatBase={(v) => `${formatNumero(v, 0)} L`} />
+                <KpiComparativo
+                  label="Lucro bruto por litro" icone={Droplet} cor="rose"
+                  valor={formatCurrency(lbPorLitro)}
+                  negativo={lbPorLitro < 0}
+                  atual={lbPorLitro}
+                  maValor={totaisMA && totaisMA.litros > 0 ? totaisMA.lucro / totaisMA.litros : null}
+                  aaValor={totaisAA && totaisAA.litros > 0 ? totaisAA.lucro / totaisAA.litros : null}
+                  formatBase={formatCurrency} />
+                <KpiComparativo
+                  label="Margem" icone={Percent} cor="violet"
+                  valor={`${margem.toFixed(1)}%`}
+                  negativo={margem < 0}
+                  atual={margem}
+                  maValor={totaisMA && totaisMA.fat > 0 ? (totaisMA.lucro / totaisMA.fat) * 100 : null}
+                  aaValor={totaisAA && totaisAA.fat > 0 ? (totaisAA.lucro / totaisAA.fat) * 100 : null}
+                  formatBase={(v) => `${v.toFixed(1)}%`} />
+              </>
+            )}
           </div>
 
           {/* Donut + Tabela Combustíveis */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-            <DonutPorCategoria categoriaDonut={categoriaDonut} totalDonut={totalDonut}
-              totaisMes={totaisMes} projetar={projecao.projetar} />
-            <TabelaCombustiveis
-              produtos={Array.from(totaisMes.porProdutoCombustivel.values()).sort((a, b) => b.qtd - a.qtd)}
-              totalLitros={totaisMes.porCat.combustivel.qtd}
-              totalLucro={totaisMes.porCat.combustivel.lucro}
-              projetar={projecao.projetar} />
+            {loading ? (
+              <>
+                <SkeletonGrafico />
+                <SkeletonTabela linhas={6} colunas={5} />
+              </>
+            ) : (
+              <>
+                <DonutPorCategoria categoriaDonut={categoriaDonut} totalDonut={totalDonut}
+                  totaisMes={totaisMes} projetar={projecao.projetar} />
+                <TabelaCombustiveis
+                  produtos={Array.from(totaisMes.porProdutoCombustivel.values()).sort((a, b) => b.qtd - a.qtd)}
+                  totalLitros={totaisMes.porCat.combustivel.qtd}
+                  totalLucro={totaisMes.porCat.combustivel.lucro}
+                  projetar={projecao.projetar} />
+              </>
+            )}
           </div>
 
           {/* Banner: hoje não é dia útil */}

@@ -45,8 +45,10 @@ import {
 } from '../../../components/vendas/VendasCompartilhado';
 import EmpresaMultiSelect from '../../../components/vendas/EmpresaMultiSelect';
 import BannerCarregando from '../../../components/vendas/BannerCarregando';
+import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 
 // ─── Helpers de data ─────────────────────────────────────────
@@ -125,18 +127,10 @@ export default function ClienteComercialVendas() {
     [clientesRede, cliente],
   );
 
-  const [empresasSelIds, setEmpresasSelIds] = useState(
-    () => new Set(empresasDisponiveis.map(c => c.id)),
+  // Seleção SINCRONIZADA entre páginas (persiste em localStorage)
+  const [empresasSelIds, setEmpresasSelIds] = useEmpresasSelecionadas(
+    empresasDisponiveis, session?.chaveApi?.id
   );
-  // Garante seleção inicial = todas após carregamento da sessão
-  useEffect(() => {
-    setEmpresasSelIds(prev => {
-      if (prev.size === 0 && empresasDisponiveis.length > 0) {
-        return new Set(empresasDisponiveis.map(c => c.id));
-      }
-      return prev;
-    });
-  }, [empresasDisponiveis]);
 
   const empresasSel = useMemo(
     () => empresasDisponiveis.filter(c => empresasSelIds.has(c.id)),
@@ -146,6 +140,8 @@ export default function ClienteComercialVendas() {
   const [loadingDados, setLoadingDados] = useState(false);
   const [bgRefresh, setBgRefresh]       = useState(false);
   const [erro, setErro]                 = useState(null);
+  // Progresso do fetch
+  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
   // Cache v3 — chave determinística (pagina + chaveApiId)
   const chaveApiIdAtiva = empresasDisponiveis[0]?.chave_api_id || null;
   const cacheInicialVendas = useMemo(() => {
@@ -257,6 +253,9 @@ export default function ClienteComercialVendas() {
     }
     if (!silencioso) setLoadingDados(true);
     setErro(null);
+    // 3 etapas: catálogos (produtos+grupos) + RPC unificada
+    if (!silencioso) setProgresso({ feitos: 0, total: 3 });
+    const tick = () => { if (!silencioso) setProgresso(p => ({ ...p, feitos: p.feitos + 1 })); };
 
     try {
       // Catálogos da Quality continuam vindo via apiKey (tem cache 1h)
@@ -284,14 +283,14 @@ export default function ClienteComercialVendas() {
 
       // 3 fetches paralelos: catálogos (se precisa) + 1 RPC unificada
       const [prods, grps, agregado] = await Promise.all([
-        precisaCatalogos ? qualityApi.buscarProdutos(apiKeyCatalogo).catch(() => []) : Promise.resolve(null),
-        precisaCatalogos ? qualityApi.buscarGrupos(apiKeyCatalogo).catch(() => [])   : Promise.resolve(null),
+        (precisaCatalogos ? qualityApi.buscarProdutos(apiKeyCatalogo).catch(() => []) : Promise.resolve(null)).finally(tick),
+        (precisaCatalogos ? qualityApi.buscarGrupos(apiKeyCatalogo).catch(() => [])   : Promise.resolve(null)).finally(tick),
         buscarVendasComercialWebposto({
           chaveApiId: chaveApiIdRede,
           empresasCodigos,
           dataDe:  atualDe,
           dataAte: atualAte,
-        }),
+        }).finally(tick),
       ]);
 
       let pMap = produtosMap, gMap = gruposMap;
@@ -386,6 +385,17 @@ export default function ClienteComercialVendas() {
     if (empresasSel.length > 0) carregar({ force: true, silencioso: true });
   });
 
+  // Auto-carregar quando filtros mudam (após 1ª carga). Debounce pra
+  // evitar disparar a cada tecla quando o usuário digita data manualmente.
+  // Banner sutil aparece durante o fetch — sem precisar clicar "Atualizar".
+  useEffect(() => {
+    if (!primeiraCargaRef.current) return; // ainda não carregou pela 1ª vez
+    if (empresasSel.length === 0) return;
+    const t = setTimeout(() => { dispararCarregamento(true); }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataDe, dataAteEfetivo, apenasFechados, JSON.stringify([...empresasSelIds].sort())]);
+
   // Snapshot dos filtros APLICADOS — fonte de verdade pra tudo que é
   // renderizado (description, projeção, modal, tree). Os inputs do
   // header continuam mostrando os valores que o usuário está editando,
@@ -478,7 +488,7 @@ export default function ClienteComercialVendas() {
           levar 20-25s pra períodos grandes com muitas empresas). Não
           aparece em refresh silencioso (cache hit + revalidate) — esse
           fica só com a BarraProgressoTopo. */}
-      <BannerCarregando aberto={loadingDados || bgRefresh} mensagem="Carregando vendas do período..." />
+      <BarraProgressoFetch loading={loadingDados} feitos={progresso.feitos} total={progresso.total} label="Carregando vendas..." />
       <PageHeader title="Vendas"
         description={session?.chaveApi?.nome || 'Itens vendidos no período'}>
         <div className="hidden md:flex items-center gap-2">
@@ -510,19 +520,6 @@ export default function ClienteComercialVendas() {
           />
         )}
         <IndicadorAtualizacao pagina="vendas" chaveApiId={chaveApiIdAtiva} />
-        <button onClick={dispararCarregamento} disabled={loadingDados || empresasSel.length === 0}
-          title={filtrosPendentes ? 'Filtros alterados — clique pra aplicar' : 'Recarregar dados'}
-          className={`relative inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-            filtrosPendentes
-              ? 'border-blue-400 bg-blue-600 text-white hover:bg-blue-700 shadow-sm ring-2 ring-blue-100'
-              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-          }`}>
-          <RefreshCw className={`h-4 w-4 ${loadingDados ? 'animate-spin' : ''}`} />
-          {filtrosPendentes ? 'Aplicar filtros' : 'Atualizar'}
-          {filtrosPendentes && !loadingDados && (
-            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white animate-pulse" />
-          )}
-        </button>
       </PageHeader>
 
       {/* Tabs */}

@@ -8,8 +8,10 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import PageHeader from '../../../components/ui/PageHeader';
 import BannerCarregando from '../../../components/vendas/BannerCarregando';
+import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 import { mascarar } from '../../../utils/demoMascarar';
 import { useClienteSession } from '../../../hooks/useAuth';
@@ -54,18 +56,10 @@ export default function ClienteComercialProdutividade() {
     [clientesRede],
   );
 
-  // Empresa(s) selecionada(s) — começa com a de menor empresa_codigo
-  const [empresasSelIds, setEmpresasSelIds] = useState(new Set());
-  useEffect(() => {
-    setEmpresasSelIds(prev => {
-      if (prev.size === 0 && empresasDisponiveis.length > 0) {
-        const menor = [...empresasDisponiveis]
-          .sort((a, b) => (Number(a.empresa_codigo) || 0) - (Number(b.empresa_codigo) || 0))[0];
-        return new Set([menor.id]);
-      }
-      return prev;
-    });
-  }, [empresasDisponiveis]);
+  // Seleção SINCRONIZADA entre páginas (persiste em localStorage)
+  const [empresasSelIds, setEmpresasSelIds] = useEmpresasSelecionadas(
+    empresasDisponiveis, chaveApi?.id
+  );
   const empresasSel = useMemo(
     () => empresasDisponiveis.filter(c => empresasSelIds.has(c.id)),
     [empresasDisponiveis, empresasSelIds],
@@ -85,6 +79,8 @@ export default function ClienteComercialProdutividade() {
     cacheInicialProd?.heatmapConv instanceof Map ? cacheInicialProd.heatmapConv : new Map());
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  // Progresso do fetch
+  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
   const [busca, setBusca] = useState('');
   const [aba, setAba] = useState('pista');
 
@@ -131,6 +127,9 @@ export default function ClienteComercialProdutividade() {
       }
     }
     if (!silencioso) setLoading(true);
+    // Etapas: 3 catálogos + N empresas
+    if (!silencioso) setProgresso({ feitos: 0, total: 3 + empresasSel.length });
+    const tick = () => { if (!silencioso) setProgresso(p => ({ ...p, feitos: p.feitos + 1 })); };
     try {
       const apiKey = chaveApi.chave;
       const filtros = { dataInicial: dataDe, dataFinal: dataAte };
@@ -138,9 +137,9 @@ export default function ClienteComercialProdutividade() {
       // Catálogos (cacheados pelo qualityApi). Necessários para resolver nome
       // do funcionário e classificar produto em combustivel/automotivos/conveniencia.
       const [funcionarios, produtos, grupos] = await Promise.all([
-        qualityApi.buscarFuncionarios(apiKey).catch(() => []),
-        qualityApi.buscarProdutos(apiKey).catch(() => []),
-        qualityApi.buscarGrupos(apiKey).catch(() => []),
+        qualityApi.buscarFuncionarios(apiKey).catch(() => []).finally(tick),
+        qualityApi.buscarProdutos(apiKey).catch(() => []).finally(tick),
+        qualityApi.buscarGrupos(apiKey).catch(() => []).finally(tick),
       ]);
       const funcionariosMap = new Map();
       (funcionarios || []).forEach(f => {
@@ -167,6 +166,7 @@ export default function ClienteComercialProdutividade() {
           qualityApi.buscarVendaItens(apiKey, filtrosEmp).catch(() => []),
           qualityApi.buscarAbastecimentos(apiKey, filtrosEmp).catch(() => []),
         ]);
+        tick();
         return { emp, vendas: vendas || [], vendaItens: vendaItens || [], abastecimentos: abastecimentos || [] };
       }));
 
@@ -576,14 +576,9 @@ export default function ClienteComercialProdutividade() {
           />
         )}
         <IndicadorAtualizacao pagina="produtividade" chaveApiId={chaveApiIdAtiva} />
-        <button onClick={() => carregar({ force: true })} disabled={loading || empresasSel.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
-        </button>
       </PageHeader>
 
-      <BannerCarregando aberto={loading} mensagem="Carregando produtividade dos vendedores..." />
+      <BarraProgressoFetch loading={loading} feitos={progresso.feitos} total={progresso.total} label="Carregando produtividade..." />
 
       {loading ? (
         <div className="h-32" />

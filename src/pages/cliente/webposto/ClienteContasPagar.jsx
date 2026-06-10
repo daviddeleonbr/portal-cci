@@ -12,6 +12,8 @@ import PageHeader from '../../../components/ui/PageHeader';
 import Modal from '../../../components/ui/Modal';
 import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { useClienteSession } from '../../../hooks/useAuth';
+import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
+import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
 import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
 import { formatCurrency } from '../../../utils/format';
@@ -116,10 +118,9 @@ export default function ClienteContasPagar() {
   const cliente = session?.cliente;
   const clientesRede = session?.clientesRede || [];
 
-  // Multi-selecao de empresas — independente da topbar.
-  // Default: todas as empresas da rede selecionadas.
-  const [empresasSelIds, setEmpresasSelIds] = useState(() =>
-    new Set((session?.clientesRede || []).map(c => c.id))
+  // Seleção SINCRONIZADA entre páginas (persiste em localStorage)
+  const [empresasSelIds, setEmpresasSelIds] = useEmpresasSelecionadas(
+    clientesRede, session?.chaveApi?.id
   );
   const empresasSel = useMemo(
     () => clientesRede.filter(c => empresasSelIds.has(c.id)),
@@ -143,7 +144,7 @@ export default function ClienteContasPagar() {
   const [empresasExpandidas, setEmpresasExpandidas] = useState(new Set());
   const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
 
-  const carregar = useCallback(async ({ force = false } = {}) => {
+  const carregar = useCallback(async ({ force = false, silencioso = false } = {}) => {
     if (empresasSel.length === 0) {
       setError('Selecione ao menos uma empresa.');
       setTitulos([]);
@@ -162,7 +163,7 @@ export default function ClienteContasPagar() {
       return;
     }
 
-    setLoading(true);
+    if (!silencioso) setLoading(true);
     setError(null);
     // 1 fetch de titulos por empresa + 1 fetch de fornecedores por chave_api distinta
     const chavesDistintas = new Set(empresasSel.map(e => e.chave_api_id).filter(Boolean));
@@ -229,6 +230,11 @@ export default function ClienteContasPagar() {
   }, [empresasSel, empresasSelIds]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Auto-refresh em background a cada 5min (silencioso)
+  useAutoRefresh(() => {
+    if (empresasSel.length > 0) carregar({ force: true, silencioso: true });
+  });
 
   const enriched = useMemo(() => {
     return (titulos || []).map(t => {
@@ -515,15 +521,6 @@ export default function ClienteContasPagar() {
             )}
           />
         )}
-        <button
-          onClick={() => carregar({ force: true })}
-          disabled={loading || empresasSel.length === 0}
-          title="Força recarga ignorando o cache"
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
-        </button>
       </PageHeader>
 
       {/* Barra de progresso da busca */}

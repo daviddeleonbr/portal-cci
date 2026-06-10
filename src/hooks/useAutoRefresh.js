@@ -11,7 +11,7 @@
 
 import { useEffect, useRef } from 'react';
 
-export function useAutoRefresh(refreshFn, intervalMs = 10 * 60 * 1000) {
+export function useAutoRefresh(refreshFn, intervalMs = 5 * 60 * 1000) {
   const fnRef = useRef(refreshFn);
   fnRef.current = refreshFn; // sempre o callback mais recente
 
