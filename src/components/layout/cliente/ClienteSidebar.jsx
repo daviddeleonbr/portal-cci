@@ -10,6 +10,7 @@ import {
   Boxes, AlertTriangle,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
+import LogoCCI from '../../ui/LogoCCI';
 import { logoutCliente } from '../../../lib/auth';
 
 // Os hrefs são montados em runtime com prefixo `/cliente/<tipoCliente>`
@@ -205,9 +206,8 @@ export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, o
       {/* Logo */}
       <div className="flex h-16 items-center px-5 flex-shrink-0 border-b border-gray-100">
         <Link to={`${prefix}/dashboard`} className={`flex items-center gap-3 ${collapsed ? 'mx-auto' : ''}`}>
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-[15px] shadow-md shadow-blue-500/30 flex-shrink-0">
-            C
-            <div className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-white" />
+          <div className="h-9 w-9 flex-shrink-0">
+            <LogoCCI className="h-9 w-9" title="CCI Cliente" />
           </div>
           {!collapsed && (
             <div>

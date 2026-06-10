@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, ArrowRight, Shield, AlertCircle, ArrowLeft, X, Mail, Copy, CheckCircle2, Loader2 } from 'lucide-react';
 import { loginAdmin, getAdminSession } from '../lib/auth';
 import * as authResetService from '../services/authResetService';
+import LogoCCI from '../components/ui/LogoCCI';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -61,9 +62,8 @@ export default function Login() {
         >
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 mb-12 group w-fit">
-            <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-base shadow-lg shadow-blue-500/30">
-              <span className="relative z-10">C</span>
-              <span className="absolute inset-0 rounded-xl bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity blur-md" />
+            <span className="relative inline-flex h-11 w-11 items-center justify-center">
+              <LogoCCI className="h-full w-full" title="CCI Admin" />
             </span>
             <div className="leading-none">
               <p className="text-[15px] font-semibold tracking-tight text-white">CCI Admin</p>

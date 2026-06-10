@@ -3,6 +3,7 @@ import { NavLink, useLocation, Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LogOut, Bell, ChevronDown, Menu, X, ChevronRight } from 'lucide-react';
 import { currentUser } from '../../data/mockData';
+import LogoCCI from '../ui/LogoCCI';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin/dashboard' },
@@ -85,8 +86,8 @@ export default function TopBar() {
       <div className="flex h-16 items-center gap-6 px-5 lg:px-8">
         {/* Logo */}
         <Link to="/admin/dashboard" className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15 backdrop-blur-sm text-white font-bold text-[15px] shadow-sm">
-            C
+          <div className="flex h-10 w-10 items-center justify-center">
+            <LogoCCI className="h-full w-full" title="CCI Admin" />
           </div>
           <span className="text-[15px] font-semibold text-white tracking-tight hidden sm:block">CCI Admin</span>
         </Link>

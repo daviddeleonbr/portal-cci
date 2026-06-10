@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Logo oficial CCI: 3 triângulos angulares -->
+  <!-- Triângulo amarelo (topo-esquerdo) -->
   <polygon points="10,10 50,10 10,50" fill="#F5B82E"/>
+  <!-- Triângulo verde (topo-direito) -->
   <polygon points="52,5 95,5 95,48" fill="#1B8073"/>
+  <!-- Triângulo verde (baixo-direito) -->
   <polygon points="95,52 95,95 52,95" fill="#1B8073"/>
 </svg>

@@ -14,6 +14,7 @@ import {
   MessageCircle, X, Loader2,
 } from 'lucide-react';
 import * as cciContatoService from '../services/cciContatoService';
+import LogoCCI from '../components/ui/LogoCCI';
 
 // Custom event para abrir o modal de "Agendar diagnóstico" de qualquer
 // botão na landing sem prop drilling.
@@ -81,14 +82,20 @@ function Navbar() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-        <a href="#top" className="flex items-center gap-2.5 group">
-          <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-sm shadow-lg shadow-blue-500/30">
-            <span className="relative z-10">C</span>
-            <span className="absolute inset-0 rounded-xl bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity blur-md" />
+        <a href="#top" className="flex items-center gap-3 group">
+          <span className="relative inline-flex h-8 w-8 items-center justify-center">
+            <LogoCCI className="h-full w-full" />
           </span>
-          <div className="leading-none">
-            <p className="text-[15px] font-semibold tracking-tight">CCI</p>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest">Consultoria Inteligente</p>
+          <p
+            className="text-[36px] font-bold tracking-tight leading-none mt-[2px]"
+            style={{ fontFamily: "'Sora', sans-serif" }}
+          >
+            CCI
+          </p>
+          <span className="h-8 w-px bg-slate-600 self-center" />
+          <div className="leading-tight text-slate-300 text-[10px] font-normal uppercase tracking-widest self-center">
+            <p>Consultoria</p>
+            <p>Inteligente</p>
           </div>
         </a>
 
@@ -144,7 +151,7 @@ function Hero() {
           transition={{ duration: 0.7, delay: 0.05 }}
           className="text-center text-[44px] sm:text-6xl md:text-7xl font-semibold tracking-tight leading-[1.05] max-w-5xl mx-auto"
         >
-          O lucro que o seu posto{' '}
+          O resultado que o seu posto{' '}
           <span className="text-blue-300">
             esquece de mostrar
           </span>{' '}
@@ -862,15 +869,6 @@ function Footer() {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 mb-12">
           <div className="md:col-span-5">
-            <div className="flex items-center gap-2.5 mb-4">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-sm shadow-lg shadow-blue-500/30">
-                C
-              </span>
-              <div className="leading-none">
-                <p className="text-[15px] font-semibold tracking-tight">CCI</p>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest">Consultoria Inteligente</p>
-              </div>
-            </div>
             <p className="text-[13px] text-slate-400 leading-relaxed max-w-md">
               Consultoria, BPO financeiro e relatórios inteligentes especializados em postos
               de combustível. Tecnologia, dados e gente para colocar o seu negócio no lucro real.

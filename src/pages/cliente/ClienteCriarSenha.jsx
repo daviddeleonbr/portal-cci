@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, ArrowRight, KeyRound, AlertCircle, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react';
 import { getClienteSession } from '../../lib/auth';
+import LogoCCI from '../../components/ui/LogoCCI';
 import {
   verificarPrimeiroAcesso,
   definirSenhaPrimeiroAcesso,
@@ -88,8 +89,8 @@ export default function ClienteCriarSenha() {
           className="mx-auto w-full max-w-md"
         >
           <div className="flex items-center gap-2.5 mb-10">
-            <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500 text-white font-bold text-base shadow-lg shadow-blue-500/30">
-              C
+            <span className="relative inline-flex h-11 w-11 items-center justify-center">
+              <LogoCCI className="h-full w-full" title="CCI" />
             </span>
             <div className="leading-none">
               <p className="text-[15px] font-semibold tracking-tight text-white">CCI</p>

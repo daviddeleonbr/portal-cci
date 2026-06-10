@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Shield, Building2, ArrowRight, ArrowLeft } from 'lucide-react';
+import LogoCCI from '../components/ui/LogoCCI';
 
 export default function LandingPortal() {
   return (
@@ -29,9 +30,8 @@ export default function LandingPortal() {
         transition={{ duration: 0.5 }}
         className="text-center mb-14"
       >
-        <div className="relative inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white font-bold text-2xl mb-6 shadow-xl shadow-blue-500/40">
-          <span className="relative z-10">C</span>
-          <span className="absolute inset-0 rounded-2xl bg-blue-500 opacity-40 blur-xl" />
+        <div className="relative inline-flex h-20 w-20 items-center justify-center mb-6">
+          <LogoCCI className="h-full w-full" title="CCI" />
         </div>
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-white mb-3">
           CCI Consultoria
