@@ -30,6 +30,9 @@ export default function ClientePendencias() {
   const cliente = session?.cliente;
   const chaveApiId = session?.chaveApi?.id;
   const usuarioCliente = session?.usuario;
+  // TODAS as empresas vinculadas ao usuário cliente — pendências
+  // direcionadas a qualquer uma delas devem aparecer.
+  const clientesIds = (session?.clientesRede || []).map(c => c.id);
 
   const [pendencias, setPendencias] = useState([]);
   const [respostasPorPend, setRespostasPorPend] = useState({}); // pendId → array
@@ -41,12 +44,11 @@ export default function ClientePendencias() {
   const [enviando, setEnviando] = useState(null);
 
   const carregar = async () => {
-    if (!cliente?.id && !chaveApiId) return;
+    if (clientesIds.length === 0 && !chaveApiId) return;
     setLoading(true); setErro(null);
     try {
       const lista = await svc.pendenciasAtivasParaCliente({
-        clienteId: cliente?.id,
-        chaveApiId,
+        clientesIds, chaveApiId,
       });
       setPendencias(lista);
       // Pré-carrega respostas pra contar/listar

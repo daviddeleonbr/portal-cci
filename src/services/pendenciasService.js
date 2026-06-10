@@ -214,12 +214,21 @@ export function resumirRecorrencia(rec) {
 //   - se recorrencia definida, aplica regra de "deve mostrar" baseada
 //     na última visualização daquele cliente
 
-export async function pendenciasAtivasParaCliente({ clienteId, chaveApiId }) {
-  if (!clienteId && !chaveApiId) return [];
+// `clientesIds` é a LISTA COMPLETA de empresas vinculadas ao usuário
+// cliente (= session.clientesRede.map(c => c.id)). Aceita também `clienteId`
+// único (legado) — convertido pra array internamente.
+export async function pendenciasAtivasParaCliente({ clienteId, clientesIds, chaveApiId }) {
+  // Normaliza pra array (compat com chamadas antigas usando clienteId único)
+  const idsClientes = Array.isArray(clientesIds) && clientesIds.length > 0
+    ? clientesIds
+    : (clienteId ? [clienteId] : []);
+  if (idsClientes.length === 0 && !chaveApiId) return [];
+
   const agora = new Date().toISOString();
   const condEscopo = [];
-  if (chaveApiId) condEscopo.push(`chave_api_id.eq.${chaveApiId}`);
-  if (clienteId)  condEscopo.push(`cliente_id.eq.${clienteId}`);
+  if (chaveApiId)            condEscopo.push(`chave_api_id.eq.${chaveApiId}`);
+  if (idsClientes.length > 0) condEscopo.push(`cliente_id.in.(${idsClientes.join(',')})`);
+
   const { data, error } = await supabase
     .from('cci_pendencias')
     .select('*')
@@ -231,17 +240,20 @@ export async function pendenciasAtivasParaCliente({ clienteId, chaveApiId }) {
   let lista = data || [];
 
   // Filtra por recorrência (precisa da última visualização)
-  if (clienteId && lista.length > 0) {
+  // Usa o PRIMEIRO cliente da lista como "identidade" pra rastreamento —
+  // representa o usuário cliente logado. Pendências direcionadas a outras
+  // empresas da mesma rede compartilham esse rastreio (1 view/cliente).
+  const clienteIdRastreio = idsClientes[0] || null;
+  if (clienteIdRastreio && lista.length > 0) {
     const ids = lista.map(p => p.id);
     const { data: visualizacoes } = await supabase
       .from('cci_pendencia_visualizacao')
       .select('pendencia_id, visualizada_em')
-      .eq('cliente_id', clienteId)
+      .eq('cliente_id', clienteIdRastreio)
       .in('pendencia_id', ids);
     const mapaUltima = new Map((visualizacoes || []).map(v => [v.pendencia_id, v.visualizada_em]));
     lista = lista.filter(p => deveMostrar(p, mapaUltima.get(p.id)));
   } else {
-    // Sem clienteId, só filtra por padrão (não tem como rastrear visualização)
     lista = lista.filter(p => deveMostrar(p, null));
   }
 

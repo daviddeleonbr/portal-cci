@@ -22,6 +22,9 @@ export default function ModalPendenciasLogin() {
   const cliente = session?.cliente;
   const chaveApiId = session?.chaveApi?.id;
   const tipoCliente = session?.tipoCliente;
+  // Lista TODAS as empresas vinculadas ao usuário (não só a ativa) —
+  // pendências direcionadas a qualquer uma delas devem aparecer
+  const clientesIds = (session?.clientesRede || []).map(c => c.id);
 
   const [pendencias, setPendencias] = useState(null); // null = carregando | array = pronto
   const [fechado, setFechado] = useState(false);
@@ -35,7 +38,9 @@ export default function ModalPendenciasLogin() {
     } catch { /* noop */ }
     (async () => {
       try {
-        const lista = await pendenciasAtivasParaCliente({ clienteId: cliente?.id, chaveApiId });
+        const lista = await pendenciasAtivasParaCliente({
+          clientesIds, chaveApiId,
+        });
         setPendencias(lista);
         // Registra visualização (pra recorrência): quando uma pendência
         // recorrente é EXIBIDA, marca data — assim só reaparece na próxima
