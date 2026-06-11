@@ -127,7 +127,9 @@ export function agregarDrePorGrupo(dadosPorMes, grupos, mapeamentos, opcoes = {}
       if (!codigo) return;
       const grupoId = planoParaGrupo.get(codigo);
       if (!grupoId) return;
-      const valor = Number(t.valorPago || t.valor || 0) * t._sinal;
+      // DRE em regime de COMPETÊNCIA — usa SEMPRE o valor total do título,
+      // não o valor pago. Título parcial conta integral; em aberto conta integral.
+      const valor = Number(t.valor || 0) * t._sinal;
       totalPorGrupo.set(grupoId, (totalPorGrupo.get(grupoId) || 0) + valor);
     });
   });

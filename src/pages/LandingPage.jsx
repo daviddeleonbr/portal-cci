@@ -941,6 +941,7 @@ function FooterCol({ titulo, links }) {
   );
 }
 
+
 // ─── Modal Agendar (Email / WhatsApp) ──────────────────────────────────
 function ModalAgendar() {
   const [open, setOpen] = useState(false);

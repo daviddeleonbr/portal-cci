@@ -667,6 +667,16 @@ export async function buscarMovimentoConta(apiKey, { dataInicial, dataFinal, emp
   });
 }
 
+// Remessas de cartão: contém taxasDespesas, acrescimos, valorLiquido por
+// administradora. Base pra apurar despesa de taxa de cartão e acréscimos
+// recebidos. Não tem `planoContaGerencialCodigo` — a conta destino é
+// resolvida por convenção (descrição) no consumidor.
+export async function buscarCartaoRemessa(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
+  return fetchPagParalelo(urlBase, 'CARTAO_REMESSA', apiKey, {
+    limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+  });
+}
+
 // Fechamentos de caixa: valores apresentados vs apurados por caixa (turno)
 export async function buscarCaixasApresentados(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'CAIXA_APRESENTADO', apiKey, {

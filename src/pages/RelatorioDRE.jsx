@@ -80,6 +80,11 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // Catalogos (cacheados ao entrar)
   const [produtosMap, setProdutosMap] = useState(new Map());
   const [gruposCatMap, setGruposCatMap] = useState(new Map());
+  // Catálogo PLANO_CONTA_GERENCIAL da Quality — usado como fallback de
+  // descrição quando o título vem sem `planoContaGerencialDescricao`
+  const [planoContasMap, setPlanoContasMap] = useState(new Map());
+  // Mapa GRID (INT) → HIERARQUIA ("1.02.06") do plano gerencial
+  const [planoContasHierarquiaMap, setPlanoContasHierarquiaMap] = useState(new Map());
 
   const [loading, setLoading] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
@@ -465,19 +470,37 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
       if (!chave) throw new Error('Chave API não encontrada');
 
-      // 1. Carregar catalogos (PRODUTO + GRUPO) - apenas se ainda nao carregados
+      // 1. Carregar catalogos (PRODUTO + GRUPO + PLANO_CONTA_GERENCIAL) - apenas se ainda nao carregados
       if (produtosMap.size === 0) {
         setLoadingProgress({ atual: 0, total: 1, mensagem: 'Carregando catalogo de produtos...' });
-        const [prods, grps] = await Promise.all([
+        const [prods, grps, planos] = await Promise.all([
           qualityApi.buscarProdutos(chave.chave).catch(() => []),
           qualityApi.buscarGrupos(chave.chave).catch(() => []),
+          qualityApi.buscarPlanoContasGerencial(chave.chave).catch(() => []),
         ]);
         const pMap = new Map();
         (prods || []).forEach(p => pMap.set(p.produtoCodigo || p.codigo, p));
         const gMap = new Map();
         (grps || []).forEach(g => gMap.set(g.grupoCodigo || g.codigo, g));
+        // Plano de contas:
+        //  - planoContasMap: GRID → DESCRIÇÃO (fallback de "não mapeadas")
+        //  - planoContasHierarquiaMap: GRID → HIERARQUIA ("1.02.06") pra
+        //    permitir match por hierarquia em vez do INT.
+        const pcMap = new Map();
+        const pcHierMap = new Map();
+        (planos || []).forEach(p => {
+          const cod = p.planoContaCodigo ?? p.planoContaGerencialCodigo ?? p.codigo;
+          const desc = p.descricao || p.nome || '';
+          const hier = p.hierarquia || '';
+          if (cod != null) {
+            if (desc) pcMap.set(String(cod), desc.trim());
+            if (hier) pcHierMap.set(String(cod), String(hier).trim());
+          }
+        });
         setProdutosMap(pMap);
         setGruposCatMap(gMap);
+        setPlanoContasMap(pcMap);
+        setPlanoContasHierarquiaMap(pcHierMap);
       }
 
       // 2. Buscar atual + ano anterior em paralelo
@@ -500,20 +523,22 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           const empresaCodigos = modoRede
             ? (cliente?._empresaCodigos || [])
             : [cliente.empresa_codigo];
-          const allPagar = [], allReceber = [], allVendaItens = [], allVendas = [];
+          const allPagar = [], allReceber = [], allMovimentos = [], allRemessas = [], allVendaItens = [], allVendas = [];
           for (const ec of empresaCodigos) {
             const filtros = { dataInicial: p.dataInicial, dataFinal: p.dataFinal, empresaCodigo: ec };
-            const [pagar, receber, vendaItens, vendas] = await Promise.all([
+            const [pagar, receber, movimentos, remessas, vendaItens, vendas] = await Promise.all([
               qualityApi.buscarTitulosPagar(chave.chave, filtros),
-              qualityApi.buscarTitulosReceber(chave.chave, filtros),
+              qualityApi.buscarTitulosReceber(chave.chave, { ...filtros, convertido: null }),
+              qualityApi.buscarMovimentoConta(chave.chave, filtros).catch(() => []),
+              qualityApi.buscarCartaoRemessa(chave.chave, filtros).catch(() => []),
               qualityApi.buscarVendaItens(chave.chave, filtros).catch(() => []),
               qualityApi.buscarVendas(chave.chave, filtros).catch(() => []),
             ]);
-            // Em modo rede, anota cada item com o empresaCodigo da iteracao
-            // (a API retorna isso no payload, mas garantimos consistencia).
             const annot = modoRede ? (arr) => (arr || []).map(x => ({ ...x, empresaCodigo: ec })) : (arr) => (arr || []);
             allPagar.push(...annot(pagar));
             allReceber.push(...annot(receber));
+            allMovimentos.push(...annot(movimentos));
+            allRemessas.push(...annot(remessas));
             allVendaItens.push(...annot(vendaItens));
             allVendas.push(...annot(vendas));
           }
@@ -524,7 +549,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             total,
             mensagem: `${periodoLabel} \u00b7 ${allPagar.length + allReceber.length} lancs \u00b7 ${allVendaItens.length} itens \u00b7 ${allVendas.length} vendas${modoRede ? ` · ${empresaCodigos.length} empresas` : ''}`,
           });
-          return { ...p, pagar: allPagar, receber: allReceber, vendaItens: allVendaItens, vendas: allVendas };
+          return { ...p, pagar: allPagar, receber: allReceber, movimentos: allMovimentos, remessasCartao: allRemessas, vendaItens: allVendaItens, vendas: allVendas };
         })
       );
 
@@ -532,7 +557,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       const anterior = {};
       results.forEach(r => {
         const target = r.isPrev ? anterior : atual;
-        target[r.key] = { titulosPagar: r.pagar, titulosReceber: r.receber, vendaItens: r.vendaItens, vendas: r.vendas };
+        target[r.key] = { titulosPagar: r.pagar, titulosReceber: r.receber, movimentos: r.movimentos, remessasCartao: r.remessasCartao, vendaItens: r.vendaItens, vendas: r.vendas };
       });
       setLoadingProgress({ atual: total, total, mensagem: 'Montando o relatório...' });
       // Pequeno delay para o usuario ver a mensagem final
@@ -593,19 +618,104 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     };
   }, [dadosCarregados, loadingGrupos, loadingMapeamentos, loadingDados, dadosPorMes, dadosPorMesAnterior, mapeamentos, mapeamentoVendas, vendasAutosystemPorMes, mapVendasAutosystem, grupos]);
 
+  // GRID destino pras TAXAS de CARTAO_REMESSA. Procura no mapeamento da
+  // DRE uma conta cuja descrição contém "TAXA" + "CART"/"CARD". Como pode
+  // haver várias (ex: "TAXAS DE CARTAO" + "TAXA ANTECIPAÇÃO DE CARTÕES"),
+  // prefere a descrição MAIS CURTA (genérica) — descrições longas têm
+  // qualificadores como "antecipação", "shell", "pagpix", etc.
+  const gridTaxaCartao = useMemo(() => {
+    const norm = s => String(s || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const candidatos = mapeamentos.filter(m => {
+      const d = norm(m.plano_conta_descricao || '');
+      return d.includes('taxa') && (d.includes('cart') || d.includes('card'));
+    });
+    if (candidatos.length === 0) return null;
+    // Prefere descrição com menos palavras (mais genérica)
+    candidatos.sort((a, b) => {
+      const wa = norm(a.plano_conta_descricao || '').trim().split(/\s+/).length;
+      const wb = norm(b.plano_conta_descricao || '').trim().split(/\s+/).length;
+      return wa - wb;
+    });
+    return String(candidatos[0].plano_conta_codigo);
+  }, [mapeamentos]);
+
   // ─── Indexar lancamentos por conta + mes (totais + itens) ──
   function indexarPorConta(dadosMap) {
     const totais = {};       // { codigo: { mesKey: total } }
     const lancamentos = {};  // { codigo: [lancamento, ...] } (todos do periodo)
+    const descricoes = {};   // { codigo: "Descrição do plano" } — primeira encontrada
     Object.entries(dadosMap).forEach(([mesKey, dados]) => {
+      // MOVIMENTO_CONTA: indexa TODOS os movimentos (mapeados ou não) pra
+      // que GRIDs não mapeados apareçam na seção "Contas não mapeadas".
+      // O `buildNode` só pega valores de GRIDs mapeados (via mapeamentos),
+      // então os não mapeados ficam visíveis APENAS no card de aviso.
+      // Filtros:
+      //   - `tipoDocumentoOrigem` começando com "TITULO_" é PAGAMENTO de
+      //     título — já foi contado em TITULO_PAGAR/RECEBER. Ignora pra
+      //     não duplicar (regime competência usa título, não pagamento).
+      //   - Sinal vem de m.tipo: "Crédito" = +, "Débito" = -.
+      const movsExtras = (dados.movimentos || []).filter(m => {
+        const cod = String(m.planoContaGerencialCodigo || '');
+        if (!cod || cod === '0') return false;
+        const origem = String(m.tipoDocumentoOrigem || '').toUpperCase();
+        if (origem.startsWith('TITULO_')) return false;
+        return true;
+      }).map(m => {
+        const isCredito = String(m.tipo || '').toLowerCase().startsWith('cr');
+        return {
+          ...m,
+          _sinal: isCredito ? 1 : -1,
+          _tipo: 'movimento',
+          valor: Math.abs(Number(m.valor || 0)),
+          dataMovimento: m.dataMovimento || m.data,
+          descricao: m.descricao || m.historico || '',
+          nomeFornecedor: m.nomePessoa || '',
+          nomeCliente: m.nomePessoa || '',
+          numeroTitulo: m.documento || '',
+        };
+      });
+
+      // CARTAO_REMESSA: cada remessa tem `taxasDespesas` (taxa cobrada
+      // pela adquirente) + `acrescimos` (encargos adicionais). Ambos são
+      // despesas — vão pra conta mapeada como "TAXAS DE CARTAO".
+      const remessasTaxa = gridTaxaCartao
+        ? (dados.remessasCartao || [])
+            .map(r => {
+              const taxas = Math.abs(Number(r.taxasDespesas || 0));
+              const acrescimos = Math.abs(Number(r.acrescimos || 0));
+              const total = taxas + acrescimos;
+              if (total <= 0) return null;
+              return {
+                planoContaGerencialCodigo: gridTaxaCartao,
+                valor: total,
+                _sinal: -1,
+                _tipo: 'remessa-cartao',
+                codigo: `cr-${r.cartaoRemessaCodigo ?? r.codigo}`,
+                dataMovimento: r.dataPagamento || r.dataRecebimento || r.dataRemessa,
+                descricao: `Taxa cartão${r.administradora ? ` · ${r.administradora}` : ''}${acrescimos > 0 ? ` (taxa ${taxas.toFixed(2)} + acréscimo ${acrescimos.toFixed(2)})` : ''}`,
+                numeroTitulo: r.cartaoRemessaReferenciaCodigo || '',
+                nomeFornecedor: r.administradora || '',
+                empresaCodigo: r.empresaCodigo,
+                situacao: 'pago',
+              };
+            })
+            .filter(Boolean)
+        : [];
+
       const todos = [
         ...(dados.titulosReceber || []).map(t => ({ ...t, _sinal: 1, _tipo: 'receber' })),
         ...(dados.titulosPagar || []).map(t => ({ ...t, _sinal: -1, _tipo: 'pagar' })),
+        ...movsExtras,
+        ...remessasTaxa,
       ];
       todos.forEach(t => {
         const codigo = String(t.planoContaGerencialCodigo || '');
         if (!codigo) return;
-        const valor = Number(t.valorPago || t.valor || 0) * t._sinal;
+        if (!descricoes[codigo] && t.planoContaGerencialDescricao) {
+          descricoes[codigo] = String(t.planoContaGerencialDescricao).trim();
+        }
+        const valor = Number(t.valor || 0) * t._sinal;
 
         if (!totais[codigo]) totais[codigo] = {};
         totais[codigo][mesKey] = (totais[codigo][mesKey] || 0) + valor;
@@ -628,21 +738,26 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           mesKey,
           data: t.dataMovimento || t.dataPagamento || t.vencimento || '',
           descricao: descricaoComposta || '\u2014',
-          valor: Math.abs(Number(t.valorPago || t.valor || 0)),
+          valor: Math.abs(Number(t.valor || 0)),
           sinal: t._sinal,
           situacao: t.situacao,
           tipo: t._tipo,
         });
       });
     });
-    return { totais, lancamentos };
+    return { totais, lancamentos, descricoes };
   }
 
-  const idxAtualFull = useMemo(() => indexarPorConta(dadosPorMes), [dadosPorMes]);
-  const idxAnteriorFull = useMemo(() => indexarPorConta(dadosPorMesAnterior), [dadosPorMesAnterior]);
+  const idxAtualFull = useMemo(() => indexarPorConta(dadosPorMes), [dadosPorMes, gridTaxaCartao]);
+
+  const idxAnteriorFull = useMemo(() => indexarPorConta(dadosPorMesAnterior), [dadosPorMesAnterior, gridTaxaCartao]);
   const idxAtual = idxAtualFull.totais;
   const idxAnterior = idxAnteriorFull.totais;
+  const descricoesAtual = idxAtualFull.descricoes || {};
+  const descricoesAnterior = idxAnteriorFull.descricoes || {};
   const lancamentosAtual = idxAtualFull.lancamentos;
+
+
 
   // ─── Indexar VENDAS por grupo configurado ──────────────────
   // SEM lancamentos individuais (vendas nao expandem em tela).
@@ -884,6 +999,46 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       .map(buildNode);
   }, [grupos, mapeamentos, idxAtual, idxAnterior, lancamentosAtual, vendasAtualPorGrupo, vendasAnteriorPorGrupo, vendasASAtualPorGrupo, vendasASAnteriorPorGrupo, meses]);
 
+  // ─── Contas NÃO MAPEADAS (admin only) ──────────────────────────
+  // Lista títulos com `planoContaGerencialCodigo` que NÃO estão no
+  // mapeamento ↔ grupo DRE. Fica numa seção SEPARADA da DRE — não
+  // distorce os cálculos e não é exibida pra cliente (esta página é
+  // exclusiva do admin).
+  const contasNaoMapeadas = useMemo(() => {
+    const codigosMapeados = new Set(mapeamentos.map(m => String(m.plano_conta_codigo)));
+    const codigosVistos = new Set([
+      ...Object.keys(idxAtual || {}),
+      ...Object.keys(idxAnterior || {}),
+    ]);
+    const codigosNaoMapeados = [...codigosVistos].filter(c => !codigosMapeados.has(c));
+    if (codigosNaoMapeados.length === 0) return [];
+
+    return codigosNaoMapeados.map(codKey => {
+      const valoresPorMes = {};
+      let totalPeriodo = 0;
+      meses.forEach(mes => {
+        const v = idxAtual[codKey]?.[mes.key] || 0;
+        valoresPorMes[mes.key] = v;
+        totalPeriodo += v;
+      });
+      const lancs = (lancamentosAtual[codKey] || [])
+        .slice()
+        .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+      const descricao = descricoesAtual[codKey]
+        || descricoesAnterior[codKey]
+        || planoContasMap.get(codKey)
+        || '(sem descrição)';
+      return {
+        codigo: codKey,
+        descricao,
+        valoresPorMes,
+        totalPeriodo,
+        qtdLancamentos: lancs.length,
+        lancamentos: lancs,
+      };
+    }).sort((a, b) => Math.abs(b.totalPeriodo) - Math.abs(a.totalPeriodo));
+  }, [mapeamentos, idxAtual, idxAnterior, lancamentosAtual, descricoesAtual, descricoesAnterior, meses, planoContasMap]);
+
   // ─── Acumulado para subtotais/resultados ─────────────────
   const dreComCalculos = useMemo(() => {
     const acumPorMes = {};
@@ -971,14 +1126,14 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         if (!porEmpresa[ec]) return;
         const cod = String(t.planoContaGerencialCodigo || '');
         if (!codigosMapeados.has(cod)) return;
-        porEmpresa[ec].total += Number(t.valorPago || t.valor || 0);
+        porEmpresa[ec].total += Number(t.valor || 0);
       });
       (d.titulosPagar || []).forEach(t => {
         const ec = Number(t.empresaCodigo);
         if (!porEmpresa[ec]) return;
         const cod = String(t.planoContaGerencialCodigo || '');
         if (!codigosMapeados.has(cod)) return;
-        porEmpresa[ec].total -= Number(t.valorPago || t.valor || 0);
+        porEmpresa[ec].total -= Number(t.valor || 0);
       });
 
       // Vendas: agrega por empresa usando vendaItens + vendas
@@ -1069,7 +1224,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       if (!codigo) return;
       const empKey = String(t.empresaCodigo ?? '');
       if (!empKey) return;
-      const valor = Number(t.valorPago || t.valor || 0) * t._sinal;
+      const valor = Number(t.valor || 0) * t._sinal;
       if (!totais[codigo]) totais[codigo] = {};
       totais[codigo][empKey] = (totais[codigo][empKey] || 0) + valor;
 
@@ -1088,7 +1243,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         mesKey: empKey, // DreNodeRows usa l.mesKey pra decidir coluna; aqui empresa
         data: t.dataMovimento || t.dataPagamento || t.vencimento || '',
         descricao: descricaoComposta || '—',
-        valor: Math.abs(Number(t.valorPago || t.valor || 0)),
+        valor: Math.abs(Number(t.valor || 0)),
         sinal: t._sinal,
         situacao: t.situacao,
         tipo: t._tipo,
@@ -1881,7 +2036,110 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ─── Contas não mapeadas (admin only — esta página é exclusiva do admin) ─── */}
+      {!loading && contasNaoMapeadas.length > 0 && (
+        <SecaoContasNaoMapeadas
+          contas={contasNaoMapeadas}
+          meses={meses}
+          showAH={showAH}
+        />
+      )}
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Seção SEPARADA pra contas não mapeadas (admin only)
+// ═══════════════════════════════════════════════════════════
+function SecaoContasNaoMapeadas({ contas, meses }) {
+  const [expandida, setExpandida] = useState(false);
+  const totalGeral = contas.reduce((s, c) => s + c.totalPeriodo, 0);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mt-6 bg-amber-50/40 border border-amber-200 rounded-2xl overflow-hidden no-print"
+    >
+      <button
+        type="button"
+        onClick={() => setExpandida(v => !v)}
+        className="w-full flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-amber-50/70 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <span className="text-amber-700 text-base">⚠</span>
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[13.5px] font-bold text-amber-900">
+              Contas não mapeadas <span className="text-amber-700">({contas.length})</span>
+            </h3>
+            <p className="text-[11px] text-amber-700/80">
+              Lançamentos com plano de contas que ainda não foi vinculado a um grupo da DRE.
+              Não aparecem pro cliente.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <span className={`text-[13px] font-bold tabular-nums ${totalGeral < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalGeral)}
+          </span>
+          <svg className={`h-4 w-4 text-amber-700 transition-transform ${expandida ? 'rotate-180' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {expandida && (
+        <div className="border-t border-amber-200/70 bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead className="bg-amber-50/60 text-amber-800 border-b border-amber-100">
+                <tr>
+                  <th className="text-left px-4 py-2 font-semibold uppercase text-[10px] tracking-wider">Código</th>
+                  <th className="text-left px-4 py-2 font-semibold uppercase text-[10px] tracking-wider">Descrição</th>
+                  <th className="text-right px-4 py-2 font-semibold uppercase text-[10px] tracking-wider">Lançamentos</th>
+                  {meses.map(m => (
+                    <th key={m.key} className="text-right px-3 py-2 font-semibold uppercase text-[10px] tracking-wider whitespace-nowrap">{m.label}</th>
+                  ))}
+                  <th className="text-right px-4 py-2 font-semibold uppercase text-[10px] tracking-wider bg-amber-100/40">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contas.map(conta => (
+                  <tr key={conta.codigo} className="border-b border-amber-50 hover:bg-amber-50/30">
+                    <td className="px-4 py-2 font-mono text-[11px] text-gray-700">{conta.codigo}</td>
+                    <td className="px-4 py-2 text-gray-800">{conta.descricao}</td>
+                    <td className="px-4 py-2 text-right text-gray-500 tabular-nums">{conta.qtdLancamentos}</td>
+                    {meses.map(m => {
+                      const v = conta.valoresPorMes[m.key] || 0;
+                      return (
+                        <td key={m.key} className={`px-3 py-2 text-right tabular-nums ${v < 0 ? 'text-rose-600' : v > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                          {v === 0 ? '—' : new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)}
+                        </td>
+                      );
+                    })}
+                    <td className={`px-4 py-2 text-right font-semibold tabular-nums bg-amber-50/30 ${conta.totalPeriodo < 0 ? 'text-rose-700' : conta.totalPeriodo > 0 ? 'text-emerald-700' : 'text-gray-500'}`}>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(conta.totalPeriodo)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-amber-50 border-t border-amber-200">
+                  <td colSpan={3 + meses.length} className="px-4 py-2.5 font-bold text-amber-900 text-right text-[11px] uppercase tracking-wider">Total geral</td>
+                  <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${totalGeral < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalGeral)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </motion.div>
   );
 }
 
@@ -2032,8 +2290,10 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
     return null;
   }
 
+  // Resultado verde/vermelho conforme positivo/negativo
+  const resultadoPositivo = node.totalPeriodo >= 0;
   const rowBg = isResultado
-    ? 'bg-emerald-50'
+    ? (resultadoPositivo ? 'bg-emerald-50' : 'bg-rose-50')
     : isCalc
       ? 'bg-slate-50'
       : depth === 0 ? 'bg-gray-50/60' : '';
@@ -2057,7 +2317,7 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
             )}
             <span title={node.nome} className={`truncate min-w-0 ${
               depth === 0 ? 'text-[12px] font-bold text-gray-900 uppercase tracking-wide'
-                : isResultado ? 'text-[12px] font-bold text-emerald-800 uppercase'
+                : isResultado ? `text-[12px] font-bold uppercase ${resultadoPositivo ? 'text-emerald-800' : 'text-rose-800'}`
                   : isCalc ? 'text-[12px] font-semibold text-gray-700 uppercase'
                     : 'text-[12px] font-semibold text-gray-800 uppercase'
             }`}>
@@ -2071,9 +2331,9 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
           return (
             <>
               <td key={`${m.key}-v`} className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap ${
-                isResultado ? 'font-bold text-emerald-700'
-                  : isCalc ? 'font-semibold text-gray-700'
-                    : v >= 0 ? 'text-gray-800' : 'text-red-600'
+                isResultado ? `font-bold ${v > 0 ? 'text-emerald-700' : v < 0 ? 'text-rose-700' : 'text-gray-400'}`
+                  : isCalc ? `font-semibold ${v > 0 ? 'text-emerald-700' : v < 0 ? 'text-rose-700' : 'text-gray-400'}`
+                    : v > 0 ? 'text-emerald-700' : v < 0 ? 'text-rose-700' : 'text-gray-400'
               }`}>
                 {formatCurrencyCompact(v)}
               </td>
@@ -2085,10 +2345,9 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
         })}
         {mostrarTotal && (
           <>
-            <td className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap bg-gray-50/40 ${
-              isResultado ? 'font-bold text-emerald-700'
-                : isCalc ? 'font-semibold text-gray-700'
-                  : node.totalPeriodo >= 0 ? 'text-gray-900 font-semibold' : 'text-red-600 font-semibold'
+            <td className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap bg-gray-50/40 font-semibold ${
+              isResultado ? `font-bold ${node.totalPeriodo > 0 ? 'text-emerald-700' : node.totalPeriodo < 0 ? 'text-rose-700' : 'text-gray-400'}`
+                : node.totalPeriodo > 0 ? 'text-emerald-700' : node.totalPeriodo < 0 ? 'text-rose-700' : 'text-gray-400'
             }`}>
               {formatCurrencyCompact(node.totalPeriodo)}
             </td>

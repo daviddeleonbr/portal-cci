@@ -221,8 +221,8 @@ export default function Sidebar({ collapsed, onToggle }) {
       {/* Logo */}
       <div className="flex h-16 items-center px-5 flex-shrink-0 border-b border-gray-100">
         <Link to="/admin/dashboard" className={`flex items-center gap-3 ${collapsed ? 'mx-auto' : ''}`}>
-          <div className="h-9 w-9 flex-shrink-0">
-            <LogoCCI className="h-9 w-9" title="CCI Admin" />
+          <div className="h-7 w-7 flex-shrink-0">
+            <LogoCCI className="h-7 w-7" title="CCI Admin" />
           </div>
           {!collapsed && (
             <div>

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 // Landing
 import LandingPage from './pages/LandingPage';
 import LandingPortal from './pages/LandingPortal';
+// import SolicitarOrcamento from './pages/SolicitarOrcamento'; // INATIVO — uso futuro
 
 // Admin
 import AppLayout from './components/layout/AppLayout';
@@ -78,6 +79,7 @@ import AdminSuporte from './pages/AdminSuporte';
 import AdminWebpostoSync from './pages/AdminWebpostoSync';
 import AdminPortalDemo from './pages/AdminPortalDemo';
 import AdminPendencias from './pages/AdminPendencias';
+// import AdminOrcamentoSolicitacoes from './pages/AdminOrcamentoSolicitacoes'; // INATIVO — uso futuro
 import WpConfiguracoes from './pages/cliente/webposto/ClienteConfiguracoes';
 import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
 // Cliente Autosystem (esqueletos — implementados página a página)
@@ -107,6 +109,8 @@ export default function App() {
       <Routes>
         {/* Landing comercial pública */}
         <Route path="/" element={<LandingPage />} />
+        {/* Rota /solicitar-orcamento desativada temporariamente — uso futuro */}
+        {/* <Route path="/solicitar-orcamento" element={<SolicitarOrcamento />} /> */}
         {/* Seletor de portais (admin / cliente) */}
         <Route path="/portais" element={<LandingPortal />} />
 
@@ -153,6 +157,8 @@ export default function App() {
           <Route path="/admin/webposto-sync" element={<AdminWebpostoSync />} />
           <Route path="/admin/portal-demo" element={<AdminPortalDemo />} />
           <Route path="/admin/pendencias" element={<AdminPendencias />} />
+          {/* Rota desativada temporariamente — uso futuro */}
+          {/* <Route path="/admin/orcamento-solicitacoes" element={<AdminOrcamentoSolicitacoes />} /> */}
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
           <Route path="/admin/fiscal/agendamento" element={<NotasFiscais />} />
 
