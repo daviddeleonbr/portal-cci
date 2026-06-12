@@ -6,6 +6,7 @@ import {
   Sparkles, CheckCircle2, AlertTriangle, XCircle, TrendingUp, TrendingDown,
   Target, Lightbulb, HelpCircle, Award, AlertCircle, ListOrdered, Fuel,
   Layers, Wallet, GitBranch, Calendar, Package, Activity, CreditCard, ShieldAlert,
+  Building2,
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/format';
 
@@ -31,6 +32,7 @@ export default function AnaliseIaView({ insights, modoRede = false, usage = null
       {insights.margens && <CardMargens m={insights.margens} />}
       {insights.linhas_criticas?.length > 0 && <CardLinhasCriticas linhas={insights.linhas_criticas} />}
       {insights.custos_despesas && <CardCustosDespesas c={insights.custos_despesas} />}
+      {insights.resultado_por_empresa?.length > 0 && <CardResultadoPorEmpresa lista={insights.resultado_por_empresa} />}
 
       {/* Cards de Fluxo */}
       {insights.variacao_caixa && <CardVariacaoCaixa v={insights.variacao_caixa} />}
@@ -497,6 +499,30 @@ function CardCustosDespesas({ c }) {
           ))}
         </ul>
       )}
+    </Card>
+  );
+}
+
+function CardResultadoPorEmpresa({ lista }) {
+  const corDestaque = (d) =>
+    d === 'critico' ? 'bg-red-100 text-red-700'
+    : d === 'alerta' ? 'bg-amber-100 text-amber-700'
+    : 'bg-emerald-100 text-emerald-700';
+  return (
+    <Card icon={Building2} color="blue" titulo="Resultado por empresa">
+      <Tabela headers={['Empresa', 'Receita bruta', 'Lucro bruto', 'Lucro líquido', 'Margem bruta', 'Margem líquida', 'Destaque', 'Comentário']}
+        rows={lista.map(e => [
+          <span className="font-semibold text-gray-900">{e.nome}</span>,
+          <span className="font-mono tabular-nums">{formatCurrency(e.receita_bruta || 0)}</span>,
+          <span className="font-mono tabular-nums">{formatCurrency(e.lucro_bruto || 0)}</span>,
+          <span className={`font-mono tabular-nums ${(e.lucro_liquido || 0) < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{formatCurrency(e.lucro_liquido || 0)}</span>,
+          <span className="font-mono tabular-nums">{Number(e.margem_bruta_pct || 0).toFixed(1)}%</span>,
+          <span className="font-mono tabular-nums">{Number(e.margem_liquida_pct || 0).toFixed(1)}%</span>,
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${corDestaque(e.destaque)}`}>
+            {e.destaque || '—'}
+          </span>,
+          <span className="text-[12px] text-gray-700">{e.comentario}</span>,
+        ])} />
     </Card>
   );
 }
