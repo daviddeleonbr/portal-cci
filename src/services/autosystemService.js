@@ -702,6 +702,35 @@ export async function buscarUsuariosOriginaisMovtoFlowAutosystem(redeId, empresa
   return Array.isArray(data?.usuarios) ? data.usuarios : [];
 }
 
+// ─── Catálogo COMPLETO de produtos (todos cadastrados no AS) ────────
+// Retorna todos os produtos da tabela `produto`, independente de ter
+// estoque ou venda. Usado em buscas de formulários (ex: novo pedido).
+//   produtos: [{ produto, produto_nome, grupo, subgrupo }]
+// Aceita filtro `busca` (string) que aplica LIKE no nome OU código.
+export async function listarProdutosCatalogo(redeId, { busca = '' } = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const { data, error } = await supabase.functions.invoke('autosystem-produtos-catalogo', {
+    body: { rede_id: redeId, busca: busca || null },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar catálogo de produtos');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.produtos) ? data.produtos : [];
+}
+
+// ─── Catálogo COMPLETO de pessoas (fornecedores/clientes ativos) ─────
+// Retorna todas as pessoas ativas da tabela `pessoa`. Usado em buscas
+// de formulários (ex: novo pedido de compra → escolher fornecedor).
+//   pessoas: [{ pessoa, pessoa_codigo, pessoa_nome }]
+export async function listarPessoasCatalogo(redeId, { busca = '' } = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const { data, error } = await supabase.functions.invoke('autosystem-pessoas-catalogo', {
+    body: { rede_id: redeId, busca: busca || null },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar catálogo de pessoas');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.pessoas) ? data.pessoas : [];
+}
+
 // ─── Produtos de combustível disponíveis (para parametrizar MIX) ─────
 // Lista produtos distintos vendidos nos últimos N dias dentro dos grupos
 // classificados como combustível.

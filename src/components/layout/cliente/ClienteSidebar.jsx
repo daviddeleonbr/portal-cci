@@ -15,7 +15,7 @@ import { logoutCliente } from '../../../lib/auth';
 
 // Os hrefs são montados em runtime com prefixo `/cliente/<tipoCliente>`
 // para que webposto e autosystem reusem o mesmo menu.
-function buildNavigation(prefix) {
+function buildNavigation(prefix, tipoCliente = 'webposto') {
   return [
     {
       section: 'Principal',
@@ -38,6 +38,8 @@ function buildNavigation(prefix) {
         { name: 'Operação', href: `${prefix}/comercial/operacao`, icon: Activity, permissao: 'comercial_operacao' },
         { name: 'Produtividade', href: `${prefix}/comercial/produtividade`, icon: Gauge, permissao: 'comercial_produtividade' },
         { name: 'Análise de Estoques', href: `${prefix}/comercial/estoques`, icon: Boxes, permissao: 'comercial_estoques' },
+        // Compras só faz sentido em autosystem (puxa análise de estoque do AS)
+        ...(tipoCliente === 'autosystem' ? [{ name: 'Compras', href: `${prefix}/compras`, icon: ShoppingCart, permissao: 'compras' }] : []),
       ],
     },
     {
@@ -121,8 +123,8 @@ export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, o
   const flagSource = tipoCliente === 'autosystem' ? asRede : cliente;
 
   const navigation = useMemo(
-    () => filtrarNavegacao(buildNavigation(prefix), usuario?.permissoes, flagSource),
-    [prefix, usuario?.permissoes, flagSource],
+    () => filtrarNavegacao(buildNavigation(prefix, tipoCliente), usuario?.permissoes, flagSource),
+    [prefix, tipoCliente, usuario?.permissoes, flagSource],
   );
 
   // Calcula o href "mais específico" que case com a URL atual. Evita o bug

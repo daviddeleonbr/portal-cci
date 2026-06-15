@@ -85,6 +85,7 @@ import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
 // Cliente Autosystem (esqueletos — implementados página a página)
 import AsDashboard from './pages/cliente/autosystem/ClienteDashboard';
 import AsDRE from './pages/cliente/autosystem/ClienteDRE';
+import AsCompras from './pages/cliente/autosystem/ClienteCompras';
 import AsFluxoCaixa from './pages/cliente/autosystem/ClienteFluxoCaixa';
 import AsBPO from './pages/cliente/autosystem/ClienteBPO';
 import AsDocumentos from './pages/cliente/autosystem/ClienteDocumentos';
@@ -233,6 +234,7 @@ export default function App() {
           {/* Cliente Autosystem */}
           <Route path="/cliente/autosystem/dashboard" element={<RequireDashboardCliente><AsDashboard /></RequireDashboardCliente>} />
           <Route path="/cliente/autosystem/dre" element={<RequirePermissaoCliente permissao="dre"><AsDRE /></RequirePermissaoCliente>} />
+          <Route path="/cliente/autosystem/compras" element={<RequirePermissaoCliente permissao="compras"><AsCompras /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/fluxo-caixa" element={<RequirePermissaoCliente permissao="fluxo_caixa"><AsFluxoCaixa /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/bpo" element={<AsBPO />} />
           <Route path="/cliente/autosystem/documentos" element={<AsDocumentos />} />

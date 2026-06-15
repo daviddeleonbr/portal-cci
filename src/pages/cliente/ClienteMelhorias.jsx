@@ -199,7 +199,7 @@ function CardStat({ label, valor, cor }) {
   );
 }
 
-function ModalNovaSolicitacao({ open, onClose, onSave }) {
+export function ModalNovaSolicitacao({ open, onClose, onSave }) {
   const [tipo, setTipo] = useState('melhoria');
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');

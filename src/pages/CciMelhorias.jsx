@@ -6,13 +6,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Loader2, Lightbulb, Bug, Search, MessageSquare, Send, Clock,
-  Network, Mail, Building2, ChevronRight,
+  Network, Mail, Building2, ChevronRight, Plus,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
 import { useAdminSession } from '../hooks/useAuth';
 import * as melhoriasService from '../services/melhoriasService';
+import { ModalNovaSolicitacao } from './cliente/ClienteMelhorias';
 
 const STATUS_COR = {
   amber:   'bg-amber-50 text-amber-700 border-amber-200',
@@ -33,6 +34,7 @@ export default function CciMelhorias() {
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroRede, setFiltroRede] = useState('todas');
   const [detalhe, setDetalhe] = useState(null);
+  const [modalNovo, setModalNovo] = useState(false);
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
 
   const showToast = (type, message) => {
@@ -50,6 +52,18 @@ export default function CciMelhorias() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const salvarNova = async ({ tipo, titulo, descricao }) => {
+    try {
+      await melhoriasService.criar({
+        usuario: usuarioAdmin,
+        tipo, titulo, descricao,
+      });
+      await carregar();
+      setModalNovo(false);
+      showToast('success', 'Solicitação criada');
+    } catch (err) { showToast('error', err.message); }
+  };
 
   // Redes que aparecem nas solicitações (pra montar dropdown)
   const redesFiltro = useMemo(() => {
@@ -90,7 +104,12 @@ export default function CciMelhorias() {
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
       <PageHeader title="Melhorias do Sistema"
-        description="Sugestões e relatos de falha enviados pelos clientes. Mude o status com uma resposta para o cliente." />
+        description="Sugestões e relatos de falha enviados pelos clientes. Mude o status com uma resposta para o cliente.">
+        <button onClick={() => setModalNovo(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold transition-colors">
+          <Plus className="h-4 w-4" /> Nova solicitação
+        </button>
+      </PageHeader>
 
       {/* KPIs por status */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
@@ -218,6 +237,11 @@ export default function CciMelhorias() {
       <ModalDetalheAdmin melhoria={detalhe} usuarioAdmin={usuarioAdmin}
         onClose={() => setDetalhe(null)} onMudou={() => { carregar(); setDetalhe(null); }}
         showToast={showToast} />
+
+      <ModalNovaSolicitacao
+        open={modalNovo}
+        onClose={() => setModalNovo(false)}
+        onSave={salvarNova} />
     </div>
   );
 }

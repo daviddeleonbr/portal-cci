@@ -56,7 +56,7 @@ export function RequirePermissaoCliente({ permissao, children }) {
           <p className="text-base font-semibold text-gray-900 mb-1">Acesso restrito</p>
           <p className="text-[13px] text-gray-500 leading-relaxed">
             Esta seção está disponível apenas para usuários autorizados.
-            Solicite ao administrador da rede a permissão necessária.
+            Entre em contato com a CCI para liberar a permissão necessária.
           </p>
         </div>
       </div>
