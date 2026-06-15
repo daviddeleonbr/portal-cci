@@ -26,8 +26,13 @@ function fmtData(iso) {
 
 export default function ClienteCompras() {
   const session = useClienteSession();
-  // Autosystem não tem `session.chaveApi` direto; cai pra `chave_api_id`
-  // das empresas vinculadas (que apontam pra chaves_api da rede AS).
+  // Filtro principal: empresas vinculadas ao usuário (cliente_id).
+  // No Autosystem `session.chaveApi` nem sempre existe; usar `clientesIds`
+  // garante que todos os pedidos de qualquer empresa da rede aparecem.
+  const clientesIds = useMemo(
+    () => (session?.clientesRede || []).map(c => c.id),
+    [session?.clientesRede]
+  );
   const chaveApiId = session?.chaveApi?.id
     || session?.clientesRede?.[0]?.chave_api_id
     || null;
@@ -45,20 +50,19 @@ export default function ClienteCompras() {
   const [selecionado, setSelecionado] = useState(null);
 
   const carregar = async () => {
-    if (!chaveApiId) {
-      // Sessão ainda não carregada — encerra loading
+    if (clientesIds.length === 0 && !chaveApiId) {
       setLoading(false);
       return;
     }
     setLoading(true); setErro(null);
     try {
-      const data = await svc.listarPedidos({ chaveApiId });
+      const data = await svc.listarPedidos({ clientesIds, chaveApiId });
       setLista(data);
     } catch (err) { setErro(err.message); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [chaveApiId]);
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [clientesIds.join(','), chaveApiId]);
 
   const filtrada = useMemo(() => {
     return lista.filter(p => {
@@ -94,7 +98,7 @@ export default function ClienteCompras() {
       </PageHeader>
 
       {/* KPIs por status */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
         <CardKpi label="Total" valor={contadores.todos} cor="gray" />
         {svc.STATUS.map(s => (
           <CardKpi key={s.key} label={s.label} valor={contadores[s.key] || 0} cor={s.cor} />
@@ -146,7 +150,7 @@ export default function ClienteCompras() {
         </div>
       ) : (
         <div className="space-y-2.5">
-          {filtrada.map(p => <ItemPedido key={p.id} p={p} onClick={() => setSelecionado(p)} />)}
+          {filtrada.map(p => <ItemPedido key={p.id} p={p} empresas={session?.clientesRede || []} onClick={() => setSelecionado(p)} />)}
         </div>
       )}
 
@@ -155,8 +159,10 @@ export default function ClienteCompras() {
           chaveApiId={chaveApiId}
           session={session}
           onClose={() => setModalNovo(false)}
-          onCriado={(p) => {
-            setLista(prev => [p, ...prev]);
+          onCriado={async (p) => {
+            // Recarrega lista do servidor — itens são inseridos APÓS o header,
+            // então totais/status só ficam corretos depois do re-fetch
+            await carregar();
             setModalNovo(false);
             setSelecionado(p);
             setToast({ tipo: 'success', mensagem: 'Pedido criado' });
@@ -170,16 +176,14 @@ export default function ClienteCompras() {
           session={session}
           usuario={usuario}
           onClose={() => setSelecionado(null)}
-          onAtualizado={(p) => {
-            setLista(prev => prev.map(x => x.id === p.id ? p : x));
-          }}
+          onAtualizado={() => carregar()}
           onExcluir={async () => {
-            if (!confirm('Excluir este pedido?')) return;
+            if (!confirm('Excluir este pedido? Ele continuará disponível na aba "Excluído" pra histórico.')) return;
             try {
-              await svc.excluirPedido(selecionado.id);
-              setLista(prev => prev.filter(x => x.id !== selecionado.id));
+              await svc.excluirPedido(selecionado.id, { excluidoPor: usuario?.id });
+              await carregar();
               setSelecionado(null);
-              setToast({ tipo: 'success', mensagem: 'Excluído' });
+              setToast({ tipo: 'success', mensagem: 'Pedido movido para Excluído' });
             } catch (err) {
               setToast({ tipo: 'error', mensagem: err.message });
             }
@@ -210,7 +214,12 @@ function CardKpi({ label, valor, cor }) {
   );
 }
 
-function ItemPedido({ p, onClick }) {
+function ItemPedido({ p, empresas = [], onClick }) {
+  const empresa = empresas.find(e =>
+    (p.cliente_id && e.id === p.cliente_id)
+    || (p.empresa_codigo != null && Number(e.empresa_codigo) === Number(p.empresa_codigo))
+  );
+  const nomeEmpresa = empresa?.fantasia || empresa?.nome;
   const status = svc.STATUS.find(s => s.key === p.status) || svc.STATUS[0];
   const corStatus = {
     gray: 'bg-gray-100 text-gray-700', amber: 'bg-amber-100 text-amber-700',
@@ -233,7 +242,10 @@ function ItemPedido({ p, onClick }) {
             </span>
           </div>
           <div className="flex items-center gap-3 text-[11.5px] text-gray-500 mt-1 flex-wrap">
-            <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Empresa {p.empresa_codigo || '—'}</span>
+            <span className="inline-flex items-center gap-1">
+              <Building2 className="h-3 w-3" />
+              {nomeEmpresa ? `${nomeEmpresa}${p.empresa_codigo != null ? ` · #${p.empresa_codigo}` : ''}` : `Empresa ${p.empresa_codigo || '—'}`}
+            </span>
             <span>· criado {fmtData(p.criado_em)}</span>
             {p.enviado_em && <span>· enviado {fmtData(p.enviado_em)}</span>}
           </div>

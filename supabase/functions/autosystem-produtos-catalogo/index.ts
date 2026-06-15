@@ -100,8 +100,9 @@ serve(async (req) => {
 
     const sql = `
       SELECT
-        p.grid   AS produto,         -- grid interno (usado pra join com estoque_produto)
-        p.codigo AS produto_codigo,  -- código humano-readable (o que o user enxerga)
+        p.grid         AS produto,         -- grid interno (usado pra join com estoque_produto)
+        p.codigo       AS produto_codigo,  -- código humano-readable
+        p.codigo_barra AS codigo_barra,    -- EAN / código de barras
         convert_to(coalesce(p.nome,  ''), 'LATIN1') AS produto_nome,
         convert_to(coalesce(gp.nome, ''), 'LATIN1') AS grupo,
         convert_to(coalesce(sp.nome, ''), 'LATIN1') AS subgrupo

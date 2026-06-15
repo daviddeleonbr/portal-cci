@@ -9,11 +9,12 @@ import { supabase } from '../lib/supabase';
 
 export const STATUS = [
   { key: 'rascunho',             label: 'Rascunho',             cor: 'gray'    },
-  { key: 'aguardando_liberacao', label: 'Aguardando liberação', cor: 'amber'   },
+  { key: 'aguardando_liberacao', label: 'Em análise',            cor: 'amber'   },
   { key: 'liberado_parcial',     label: 'Liberado parcial',     cor: 'blue'    },
   { key: 'liberado_total',       label: 'Liberado total',       cor: 'emerald' },
   { key: 'recusado',             label: 'Recusado',             cor: 'rose'    },
   { key: 'concluido',            label: 'Concluído',            cor: 'violet'  },
+  { key: 'excluido',             label: 'Excluído',             cor: 'rose'    },
 ];
 
 export const STATUS_ITEM = [
@@ -59,7 +60,24 @@ export async function atualizarPedido(id, payload) {
   return data;
 }
 
-export async function excluirPedido(id) {
+// Soft delete: NÃO remove o registro, marca status='excluido' + grava quem/quando.
+// Pra apagar de fato use `removerPermanentemente` (apenas admin / manutenção).
+export async function excluirPedido(id, { excluidoPor } = {}) {
+  const { data, error } = await supabase
+    .from('cci_pedidos_compra')
+    .update({
+      status:       'excluido',
+      excluido_em:  new Date().toISOString(),
+      excluido_por: excluidoPor || null,
+    })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function removerPermanentemente(id) {
   const { error } = await supabase
     .from('cci_pedidos_compra')
     .delete()
@@ -67,14 +85,32 @@ export async function excluirPedido(id) {
   if (error) throw error;
 }
 
-export async function listarPedidos({ chaveApiId = null, status = null, clienteId = null } = {}) {
+// Lista pedidos. Aceita filtros opcionais:
+//   chaveApiId — FK Webposto (chaves_api.id)
+//   clientesIds — array de IDs de empresas (clientes.id). Modo padrão pro
+//     Autosystem: passa todas as empresas do usuário e traz pedidos de
+//     qualquer uma. Quando passado junto com chaveApiId, age como OR.
+//   status — filtra por status
+export async function listarPedidos({ chaveApiId = null, clientesIds = null, status = null, clienteId = null } = {}) {
   let q = supabase
     .from('cci_pedidos_compra')
-    .select('*')
+    .select(`
+      *,
+      criador:cci_usuarios_sistema!cci_pedidos_compra_criado_por_fkey(id, nome, email),
+      liberador:cci_usuarios_sistema!cci_pedidos_compra_liberado_por_fkey(id, nome, email),
+      excluidor:cci_usuarios_sistema!cci_pedidos_compra_excluido_por_fkey(id, nome, email)
+    `)
     .order('criado_em', { ascending: false });
-  if (chaveApiId) q = q.eq('chave_api_id', chaveApiId);
-  if (status)     q = q.eq('status', status);
-  if (clienteId)  q = q.eq('cliente_id', clienteId);
+  if (status) q = q.eq('status', status);
+  // Filtro de escopo: prefere `clientesIds` (mais flexível), depois `clienteId`,
+  // depois `chaveApiId`. Se vier mais de um, aplica OR pra abranger.
+  const condEscopo = [];
+  if (Array.isArray(clientesIds) && clientesIds.length > 0) {
+    condEscopo.push(`cliente_id.in.(${clientesIds.join(',')})`);
+  }
+  if (clienteId) condEscopo.push(`cliente_id.eq.${clienteId}`);
+  if (chaveApiId) condEscopo.push(`chave_api_id.eq.${chaveApiId}`);
+  if (condEscopo.length > 0) q = q.or(condEscopo.join(','));
   const { data, error } = await q;
   if (error) throw error;
   return data || [];
@@ -82,7 +118,12 @@ export async function listarPedidos({ chaveApiId = null, status = null, clienteI
 
 export async function obterPedido(id) {
   const [{ data: pedido, error: e1 }, { data: itens, error: e2 }] = await Promise.all([
-    supabase.from('cci_pedidos_compra').select('*').eq('id', id).single(),
+    supabase.from('cci_pedidos_compra').select(`
+      *,
+      criador:cci_usuarios_sistema!cci_pedidos_compra_criado_por_fkey(id, nome, email),
+      liberador:cci_usuarios_sistema!cci_pedidos_compra_liberado_por_fkey(id, nome, email),
+      excluidor:cci_usuarios_sistema!cci_pedidos_compra_excluido_por_fkey(id, nome, email)
+    `).eq('id', id).single(),
     supabase.from('cci_pedidos_compra_item').select('*').eq('pedido_id', id).order('produto_nome', { ascending: true }),
   ]);
   if (e1) throw e1;

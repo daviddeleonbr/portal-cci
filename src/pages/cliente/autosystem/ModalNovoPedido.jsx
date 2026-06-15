@@ -21,7 +21,7 @@ const STATUS_ESTOQUE = {
   ok:       { label: 'OK',        cor: 'bg-emerald-100 text-emerald-700' },
   excesso:  { label: 'EXCESSO',   cor: 'bg-orange-100 text-orange-700' },
   parado:   { label: 'PARADO',    cor: 'bg-gray-200 text-gray-700' },
-  inativo:  { label: 'INATIVO',   cor: 'bg-gray-100 text-gray-500' },
+  inativo:  { label: 'SEM VENDA', cor: 'bg-gray-100 text-gray-500' },
 };
 
 // Heurística de classificação (mesma da página de análise de estoque)
@@ -75,6 +75,7 @@ export default function ModalNovoPedido({ chaveApiId, session, onClose, onCriado
   const [buscaModalKey, setBuscaModalKey] = useState(null);
 
   const [showSugestoes, setShowSugestoes] = useState(false);
+  const [filtroSugestao, setFiltroSugestao] = useState('todos'); // todos | ruptura | critico | baixo
   const [analise, setAnalise] = useState([]);
   const [loadingAnalise, setLoadingAnalise] = useState(false);
 
@@ -168,17 +169,30 @@ export default function ModalNovoPedido({ chaveApiId, session, onClose, onCriado
     return () => { cancelado = true; };
   }, [tipoCliente, asRede?.id, empresaSel]);
 
-  // Filtra sugestões (prioridade: ruptura > critico > baixo)
+  // Base: produtos da análise nos 3 status críticos (sem busca/tab aplicada)
+  const sugestoesBase = useMemo(() => {
+    return analise.filter(p => ['ruptura', 'critico', 'baixo'].includes(p.status));
+  }, [analise]);
+
+  // Contadores por status pra mostrar nas tabs
+  const contagemSugestoes = useMemo(() => ({
+    todos:   sugestoesBase.length,
+    ruptura: sugestoesBase.filter(p => p.status === 'ruptura').length,
+    critico: sugestoesBase.filter(p => p.status === 'critico').length,
+    baixo:   sugestoesBase.filter(p => p.status === 'baixo').length,
+  }), [sugestoesBase]);
+
+  // Aplica tab + busca + dedup (ignora itens já adicionados)
   const sugestoes = useMemo(() => {
     const prio = { ruptura: 1, critico: 2, baixo: 3 };
     const b = busca.toLowerCase();
-    return analise
-      .filter(p => ['ruptura', 'critico', 'baixo'].includes(p.status))
+    return sugestoesBase
+      .filter(p => filtroSugestao === 'todos' || p.status === filtroSugestao)
       .filter(p => !b || (p.produto_nome || '').toLowerCase().includes(b) || String(p.produto || '').includes(b))
-      .filter(p => !itens.some(i => String(i.produtoCodigo) === String(p.produto)))
+      .filter(p => !itens.some(i => String(i.produtoCodigo) === String(p.produto_codigo ?? p.produto)))
       .sort((a, b) => (prio[a.status] || 99) - (prio[b.status] || 99))
       .slice(0, 100);
-  }, [analise, busca, itens]);
+  }, [sugestoesBase, busca, itens, filtroSugestao]);
 
   const adicionarSugestao = (p) => {
     const novo = {
@@ -320,6 +334,17 @@ export default function ModalNovoPedido({ chaveApiId, session, onClose, onCriado
               </button>
               {showSugestoes && (
                 <div className="px-4 pb-4">
+                  {/* Tabs por status: filtra a lista abaixo */}
+                  <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                    <TabSugestao label="Todos"   ativo={filtroSugestao === 'todos'}   count={contagemSugestoes.todos}   cor="blue"
+                      onClick={() => setFiltroSugestao('todos')} />
+                    <TabSugestao label="Ruptura" ativo={filtroSugestao === 'ruptura'} count={contagemSugestoes.ruptura} cor="rose"
+                      onClick={() => setFiltroSugestao('ruptura')} />
+                    <TabSugestao label="Crítico" ativo={filtroSugestao === 'critico'} count={contagemSugestoes.critico} cor="amber"
+                      onClick={() => setFiltroSugestao('critico')} />
+                    <TabSugestao label="Baixo"   ativo={filtroSugestao === 'baixo'}   count={contagemSugestoes.baixo}   cor="yellow"
+                      onClick={() => setFiltroSugestao('baixo')} />
+                  </div>
                   <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
                     placeholder="Buscar produto..."
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 mb-3" />
@@ -350,8 +375,13 @@ export default function ModalNovoPedido({ chaveApiId, session, onClose, onCriado
                             return (
                               <tr key={p.produto} className="border-t border-gray-100 hover:bg-blue-50/30">
                                 <td className="px-3 py-1.5">
-                                  <p className="font-medium text-gray-800">{p.produto_nome}</p>
-                                  <p className="text-[10.5px] text-gray-400 font-mono">#{p.produto_codigo ?? p.produto}</p>
+                                  <p className="font-medium text-gray-800">
+                                    <span className="font-mono text-gray-500 mr-1.5">#{p.produto_codigo ?? p.produto}</span>
+                                    {p.produto_nome}
+                                  </p>
+                                  {p.codigo_barra && (
+                                    <p className="text-[10.5px] text-gray-400 font-mono">EAN {p.codigo_barra}</p>
+                                  )}
                                 </td>
                                 <td className="px-2 py-1.5 text-center">
                                   <span className={`inline-block text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${st.cor}`}>
@@ -405,12 +435,13 @@ export default function ModalNovoPedido({ chaveApiId, session, onClose, onCriado
                 <table className="w-full text-[12.5px]">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="text-left px-3 py-2 font-semibold text-gray-600 w-28">Código</th>
-                      <th className="text-left px-3 py-2 font-semibold text-gray-600">Produto</th>
-                      <th className="text-right px-2 py-2 font-semibold text-gray-600 w-24">Estoque</th>
-                      <th className="text-right px-2 py-2 font-semibold text-gray-600 w-28">Qtd</th>
-                      <th className="text-right px-2 py-2 font-semibold text-gray-600 w-32">Custo unit.</th>
-                      <th className="text-right px-2 py-2 font-semibold text-gray-600 w-32">Total</th>
+                      <th className="text-left  px-3 py-2 font-semibold text-gray-600 w-24">Código</th>
+                      <th className="text-left  px-3 py-2 font-semibold text-gray-600">Produto</th>
+                      <th className="text-center px-2 py-2 font-semibold text-gray-600 w-24">Situação</th>
+                      <th className="text-right px-2 py-2 font-semibold text-gray-600 w-20">Estoque</th>
+                      <th className="text-right px-2 py-2 font-semibold text-gray-600 w-24">Qtd</th>
+                      <th className="text-right px-2 py-2 font-semibold text-gray-600 w-28">Custo unit.</th>
+                      <th className="text-right px-2 py-2 font-semibold text-gray-600 w-28">Total</th>
                       <th className="w-8"></th>
                     </tr>
                   </thead>
@@ -435,15 +466,17 @@ export default function ModalNovoPedido({ chaveApiId, session, onClose, onCriado
                               </span>
                             </button>
                           </td>
-                          <td className="px-2 py-1.5 text-right">
+                          <td className="px-2 py-1.5 text-center">
                             {st ? (
-                              <div className="flex flex-col items-end gap-0.5">
-                                <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${st.cor}`}>
-                                  {st.label}
-                                </span>
-                                <span className="text-[10.5px] text-gray-500 tabular-nums">{fmtNumero(i.estoqueAtual)}</span>
-                              </div>
-                            ) : <span className="text-gray-400">—</span>}
+                              <span className={`inline-block text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${st.cor}`}>
+                                {st.label}
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-right">
+                            {i.estoqueAtual != null ? (
+                              <span className="text-[11.5px] text-gray-700 tabular-nums font-mono">{fmtNumero(i.estoqueAtual)}</span>
+                            ) : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-2 py-1.5">
                             <input type="number" min={0} value={i.quantidadeSolicitada}
@@ -470,7 +503,7 @@ export default function ModalNovoPedido({ chaveApiId, session, onClose, onCriado
                   </tbody>
                   <tfoot>
                     <tr className="bg-gray-50 border-t border-gray-200">
-                      <td colSpan={5} className="px-3 py-2 text-right font-bold text-gray-700 text-[11.5px] uppercase">Total geral</td>
+                      <td colSpan={6} className="px-3 py-2 text-right font-bold text-gray-700 text-[11.5px] uppercase">Total geral</td>
                       <td className="px-2 py-2 text-right font-mono tabular-nums font-bold text-blue-700">{fmtMoeda(totalSolicitado)}</td>
                       <td></td>
                     </tr>
@@ -655,7 +688,7 @@ function ModalBuscaProduto({ produtos, loading, onSelect, onClose }) {
     return produtos
       .filter(p => {
         const haystack = norm(
-          [p.produto_nome, p.produto_codigo, p.produto, p.grupo, p.subgrupo]
+          [p.produto_nome, p.produto_codigo, p.codigo_barra, p.produto, p.grupo, p.subgrupo]
             .filter(Boolean).join(' ')
         );
         return palavras.every(w => haystack.includes(w));
@@ -691,7 +724,7 @@ function ModalBuscaProduto({ produtos, loading, onSelect, onClose }) {
             <input autoFocus
               value={termo}
               onChange={e => setTermo(e.target.value)}
-              placeholder="Buscar por nome, código, grupo..."
+              placeholder="Buscar por nome, código, código de barras, grupo..."
               className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2.5 text-[14px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
         </div>
@@ -726,9 +759,12 @@ function ModalBuscaProduto({ produtos, loading, onSelect, onClose }) {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium text-gray-800 truncate">{p.produto_nome || '—'}</p>
+                        <p className="text-[13px] font-medium text-gray-800 truncate">
+                          <span className="font-mono text-gray-500 mr-1.5">#{p.produto_codigo ?? p.produto}</span>
+                          {p.produto_nome || '—'}
+                        </p>
                         <div className="flex items-center gap-2 text-[10.5px] text-gray-400 mt-0.5 flex-wrap">
-                          <span className="font-mono">#{p.produto_codigo ?? p.produto}</span>
+                          {p.codigo_barra && <span className="font-mono">EAN {p.codigo_barra}</span>}
                           {p.grupo && <span>· {p.grupo}</span>}
                           {p.subgrupo && p.subgrupo !== p.grupo && <span>· {p.subgrupo}</span>}
                         </div>
@@ -736,7 +772,7 @@ function ModalBuscaProduto({ produtos, loading, onSelect, onClose }) {
                       <div className="flex-shrink-0 flex items-center gap-2 text-[10.5px]">
                         {stCor && (
                           <span className={`font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${stCor}`}>
-                            {p.status}
+                            {STATUS_ESTOQUE[p.status]?.label || p.status}
                           </span>
                         )}
                         {p.estoque_atual != null && (
@@ -759,6 +795,22 @@ function ModalBuscaProduto({ produtos, loading, onSelect, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function TabSugestao({ label, count, ativo, cor, onClick }) {
+  const cores = {
+    blue:   ativo ? 'bg-blue-600 text-white border-blue-600'        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50/40',
+    rose:   ativo ? 'bg-rose-600 text-white border-rose-600'        : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50',
+    amber:  ativo ? 'bg-amber-600 text-white border-amber-600'      : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50',
+    yellow: ativo ? 'bg-yellow-500 text-white border-yellow-500'    : 'bg-white text-yellow-700 border-yellow-200 hover:bg-yellow-50',
+  };
+  return (
+    <button type="button" onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${cores[cor]}`}>
+      {label}
+      <span className={`tabular-nums font-bold ${ativo ? 'text-white/90' : 'opacity-60'}`}>{count}</span>
+    </button>
   );
 }
 

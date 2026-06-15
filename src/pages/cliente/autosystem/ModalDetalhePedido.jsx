@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import {
   X, Loader2, ShoppingCart, Send, CheckCircle2, XCircle,
   Trash2, Printer, Building2, AlertCircle, Package, MessageSquare,
+  User, UserCheck, UserX,
 } from 'lucide-react';
 import * as svc from '../../../services/pedidosCompraService';
 
@@ -91,6 +92,22 @@ export default function ModalDetalhePedido({ pedidoId, session, usuario, onClose
   };
 
   const confirmarLiberacao = async () => {
+    // Aviso preventivo: se NENHUM item foi marcado, o pedido será recusado
+    // por completo. Pede confirmação explícita pra evitar liberação acidental
+    // (ex: usuário clica direto em "Confirmar" sem marcar qtds).
+    const totalLiberados = (pedido.itens || []).reduce(
+      (n, i) => n + ((liberacao[i.id]?.liberado) ? 1 : 0), 0
+    );
+    if (totalLiberados === 0) {
+      const ok = confirm(
+        'Nenhum item foi marcado como liberado.\n\n' +
+        'Confirmar agora vai RECUSAR o pedido por completo. ' +
+        'Se quiser liberar algo, feche este aviso e marque os itens primeiro.\n\n' +
+        'Deseja realmente recusar o pedido?'
+      );
+      if (!ok) return;
+    }
+
     setAcao('liberar'); setErro(null);
     try {
       // Mapeia checkbox → status do banco:
@@ -160,15 +177,45 @@ export default function ModalDetalhePedido({ pedidoId, session, usuario, onClose
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Info */}
+          {/* Info principal (incluindo solicitado por) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 rounded-xl p-3">
-            <Info icon={Building2} label="Empresa" valor={`#${pedido.empresa_codigo}`} />
+            <Info icon={Building2} label="Empresa" valor={(() => {
+              const empresa = (session?.clientesRede || []).find(c =>
+                (pedido.cliente_id && c.id === pedido.cliente_id)
+                || (pedido.empresa_codigo != null && Number(c.empresa_codigo) === Number(pedido.empresa_codigo))
+              );
+              const nome = empresa?.fantasia || empresa?.nome;
+              const cod = pedido.empresa_codigo != null ? `#${pedido.empresa_codigo}` : '';
+              return nome ? `${nome}${cod ? ` · ${cod}` : ''}` : (cod || '—');
+            })()} />
+            <Info icon={User} label="Solicitado por"
+              valor={pedido.criador?.nome || '—'}
+              sub={fmtData(pedido.criado_em)} />
             <Info label="Total solicitado" valor={fmtMoeda(pedido.total_solicitado)} destaque="blue" />
-            {Number(pedido.total_liberado) > 0 && (
+            {Number(pedido.total_liberado) > 0 ? (
               <Info label="Total liberado" valor={fmtMoeda(pedido.total_liberado)} destaque="emerald" />
+            ) : (
+              <Info label="Enviado em" valor={fmtData(pedido.enviado_em)} />
             )}
-            <Info label="Enviado em" valor={fmtData(pedido.enviado_em)} />
           </div>
+
+          {/* Auditoria adicional: liberador / excluidor */}
+          {(pedido.liberado_em || pedido.excluido_em) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {pedido.liberado_em && (
+                <Auditoria icone={UserCheck} cor="emerald"
+                  titulo="Liberado por"
+                  nome={pedido.liberador?.nome || '—'}
+                  quando={fmtData(pedido.liberado_em)} />
+              )}
+              {pedido.excluido_em && (
+                <Auditoria icone={UserX}    cor="rose"
+                  titulo="Excluído por"
+                  nome={pedido.excluidor?.nome || '—'}
+                  quando={fmtData(pedido.excluido_em)} />
+              )}
+            </div>
+          )}
 
           {pedido.observacoes && (
             <div className="rounded-xl border border-gray-200 bg-white p-3">
@@ -339,7 +386,25 @@ export default function ModalDetalhePedido({ pedidoId, session, usuario, onClose
   );
 }
 
-function Info({ icon: Icone, label, valor, destaque }) {
+function Auditoria({ icone: Icone, cor, titulo, nome, quando }) {
+  const cores = {
+    blue:    'bg-blue-50 border-blue-200 text-blue-700',
+    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    rose:    'bg-rose-50 border-rose-200 text-rose-700',
+  };
+  return (
+    <div className={`rounded-xl border ${cores[cor] || cores.blue} p-3`}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <Icone className="h-3.5 w-3.5" />
+        <p className="text-[10px] font-bold uppercase tracking-wider">{titulo}</p>
+      </div>
+      <p className="text-[12.5px] font-semibold text-gray-800">{nome}</p>
+      <p className="text-[10.5px] text-gray-500 mt-0.5">{quando}</p>
+    </div>
+  );
+}
+
+function Info({ icon: Icone, label, valor, sub, destaque }) {
   const cores = {
     blue: 'text-blue-700',
     emerald: 'text-emerald-700',
@@ -351,6 +416,7 @@ function Info({ icon: Icone, label, valor, destaque }) {
         {label}
       </p>
       <p className={`text-[13.5px] font-bold ${cores[destaque] || 'text-gray-900'}`}>{valor || '—'}</p>
+      {sub && <p className="text-[10.5px] text-gray-500 mt-0.5 font-normal">{sub}</p>}
     </div>
   );
 }
