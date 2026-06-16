@@ -486,7 +486,8 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
             );
             setExpandedGrupos(expand);
           } else {
-            setExpandedGrupos(new Set((grps || []).filter(g => ['grupo', 'entrada', 'saida'].includes(g.tipo)).map(g => g.id)));
+            // DRE inicia recolhido — usuário expande só o que quer mexer.
+            setExpandedGrupos(new Set());
           }
         } catch (err) {
           console.error('[Mapeamento] listarGrupos/listarMapeamentos erro:', err);
@@ -1098,7 +1099,8 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
         );
         setExpandedGrupos(expand);
       } else {
-        setExpandedGrupos(new Set((grps || []).filter(g => ['grupo', 'entrada', 'saida'].includes(g.tipo)).map(g => g.id)));
+        // DRE inicia recolhido — usuário expande só o que quer mexer.
+        setExpandedGrupos(new Set());
       }
     } catch (err) { showToast('error', 'Erro ao carregar dados'); }
   }, [rede.id, mascaraSelecionada, showToast, adapter, isFluxo]);
