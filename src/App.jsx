@@ -11,6 +11,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Financeiro from './pages/Financeiro';
 import Cadastros from './pages/Cadastros';
+import Contratos from './pages/Contratos';
 import NotasFiscais from './pages/NotasFiscais';
 import Boletos from './pages/Boletos';
 import Clientes from './pages/Clientes';
@@ -168,6 +169,9 @@ export default function App() {
           {/* <Route path="/admin/orcamento-solicitacoes" element={<AdminOrcamentoSolicitacoes />} /> */}
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
           <Route path="/admin/fiscal/agendamento" element={<NotasFiscais />} />
+
+          {/* Contratos — gestão de contratos ativos, propostas e catálogo de serviços */}
+          <Route path="/admin/contratos" element={<Contratos />} />
 
           {/* Relatorios Cliente (analises por empresa) */}
           <Route path="/admin/relatorios-cliente" element={<RelatoriosCliente />} />

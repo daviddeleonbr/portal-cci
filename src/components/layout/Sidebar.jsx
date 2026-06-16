@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Landmark, Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
   MessageCircle, RefreshCw, Eye, AlertTriangle,
-  Activity, FileSpreadsheet, Receipt,
+  Activity, FileSpreadsheet, Receipt, FileSignature,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import LogoCCI from '../ui/LogoCCI';
@@ -41,6 +41,11 @@ const navigationAll = [
         href: '/admin/fiscal/notas-fiscais',
         icon: FileText,
         permissao: 'fiscal',
+      },
+      {
+        name: 'Contratos',
+        href: '/admin/contratos',
+        icon: FileSignature,
       },
     ],
   },
