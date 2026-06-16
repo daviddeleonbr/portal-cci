@@ -11,6 +11,8 @@ import {
 import { useAdminSession } from '../../hooks/useAuth';
 import LogoCCI from '../ui/LogoCCI';
 import { logoutAdmin } from '../../lib/auth';
+import * as pendenciasService from '../../services/pendenciasService';
+import * as melhoriasService from '../../services/melhoriasService';
 
 const navigationAll = [
   {
@@ -24,31 +26,21 @@ const navigationAll = [
     items: [
       {
         name: 'Cadastros',
+        href: '/admin/cadastros',
         icon: FolderKanban,
-        children: [
-          { name: 'Clientes', href: '/admin/clientes', permissao: 'clientes' },
-          { name: 'Colaboradores', href: '/admin/colaboradores', permissao: 'colaboradores' },
-          { name: 'Usuários do Sistema', href: '/admin/cadastros/usuarios', permissao: 'usuarios' },
-          { name: 'Fornecedores', href: '/admin/cadastros/fornecedores', permissao: 'fornecedores' },
-          { name: 'Plano de Contas', href: '/admin/cadastros/plano-contas', permissao: 'plano_contas' },
-          { name: 'Motivos de Movimentação', href: '/admin/cadastros/motivos', permissao: 'motivos' },
-        ],
+        permissaoQualquer: ['clientes', 'colaboradores', 'usuarios', 'fornecedores', 'plano_contas', 'motivos'],
       },
       {
         name: 'Financeiro',
+        href: '/admin/financeiro/contas-pagar',
         icon: Wallet,
-        children: [
-          { name: 'Contas a Pagar', href: '/admin/financeiro/contas-pagar', permissao: 'contas_pagar' },
-          { name: 'Contas a Receber', href: '/admin/financeiro/contas-receber', permissao: 'contas_receber' },
-        ],
+        permissao: 'contas_pagar',
       },
       {
-        name: 'Fiscal',
+        name: 'Notas Fiscais',
+        href: '/admin/fiscal/notas-fiscais',
         icon: FileText,
-        children: [
-          { name: 'Notas Fiscais', href: '/admin/fiscal/notas-fiscais', permissao: 'fiscal' },
-          { name: 'Agendamento de Emissão', href: '/admin/fiscal/agendamento', permissao: 'fiscal' },
-        ],
+        permissao: 'fiscal',
       },
     ],
   },
@@ -73,10 +65,10 @@ const navigationAll = [
   {
     section: 'Comunicações',
     items: [
-      { name: 'Pendências', href: '/admin/pendencias', icon: AlertTriangle },
+      { name: 'Pendências', href: '/admin/pendencias', icon: AlertTriangle, badgeKey: 'pendencias' },
       { name: 'Notificações', href: '/admin/notificacoes', icon: Bell, permissao: 'notificacoes' },
       { name: 'Mensagens Iniciais', href: '/admin/mensagens-iniciais', icon: Megaphone, permissao: 'mensagens_iniciais' },
-      { name: 'Melhorias do Sistema', href: '/admin/melhorias', icon: Lightbulb, permissao: 'melhorias' },
+      { name: 'Melhorias do Sistema', href: '/admin/melhorias', icon: Lightbulb, permissao: 'melhorias', badgeKey: 'melhorias' },
       { name: 'Suporte (chat)', href: '/admin/suporte', icon: MessageCircle, permissao: 'suporte_admin' },
     ],
   },
@@ -91,10 +83,16 @@ const navigationAll = [
   },
 ];
 
-// Filtra navegacao com base nas permissoes do usuario logado
+// Filtra navegacao com base nas permissoes do usuario logado.
+// Suporta `permissao` (string única — precisa ter) e `permissaoQualquer`
+// (array — basta ter pelo menos uma). Útil em itens agrupados (Cadastros).
 function filtrarNavegacao(permissoes) {
   const perms = new Set(permissoes || []);
-  const visivel = (item) => !item.permissao || perms.has(item.permissao);
+  const visivel = (item) => {
+    if (item.permissao && !perms.has(item.permissao)) return false;
+    if (item.permissaoQualquer && !item.permissaoQualquer.some(p => perms.has(p))) return false;
+    return true;
+  };
   return navigationAll
     .map(section => ({
       ...section,
@@ -124,6 +122,23 @@ export default function Sidebar({ collapsed, onToggle }) {
   const usuario = session?.usuario;
 
   const navigation = useMemo(() => filtrarNavegacao(usuario?.permissoes), [usuario?.permissoes]);
+
+  // Contadores pra badges em "Pendências" e "Melhorias do Sistema".
+  // Re-carrega ao navegar (admin pode ter resolvido algo na página anterior).
+  const [badges, setBadges] = useState({});
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const [pend, melh] = await Promise.all([
+          pendenciasService.contarAbertasAdmin().catch(() => 0),
+          melhoriasService.contarAbertasAdmin().catch(() => 0),
+        ]);
+        if (!cancelado) setBadges({ pendencias: pend, melhorias: melh });
+      } catch { /* silencioso — badge zerado se falhar */ }
+    })();
+    return () => { cancelado = true; };
+  }, [location.pathname]);
 
   // Determina o href "mais específico" que case com a URL atual — apenas esse
   // item fica destacado. Evita rotas pai (ex: /admin/bpo) ativarem junto com
@@ -268,6 +283,15 @@ export default function Sidebar({ collapsed, onToggle }) {
                       )}
                       {Icon && <Icon className={`h-[17px] w-[17px] flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
                       {!collapsed && <span>{item.name}</span>}
+                      {!collapsed && item.badgeKey && badges[item.badgeKey] > 0 && (
+                        <span className="ml-auto inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white tabular-nums">
+                          {badges[item.badgeKey] > 99 ? '99+' : badges[item.badgeKey]}
+                        </span>
+                      )}
+                      {/* Quando sidebar colapsada — ponto vermelho discreto */}
+                      {collapsed && item.badgeKey && badges[item.badgeKey] > 0 && (
+                        <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
+                      )}
                     </NavLink>
                   );
                 }

@@ -10,7 +10,7 @@ import Modal from '../components/ui/Modal';
 import * as cciService from '../services/cciFinanceiroService';
 import { proximoCodigoHierarquico } from '../services/cciFinanceiroService';
 
-export default function CciPlanoContas() {
+export default function CciPlanoContas({ embedded = false }) {
   const [contas, setContas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
@@ -85,12 +85,22 @@ export default function CciPlanoContas() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Plano de Contas CCI" description="Plano de contas interno para controle financeiro da CCI">
-        <button onClick={() => setModal({ open: true, data: null })}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Nova Conta
-        </button>
-      </PageHeader>
+      {!embedded && (
+        <PageHeader title="Plano de Contas CCI" description="Plano de contas interno para controle financeiro da CCI">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Nova Conta
+          </button>
+        </PageHeader>
+      )}
+      {embedded && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Nova Conta
+          </button>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-200/60 p-3 mb-4 flex flex-wrap items-center gap-2">

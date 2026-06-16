@@ -12,6 +12,7 @@ import {
 import { useClienteSession } from '../../../hooks/useAuth';
 import LogoCCI from '../../ui/LogoCCI';
 import { logoutCliente } from '../../../lib/auth';
+import * as pendenciasService from '../../../services/pendenciasService';
 
 // Os hrefs são montados em runtime com prefixo `/cliente/<tipoCliente>`
 // para que webposto e autosystem reusem o mesmo menu.
@@ -61,7 +62,7 @@ function buildNavigation(prefix, tipoCliente = 'webposto') {
     {
       section: 'Atendimento',
       items: [
-        { name: 'Pendências', href: `${prefix}/pendencias`, icon: AlertTriangle },
+        { name: 'Pendências', href: `${prefix}/pendencias`, icon: AlertTriangle, badgeKey: 'pendencias' },
         { name: 'Suporte', href: `${prefix}/suporte`, icon: HelpCircle, permissao: 'suporte' },
         { name: 'Melhorias do Sistema', href: `${prefix}/melhorias`, icon: Lightbulb },
       ],
@@ -160,6 +161,27 @@ export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, o
     setExpanded(next);
   }, [location.pathname, navigation]);
 
+  // Badge de "Pendências" — conta pendências ATIVAS pra esse cliente
+  // (respeita escopo de rede/cliente + janela + recorrência).
+  const chaveApiId = session?.chaveApi?.id;
+  const clientesIds = useMemo(
+    () => (session?.clientesRede || []).map(c => c.id),
+    [session?.clientesRede],
+  );
+  const [badges, setBadges] = useState({});
+  useEffect(() => {
+    if (!chaveApiId && clientesIds.length === 0) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const n = await pendenciasService.contarAbertasCliente({ clientesIds, chaveApiId });
+        if (!cancelado) setBadges({ pendencias: n });
+      } catch { /* silencioso */ }
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveApiId, clientesIds.join(','), location.pathname]);
+
   const toggleExpand = (name) => {
     setExpanded(prev => {
       const next = new Set(prev);
@@ -255,6 +277,14 @@ export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, o
                       )}
                       {Icon && <Icon className={`h-[17px] w-[17px] flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
                       {!collapsed && <span>{item.name}</span>}
+                      {!collapsed && item.badgeKey && badges[item.badgeKey] > 0 && (
+                        <span className="ml-auto inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white tabular-nums">
+                          {badges[item.badgeKey] > 99 ? '99+' : badges[item.badgeKey]}
+                        </span>
+                      )}
+                      {collapsed && item.badgeKey && badges[item.badgeKey] > 0 && (
+                        <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
+                      )}
                     </NavLink>
                   );
                 }

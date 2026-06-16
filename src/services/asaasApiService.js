@@ -55,16 +55,68 @@ export async function criarCustomer(ambiente, apiKey, { name, cpfCnpj, email, ph
   });
 }
 
+// PUT /customers/:id — atualiza apenas os campos passados.
+export async function atualizarCustomer(ambiente, apiKey, customerId, campos) {
+  return request(ambiente, apiKey, 'PUT', `/customers/${customerId}`, campos);
+}
+
+export async function buscarCustomer(ambiente, apiKey, customerId) {
+  if (!customerId) return null;
+  return request(ambiente, apiKey, 'GET', `/customers/${customerId}`);
+}
+
 export async function buscarCustomerPorCnpj(ambiente, apiKey, cpfCnpj) {
   const res = await listarCustomers(ambiente, apiKey, { cpfCnpj, limit: 1 });
   return res?.data?.[0] || null;
+}
+
+// Calcula o diff entre o que TEMOS (nosso) e o que ESTÁ no Asaas (deles).
+// Regra: só sobrescreve quando temos valor preenchido. Campo vazio do
+// nosso lado NÃO apaga o que está lá (evita perder dado bom).
+//
+// Comparação tolerante: trim em string, normaliza dígitos em CEP/CPF,
+// considera null/undefined/'' como iguais entre si.
+function _norm(v)   { return v == null ? '' : String(v).trim(); }
+function _digits(v) { return _norm(v).replace(/\D/g, ''); }
+
+export function diffCustomer(nosso, deles) {
+  const update = {};
+  const pares = [
+    ['email',         _norm(nosso.email),                  _norm(deles?.email)],
+    ['address',       _norm(nosso.address),                _norm(deles?.address)],
+    ['addressNumber', _norm(nosso.addressNumber),          _norm(deles?.addressNumber)],
+    ['complement',    _norm(nosso.complement),             _norm(deles?.complement)],
+    ['province',      _norm(nosso.province),               _norm(deles?.province)],
+    ['city',          _norm(nosso.city),                   _norm(deles?.city)],
+    ['state',         _norm(nosso.state),                  _norm(deles?.state)],
+    ['postalCode',    _digits(nosso.postalCode),           _digits(deles?.postalCode)],
+    ['phone',         _digits(nosso.phone),                _digits(deles?.phone)],
+    ['mobilePhone',   _digits(nosso.mobilePhone),          _digits(deles?.mobilePhone)],
+  ];
+  for (const [campo, novo, atual] of pares) {
+    if (novo && novo !== atual) update[campo] = nosso[campo];
+  }
+  return update;
 }
 
 export async function encontrarOuCriarCustomer(ambiente, apiKey, clienteData) {
   const limpo = (clienteData.cpfCnpj || '').replace(/\D/g, '');
   if (limpo) {
     const existente = await buscarCustomerPorCnpj(ambiente, apiKey, limpo);
-    if (existente) return existente;
+    if (existente) {
+      // Sincroniza endereço/contato se houver divergência
+      const update = diffCustomer(clienteData, existente);
+      if (Object.keys(update).length > 0) {
+        try {
+          return await atualizarCustomer(ambiente, apiKey, existente.id, update);
+        } catch {
+          // Se a atualização falhar, mantém o customer existente
+          // (não bloqueia a emissão por causa de sync de endereço)
+          return existente;
+        }
+      }
+      return existente;
+    }
   }
   return criarCustomer(ambiente, apiKey, { ...clienteData, cpfCnpj: limpo });
 }
@@ -83,8 +135,10 @@ export async function buscarInvoice(ambiente, apiKey, id) {
   return request(ambiente, apiKey, 'GET', `/invoices/${id}`);
 }
 
-// Criar NFS-e (nao emite ainda, fica como SCHEDULED ate effectiveDate)
-// Campos obrigatorios: customer, serviceDescription, value, effectiveDate, municipalServiceCode/Id/Name
+// Criar NFS-e (nao emite ainda, fica como SCHEDULED ate effectiveDate).
+// Suporta o NOVO formato Portal Nacional NFS-e (PNFS-e) via `nationalServiceCode`
+// (ex: "17.03.03" — código NBS). Mantém compat com os campos municipais
+// legados — só envia os que estiverem preenchidos.
 export async function criarInvoice(ambiente, apiKey, {
   customer,
   serviceDescription,
@@ -92,26 +146,30 @@ export async function criarInvoice(ambiente, apiKey, {
   value,
   deductions = 0,
   effectiveDate,
+  // ─── Portal Nacional ───────────────────────
+  nationalServiceCode,        // ex: "17.03.03"
+  serie,                      // Série da NF (1-6 alfanuméricos, ex: "1" ou "NFS-E")
+  // ─── Compat municipal (mesmo no Portal Nacional, Asaas ainda exige) ─
   municipalServiceId,
   municipalServiceCode,
   municipalServiceName,
+  municipalServiceDescription,
   // impostos retidos (%)
   taxes = null,  // { retainedIss, iss, cofins, csll, inss, ir, pis }
   externalReference,
 }) {
-  return request(ambiente, apiKey, 'POST', '/invoices', {
-    customer,
-    serviceDescription,
-    observations,
-    value,
-    deductions,
-    effectiveDate,
-    municipalServiceId,
-    municipalServiceCode,
-    municipalServiceName,
-    taxes,
-    externalReference,
-  });
+  const payload = {
+    customer, serviceDescription, observations, value, deductions, effectiveDate,
+    taxes, externalReference,
+  };
+  // Portal Nacional tem prioridade quando preenchido
+  if (nationalServiceCode) payload.nationalServiceCode = nationalServiceCode;
+  if (serie)               payload.serie = serie;
+  if (municipalServiceId)          payload.municipalServiceId          = municipalServiceId;
+  if (municipalServiceCode)        payload.municipalServiceCode        = municipalServiceCode;
+  if (municipalServiceName)        payload.municipalServiceName        = municipalServiceName;
+  if (municipalServiceDescription) payload.municipalServiceDescription = municipalServiceDescription;
+  return request(ambiente, apiKey, 'POST', '/invoices', payload);
 }
 
 // Cancelar uma NFS-e

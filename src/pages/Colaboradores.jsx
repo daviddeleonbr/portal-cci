@@ -18,7 +18,7 @@ const permissaoLabels = {
   colaboradores: { label: 'Pessoas', color: 'bg-pink-50 text-pink-700' },
 };
 
-export default function Colaboradores() {
+export default function Colaboradores({ embedded = false }) {
   const loading = useSimulatedLoading(500);
   const [searchTerm, setSearchTerm] = useState('');
   const [detailUser, setDetailUser] = useState(null);
@@ -36,7 +36,7 @@ export default function Colaboradores() {
 
   if (loading) return (
     <div>
-      <PageHeader title="Colaboradores" description="Gestão de equipe e permissões" />
+      {!embedded && <PageHeader title="Colaboradores" description="Gestão de equipe e permissões" />}
       <TableSkeleton rows={5} cols={5} />
     </div>
   );
@@ -44,15 +44,22 @@ export default function Colaboradores() {
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-      <PageHeader title="Colaboradores" description="Gestão de equipe e permissões de acesso">
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          Novo Colaborador
-        </button>
-      </PageHeader>
+      {!embedded && (
+        <PageHeader title="Colaboradores" description="Gestão de equipe e permissões de acesso">
+          <button onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Colaborador
+          </button>
+        </PageHeader>
+      )}
+      {embedded && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Colaborador
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">

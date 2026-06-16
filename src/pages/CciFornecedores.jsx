@@ -7,7 +7,7 @@ import Toast from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
 import * as cciService from '../services/cciFinanceiroService';
 
-export default function CciFornecedores() {
+export default function CciFornecedores({ embedded = false }) {
   const [fornecedores, setFornecedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
@@ -66,12 +66,22 @@ export default function CciFornecedores() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Fornecedores CCI" description="Cadastro de fornecedores da CCI">
-        <button onClick={() => setModal({ open: true, data: null })}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Novo Fornecedor
-        </button>
-      </PageHeader>
+      {!embedded && (
+        <PageHeader title="Fornecedores CCI" description="Cadastro de fornecedores da CCI">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Fornecedor
+          </button>
+        </PageHeader>
+      )}
+      {embedded && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Fornecedor
+          </button>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200/60 p-3 mb-4">
         <div className="relative max-w-md">

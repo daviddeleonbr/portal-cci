@@ -1,7 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
-export default function Modal({ open, onClose, title, children, size = 'md' }) {
+// `footer`: opcional. Renderizado FORA do scroll container — fica fixo
+// na base do modal mesmo quando o conteúdo rola.
+export default function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   const sizes = {
     sm: 'max-w-md',
     md: 'max-w-lg',
@@ -37,9 +39,14 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="overflow-y-auto p-6">
+            <div className="overflow-y-auto p-6 flex-1">
               {children}
             </div>
+            {footer && (
+              <div className="px-6 py-3 border-t border-gray-100 dark:border-white/10 bg-white dark:bg-slate-900 rounded-b-2xl">
+                {footer}
+              </div>
+            )}
           </motion.div>
         </div>
       )}

@@ -18,7 +18,7 @@ const TIPO_OPERACAO = {
   outro:              { label: 'Outro',                       color: 'bg-gray-100 text-gray-600 border-gray-200' },
 };
 
-export default function CciMotivos() {
+export default function CciMotivos({ embedded = false }) {
   const [motivos, setMotivos] = useState([]);
   const [contas, setContas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,12 +84,22 @@ export default function CciMotivos() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Motivos de Movimentação" description="Templates contábeis que definem o par Debito/Credito de cada tipo de operação">
-        <button onClick={() => setModal({ open: true, data: null })}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Novo Motivo
-        </button>
-      </PageHeader>
+      {!embedded && (
+        <PageHeader title="Motivos de Movimentação" description="Templates contábeis que definem o par Debito/Credito de cada tipo de operação">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Motivo
+          </button>
+        </PageHeader>
+      )}
+      {embedded && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Motivo
+          </button>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-200/60 p-3 mb-4 flex flex-wrap items-center gap-2">

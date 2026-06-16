@@ -27,7 +27,7 @@ function calcStatus(c) {
   return 'aberto';
 }
 
-export default function CciContasPagar() {
+export default function CciContasPagar({ embedded = false }) {
   const [contas, setContas] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [planoContas, setPlanoContas] = useState([]);
@@ -143,12 +143,22 @@ export default function CciContasPagar() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Contas a Pagar (CCI)" description="Controle de obrigações financeiras da CCI">
-        <button onClick={() => setModal({ open: true, data: null })}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Nova Conta
-        </button>
-      </PageHeader>
+      {!embedded && (
+        <PageHeader title="Contas a Pagar (CCI)" description="Controle de obrigações financeiras da CCI">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Nova Conta
+          </button>
+        </PageHeader>
+      )}
+      {embedded && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Nova Conta
+          </button>
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">

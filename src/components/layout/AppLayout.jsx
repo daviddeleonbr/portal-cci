@@ -3,12 +3,13 @@ import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import { PageHeaderProvider } from './PageHeaderContext';
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="min-h-screen relative app-bg">
+    <PageHeaderProvider><div className="min-h-screen relative app-bg">
       {/* Decorative background - gradient mesh */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         {/* Soft blurred color blobs */}
@@ -38,6 +39,6 @@ export default function AppLayout() {
           </motion.div>
         </main>
       </div>
-    </div>
+    </div></PageHeaderProvider>
   );
 }

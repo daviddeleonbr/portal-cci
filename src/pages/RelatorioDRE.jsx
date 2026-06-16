@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -95,6 +95,23 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const [reportReady, setReportReady] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('dre'); // 'dre' | 'empresa' | 'insights'
+
+  // Tabs flutuantes — versão fixa no topo aparece só quando o original
+  // sai da viewport durante o scroll.
+  const tabsAnchorRef = useRef(null);
+  const [tabsFlutuando, setTabsFlutuando] = useState(false);
+  useEffect(() => {
+    const el = tabsAnchorRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setTabsFlutuando(!entry.isIntersecting),
+      // rootMargin negativo no topo: dispara assim que o bloco passa do
+      // cabeçalho. -64px ≈ altura típica do header da aplicação.
+      { threshold: 0, rootMargin: '-64px 0px 0px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   // Mes selecionado da aba "Por Empresa" (so modoRede). Default: ultimo mes do periodo.
   const [mesEmpresaKey, setMesEmpresaKey] = useState(null);
 
@@ -640,75 +657,81 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     return String(candidatos[0].plano_conta_codigo);
   }, [mapeamentos]);
 
+  // ─── Montar lançamentos de UM mês (fonte única usada pelo DRE sintético
+  // e pela aba "Por Empresa") ──────────────────────────────────────
+  // Inclui: títulos receber/pagar + movimentos extras + remessas cartão.
+  // Cada item já vem com _sinal (+1 / -1) e _tipo aplicados.
+  function montarLancamentosDoMes(dados, gridTaxaCartao) {
+    // MOVIMENTO_CONTA: indexa TODOS os movimentos (mapeados ou não) pra
+    // que GRIDs não mapeados apareçam na seção "Contas não mapeadas".
+    // Filtros:
+    //   - `tipoDocumentoOrigem` começando com "TITULO_" é PAGAMENTO de
+    //     título — já foi contado em TITULO_PAGAR/RECEBER. Ignora pra
+    //     não duplicar (regime competência usa título, não pagamento).
+    //   - Sinal vem de m.tipo: "Crédito" = +, "Débito" = -.
+    const movsExtras = (dados.movimentos || []).filter(m => {
+      const cod = String(m.planoContaGerencialCodigo || '');
+      if (!cod || cod === '0') return false;
+      const origem = String(m.tipoDocumentoOrigem || '').toUpperCase();
+      if (origem.startsWith('TITULO_')) return false;
+      return true;
+    }).map(m => {
+      const isCredito = String(m.tipo || '').toLowerCase().startsWith('cr');
+      return {
+        ...m,
+        _sinal: isCredito ? 1 : -1,
+        _tipo: 'movimento',
+        valor: Math.abs(Number(m.valor || 0)),
+        dataMovimento: m.dataMovimento || m.data,
+        descricao: m.descricao || m.historico || '',
+        nomeFornecedor: m.nomePessoa || '',
+        nomeCliente: m.nomePessoa || '',
+        numeroTitulo: m.documento || '',
+      };
+    });
+
+    // CARTAO_REMESSA: cada remessa tem `taxasDespesas` (taxa cobrada
+    // pela adquirente) + `acrescimos` (encargos adicionais). Ambos são
+    // despesas — vão pra conta mapeada como "TAXAS DE CARTAO".
+    const remessasTaxa = gridTaxaCartao
+      ? (dados.remessasCartao || [])
+          .map(r => {
+            const taxas = Math.abs(Number(r.taxasDespesas || 0));
+            const acrescimos = Math.abs(Number(r.acrescimos || 0));
+            const total = taxas + acrescimos;
+            if (total <= 0) return null;
+            return {
+              planoContaGerencialCodigo: gridTaxaCartao,
+              valor: total,
+              _sinal: -1,
+              _tipo: 'remessa-cartao',
+              codigo: `cr-${r.cartaoRemessaCodigo ?? r.codigo}`,
+              dataMovimento: r.dataPagamento || r.dataRecebimento || r.dataRemessa,
+              descricao: `Taxa cartão${r.administradora ? ` · ${r.administradora}` : ''}${acrescimos > 0 ? ` (taxa ${taxas.toFixed(2)} + acréscimo ${acrescimos.toFixed(2)})` : ''}`,
+              numeroTitulo: r.cartaoRemessaReferenciaCodigo || '',
+              nomeFornecedor: r.administradora || '',
+              empresaCodigo: r.empresaCodigo,
+              situacao: 'pago',
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    return [
+      ...(dados.titulosReceber || []).map(t => ({ ...t, _sinal: 1, _tipo: 'receber' })),
+      ...(dados.titulosPagar   || []).map(t => ({ ...t, _sinal: -1, _tipo: 'pagar' })),
+      ...movsExtras,
+      ...remessasTaxa,
+    ];
+  }
+
   // ─── Indexar lancamentos por conta + mes (totais + itens) ──
   function indexarPorConta(dadosMap) {
     const totais = {};       // { codigo: { mesKey: total } }
     const lancamentos = {};  // { codigo: [lancamento, ...] } (todos do periodo)
     const descricoes = {};   // { codigo: "Descrição do plano" } — primeira encontrada
     Object.entries(dadosMap).forEach(([mesKey, dados]) => {
-      // MOVIMENTO_CONTA: indexa TODOS os movimentos (mapeados ou não) pra
-      // que GRIDs não mapeados apareçam na seção "Contas não mapeadas".
-      // O `buildNode` só pega valores de GRIDs mapeados (via mapeamentos),
-      // então os não mapeados ficam visíveis APENAS no card de aviso.
-      // Filtros:
-      //   - `tipoDocumentoOrigem` começando com "TITULO_" é PAGAMENTO de
-      //     título — já foi contado em TITULO_PAGAR/RECEBER. Ignora pra
-      //     não duplicar (regime competência usa título, não pagamento).
-      //   - Sinal vem de m.tipo: "Crédito" = +, "Débito" = -.
-      const movsExtras = (dados.movimentos || []).filter(m => {
-        const cod = String(m.planoContaGerencialCodigo || '');
-        if (!cod || cod === '0') return false;
-        const origem = String(m.tipoDocumentoOrigem || '').toUpperCase();
-        if (origem.startsWith('TITULO_')) return false;
-        return true;
-      }).map(m => {
-        const isCredito = String(m.tipo || '').toLowerCase().startsWith('cr');
-        return {
-          ...m,
-          _sinal: isCredito ? 1 : -1,
-          _tipo: 'movimento',
-          valor: Math.abs(Number(m.valor || 0)),
-          dataMovimento: m.dataMovimento || m.data,
-          descricao: m.descricao || m.historico || '',
-          nomeFornecedor: m.nomePessoa || '',
-          nomeCliente: m.nomePessoa || '',
-          numeroTitulo: m.documento || '',
-        };
-      });
-
-      // CARTAO_REMESSA: cada remessa tem `taxasDespesas` (taxa cobrada
-      // pela adquirente) + `acrescimos` (encargos adicionais). Ambos são
-      // despesas — vão pra conta mapeada como "TAXAS DE CARTAO".
-      const remessasTaxa = gridTaxaCartao
-        ? (dados.remessasCartao || [])
-            .map(r => {
-              const taxas = Math.abs(Number(r.taxasDespesas || 0));
-              const acrescimos = Math.abs(Number(r.acrescimos || 0));
-              const total = taxas + acrescimos;
-              if (total <= 0) return null;
-              return {
-                planoContaGerencialCodigo: gridTaxaCartao,
-                valor: total,
-                _sinal: -1,
-                _tipo: 'remessa-cartao',
-                codigo: `cr-${r.cartaoRemessaCodigo ?? r.codigo}`,
-                dataMovimento: r.dataPagamento || r.dataRecebimento || r.dataRemessa,
-                descricao: `Taxa cartão${r.administradora ? ` · ${r.administradora}` : ''}${acrescimos > 0 ? ` (taxa ${taxas.toFixed(2)} + acréscimo ${acrescimos.toFixed(2)})` : ''}`,
-                numeroTitulo: r.cartaoRemessaReferenciaCodigo || '',
-                nomeFornecedor: r.administradora || '',
-                empresaCodigo: r.empresaCodigo,
-                situacao: 'pago',
-              };
-            })
-            .filter(Boolean)
-        : [];
-
-      const todos = [
-        ...(dados.titulosReceber || []).map(t => ({ ...t, _sinal: 1, _tipo: 'receber' })),
-        ...(dados.titulosPagar || []).map(t => ({ ...t, _sinal: -1, _tipo: 'pagar' })),
-        ...movsExtras,
-        ...remessasTaxa,
-      ];
+      const todos = montarLancamentosDoMes(dados, gridTaxaCartao);
       todos.forEach(t => {
         const codigo = String(t.planoContaGerencialCodigo || '');
         if (!codigo) return;
@@ -1077,10 +1100,13 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     return base;
   }, [dreTree, meses]);
 
-  const totalGeral = useMemo(() =>
-    dreComCalculos.find(n => n.tipo === 'resultado')?.totalPeriodo
-    ?? dreTree.reduce((s, n) => s + n.totalPeriodo, 0)
-  , [dreComCalculos, dreTree]);
+  // Pega o ÚLTIMO node de tipo='resultado' = "Resultado Gerencial Líquido"
+  // (o primeiro normalmente é "Resultado antes do IRPJ/CSLL").
+  const totalGeral = useMemo(() => {
+    const resultados = dreComCalculos.filter(n => n.tipo === 'resultado');
+    return resultados[resultados.length - 1]?.totalPeriodo
+      ?? dreTree.reduce((s, n) => s + n.totalPeriodo, 0);
+  }, [dreComCalculos, dreTree]);
 
   // ─── Resultado por empresa (apenas em modo rede) ─────────
   // Calcula o resultado (receita liquida − custos, conforme mapeamento) por
@@ -1119,21 +1145,25 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       });
     }
 
+    // "Pseudo-empresa" pra lançamentos sem empresaCodigo válido. Só
+    // entra no resultado final se algum lançamento órfão aparecer.
+    const REDE_KEY = '_rede';
+
     Object.values(dadosPorMes).forEach(d => {
-      // Titulos (receita e saida)
-      (d.titulosReceber || []).forEach(t => {
-        const ec = Number(t.empresaCodigo);
-        if (!porEmpresa[ec]) return;
+      // Lançamentos contábeis: títulos + movimentos extras + remessas cartão
+      // (mesma fonte do DRE sintético — `_sinal` já aplicado).
+      const lancs = montarLancamentosDoMes(d, gridTaxaCartao);
+      lancs.forEach(t => {
         const cod = String(t.planoContaGerencialCodigo || '');
-        if (!codigosMapeados.has(cod)) return;
-        porEmpresa[ec].total += Number(t.valor || 0);
-      });
-      (d.titulosPagar || []).forEach(t => {
-        const ec = Number(t.empresaCodigo);
-        if (!porEmpresa[ec]) return;
-        const cod = String(t.planoContaGerencialCodigo || '');
-        if (!codigosMapeados.has(cod)) return;
-        porEmpresa[ec].total -= Number(t.valor || 0);
+        if (!cod || !codigosMapeados.has(cod)) return;
+        const ecRaw = Number(t.empresaCodigo);
+        const bucket = Number.isFinite(ecRaw) && porEmpresa[ecRaw]
+          ? porEmpresa[ecRaw]
+          : (porEmpresa[REDE_KEY] ??= {
+              empresa: { fantasia: 'Rede / Não alocado', razao_social: 'Rede / Não alocado' },
+              empresaCodigo: REDE_KEY, _isRede: true, total: 0,
+            });
+        bucket.total += Number(t.valor || 0) * (t._sinal || 1);
       });
 
       // Vendas: agrega por empresa usando vendaItens + vendas
@@ -1175,7 +1205,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       })),
       totalConsolidado,
     };
-  }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap, mapVendasAutosystem, vendasAutosystemPorMes.atual, meses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap, mapVendasAutosystem, vendasAutosystemPorMes.atual, meses, gridTaxaCartao]);
 
   // ═══════════════════════════════════════════════════════════
   // ABA "POR EMPRESA": mesmo relatorio da mascara DRE, mas com
@@ -1185,7 +1216,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
   // "Colunas" virtuais = uma por empresa da rede. Mesmo shape que meses
   // ({key, label}) para que o renderer DreNodeRows funcione sem mudancas.
-  const colunasEmpresa = useMemo(() => {
+  const colunasEmpresaBase = useMemo(() => {
     if (!modoRede) return [];
     return (cliente?._empresas || [])
       .filter(emp => Number.isFinite(Number(emp.empresa_codigo)))
@@ -1215,15 +1246,20 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     if (!mesEmpresa) return { totais, lancamentos };
     const dados = dadosPorMes[mesEmpresa.key];
     if (!dados) return { totais, lancamentos };
-    const todos = [
-      ...(dados.titulosReceber || []).map(t => ({ ...t, _sinal: 1, _tipo: 'receber' })),
-      ...(dados.titulosPagar || []).map(t => ({ ...t, _sinal: -1, _tipo: 'pagar' })),
-    ];
+    // Mesma fonte do DRE sintético: títulos + movimentos extras + remessas cartão.
+    const todos = montarLancamentosDoMes(dados, gridTaxaCartao);
+    // Bandeira: ao menos 1 lançamento órfão (sem empresaCodigo). Usado
+    // pra decidir se mostramos a coluna virtual "Rede" no header.
+    let temOrfaos = false;
     todos.forEach(t => {
       const codigo = String(t.planoContaGerencialCodigo || '');
       if (!codigo) return;
-      const empKey = String(t.empresaCodigo ?? '');
-      if (!empKey) return;
+      // Lançamento SEM empresaCodigo vai pra coluna virtual '_rede'
+      // (lançamentos centralizados — matriz/holding). Sem essa rede,
+      // o total da quebra por empresa não bate com o DRE sintético.
+      const empKeyRaw = String(t.empresaCodigo ?? '');
+      const empKey = empKeyRaw || '_rede';
+      if (!empKeyRaw) temOrfaos = true;
       const valor = Number(t.valor || 0) * t._sinal;
       if (!totais[codigo]) totais[codigo] = {};
       totais[codigo][empKey] = (totais[codigo][empKey] || 0) + valor;
@@ -1249,8 +1285,21 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         tipo: t._tipo,
       });
     });
-    return { totais, lancamentos };
-  }, [mesEmpresa, dadosPorMes]);
+    return { totais, lancamentos, temOrfaos };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mesEmpresa, dadosPorMes, gridTaxaCartao]);
+
+  // Adiciona coluna virtual "Rede" no fim quando há lançamentos órfãos
+  // (sem empresaCodigo) no mês selecionado. Sem isso, o total não bate
+  // com o DRE sintético.
+  const colunasEmpresa = useMemo(() => {
+    if (!colunasEmpresaBase.length) return colunasEmpresaBase;
+    if (!idxEmpresaFull.temOrfaos) return colunasEmpresaBase;
+    return [
+      ...colunasEmpresaBase,
+      { key: '_rede', label: 'Rede', _isRede: true },
+    ];
+  }, [colunasEmpresaBase, idxEmpresaFull.temOrfaos]);
 
   // Vendas/custo Autosystem do mes selecionado, por (grupo_dre, key, empresaCodigo)
   // — espelha vendasASAtualPorGrupo mas com empresa como "coluna".
@@ -1291,18 +1340,16 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     mapeamentoVendas.forEach(m => { if (m.grupo_dre_id) cfgPorTipo.set(m.tipo, m); });
     if (cfgPorTipo.size === 0) return porGrupo;
 
-    // Agrupa itens e vendas por empresa pra agregar cada empresa separadamente
+    // Agrupa itens e vendas por empresa. Sem empresaCodigo → coluna '_rede'.
     const itensPorEmp = new Map();
     (dados.vendaItens || []).forEach(item => {
-      const ec = String(item.empresaCodigo ?? '');
-      if (!ec) return;
+      const ec = String(item.empresaCodigo ?? '') || '_rede';
       if (!itensPorEmp.has(ec)) itensPorEmp.set(ec, []);
       itensPorEmp.get(ec).push(item);
     });
     const vendasPorEmp = new Map();
     (dados.vendas || []).forEach(v => {
-      const ec = String(v.empresaCodigo ?? '');
-      if (!ec) return;
+      const ec = String(v.empresaCodigo ?? '') || '_rede';
       if (!vendasPorEmp.has(ec)) vendasPorEmp.set(ec, new Map());
       vendasPorEmp.get(ec).set(v.vendaCodigo || v.codigo, v);
     });
@@ -1484,10 +1531,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     return base;
   }, [dreTreeEmpresa, colunasEmpresa]);
 
-  const totalGeralEmpresa = useMemo(() =>
-    dreComCalculosEmpresa.find(n => n.tipo === 'resultado')?.totalPeriodo
-    ?? dreTreeEmpresa.reduce((s, n) => s + n.totalPeriodo, 0)
-  , [dreComCalculosEmpresa, dreTreeEmpresa]);
+  // Pega o ÚLTIMO node de tipo='resultado' = "Resultado Gerencial Líquido".
+  const totalGeralEmpresa = useMemo(() => {
+    const resultados = dreComCalculosEmpresa.filter(n => n.tipo === 'resultado');
+    return resultados[resultados.length - 1]?.totalPeriodo
+      ?? dreTreeEmpresa.reduce((s, n) => s + n.totalPeriodo, 0);
+  }, [dreComCalculosEmpresa, dreTreeEmpresa]);
 
   const toggleGrupo = (id) => {
     setExpandedGrupos(prev => {
@@ -1748,30 +1797,36 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         </div>
       </div>
 
-      {/* Tabs DRE | Por Empresa | Insights (oculto na impressao) */}
+      {/* Tabs DRE | Por Empresa | Insights — versão inline + versão flutuante
+          quando o usuário rola e o original sai da viewport. */}
       {reportReady && (
-        <div className="flex items-center gap-0.5 mb-4 bg-gray-100/80 rounded-lg p-0.5 w-fit no-print">
-          <button onClick={() => setActiveTab('dre')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
-              activeTab === 'dre' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <Table className="h-3.5 w-3.5" /> DRE
-          </button>
-          {modoRede && colunasEmpresa.length > 0 && (
-            <button onClick={() => setActiveTab('empresa')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
-                activeTab === 'empresa' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}>
-              <Building2 className="h-3.5 w-3.5" /> Por Empresa
-            </button>
-          )}
-          <button onClick={() => setActiveTab('insights')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
-              activeTab === 'insights' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <Sparkles className="h-3.5 w-3.5" /> Insights
-          </button>
-        </div>
+        <>
+          <div ref={tabsAnchorRef}>
+            <TabsBar
+              activeTab={activeTab} setActiveTab={setActiveTab}
+              mostrarEmpresa={modoRede && colunasEmpresa.length > 0}
+            />
+          </div>
+          <AnimatePresence>
+            {tabsFlutuando && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+                className="fixed top-4 left-1/2 -translate-x-1/2 z-40 no-print"
+              >
+                <div className="bg-white shadow-lg shadow-gray-900/10 border border-gray-200/80 rounded-xl px-1 py-1">
+                  <TabsBar
+                    activeTab={activeTab} setActiveTab={setActiveTab}
+                    mostrarEmpresa={modoRede && colunasEmpresa.length > 0}
+                    floating
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
       )}
 
       {/* Loading state - exibido enquanto dados nao estao prontos OU memos ainda computando */}
@@ -1824,7 +1879,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-gray-800">{mascaraSelecionada?.nome}</h3>
                     <p className="text-[11px] text-gray-400">
-                      Por empresa · {mesEmpresa?.label || '—'} · {colunasEmpresa.length} empresas
+                      Por empresa · {mesEmpresa?.label || '—'} · {colunasEmpresaBase.length} empresas
+                      {idxEmpresaFull.temOrfaos && <span className="text-blue-500"> + rede</span>}
                     </p>
                   </div>
                 </div>
@@ -1862,11 +1918,14 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                       <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">Conta</th>
                       {colunasEmpresa.map(c => (
                         <>
-                          <th key={`${c.key}-h`} title={c._empresa ? labelEmpresa(c._empresa) : c.label}
-                            className="text-right px-2 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap truncate max-w-[90px]">
+                          <th key={`${c.key}-h`}
+                            title={c._isRede
+                              ? 'Lançamentos da rede sem empresa específica (matriz, despesas centralizadas, rateios). Inclui pra fechar o total com o DRE sintético.'
+                              : (c._empresa ? labelEmpresa(c._empresa) : c.label)}
+                            className={`text-right px-2 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap truncate max-w-[90px] ${c._isRede ? 'bg-blue-50/60 text-blue-700' : ''}`}>
                             {c.label}
                           </th>
-                          <th key={`${c.key}-hav`} className="text-right px-1 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 whitespace-nowrap">AV%</th>
+                          <th key={`${c.key}-hav`} className={`text-right px-1 py-2.5 font-medium text-[9px] tracking-wider whitespace-nowrap ${c._isRede ? 'bg-blue-50/60 text-blue-400' : 'text-gray-400'}`}>AV%</th>
                         </>
                       ))}
                       {mostrarTotal && (
@@ -1923,10 +1982,13 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {resultadoPorEmpresa.empresas.map((p, i) => (
-                      <tr key={p.empresaCodigo} className="hover:bg-gray-50/60">
-                        <td className="px-4 py-2 text-[11px] text-gray-400 font-mono">{i + 1}</td>
-                        <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa ? labelEmpresa(p.empresa) : `#${p.empresaCodigo}`}</td>
-                        <td className="px-4 py-2 text-[11px] text-gray-500 font-mono">{p.empresa?.cnpj ? labelCnpj(p.empresa.cnpj) : '—'}</td>
+                      <tr key={p.empresaCodigo} className={`hover:bg-gray-50/60 ${p._isRede ? 'bg-blue-50/40' : ''}`}>
+                        <td className="px-4 py-2 text-[11px] text-gray-400 font-mono">{p._isRede ? '—' : i + 1}</td>
+                        <td className={`px-4 py-2 text-[12.5px] font-medium ${p._isRede ? 'text-blue-700 italic' : 'text-gray-800'}`}
+                          title={p._isRede ? 'Lançamentos sem empresa específica (matriz, despesas centralizadas, rateios)' : undefined}>
+                          {p._isRede ? 'Rede / Não alocado' : (p.empresa ? labelEmpresa(p.empresa) : `#${p.empresaCodigo}`)}
+                        </td>
+                        <td className="px-4 py-2 text-[11px] text-gray-500 font-mono">{p._isRede ? '—' : (p.empresa?.cnpj ? labelCnpj(p.empresa.cnpj) : '—')}</td>
                         <td className={`px-4 py-2 text-right font-mono text-[12.5px] font-semibold tabular-nums ${p.total >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                           {formatCurrency(p.total)}
                         </td>
@@ -2522,5 +2584,42 @@ function AHBadge({ atual, anterior, small }) {
     }`}>
       {positivo ? '▲' : '▼'} {Math.abs(variacao).toFixed(1)}%
     </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// TabsBar — DRE | Por Empresa | Insights.
+// Usada inline + na versão flutuante (idêntica visualmente exceto pelo
+// container externo, que é o pai quem decide).
+// ═══════════════════════════════════════════════════════════
+function TabsBar({ activeTab, setActiveTab, mostrarEmpresa, floating = false }) {
+  // No modo flutuante, removemos o background do container interno —
+  // o container externo já dá a estética de "card flutuante".
+  const containerCls = floating
+    ? 'flex items-center gap-0.5'
+    : 'flex items-center gap-0.5 mb-4 bg-gray-100/80 rounded-lg p-0.5 w-fit no-print';
+  return (
+    <div className={containerCls}>
+      <button onClick={() => setActiveTab('dre')}
+        className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+          activeTab === 'dre' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+        }`}>
+        <Table className="h-3.5 w-3.5" /> DRE
+      </button>
+      {mostrarEmpresa && (
+        <button onClick={() => setActiveTab('empresa')}
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+            activeTab === 'empresa' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}>
+          <Building2 className="h-3.5 w-3.5" /> Por Empresa
+        </button>
+      )}
+      <button onClick={() => setActiveTab('insights')}
+        className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+          activeTab === 'insights' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+        }`}>
+        <Sparkles className="h-3.5 w-3.5" /> Insights
+      </button>
+    </div>
   );
 }

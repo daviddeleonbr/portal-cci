@@ -16,6 +16,7 @@ import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as autosystemService from '../services/autosystemService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
+import { buscarCep } from '../services/viacepService';
 
 // Mascara IP exibindo apenas o primeiro e o ultimo octeto (ex.: 187.***.***.45).
 // Hostnames (sem 4 octetos) caem num fallback que mostra so primeiro/ultimo caractere.
@@ -38,7 +39,7 @@ function mascararIp(ip) {
   return `${ip[0]}***${ip[ip.length - 1]}`;
 }
 
-export default function Clientes() {
+export default function Clientes({ embedded = false }) {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -193,12 +194,22 @@ export default function Clientes() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Clientes" description="Gestão de clientes e empresas atendidas">
-        <button onClick={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Novo Cliente
-        </button>
-      </PageHeader>
+      {!embedded && (
+        <PageHeader title="Clientes" description="Gestão de clientes e empresas atendidas">
+          <button onClick={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Cliente
+          </button>
+        </PageHeader>
+      )}
+      {embedded && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Cliente
+          </button>
+        </div>
+      )}
 
       {/* KPIs - sem Receita Mensal */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -1278,7 +1289,32 @@ const STEPS = [
 
 function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitLabel = 'Salvar' }) {
   const [stepIndex, setStepIndex] = useState(0);
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [erroCep, setErroCep] = useState('');
   const setField = (field, value) => setForm(f => ({ ...f, [field]: value }));
+
+  // Busca endereço no ViaCEP quando o CEP fica com 8 dígitos
+  const handleCepChange = async (raw) => {
+    setField('cep', raw);
+    setErroCep('');
+    const limpo = raw.replace(/\D/g, '');
+    if (limpo.length !== 8) return;
+    try {
+      setBuscandoCep(true);
+      const dados = await buscarCep(limpo);
+      if (!dados) { setErroCep('CEP não encontrado'); return; }
+      // Preenche só campos vazios — não sobrescreve edição manual
+      setForm(f => ({
+        ...f,
+        endereco: f.endereco || dados.endereco || '',
+        bairro:   f.bairro   || dados.bairro   || '',
+        cidade:   f.cidade   || dados.cidade   || '',
+        estado:   f.estado   || dados.estado   || '',
+      }));
+    } catch (err) {
+      setErroCep(err.message);
+    } finally { setBuscandoCep(false); }
+  };
 
   const isLast = stepIndex === STEPS.length - 1;
   const canAdvance = stepIndex === 0 ? !!form.nome?.trim() : true;
@@ -1406,23 +1442,35 @@ function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitL
             <motion.div key="step3" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
               className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Endereço</label>
-                <input type="text" autoFocus value={form.endereco || ''} onChange={e => setField('endereco', e.target.value)}
-                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-2">
+                  CEP
+                  {buscandoCep && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
+                  {erroCep && <span className="text-rose-600 text-[10.5px] font-normal">{erroCep}</span>}
+                </label>
+                <input type="text" autoFocus value={form.cep || ''}
+                  onChange={e => handleCepChange(e.target.value)}
+                  placeholder="00000-000"
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                <p className="text-[10.5px] text-gray-400 mt-1">Digite o CEP completo e o restante do endereço será preenchido automaticamente.</p>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
+                <div className="col-span-3">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Endereço (Rua, Av.)</label>
+                  <input type="text" value={form.endereco || ''} onChange={e => setField('endereco', e.target.value)}
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Número</label>
                   <input type="text" value={form.numero || ''} onChange={e => setField('numero', e.target.value)}
                     className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Bairro</label>
-                  <input type="text" value={form.bairro || ''} onChange={e => setField('bairro', e.target.value)}
-                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                </div>
               </div>
-              <div className="grid grid-cols-6 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Bairro</label>
+                <input type="text" value={form.bairro || ''} onChange={e => setField('bairro', e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+              <div className="grid grid-cols-4 gap-3">
                 <div className="col-span-3">
                   <label className="block text-xs font-medium text-gray-700 mb-1">Cidade</label>
                   <input type="text" value={form.cidade || ''} onChange={e => setField('cidade', e.target.value)}
@@ -1432,11 +1480,6 @@ function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitL
                   <label className="block text-xs font-medium text-gray-700 mb-1">UF</label>
                   <input type="text" maxLength={2} value={form.estado || ''} onChange={e => setField('estado', e.target.value.toUpperCase())}
                     className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm uppercase focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">CEP</label>
-                  <input type="text" value={form.cep || ''} onChange={e => setField('cep', e.target.value)}
-                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                 </div>
               </div>
             </motion.div>

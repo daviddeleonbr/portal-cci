@@ -15,6 +15,24 @@ export const PRIORIDADES = [
 
 // ─── Admin: CRUD ─────────────────────────────────────────────
 
+// Conta pendências abertas (status='aberta'). Usado pelo badge da
+// sidebar — admin vê todas; cliente filtra por escopo (rede/cliente).
+export async function contarAbertasAdmin() {
+  const { count, error } = await supabase
+    .from('cci_pendencias')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'aberta');
+  if (error) throw error;
+  return count || 0;
+}
+
+// Versão pro cliente: usa a mesma regra de visibilidade do modal de login
+// (escopo + janela + recorrência), mas só retorna count.
+export async function contarAbertasCliente({ clienteId, clientesIds, chaveApiId }) {
+  const lista = await pendenciasAtivasParaCliente({ clienteId, clientesIds, chaveApiId });
+  return lista.length;
+}
+
 export async function listarPendencias({ status = null, chaveApiId = null, clienteId = null } = {}) {
   let q = supabase
     .from('cci_pendencias')

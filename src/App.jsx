@@ -10,6 +10,7 @@ import AppLayout from './components/layout/AppLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Financeiro from './pages/Financeiro';
+import Cadastros from './pages/Cadastros';
 import NotasFiscais from './pages/NotasFiscais';
 import Boletos from './pages/Boletos';
 import Clientes from './pages/Clientes';
@@ -120,9 +121,13 @@ export default function App() {
         <Route element={<RequireAdmin><AppLayout /></RequireAdmin>}>
           <Route path="/admin/dashboard" element={<Dashboard />} />
 
-          {/* Cadastros */}
-          <Route path="/admin/clientes" element={<Clientes />} />
-          <Route path="/admin/colaboradores" element={<Colaboradores />} />
+          {/* Cadastros — página única com tabs (Clientes, Colaboradores,
+              Usuários, Fornecedores, Plano de Contas, Motivos).
+              Todos os paths antigos continuam funcionando — a URL controla
+              a aba inicial. */}
+          <Route path="/admin/cadastros"     element={<Cadastros />} />
+          <Route path="/admin/clientes"      element={<Cadastros />} />
+          <Route path="/admin/colaboradores" element={<Cadastros />} />
 
           {/* Parametros (tabs: Mascaras DRE | Mapeamento) */}
           <Route path="/admin/parametros" element={<Parametros />}>
@@ -137,16 +142,17 @@ export default function App() {
           <Route path="/admin/parametrizacoes/mascaras" element={<Navigate to="/admin/parametros/mascaras" replace />} />
           <Route path="/admin/parametrizacoes/mapeamento" element={<Navigate to="/admin/parametros/mapeamento" replace />} />
 
-          {/* Cadastros CCI */}
-          <Route path="/admin/cadastros/plano-contas" element={<CciPlanoContas />} />
-          <Route path="/admin/cadastros/fornecedores" element={<CciFornecedores />} />
-          <Route path="/admin/cadastros/motivos" element={<CciMotivos />} />
-          <Route path="/admin/cadastros/usuarios" element={<CciUsuarios />} />
+          {/* Cadastros CCI — todos os paths abrem a página única <Cadastros /> */}
+          <Route path="/admin/cadastros/plano-contas" element={<Cadastros />} />
+          <Route path="/admin/cadastros/fornecedores" element={<Cadastros />} />
+          <Route path="/admin/cadastros/motivos"     element={<Cadastros />} />
+          <Route path="/admin/cadastros/usuarios"    element={<Cadastros />} />
 
-          {/* Financeiro CCI */}
-          <Route path="/admin/financeiro" element={<CciContasPagar />} />
-          <Route path="/admin/financeiro/contas-pagar" element={<CciContasPagar />} />
-          <Route path="/admin/financeiro/contas-receber" element={<Boletos />} />
+          {/* Financeiro CCI — página única com tabs (Contas a Pagar / Receber).
+              Os 3 paths abrem o mesmo componente; a URL controla a aba inicial. */}
+          <Route path="/admin/financeiro"                 element={<Financeiro />} />
+          <Route path="/admin/financeiro/contas-pagar"    element={<Financeiro />} />
+          <Route path="/admin/financeiro/contas-receber"  element={<Financeiro />} />
           <Route path="/admin/boletos" element={<Boletos />} />
 
           {/* Fiscal */}

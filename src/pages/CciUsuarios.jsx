@@ -12,7 +12,7 @@ import * as clientesService from '../services/clientesService';
 import * as mapeamentoService from '../services/mapeamentoService';
 import * as autosystemService from '../services/autosystemService';
 
-export default function CciUsuarios() {
+export default function CciUsuarios({ embedded = false }) {
   const [usuarios, setUsuarios] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]); // lista de redes Webposto
@@ -120,12 +120,22 @@ export default function CciUsuarios() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
-      <PageHeader title="Usuários do Sistema" description="Gerenciamento de acessos aos portais admin e cliente">
-        <button onClick={() => setModal({ open: true, data: null })}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Novo Usuário
-        </button>
-      </PageHeader>
+      {!embedded && (
+        <PageHeader title="Usuários do Sistema" description="Gerenciamento de acessos aos portais admin e cliente">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Usuário
+          </button>
+        </PageHeader>
+      )}
+      {embedded && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setModal({ open: true, data: null })}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo Usuário
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">

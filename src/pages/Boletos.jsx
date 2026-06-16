@@ -10,7 +10,7 @@ import { useSimulatedLoading } from '../hooks/useSimulatedLoading';
 import { boletos } from '../data/mockData';
 import { formatCurrency, formatDate } from '../utils/format';
 
-export default function Boletos() {
+export default function Boletos({ embedded = false }) {
   const loading = useSimulatedLoading(500);
   const [modalOpen, setModalOpen] = useState(false);
   const [detailModal, setDetailModal] = useState(null);
@@ -41,7 +41,7 @@ export default function Boletos() {
 
   if (loading) return (
     <div>
-      <PageHeader title="Boletos" description="Gestão de boletos - Banco Inter" />
+      {!embedded && <PageHeader title="Boletos" description="Gestão de boletos - Banco Inter" />}
       <TableSkeleton rows={6} cols={6} />
     </div>
   );
@@ -49,19 +49,34 @@ export default function Boletos() {
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-      <PageHeader title="Boletos" description="Gestão de boletos bancários - Banco Inter">
-        <div className="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-1.5">
-          <Building2 className="h-4 w-4 text-orange-600" />
-          <span className="text-xs font-medium text-orange-700">Banco Inter</span>
+      {!embedded && (
+        <PageHeader title="Boletos" description="Gestão de boletos bancários - Banco Inter">
+          <div className="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-1.5">
+            <Building2 className="h-4 w-4 text-orange-600" />
+            <span className="text-xs font-medium text-orange-700">Banco Inter</span>
+          </div>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            Gerar Boleto
+          </button>
+        </PageHeader>
+      )}
+      {embedded && (
+        <div className="flex items-center justify-end gap-2 mb-4">
+          <div className="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-1.5">
+            <Building2 className="h-4 w-4 text-orange-600" />
+            <span className="text-xs font-medium text-orange-700">Banco Inter</span>
+          </div>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Gerar Boleto
+          </button>
         </div>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          Gerar Boleto
-        </button>
-      </PageHeader>
+      )}
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">

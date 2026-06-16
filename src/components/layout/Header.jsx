@@ -7,6 +7,7 @@ import { logoutAdmin } from '../../lib/auth';
 import { useTheme } from '../../hooks/useTheme';
 import { useAnonimizador } from '../../services/anonimizarService';
 import NotificacoesBell from '../ui/NotificacoesBell';
+import { usePageHeader } from './PageHeaderContext';
 
 export default function Header({ onMenuClick }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -29,6 +30,7 @@ export default function Header({ onMenuClick }) {
   const { tema, alternar } = useTheme();
   const escuro = tema === 'dark';
   const { ativo: demoAtivo, setAtivo: setDemoAtivo } = useAnonimizador();
+  const { title: pageTitle, description: pageDescription } = usePageHeader();
 
   const handleLogout = () => {
     logoutAdmin();
@@ -37,13 +39,23 @@ export default function Header({ onMenuClick }) {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-md px-6">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
-          className="lg:hidden rounded p-2 text-gray-500 hover:bg-gray-100 transition-colors"
+          className="lg:hidden rounded p-2 text-gray-500 hover:bg-gray-100 transition-colors flex-shrink-0"
         >
           <Menu className="h-5 w-5" />
         </button>
+        {/* Título da página — elevado pelo <PageHeader> via context.
+            Fonte menor pra ficar fluido no topbar. */}
+        {pageTitle && (
+          <div className="min-w-0">
+            <h1 className="text-sm font-semibold text-gray-900 leading-tight truncate">{pageTitle}</h1>
+            {pageDescription && (
+              <p className="text-[11px] text-gray-500 leading-tight truncate">{pageDescription}</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">

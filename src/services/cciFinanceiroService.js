@@ -194,7 +194,7 @@ export async function excluirFornecedor(id) {
 export async function listarContasPagar({ status, dataInicial, dataFinal } = {}) {
   let query = supabase
     .from('cci_contas_pagar')
-    .select('*, cci_fornecedores(id, nome, cpf_cnpj), cci_plano_contas(id, código, nome, natureza)')
+    .select('*, cci_fornecedores(id, nome, cpf_cnpj), cci_plano_contas(id, codigo, nome, natureza)')
     .order('vencimento', { ascending: true });
   if (status && status !== 'todos') query = query.eq('status', status);
   if (dataInicial) query = query.gte('vencimento', dataInicial);
@@ -376,7 +376,7 @@ export async function excluirContaPagar(id) {
 export async function listarMotivos(tipoOperacao) {
   let query = supabase
     .from('cci_motivos_movimentacao')
-    .select('*, conta_debito:conta_debito_id(id, código, nome, natureza, grupo), conta_credito:conta_credito_id(id, código, nome, natureza, grupo)')
+    .select('*, conta_debito:conta_debito_id(id, codigo, nome, natureza, grupo), conta_credito:conta_credito_id(id, codigo, nome, natureza, grupo)')
     .order('codigo', { ascending: true });
   if (tipoOperacao) query = query.eq('tipo_operacao', tipoOperacao);
   const { data, error } = await query;
@@ -432,7 +432,7 @@ export async function excluirMotivo(id) {
 export async function listarLancamentosContabeis({ dataInicial, dataFinal, origemTipo, origemId } = {}) {
   let query = supabase
     .from('cci_lancamentos_contabeis')
-    .select('*, motivo:motivo_id(id, código, nome), debito:conta_debito_id(id, código, nome), credito:conta_credito_id(id, código, nome)')
+    .select('*, motivo:motivo_id(id, codigo, nome), debito:conta_debito_id(id, codigo, nome), credito:conta_credito_id(id, codigo, nome)')
     .order('data_competencia', { ascending: false });
   if (dataInicial) query = query.gte('data_competencia', dataInicial);
   if (dataFinal) query = query.lte('data_competencia', dataFinal);

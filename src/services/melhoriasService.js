@@ -58,6 +58,17 @@ export async function criar({ usuario, tipo, titulo, descricao, contexto = {} })
 // ─── Admin ──────────────────────────────────────────────────────
 
 // Lista TODAS as solicitações, com info do remetente e rede.
+// Conta melhorias que requerem ação do admin — exclui já concluídas
+// e não-aprovadas (que estão "fechadas" na visão do admin).
+export async function contarAbertasAdmin() {
+  const { count, error } = await supabase
+    .from('cci_melhorias')
+    .select('*', { count: 'exact', head: true })
+    .not('status', 'in', '(concluida,nao_aprovada)');
+  if (error) throw error;
+  return count || 0;
+}
+
 export async function listarTodas() {
   const { data, error } = await supabase
     .from('cci_melhorias')
