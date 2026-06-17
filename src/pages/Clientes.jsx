@@ -668,6 +668,8 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   const [redeNome, setRedeNome] = useState('');
   const [redeSlug, setRedeSlug] = useState('');
   const [redeSlugEdited, setRedeSlugEdited] = useState(false);
+  // Tipo de conexão: 'tcp' (atual) ou 'https' (proxy via Cloudflare Tunnel)
+  const [redeTipoConexao, setRedeTipoConexao] = useState('tcp');
   const [redeIp, setRedeIp] = useState('');
   const [redeIpMascarado, setRedeIpMascarado] = useState(''); // valor mascarado original em modo edicao; usado pra detectar alteracao
   const [redePorta, setRedePorta] = useState('');
@@ -675,6 +677,13 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   const [redeUsuario, setRedeUsuario] = useState('');
   const [redeSenha, setRedeSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  // Campos HTTPS (Cloudflare). Token nunca vem do banco no front (vem null).
+  // URL vem mascarada (ba***te.exemplo.com) — guardamos o valor mascarado pra
+  // detectar se o admin editou ou manteve.
+  const [redeHttpsUrl, setRedeHttpsUrl] = useState('');
+  const [redeHttpsUrlMascarada, setRedeHttpsUrlMascarada] = useState('');
+  const [redeHttpsToken, setRedeHttpsToken] = useState('');
+  const [mostrarToken, setMostrarToken] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -690,6 +699,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
     setRedeNome('');
     setRedeSlug('');
     setRedeSlugEdited(false);
+    setRedeTipoConexao('tcp');
     setRedeIp('');
     setRedeIpMascarado('');
     setRedePorta('');
@@ -697,6 +707,10 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
     setRedeUsuario('');
     setRedeSenha('');
     setMostrarSenha(false);
+    setRedeHttpsUrl('');
+    setRedeHttpsUrlMascarada('');
+    setRedeHttpsToken('');
+    setMostrarToken(false);
 
     // Modo EDITAR rede Autosystem: pula choice, pre-popula tudo, vai pra rede-form
     if (editandoRede?.id) {
@@ -709,6 +723,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
         try {
           setBuscando(true);
           const cred = await autosystemService.obterCredenciais(editandoRede.id);
+          setRedeTipoConexao(cred?.tipo_conexao || 'tcp');
           // IP mascarado (so primeiro e ultimo octeto). Porta e banco intencionalmente
           // vazios — "deixe em branco para manter o atual" (mesmo padrao da senha).
           const ipMask = mascararIp(cred?.conexao_ip || '');
@@ -718,6 +733,13 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
           setRedeBanco('');
           setRedeUsuario(cred?.conexao_usuario || '');
           setRedeSenha('');
+          // HTTPS: URL vem MASCARADA do banco (ex: ba***te.tuneiscci.app.br)
+          // pra não vazar o subdomínio do cliente. Guardamos o valor mascarado
+          // pra detectar se o admin editou ou manteve igual. Token vem null.
+          const urlMask = cred?.conexao_https_url || '';
+          setRedeHttpsUrl(urlMask);
+          setRedeHttpsUrlMascarada(urlMask);
+          setRedeHttpsToken('');
         } catch (err) {
           showToast?.('error', 'Erro ao carregar credenciais: ' + err.message);
         } finally { setBuscando(false); }
@@ -760,11 +782,12 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
     try {
       setSaving(true);
       if (editandoRede?.id) {
-        // Modo edicao: campos vazios ou inalterados (IP ainda mascarado) = manter atual.
+        // Modo edicao: campos vazios ou inalterados (IP/senha/token) = manter atual.
         // Service preserva o valor quando recebemos undefined no payload.
         const payload = {
           nome: redeNome.trim(),
           slug: redeSlug.trim(),
+          tipo_conexao: redeTipoConexao,
           conexao_usuario: redeUsuario.trim(),
         };
         const ipTrim = redeIp.trim();
@@ -772,17 +795,25 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
         if (redePorta !== '') payload.conexao_porta = redePorta;
         if (redeBanco.trim() !== '') payload.conexao_banco = redeBanco.trim();
         if (redeSenha) payload.senha = redeSenha;
+        // HTTPS — URL vem mascarada (ba***te.exemplo.com). Só envia se o admin
+        // efetivamente alterou (valor != mascarada original). Token só se preenchido.
+        const urlTrim = redeHttpsUrl.trim();
+        if (urlTrim !== '' && urlTrim !== redeHttpsUrlMascarada) payload.conexao_https_url = urlTrim;
+        if (redeHttpsToken) payload.conexao_https_token = redeHttpsToken;
         await autosystemService.atualizarRede(editandoRede.id, payload);
         showToast('success', 'Rede atualizada');
       } else {
         await autosystemService.criarRede({
           nome: redeNome.trim(),
           slug: redeSlug.trim(),
-          conexao_ip: redeIp.trim() || null,
-          conexao_porta: redePorta || null,
-          conexao_banco: redeBanco.trim() || null,
-          conexao_usuario: redeUsuario.trim() || null,
-          senha: redeSenha || null,
+          tipo_conexao: redeTipoConexao,
+          conexao_ip:          redeIp.trim()       || null,
+          conexao_porta:       redePorta           || null,
+          conexao_banco:       redeBanco.trim()    || null,
+          conexao_usuario:     redeUsuario.trim()  || null,
+          senha:               redeSenha           || null,
+          conexao_https_url:   redeHttpsUrl.trim() || null,
+          conexao_https_token: redeHttpsToken      || null,
         });
         showToast('success', 'Rede cadastrada');
       }
@@ -1147,12 +1178,47 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 <p className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
                   Credenciais de conexão ao servidor <strong>{redeNome}</strong>.
                   {editandoRede
-                    ? ' Todos os campos são criptografados antes de serem armazenados. Por segurança, o IP aparece mascarado e os demais campos vêm em branco — preencha apenas o que desejar alterar.'
+                    ? ' Todos os campos são criptografados antes de serem armazenados. Por segurança, IP/senha/token aparecem mascarados ou em branco — preencha apenas o que desejar alterar.'
                     : ' Todos os campos são criptografados antes de serem armazenados.'}
                 </p>
               </div>
             </div>
 
+            {/* Tipo de conexão: TCP direto (IP + porta) ou HTTPS proxy
+                (Cloudflare Tunnel — sem porta aberta no cliente). */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo de conexão</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setRedeTipoConexao('tcp')}
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    redeTipoConexao === 'tcp'
+                      ? 'border-blue-300 bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10'
+                      : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
+                  }`}>
+                  <p className={`text-sm font-medium ${redeTipoConexao === 'tcp' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'}`}>
+                    TCP direto
+                  </p>
+                  <p className="text-[10.5px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    IP externo / DDNS + porta. Cliente abre porta no firewall.
+                  </p>
+                </button>
+                <button type="button" onClick={() => setRedeTipoConexao('https')}
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    redeTipoConexao === 'https'
+                      ? 'border-blue-300 bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10'
+                      : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
+                  }`}>
+                  <p className={`text-sm font-medium ${redeTipoConexao === 'https' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'}`}>
+                    HTTPS via Cloudflare Tunnel
+                  </p>
+                  <p className="text-[10.5px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    Sem porta aberta. Cliente roda proxy HTTPS + cloudflared.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {redeTipoConexao === 'tcp' && (<>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1210,6 +1276,59 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 </div>
               </div>
             </div>
+            </>)}
+
+            {/* Bloco HTTPS — só aparece quando tipo='https' */}
+            {redeTipoConexao === 'https' && (
+              <div className="space-y-3">
+                <div className="rounded-lg bg-emerald-50/60 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-3 text-[11px] text-emerald-900 dark:text-emerald-200 leading-relaxed">
+                  O servidor do cliente deve rodar um proxy HTTPS que aceite
+                  <code className="font-mono mx-1 px-1 bg-emerald-100 dark:bg-emerald-500/20 rounded">POST /query</code>
+                  com <code className="font-mono">{`{ sql, params }`}</code> e retorne <code className="font-mono">{`{ rows }`}</code>.
+                  Exponha esse proxy via Cloudflare Tunnel.
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <Network className="inline h-3 w-3 mr-1" /> URL do proxy (Cloudflare Tunnel)
+                  </label>
+                  <input type="text" value={redeHttpsUrl}
+                    onChange={(e) => setRedeHttpsUrl(e.target.value)}
+                    onBlur={(e) => {
+                      // Auto-prefixa https:// e remove barra final (mesma regra do helper das edges)
+                      const raw = e.target.value.trim();
+                      if (!raw) return;
+                      let v = raw;
+                      if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
+                      setRedeHttpsUrl(v.replace(/\/+$/, ''));
+                    }}
+                    placeholder="https://posto-x.suaempresa.com.br"
+                    className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
+                  <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">
+                    Deve começar com <code className="font-mono">https://</code>. O endpoint <code className="font-mono">/query</code> é adicionado automaticamente.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <Lock className="inline h-3 w-3 mr-1" /> Token de autenticação (Bearer)
+                  </label>
+                  <div className="relative">
+                    <input type={mostrarToken ? 'text' : 'password'} value={redeHttpsToken} autoComplete="new-password"
+                      onChange={(e) => setRedeHttpsToken(e.target.value)}
+                      placeholder={editandoRede ? 'Deixe em branco para manter o atual' : 'token-secreto-gerado-no-cliente'}
+                      className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 pr-10 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
+                    <button type="button" onClick={() => setMostrarToken(o => !o)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 p-1.5">
+                      {mostrarToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">
+                    Enviado em <code className="font-mono">Authorization: Bearer …</code> a cada request.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-white/10">
               <button type="button" onClick={onClose}

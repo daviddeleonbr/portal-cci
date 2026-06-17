@@ -35,7 +35,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { Client as PgClient } from 'https://deno.land/x/postgres@v0.17.0/mod.ts';
+import { obterRede, executarQuery, decodeRowText } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -100,43 +100,13 @@ serve(async (req) => {
     auth: { persistSession: false },
   });
 
-  // 1) Credenciais
-  const { data: credRows, error: credErr } = await supabase.rpc(
-    'as_rede_get_credenciais',
-    { p_id: redeId },
-  );
-  if (credErr) {
-    return json({ error: 'Falha ao buscar credenciais', detail: credErr.message }, 500);
-  }
-  const cred = Array.isArray(credRows) ? credRows[0] : credRows;
-  if (!cred) return json({ error: 'Rede não encontrada' }, 404);
-
-  const { conexao_ip, conexao_porta, conexao_banco, conexao_usuario, conexao_senha } = cred;
-  if (!conexao_ip || !conexao_banco || !conexao_usuario || !conexao_senha) {
-    return json({ error: 'Credenciais incompletas para a rede informada' }, 400);
-  }
-
-  const pg = new PgClient({
-    hostname: conexao_ip,
-    port: conexao_porta || 5432,
-    database: conexao_banco,
-    user: conexao_usuario,
-    password: conexao_senha,
-    tls: { enabled: false },
-  });
-
-  let failedStep = 'connect';
   try {
-    await pg.connect();
-
-    failedStep = 'set_client_encoding';
-    await pg.queryArray("set client_encoding to 'SQL_ASCII'");
+    const rede = await obterRede(supabase, redeId);
 
     // 2) Em aberto = NÃO está em movto_bordero (mesma heurística do
     //    cliente nativo Autosystem). Conta_creditar exatamente '2.1.1'
     //    ou descendentes diretos '2.1.1.%' (LIKE '2.1.1%' pegaria
     //    indevidamente outras contas como 2.1.10, 2.1.11 etc.).
-    failedStep = 'select_contas_pagar';
     const params: unknown[] = [empresaCodigo];
     const conds: string[] = [
       "(m.conta_creditar = '2.1.1' or m.conta_creditar like '2.1.1.%')",
@@ -179,21 +149,10 @@ serve(async (req) => {
       order by m.vencto, m.data, m.documento
     `;
 
-    const result = await pg.queryObject<Record<string, unknown>>({ text: sql, args: params });
+    const result = await executarQuery(rede, sql, params, { encoding: 'SQL_ASCII' });
 
-    // 3) Decoda colunas de texto (Uint8Array → string windows-1252)
-    const decoder = new TextDecoder('windows-1252');
-    const linhas = result.rows.map((row) => {
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(row)) {
-        if (TEXT_COLUMNS.has(k) && v instanceof Uint8Array) {
-          out[k] = decoder.decode(v);
-        } else {
-          out[k] = v;
-        }
-      }
-      return out;
-    });
+    // 3) Decoda colunas de texto (bytea → string windows-1252) — funciona em TCP e HTTPS
+    const linhas = result.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
 
     return json({ contas: linhas });
   } catch (err) {
@@ -201,11 +160,8 @@ serve(async (req) => {
       {
         error: 'Falha ao consultar o servidor Autosystem',
         detail: err instanceof Error ? err.message : String(err),
-        failed_step: failedStep,
       },
       502,
     );
-  } finally {
-    try { await pg.end(); } catch { /* noop */ }
   }
 });

@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import {
   Coins, Loader2, AlertCircle, Calendar, CheckCircle2,
   TrendingUp, TrendingDown, RefreshCw, Lock, History, Save,
-  Building2, ChevronDown,
+  Building2,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import Toast from '../../../components/ui/Toast';
 import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
+import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
+import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
 import * as sangriasService from '../../../services/clienteSangriasService';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
@@ -35,26 +37,17 @@ export default function ClienteSangrias() {
   const session = useClienteSession();
   const asRede = session?.asRede;
   const usuario = session?.usuario;
-  const clientesRede = useMemo(() => session?.clientesRede || [], [session]);
 
-  // Empresas elegíveis (com empresa_codigo preenchido)
-  const empresasDisponiveis = useMemo(
-    () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
-    [clientesRede],
-  );
-
-  // Sangria é por empresa+dia. No portal Autosystem o seletor da topbar
-  // foi removido (cada tela agrega N empresas), então esta tela mantém
-  // um seletor local de empresa única.
-  const [empresaId, setEmpresaId] = useState(empresasDisponiveis[0]?.id || null);
-  useEffect(() => {
-    if (!empresaId && empresasDisponiveis.length > 0) {
-      setEmpresaId(empresasDisponiveis[0].id);
-    }
-  }, [empresasDisponiveis, empresaId]);
+  // Sangria é por empresa+dia. Usa o context compartilhado de empresa ativa
+  // (mesma empresa selecionada em outras páginas Autosystem).
+  const { empresaId, setEmpresaId, empresasDisponiveis } = useEmpresaAtiva();
   const empresa = useMemo(
     () => empresasDisponiveis.find(c => c.id === empresaId) || null,
     [empresasDisponiveis, empresaId],
+  );
+  const empresasSelIds = useMemo(
+    () => new Set(empresaId ? [empresaId] : []),
+    [empresaId],
   );
 
   const [data, setData] = useState(ontemStr());
@@ -266,10 +259,11 @@ export default function ClienteSangrias() {
 
       <PageHeader title="Sangrias - Contagem de Caixa" description="Confira o dinheiro apurado no sistema e registre o apresentado no fechamento de cada funcionário">
         {empresasDisponiveis.length > 1 && (
-          <SeletorEmpresa
-            empresas={empresasDisponiveis}
-            empresaId={empresaId}
-            onChange={setEmpresaId}
+          <EmpresaSeletorCompartilhado
+            single
+            clientesRede={empresasDisponiveis}
+            selecionadas={empresasSelIds}
+            onToggle={(id) => setEmpresaId(id)}
           />
         )}
         <button onClick={() => setMostrarHistorico(!mostrarHistorico)}
@@ -672,63 +666,3 @@ function Kpi({ label, valor, icon: Icon, color }) {
   );
 }
 
-// Seletor single de empresa (sangria é por empresa+dia)
-function SeletorEmpresa({ empresas, empresaId, onChange }) {
-  const [aberto, setAberto] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, []);
-
-  const atual = empresas.find(e => e.id === empresaId);
-  const label = atual?.nome || 'Selecione';
-
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setAberto(o => !o)}
-        className={`h-10 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-sm transition-colors min-w-[220px] max-w-[320px] font-medium ${
-          aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800 bg-white' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
-        }`}>
-        <Building2 className="h-4 w-4 text-blue-500 flex-shrink-0" />
-        <span className="truncate flex-1 text-left">{label}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence>
-        {aberto && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.12 }}
-            className="absolute right-0 top-full mt-1 w-80 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
-            <div className="max-h-72 overflow-y-auto">
-              {empresas.map(emp => {
-                const ativa = emp.id === empresaId;
-                return (
-                  <button key={emp.id} type="button"
-                    onClick={() => { onChange(emp.id); setAberto(false); }}
-                    className={`w-full flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors text-left ${
-                      ativa ? 'bg-blue-50/60' : ''
-                    }`}>
-                    <div className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      ativa ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      <Building2 className="h-3.5 w-3.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-[12.5px] truncate ${ativa ? 'text-blue-900 font-semibold' : 'text-gray-800'}`}>{emp.nome}</p>
-                      {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
-                    </div>
-                    {ativa && <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}

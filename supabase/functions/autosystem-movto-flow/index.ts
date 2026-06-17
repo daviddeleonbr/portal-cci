@@ -23,7 +23,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { Client as PgClient } from 'https://deno.land/x/postgres@v0.17.0/mod.ts';
+import { obterRede, withConexao, decodeBytea } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -82,49 +82,33 @@ serve(async (req) => {
   }
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { data: credRows, error: credErr } = await supabase.rpc('as_rede_get_credenciais', { p_id: redeId });
-  if (credErr) return json({ error: 'Falha ao buscar credenciais', detail: credErr.message }, 500);
-  const cred = Array.isArray(credRows) ? credRows[0] : credRows;
-  if (!cred) return json({ error: 'Rede não encontrada' }, 404);
-
-  const pg = new PgClient({
-    hostname: cred.conexao_ip,
-    port: cred.conexao_porta || 5432,
-    database: cred.conexao_banco,
-    user: cred.conexao_usuario,
-    password: cred.conexao_senha,
-    tls: { enabled: false },
-  });
-
   const empresasNum = empresaCodigos.map(v => Number(v)).filter(n => Number.isFinite(n));
-  const decoder = new TextDecoder('windows-1252');
+  // Decoda toda coluna que veio como bytea (Uint8Array em TCP, {type:'Buffer',...} em HTTPS).
+  const isBytea = (v: unknown): boolean => {
+    if (v instanceof Uint8Array) return true;
+    if (typeof v === 'object' && v !== null && (v as any).type === 'Buffer' && Array.isArray((v as any).data)) return true;
+    return false;
+  };
   const decodeRow = (row: Record<string, unknown>) => {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(row)) {
-      if (v instanceof Uint8Array) out[k] = decoder.decode(v);
+      if (isBytea(v)) out[k] = decodeBytea(v, 'windows-1252');
       else out[k] = v;
     }
     return out;
   };
 
-  let failedStep = 'connect';
   try {
-    await pg.connect();
+    const rede = await obterRede(supabase, redeId);
 
-    failedStep = 'set_client_encoding';
-    await pg.queryArray("set client_encoding to 'SQL_ASCII'");
-
+    const out = await withConexao(rede, async (run) => {
     // 1) Schema de movto_flow
-    failedStep = 'select_schema';
-    const schemaRes = await pg.queryObject<Record<string, unknown>>({
-      text: `
+    const schema = await run(`
         select column_name, data_type, ordinal_position
         from information_schema.columns
         where table_name = 'movto_flow'
         order by ordinal_position
-      `,
-    });
-    const schema = schemaRes.rows;
+      `);
     const colunas = new Set(
       schema.map(r => String((r as any).column_name || '').toLowerCase()),
     );
@@ -185,11 +169,9 @@ serve(async (req) => {
     // Só anexa se a tabela conta existir e movto_flow tiver as colunas.
     let contasJoin = '';
     if (has('conta_debitar') || has('conta_creditar')) {
-      const schemaContaRes = await pg.queryObject<Record<string, unknown>>({
-        text: `select column_name from information_schema.columns where table_name = 'conta'`,
-      });
+      const schemaContaRes = await run(`select column_name from information_schema.columns where table_name = 'conta'`);
       const colunasConta = new Set(
-        schemaContaRes.rows.map(r => String((r as any).column_name || '').toLowerCase()),
+        schemaContaRes.map(r => String((r as any).column_name || '').toLowerCase()),
       );
       if (colunasConta.has('codigo') && colunasConta.has('nome')) {
         if (has('conta_debitar')) {
@@ -213,11 +195,9 @@ serve(async (req) => {
     // mf.motivo é uma FK pra motivo_movto.grid.
     let motivoJoin = '';
     if (has('motivo')) {
-      const schemaMotivoRes = await pg.queryObject<Record<string, unknown>>({
-        text: `select column_name from information_schema.columns where table_name = 'motivo_movto'`,
-      });
+      const schemaMotivoRes = await run(`select column_name from information_schema.columns where table_name = 'motivo_movto'`);
       const colunasMotivo = new Set(
-        schemaMotivoRes.rows.map(r => String((r as any).column_name || '').toLowerCase()),
+        schemaMotivoRes.map(r => String((r as any).column_name || '').toLowerCase()),
       );
       if (colunasMotivo.has('grid') && colunasMotivo.has('nome')) {
         motivoJoin = `,
@@ -268,11 +248,9 @@ serve(async (req) => {
       }
     } else if (has('movto')) {
       // Fallback: tenta JOIN com movto se o snapshot não trouxer as contas
-      const schemaMovtoRes = await pg.queryObject<Record<string, unknown>>({
-        text: `select column_name from information_schema.columns where table_name = 'movto'`,
-      });
+      const schemaMovtoRes = await run(`select column_name from information_schema.columns where table_name = 'movto'`);
       const colunasMovto = new Set(
-        schemaMovtoRes.rows.map(r => String((r as any).column_name || '').toLowerCase()),
+        schemaMovtoRes.map(r => String((r as any).column_name || '').toLowerCase()),
       );
       if (colunasMovto.has('conta_debitar') && colunasMovto.has('conta_creditar')) {
         filtroContas = `
@@ -299,11 +277,9 @@ serve(async (req) => {
     // pra popular o filtro de usuário na UI sem precisar carregar todos os eventos.
     if (mode === 'usuarios') {
       if (!colUsuario) {
-        return json({ usuarios: [] });
+        return { kind: 'usuarios' as const, usuarios: [] as Record<string, unknown>[] };
       }
-      failedStep = 'select_usuarios';
-      const usuariosRes = await pg.queryObject<Record<string, unknown>>({
-        text: `
+      const usuariosRes = await run(`
           select
             u.usuario,
             (select convert_to(coalesce(pe.nome::text,''), 'LATIN1')
@@ -321,22 +297,18 @@ serve(async (req) => {
               and trim(mf.${colUsuario}::text) <> ''
           ) u
           order by u.usuario
-        `,
-        args: [empresasNum, data_de, data_ate],
-      });
-      const usuarios = usuariosRes.rows.map(decodeRow);
-      return json({ usuarios });
+        `, [empresasNum, data_de, data_ate]);
+      const usuarios = usuariosRes.map(decodeRow);
+      return { kind: 'usuarios' as const, usuarios };
     }
 
     // Modo `usuarios_originais`: retorna lista distinta da coluna `usuario`
     // (usuário original do lançamento, diferente do pgd_username do log).
     if (mode === 'usuarios_originais') {
       if (!has('usuario')) {
-        return json({ usuarios: [] });
+        return { kind: 'usuarios' as const, usuarios: [] as Record<string, unknown>[] };
       }
-      failedStep = 'select_usuarios_originais';
-      const res = await pg.queryObject<Record<string, unknown>>({
-        text: `
+      const res = await run(`
           select distinct convert_to(mf.usuario::text, 'LATIN1') as usuario
           from movto_flow mf
           where mf.${colEmpresa} = any($1::bigint[])
@@ -345,19 +317,15 @@ serve(async (req) => {
             and mf.usuario is not null
             and trim(mf.usuario::text) <> ''
           order by 1
-        `,
-        args: [empresasNum, data_de, data_ate],
-      });
-      const usuarios = res.rows.map(decodeRow);
-      return json({ usuarios });
+        `, [empresasNum, data_de, data_ate]);
+      const usuarios = res.map(decodeRow);
+      return { kind: 'usuarios' as const, usuarios };
     }
 
     // Filtro direto na movto_flow — sem CTE, sem self-join. O range de data é
     // expresso de forma index-friendly (sem cast no LHS) pra permitir uso de
     // qualquer btree existente em mf.data.
-    failedStep = 'select_alteracoes';
-    const alterRes = await pg.queryObject<Record<string, unknown>>({
-      text: `
+    const alterRes = await run(`
         select mf.* ${aliasesClause} ${usuarioJoin} ${contasJoin} ${motivoJoin}
         from movto_flow mf
         where mf.${colEmpresa} = any($1::bigint[])
@@ -370,11 +338,10 @@ serve(async (req) => {
         order by ${orderBy}
         limit $4
       `,
-      args: contasExcluidas.length > 0
+      contasExcluidas.length > 0
         ? [empresasNum, data_de, data_ate, limit, contasExcluidas]
-        : [empresasNum, data_de, data_ate, limit],
-    });
-    const alteracoes = alterRes.rows.map(decodeRow);
+        : [empresasNum, data_de, data_ate, limit]);
+    const alteracoes = alterRes.map(decodeRow);
 
     // No novo modelo do movto_flow, pares de eventos (D+I para alteração manual,
     // Uo+Un para ajuste automático) compartilham o mesmo `pgd_when`. Se o
@@ -382,10 +349,10 @@ serve(async (req) => {
     // não é necessário lookup adicional. Removido o orphan-fetch que existia
     // no modelo antigo.
 
-    return json({
+    return {
+      kind: 'eventos' as const,
       schema,
       alteracoes,
-      total: alteracoes.length,
       colunas_detectadas: {
         when: colWhen,
         data_filtro: colDataFiltro,
@@ -395,17 +362,25 @@ serve(async (req) => {
         optype: colOptype,
         gfid: colGfid,
       },
+    };
+    }, { encoding: 'SQL_ASCII' });
+
+    if (out.kind === 'usuarios') {
+      return json({ usuarios: out.usuarios });
+    }
+    return json({
+      schema: out.schema,
+      alteracoes: out.alteracoes,
+      total: out.alteracoes.length,
+      colunas_detectadas: out.colunas_detectadas,
     });
   } catch (err) {
     return json(
       {
         error: 'Falha ao consultar o servidor Autosystem',
         detail: err instanceof Error ? err.message : String(err),
-        failed_step: failedStep,
       },
       502,
     );
-  } finally {
-    try { await pg.end(); } catch { /* noop */ }
   }
 });

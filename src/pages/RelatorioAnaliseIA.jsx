@@ -147,7 +147,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         mesRef,
         onProgress: setProgress,
       });
-      setProgress('Enviando para Claude...');
+      setProgress('Processando análise...');
       const r = await vendasIA.gerarAnaliseVendasIA(dados, apiKey, { modoRede });
       setResultados(prev => ({ ...prev, vendas: { insights: r.insights, usage: r.usage, dados, mesKey } }));
     } catch (e) { setErr(e.message || String(e)); }
@@ -169,7 +169,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         mesRef,
         onProgress: setProgress,
       });
-      setProgress('Enviando para Claude...');
+      setProgress('Processando análise...');
       const r = await dreIA.gerarAnaliseDREIA(dados, apiKey);
       setResultados(prev => ({ ...prev, dre: { insights: r.insights, usage: r.usage, dados, mesKey } }));
     } catch (e) { setErr(e.message || String(e)); }
@@ -191,7 +191,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         mesRef,
         onProgress: setProgress,
       });
-      setProgress('Enviando para Claude...');
+      setProgress('Processando análise...');
       const r = await fluxoIA.gerarAnaliseFluxoIA(dados, apiKey);
       setResultados(prev => ({ ...prev, fluxo: { insights: r.insights, usage: r.usage, dados, mesKey } }));
     } catch (e) { setErr(e.message || String(e)); }
@@ -503,7 +503,7 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
         <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-12 text-center shadow-sm no-print">
           <Loader2 className="h-7 w-7 text-blue-500 animate-spin mx-auto mb-3" />
           <p className="text-sm font-medium text-gray-800">{progresso || 'Processando...'}</p>
-          <p className="text-[11px] text-gray-400 mt-1">Claude Opus 4.7 · adaptive thinking</p>
+          <p className="text-[11px] text-gray-400 mt-1">Análise profunda · pode levar alguns instantes</p>
         </div>
       )}
 

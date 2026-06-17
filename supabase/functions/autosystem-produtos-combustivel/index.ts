@@ -10,7 +10,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { Client as PgClient } from 'https://deno.land/x/postgres@v0.17.0/mod.ts';
+import { obterRede, executarQuery, decodeBytea } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,37 +53,22 @@ serve(async (req) => {
   }
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { data: credRows, error: credErr } = await supabase.rpc('as_rede_get_credenciais', { p_id: redeId });
-  if (credErr) return json({ error: 'Falha ao buscar credenciais', detail: credErr.message }, 500);
-  const cred = Array.isArray(credRows) ? credRows[0] : credRows;
-  if (!cred) return json({ error: 'Rede não encontrada' }, 404);
-
-  const pg = new PgClient({
-    hostname: cred.conexao_ip,
-    port: cred.conexao_porta || 5432,
-    database: cred.conexao_banco,
-    user: cred.conexao_usuario,
-    password: cred.conexao_senha,
-    tls: { enabled: false },
-  });
-
   const gruposNum = Array.isArray(grupos_filtro)
     ? grupos_filtro.map(v => Number(v)).filter(n => Number.isFinite(n))
     : [];
   const janela = Math.max(7, Math.min(365, Number(dias) || 90));
-  const decoder = new TextDecoder('windows-1252');
+  const isBytea = (v: unknown): boolean => {
+    if (v instanceof Uint8Array) return true;
+    if (typeof v === 'object' && v !== null && (v as any).type === 'Buffer' && Array.isArray((v as any).data)) return true;
+    return false;
+  };
 
-  let failedStep = 'connect';
   try {
-    await pg.connect();
-    failedStep = 'set_client_encoding';
-    await pg.queryArray("set client_encoding to 'SQL_ASCII'");
+    const rede = await obterRede(supabase, redeId);
 
-    failedStep = 'select_produtos';
     // Lista produtos distintos vendidos nos últimos N dias, restritos aos
     // grupos de combustível informados. Inclui litros para ordenar.
-    const res = await pg.queryObject<Record<string, unknown>>({
-      text: `
+    const res = await executarQuery(rede, `
         select
           l.produto                                                 as produto_codigo,
           convert_to(coalesce(max(prod.nome::text), ''), 'LATIN1')  as produto_nome,
@@ -98,13 +83,11 @@ serve(async (req) => {
         having sum(coalesce(l.quantidade, 0)) > 0
         order by sum(coalesce(l.quantidade, 0)) desc
         limit 200
-      `,
-      args: [janela, gruposNum],
-    });
-    const produtos = res.rows.map(row => {
+      `, [janela, gruposNum], { encoding: 'SQL_ASCII' });
+    const produtos = res.map(row => {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(row)) {
-        if (v instanceof Uint8Array) out[k] = decoder.decode(v);
+        if (isBytea(v)) out[k] = decodeBytea(v, 'windows-1252');
         else out[k] = v;
       }
       return out;
@@ -116,11 +99,8 @@ serve(async (req) => {
       {
         error: 'Falha ao consultar o servidor Autosystem',
         detail: err instanceof Error ? err.message : String(err),
-        failed_step: failedStep,
       },
       502,
     );
-  } finally {
-    try { await pg.end(); } catch { /* noop */ }
   }
 });

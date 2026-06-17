@@ -9,6 +9,7 @@ import BannerModoDemo from './BannerModoDemo';
 import ModalPendenciasLogin from './ModalPendenciasLogin';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { registrarPageview } from '../../../services/usoPortalService';
+import { EmpresaAtivaProvider } from '../../../contexts/EmpresaAtivaContext';
 
 export default function ClienteLayout() {
   // collapsed: controla largura no desktop (≥lg). mobileOpen: drawer overlay no mobile.
@@ -35,7 +36,7 @@ export default function ClienteLayout() {
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   return (
-    <div className="min-h-screen relative app-bg">
+    <EmpresaAtivaProvider><div className="min-h-screen relative app-bg">
       <BannerModoDemo />
       {/* Decorative background - gradient mesh */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -78,6 +79,6 @@ export default function ClienteLayout() {
           </motion.div>
         </main>
       </div>
-    </div>
+    </div></EmpresaAtivaProvider>
   );
 }

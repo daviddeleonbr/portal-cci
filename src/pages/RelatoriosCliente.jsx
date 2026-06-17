@@ -65,7 +65,7 @@ const RELATORIOS = [
   {
     id: 'analise-ia',
     nome: 'Análise de Vendas (IA)',
-    descricao: 'Diagnóstico comercial com Claude: mix, margens, oportunidades',
+    descricao: 'Diagnóstico comercial com IA: mix, margens, oportunidades',
     icon: Sparkles,
     color: 'violet',
     disponivel: true,

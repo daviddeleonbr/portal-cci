@@ -11,7 +11,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { Client as PgClient } from 'https://deno.land/x/postgres@v0.17.0/mod.ts';
+import { obterRede, executarQuery, decodeBytea } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,25 +72,6 @@ serve(async (req) => {
   }
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { data: credRows, error: credErr } = await supabase.rpc('as_rede_get_credenciais', { p_id: redeId });
-  if (credErr) return json({ error: 'Falha ao buscar credenciais', detail: credErr.message }, 500);
-  const cred = Array.isArray(credRows) ? credRows[0] : credRows;
-  if (!cred) return json({ error: 'Rede não encontrada' }, 404);
-
-  const { conexao_ip, conexao_porta, conexao_banco, conexao_usuario, conexao_senha } = cred;
-  if (!conexao_ip || !conexao_banco || !conexao_usuario || !conexao_senha) {
-    return json({ error: 'Credenciais incompletas para a rede informada' }, 400);
-  }
-
-  const pg = new PgClient({
-    hostname: conexao_ip,
-    port: conexao_porta || 5432,
-    database: conexao_banco,
-    user: conexao_usuario,
-    password: conexao_senha,
-    tls: { enabled: false },
-  });
-
   const empresasNum = empresaCodigos.map(v => Number(v)).filter(n => Number.isFinite(n));
   const toBigArr = (arr?: (string | number)[]) =>
     Array.isArray(arr) ? arr.map(v => Number(v)).filter(n => Number.isFinite(n)) : [];
@@ -100,18 +81,12 @@ serve(async (req) => {
   const pAditivada    = toBigArr(produtos_aditivada);
   const pComum        = toBigArr(produtos_comum);
 
-  let failedStep = 'connect';
   try {
-    await pg.connect();
+    const rede = await obterRede(supabase, redeId);
 
-    failedStep = 'set_client_encoding';
-    await pg.queryArray("set client_encoding to 'SQL_ASCII'");
-
-    failedStep = 'select_produtividade';
     // CTE: filtra V (sem DC) e calcula custo (via subquery escalar) e grupo do produto.
     // Em seguida agrupa por vendedor com totais e quebra por categoria.
-    const res = await pg.queryObject<Record<string, unknown>>({
-      text: `
+    const res = await executarQuery(rede, `
         with base as (
           select
             l.empresa,
@@ -178,15 +153,17 @@ serve(async (req) => {
         left join pessoa pe on pe.grid = b.vendedor
         group by b.empresa, b.vendedor, pe.nome
         order by sum(b.valor) desc
-      `,
-      args: [empresasNum, data_de, data_ate, gCombustivel, gAutomotivos, gConveniencia, pAditivada, pComum],
-    });
+      `, [empresasNum, data_de, data_ate, gCombustivel, gAutomotivos, gConveniencia, pAditivada, pComum], { encoding: 'SQL_ASCII' });
 
-    const decoder = new TextDecoder('windows-1252');
-    const vendedores = res.rows.map((row) => {
+    const isBytea = (v: unknown): boolean => {
+      if (v instanceof Uint8Array) return true;
+      if (typeof v === 'object' && v !== null && (v as any).type === 'Buffer' && Array.isArray((v as any).data)) return true;
+      return false;
+    };
+    const vendedores = res.map((row) => {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(row)) {
-        if (v instanceof Uint8Array) out[k] = decoder.decode(v);
+        if (isBytea(v)) out[k] = decodeBytea(v, 'windows-1252');
         else out[k] = v;
       }
       return out;
@@ -198,11 +175,8 @@ serve(async (req) => {
       {
         error: 'Falha ao consultar o servidor Autosystem',
         detail: err instanceof Error ? err.message : String(err),
-        failed_step: failedStep,
       },
       502,
     );
-  } finally {
-    try { await pg.end(); } catch { /* noop */ }
   }
 });

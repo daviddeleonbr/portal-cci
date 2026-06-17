@@ -52,21 +52,28 @@ export async function buscarRede(id) {
 }
 
 // Cria a rede com nome+slug+credenciais em uma unica chamada RPC atomica.
+// Suporta os 2 modos de conexão:
+//   tipo_conexao='tcp'   → conexão direta no Postgres do cliente
+//   tipo_conexao='https' → proxy HTTPS via Cloudflare Tunnel
 export async function criarRede({
   nome, slug, ativo = true,
-  conexao_ip, conexao_porta, conexao_banco, conexao_usuario,
-  senha,
+  tipo_conexao = 'tcp',
+  conexao_ip, conexao_porta, conexao_banco, conexao_usuario, senha,
+  conexao_https_url, conexao_https_token,
 }) {
   const porta = conexao_porta != null && conexao_porta !== '' ? Number(conexao_porta) : null;
   const { data, error } = await supabase.rpc('as_rede_create_full', {
     p_nome: nome,
     p_slug: slug || gerarSlug(nome),
     p_ativo: ativo,
-    p_ip: conexao_ip || null,
-    p_porta: porta,
-    p_banco: conexao_banco || null,
-    p_usuario: conexao_usuario || null,
-    p_senha: senha || null,
+    p_tipo:        tipo_conexao,
+    p_ip:          conexao_ip          || null,
+    p_porta:       porta,
+    p_banco:       conexao_banco       || null,
+    p_usuario:     conexao_usuario     || null,
+    p_senha:       senha               || null,
+    p_https_url:   conexao_https_url   || null,
+    p_https_token: conexao_https_token || null,
   });
   if (error) throw error;
   return await buscarRede(data);
@@ -78,8 +85,9 @@ export async function criarRede({
 //     (campos undefined ficam null = mantém atual).
 export async function atualizarRede(id, campos) {
   const {
-    senha,
+    senha, tipo_conexao,
     conexao_ip, conexao_porta, conexao_banco, conexao_usuario,
+    conexao_https_url, conexao_https_token,
     ...resto
   } = campos;
 
@@ -100,21 +108,27 @@ export async function atualizarRede(id, campos) {
     if (error) throw error;
   }
 
-  // Credenciais — so dispara RPC se algum dos 5 campos veio definido
+  // Credenciais — dispara RPC se algum dos campos sensíveis veio definido
+  // ou se o tipo_conexao mudou.
   const algumaCred =
     conexao_ip !== undefined || conexao_porta !== undefined ||
     conexao_banco !== undefined || conexao_usuario !== undefined ||
-    senha !== undefined;
+    senha !== undefined ||
+    conexao_https_url !== undefined || conexao_https_token !== undefined ||
+    tipo_conexao !== undefined;
   if (algumaCred) {
     const porta = conexao_porta === undefined ? null
       : conexao_porta != null && conexao_porta !== '' ? Number(conexao_porta) : null;
     const { error } = await supabase.rpc('as_rede_set_credenciais', {
       p_id: id,
-      p_ip:      conexao_ip      === undefined ? null : (conexao_ip      || ''),
-      p_porta:   porta,
-      p_banco:   conexao_banco   === undefined ? null : (conexao_banco   || ''),
-      p_usuario: conexao_usuario === undefined ? null : (conexao_usuario || ''),
-      p_senha:   senha           === undefined ? null : (senha           || ''),
+      p_ip:          conexao_ip          === undefined ? null : (conexao_ip          || ''),
+      p_porta:       porta,
+      p_banco:       conexao_banco       === undefined ? null : (conexao_banco       || ''),
+      p_usuario:     conexao_usuario     === undefined ? null : (conexao_usuario     || ''),
+      p_senha:       senha               === undefined ? null : (senha               || ''),
+      p_tipo:        tipo_conexao        === undefined ? null : tipo_conexao,
+      p_https_url:   conexao_https_url   === undefined ? null : (conexao_https_url   || ''),
+      p_https_token: conexao_https_token === undefined ? null : (conexao_https_token || ''),
     });
     if (error) throw error;
   }

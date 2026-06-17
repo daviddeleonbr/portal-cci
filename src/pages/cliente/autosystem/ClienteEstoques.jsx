@@ -28,6 +28,8 @@ import {
 import PageHeader from '../../../components/ui/PageHeader';
 import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
+import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
+import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
 
@@ -116,14 +118,16 @@ function diasEntre(iso, agora) {
 export default function ClienteEstoques() {
   const session = useClienteSession();
   const asRede = session?.asRede;
-  const clientesRede = useMemo(() => session?.clientesRede || [], [session]);
-  const empresasDisponiveis = useMemo(
-    () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
-    [clientesRede],
+
+  // Empresa ativa compartilhada com outras páginas Autosystem.
+  const { empresaId, setEmpresaId, empresasDisponiveis } = useEmpresaAtiva();
+  const empresaSelId = empresaId;
+  const empresasSelIds = useMemo(
+    () => new Set(empresaId ? [empresaId] : []),
+    [empresaId],
   );
 
   // ─── Estados ────────────────────────────────────────────
-  const [empresaSelId, setEmpresaSelId] = useState('todas');
   const [busca, setBusca] = useState('');
   const [itens, setItens] = useState([]);
   const [meta, setMeta] = useState({ janelaDias: 90, dataDe: null, dataCorte: null });
@@ -162,7 +166,7 @@ export default function ClienteEstoques() {
   }, [asRede?.id]);
 
   const empresaCodigo = useMemo(() => {
-    if (empresaSelId === 'todas') return null;
+    if (!empresaSelId) return null;
     return empresasDisponiveis.find(e => e.id === empresaSelId)?.empresa_codigo || null;
   }, [empresaSelId, empresasDisponiveis]);
 
@@ -551,11 +555,14 @@ export default function ClienteEstoques() {
     <div>
       <PageHeader title="Análise de Estoques"
         description={`${CATEGORIA_INFO[categoriaAba]?.label || ''} · janela ${meta.janelaDias || params.janelaDias} dias · ${fmtDataBR(meta.dataDe)} → ${fmtDataBR(meta.dataCorte)}`}>
-        <select value={empresaSelId} onChange={e => setEmpresaSelId(e.target.value)}
-          className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 min-w-[160px]">
-          <option value="todas">Todas as empresas</option>
-          {empresasDisponiveis.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-        </select>
+        {empresasDisponiveis.length > 1 && (
+          <EmpresaSeletorCompartilhado
+            single
+            clientesRede={empresasDisponiveis}
+            selecionadas={empresasSelIds}
+            onToggle={(id) => setEmpresaId(id)}
+          />
+        )}
         <button onClick={() => setModalCompras(true)}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-2 text-sm font-semibold text-white shadow-sm relative">
           <Package className="h-4 w-4" />

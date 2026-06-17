@@ -7,32 +7,30 @@
 
 import { Navigate } from 'react-router-dom';
 import { AlertCircle, Building2 } from 'lucide-react';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import PageHeader from '../../../components/ui/PageHeader';
 import RelatorioFluxoCaixa from '../../RelatorioFluxoCaixa';
-import EmpresaMultiSelect from '../../../components/vendas/EmpresaMultiSelect';
+import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
 import { useClienteSession } from '../../../hooks/useAuth';
+import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
 
 export default function ClienteFluxoCaixa() {
   const session = useClienteSession();
   const asRede = session?.asRede;
-  const clientesRede = session?.clientesRede || [];
 
-  const empresas = useMemo(
-    () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
-    [clientesRede],
+  const { empresaId, setEmpresaId, empresasDisponiveis } = useEmpresaAtiva();
+  const empresas = empresasDisponiveis;
+  const empresaAtual = useMemo(
+    () => empresasDisponiveis.find(c => c.id === empresaId) || null,
+    [empresasDisponiveis, empresaId],
   );
-
-  const [empresasSelIds, setEmpresasSelIds] = useState(() => new Set(empresas.map(c => c.id)));
-  useEffect(() => {
-    setEmpresasSelIds(prev => {
-      if (prev.size === 0 && empresas.length > 0) return new Set(empresas.map(c => c.id));
-      return prev;
-    });
-  }, [empresas]);
   const empresasSel = useMemo(
-    () => empresas.filter(c => empresasSelIds.has(c.id)),
-    [empresas, empresasSelIds],
+    () => empresaAtual ? [empresaAtual] : [],
+    [empresaAtual],
+  );
+  const empresasSelIds = useMemo(
+    () => new Set(empresaId ? [empresaId] : []),
+    [empresaId],
   );
 
   const redeContexto = useMemo(() => {
@@ -89,17 +87,11 @@ export default function ClienteFluxoCaixa() {
       backHref="/cliente/autosystem/dashboard"
       modoCliente
       seletorEmpresas={empresas.length > 1 ? (
-        <EmpresaMultiSelect
+        <EmpresaSeletorCompartilhado
+          single
           clientesRede={empresas}
           selecionadas={empresasSelIds}
-          onToggle={(id) => setEmpresasSelIds(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id); else next.add(id);
-            return next;
-          })}
-          onToggleTodas={() => setEmpresasSelIds(prev =>
-            prev.size === empresas.length ? new Set() : new Set(empresas.map(c => c.id))
-          )}
+          onToggle={(id) => setEmpresaId(id)}
         />
       ) : null}
     />

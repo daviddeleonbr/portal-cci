@@ -1,11 +1,16 @@
 // Multi-select de empresas — mesmo padrão usado em outras telas do portal.
 // Mostra label "Todas (N)" / "K empresas" / "Nenhuma" baseado na seleção.
+//
+// Prop opcional `single` ativa modo de seleção única (radio em vez de
+// checkbox, sem "Marcar todas", fecha dropdown ao escolher). O pai deve
+// implementar `onToggle(id)` substituindo o estado (new Set([id])) em
+// vez de fazer toggle aditivo.
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Building2 } from 'lucide-react';
 
-export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleTodas }) {
+export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleTodas, single = false }) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef(null);
 
@@ -47,23 +52,25 @@ export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggl
             initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.12 }}
             className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
-            <button type="button" onClick={onToggleTodas}
-              className="w-full flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
-              <input type="checkbox" checked={todasMarcadas}
-                onChange={() => {}} className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-              <span className="text-[11.5px] font-medium text-gray-700">
-                {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
-              </span>
-            </button>
+            {!single && (
+              <button type="button" onClick={onToggleTodas}
+                className="w-full flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
+                <input type="checkbox" checked={todasMarcadas}
+                  onChange={() => {}} className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <span className="text-[11.5px] font-medium text-gray-700">
+                  {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
+                </span>
+              </button>
+            )}
             <div className="max-h-72 overflow-y-auto">
               {clientesRede.map(emp => {
                 const marcada = selecionadas.has(emp.id);
                 return (
                   <label key={emp.id}
                     className="flex items-start gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors cursor-pointer">
-                    <input type="checkbox" checked={marcada}
-                      onChange={() => onToggle(emp.id)}
-                      className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
+                    <input type={single ? 'radio' : 'checkbox'} checked={marcada}
+                      onChange={() => { onToggle(emp.id); if (single) setAberto(false); }}
+                      className={`h-3.5 w-3.5 ${single ? '' : 'rounded'} border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[11.5px] text-gray-800 truncate">{emp.fantasia || emp.nome}</p>
                       {emp.cnpj && <p className="text-[9.5px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}

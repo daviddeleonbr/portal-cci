@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Loader2, AlertCircle, RefreshCw, Building2, ChevronDown, ChevronRight,
+  Loader2, AlertCircle, RefreshCw, ChevronDown, ChevronRight,
   Users, Fuel, Package, Store,
   Search, Coins, Calendar, Boxes, LineChart as LineChartIcon, Droplet, Gauge,
   Trophy, Medal, Award, Info,
@@ -14,6 +13,8 @@ import {
 const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 import PageHeader from '../../../components/ui/PageHeader';
 import { useClienteSession } from '../../../hooks/useAuth';
+import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
+import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
 
@@ -55,28 +56,20 @@ const ABAS = [
 export default function ClienteComercialProdutividade() {
   const session = useClienteSession();
   const asRede = session?.asRede;
-  const clientesRede = useMemo(() => session?.clientesRede || [], [session]);
-  const empresasDisponiveis = useMemo(
-    () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
-    [clientesRede],
-  );
 
-  // Inicialmente apenas a empresa com o menor `empresa_codigo` fica marcada.
-  // Usuário pode marcar/desmarcar livremente depois.
-  const [empresasSelIds, setEmpresasSelIds] = useState(new Set());
-  useEffect(() => {
-    setEmpresasSelIds(prev => {
-      if (prev.size === 0 && empresasDisponiveis.length > 0) {
-        const menor = [...empresasDisponiveis]
-          .sort((a, b) => (Number(a.empresa_codigo) || 0) - (Number(b.empresa_codigo) || 0))[0];
-        return new Set([menor.id]);
-      }
-      return prev;
-    });
-  }, [empresasDisponiveis]);
+  // Empresa ativa compartilhada com outras páginas Autosystem.
+  const { empresaId, setEmpresaId, empresasDisponiveis } = useEmpresaAtiva();
+  const empresaAtual = useMemo(
+    () => empresasDisponiveis.find(c => c.id === empresaId) || null,
+    [empresasDisponiveis, empresaId],
+  );
   const empresasSel = useMemo(
-    () => empresasDisponiveis.filter(c => empresasSelIds.has(c.id)),
-    [empresasDisponiveis, empresasSelIds],
+    () => empresaAtual ? [empresaAtual] : [],
+    [empresaAtual],
+  );
+  const empresasSelIds = useMemo(
+    () => new Set(empresaId ? [empresaId] : []),
+    [empresaId],
   );
 
   // Período: usuário escolhe data inicial e final. Default = mês atual.
@@ -455,17 +448,11 @@ export default function ClienteComercialProdutividade() {
             className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
         {empresasDisponiveis.length > 1 && (
-          <EmpresaMultiSelect
+          <EmpresaSeletorCompartilhado
+            single
             clientesRede={empresasDisponiveis}
             selecionadas={empresasSelIds}
-            onToggle={(id) => setEmpresasSelIds(prev => {
-              const next = new Set(prev);
-              if (next.has(id)) next.delete(id); else next.add(id);
-              return next;
-            })}
-            onToggleTodas={() => setEmpresasSelIds(prev =>
-              prev.size === empresasDisponiveis.length ? new Set() : new Set(empresasDisponiveis.map(c => c.id))
-            )}
+            onToggle={(id) => setEmpresaId(id)}
           />
         )}
         <button onClick={carregar} disabled={loading || empresasSel.length === 0}
@@ -1228,71 +1215,3 @@ function Kpi({ icone: Icone, cor, label, valor, sub, negativo }) {
   );
 }
 
-// Multi-select de empresas (mesmo padrão da Operação)
-function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleTodas }) {
-  const [aberto, setAberto] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, []);
-  if (clientesRede.length === 0) return null;
-  const todasMarcadas = selecionadas.size === clientesRede.length;
-  const label = selecionadas.size === 0
-    ? 'Nenhuma'
-    : todasMarcadas ? `Todas (${clientesRede.length})`
-    : selecionadas.size === 1
-    ? clientesRede.find(c => selecionadas.has(c.id))?.nome || '1 selecionada'
-    : `${selecionadas.size} empresas`;
-  return (
-    <div ref={ref} className="relative">
-      <label className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
-          <Building2 className="h-3 w-3" /> Empresas
-        </span>
-        <button type="button" onClick={() => setAberto(o => !o)}
-          className={`h-9 inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-xs transition-colors min-w-[180px] max-w-[260px] ${
-            aberto ? 'border-blue-400 ring-2 ring-blue-100 text-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
-          }`}>
-          <span className="truncate">{label}</span>
-          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
-        </button>
-      </label>
-      <AnimatePresence>
-        {aberto && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.12 }}
-            className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-gray-200/70 shadow-xl z-40 overflow-hidden">
-            <button type="button" onClick={onToggleTodas}
-              className="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left">
-              <input type="checkbox" checked={todasMarcadas} onChange={() => {}}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-              <span className="text-[12.5px] font-medium text-gray-700">
-                {todasMarcadas ? 'Desmarcar todas' : 'Marcar todas'}
-              </span>
-            </button>
-            <div className="max-h-72 overflow-y-auto">
-              {clientesRede.map(emp => {
-                const marcada = selecionadas.has(emp.id);
-                return (
-                  <label key={emp.id}
-                    className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
-                    <input type="checkbox" checked={marcada}
-                      onChange={() => onToggle(emp.id)}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12.5px] text-gray-800 truncate">{emp.nome}</p>
-                      {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}

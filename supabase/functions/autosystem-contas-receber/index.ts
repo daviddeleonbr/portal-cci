@@ -32,7 +32,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { Client as PgClient } from 'https://deno.land/x/postgres@v0.17.0/mod.ts';
+import { obterRede, withConexao, decodeRowText } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -93,36 +93,9 @@ serve(async (req) => {
     auth: { persistSession: false },
   });
 
-  const { data: credRows, error: credErr } = await supabase.rpc(
-    'as_rede_get_credenciais',
-    { p_id: redeId },
-  );
-  if (credErr) return json({ error: 'Falha ao buscar credenciais', detail: credErr.message }, 500);
-  const cred = Array.isArray(credRows) ? credRows[0] : credRows;
-  if (!cred) return json({ error: 'Rede não encontrada' }, 404);
-
-  const { conexao_ip, conexao_porta, conexao_banco, conexao_usuario, conexao_senha } = cred;
-  if (!conexao_ip || !conexao_banco || !conexao_usuario || !conexao_senha) {
-    return json({ error: 'Credenciais incompletas para a rede informada' }, 400);
-  }
-
-  const pg = new PgClient({
-    hostname: conexao_ip,
-    port: conexao_porta || 5432,
-    database: conexao_banco,
-    user: conexao_usuario,
-    password: conexao_senha,
-    tls: { enabled: false },
-  });
-
-  let failedStep = 'connect';
   try {
-    await pg.connect();
+    const rede = await obterRede(supabase, redeId);
 
-    failedStep = 'set_client_encoding';
-    await pg.queryArray("set client_encoding to 'SQL_ASCII'");
-
-    failedStep = 'select_contas_receber';
     const params: unknown[] = [empresaCodigo];
     const conds: string[] = [
       "(m.conta_debitar = '1.3' or m.conta_debitar like '1.3.%')",
@@ -158,78 +131,72 @@ serve(async (req) => {
       order by m.vencto, m.data
     `;
 
-    const result = await pg.queryObject<Record<string, unknown>>({ text: sql, args: params });
-
-    const decoder = new TextDecoder('windows-1252');
-    const linhas = result.rows.map((row) => {
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(row)) {
-        if (TEXT_COLUMNS.has(k) && v instanceof Uint8Array) out[k] = decoder.decode(v);
-        else out[k] = v;
-      }
-      return out;
-    });
-
     // Diagnóstico: contagens em cada etapa do filtro para identificar
     // onde registros estão sendo cortados (usado pelo console do front).
-    failedStep = 'diag_counts';
     const baseDateConds: string[] = [];
     const baseDateParams: unknown[] = [empresaCodigo];
     if (vencto_de)  { baseDateParams.push(vencto_de);  baseDateConds.push(`vencto >= $${baseDateParams.length}`); }
     if (vencto_ate) { baseDateParams.push(vencto_ate); baseDateConds.push(`vencto <= $${baseDateParams.length}`); }
     const dateExtra = baseDateConds.length ? ' and ' + baseDateConds.join(' and ') : '';
 
-    const fazContagem = async (sql: string, args: unknown[]) => {
-      try {
-        const r = await pg.queryObject<{ n: bigint | number }>({ text: sql, args });
-        const n = r.rows[0]?.n;
-        return typeof n === 'bigint' ? Number(n) : Number(n) || 0;
-      } catch {
-        return -1;
-      }
-    };
-    const diag = {
-      empresa_codigo: empresaCodigo,
-      vencto_de: vencto_de || null,
-      vencto_ate: vencto_ate || null,
-      total_debito_1_3: await fazContagem(
+    const {
+      result,
+      total_debito_1_3,
+      total_debito_1_3_03_2,
+      total_debito_1_3_03_2_no_periodo,
+      total_debito_1_3_03_2_no_periodo_child0,
+      distintos_child_1_3_03_2,
+      cartoes_por_conta,
+    } = await withConexao(rede, async (run) => {
+      const result = await run(sql, params);
+
+      const fazContagem = async (s: string, args: unknown[]) => {
+        try {
+          const r = await run(s, args) as { n: bigint | number }[];
+          const n = r[0]?.n;
+          return typeof n === 'bigint' ? Number(n) : Number(n) || 0;
+        } catch {
+          return -1;
+        }
+      };
+
+      const total_debito_1_3 = await fazContagem(
         "select count(*)::int as n from movto where (conta_debitar = '1.3' or conta_debitar like '1.3.%') and empresa = $1",
         [empresaCodigo],
-      ),
-      total_debito_1_3_03_2: await fazContagem(
+      );
+      const total_debito_1_3_03_2 = await fazContagem(
         "select count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1",
         [empresaCodigo],
-      ),
-      total_debito_1_3_03_2_no_periodo: await fazContagem(
+      );
+      const total_debito_1_3_03_2_no_periodo = await fazContagem(
         `select count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1${dateExtra}`,
         baseDateParams,
-      ),
-      total_debito_1_3_03_2_no_periodo_child0: await fazContagem(
+      );
+      const total_debito_1_3_03_2_no_periodo_child0 = await fazContagem(
         `select count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1 and child = 0${dateExtra}`,
         baseDateParams,
-      ),
-      distintos_child_1_3_03_2: await (async () => {
-        try {
-          const r = await pg.queryObject<{ child: unknown; n: bigint | number }>({
-            text: `select child, count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1${dateExtra} group by child order by child`,
-            args: baseDateParams,
-          });
-          return r.rows.map(row => ({
-            child: typeof row.child === 'bigint' ? Number(row.child) : row.child,
-            n: typeof row.n === 'bigint' ? Number(row.n) : Number(row.n) || 0,
-          }));
-        } catch { return null; }
-      })(),
+      );
+
+      let distintos_child_1_3_03_2: { child: unknown; n: number }[] | null = null;
+      try {
+        const r = await run(
+          `select child, count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1${dateExtra} group by child order by child`,
+          baseDateParams,
+        ) as { child: unknown; n: bigint | number }[];
+        distintos_child_1_3_03_2 = r.map(row => ({
+          child: typeof row.child === 'bigint' ? Number(row.child) : row.child,
+          n: typeof row.n === 'bigint' ? Number(row.n) : Number(row.n) || 0,
+        }));
+      } catch { distintos_child_1_3_03_2 = null; }
+
       // Breakdown por conta_debitar dentro de cartões (1.3.01.*) — total
       // e quanto sai com child = 0; ajuda a ver contas tipo ALELO que
       // somem porque os registros têm child ≠ 0.
-      cartoes_por_conta: await (async () => {
-        try {
-          const r = await pg.queryObject<{
-            conta_debitar: unknown; total: bigint | number; com_child_0: bigint | number;
-            soma_total: unknown; soma_child_0: unknown;
-          }>({
-            text: `
+      let cartoes_por_conta:
+        | { conta_debitar: unknown; total: number; com_child_0: number; soma_total: unknown; soma_child_0: unknown }[]
+        | null = null;
+      try {
+        const r = await run(`
               select
                 conta_debitar,
                 count(*)::int                                 as total,
@@ -240,18 +207,42 @@ serve(async (req) => {
               where conta_debitar like '1.3.01%' and empresa = $1${dateExtra}
               group by conta_debitar
               order by conta_debitar
-            `,
-            args: baseDateParams,
-          });
-          return r.rows.map(row => ({
-            conta_debitar: row.conta_debitar,
-            total: typeof row.total === 'bigint' ? Number(row.total) : Number(row.total) || 0,
-            com_child_0: typeof row.com_child_0 === 'bigint' ? Number(row.com_child_0) : Number(row.com_child_0) || 0,
-            soma_total: typeof row.soma_total === 'bigint' ? Number(row.soma_total) : Number(row.soma_total),
-            soma_child_0: typeof row.soma_child_0 === 'bigint' ? Number(row.soma_child_0) : Number(row.soma_child_0),
-          }));
-        } catch { return null; }
-      })(),
+            `, baseDateParams) as {
+              conta_debitar: unknown; total: bigint | number; com_child_0: bigint | number;
+              soma_total: unknown; soma_child_0: unknown;
+            }[];
+        cartoes_por_conta = r.map(row => ({
+          conta_debitar: row.conta_debitar,
+          total: typeof row.total === 'bigint' ? Number(row.total) : Number(row.total) || 0,
+          com_child_0: typeof row.com_child_0 === 'bigint' ? Number(row.com_child_0) : Number(row.com_child_0) || 0,
+          soma_total: typeof row.soma_total === 'bigint' ? Number(row.soma_total) : Number(row.soma_total),
+          soma_child_0: typeof row.soma_child_0 === 'bigint' ? Number(row.soma_child_0) : Number(row.soma_child_0),
+        }));
+      } catch { cartoes_por_conta = null; }
+
+      return {
+        result,
+        total_debito_1_3,
+        total_debito_1_3_03_2,
+        total_debito_1_3_03_2_no_periodo,
+        total_debito_1_3_03_2_no_periodo_child0,
+        distintos_child_1_3_03_2,
+        cartoes_por_conta,
+      };
+    }, { encoding: 'SQL_ASCII' });
+
+    const linhas = result.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
+
+    const diag = {
+      empresa_codigo: empresaCodigo,
+      vencto_de: vencto_de || null,
+      vencto_ate: vencto_ate || null,
+      total_debito_1_3,
+      total_debito_1_3_03_2,
+      total_debito_1_3_03_2_no_periodo,
+      total_debito_1_3_03_2_no_periodo_child0,
+      distintos_child_1_3_03_2,
+      cartoes_por_conta,
       retornados: linhas.length,
     };
 
@@ -261,11 +252,8 @@ serve(async (req) => {
       {
         error: 'Falha ao consultar o servidor Autosystem',
         detail: err instanceof Error ? err.message : String(err),
-        failed_step: failedStep,
       },
       502,
     );
-  } finally {
-    try { await pg.end(); } catch { /* noop */ }
   }
 });

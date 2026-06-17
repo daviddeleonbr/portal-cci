@@ -23,7 +23,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { Client as PgClient } from 'https://deno.land/x/postgres@v0.17.0/mod.ts';
+import { obterRede, executarQuery, withConexao, decodeRowText } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -101,36 +101,9 @@ serve(async (req) => {
     auth: { persistSession: false },
   });
 
-  const { data: credRows, error: credErr } = await supabase.rpc(
-    'as_rede_get_credenciais',
-    { p_id: redeId },
-  );
-  if (credErr) return json({ error: 'Falha ao buscar credenciais', detail: credErr.message }, 500);
-  const cred = Array.isArray(credRows) ? credRows[0] : credRows;
-  if (!cred) return json({ error: 'Rede não encontrada' }, 404);
-
-  const { conexao_ip, conexao_porta, conexao_banco, conexao_usuario, conexao_senha } = cred;
-  if (!conexao_ip || !conexao_banco || !conexao_usuario || !conexao_senha) {
-    return json({ error: 'Credenciais incompletas para a rede informada' }, 400);
-  }
-
-  const pg = new PgClient({
-    hostname: conexao_ip,
-    port: conexao_porta || 5432,
-    database: conexao_banco,
-    user: conexao_usuario,
-    password: conexao_senha,
-    tls: { enabled: false },
-  });
-
-  let failedStep = 'connect';
   try {
-    await pg.connect();
+    const rede = await obterRede(supabase, redeId);
 
-    failedStep = 'set_client_encoding';
-    await pg.queryArray("set client_encoding to 'SQL_ASCII'");
-
-    failedStep = 'select_vendas';
     // `lancto.empresa`, `lancto.produto` e `produto.grid` são numéricos
     // (bigint). Envia o array de empresas como números e compara via bigint[].
     const empresasNum = empresaCodigos
@@ -150,11 +123,9 @@ serve(async (req) => {
     // nulos/vazios. Devoluções (DC) ainda são filtradas pelo `mlid` que casa
     // venda original ↔ devolução para o mesmo produto.
     if (pares_carrinho) {
-      failedStep = 'select_pares_carrinho';
-      const decoder = new TextDecoder('windows-1252');
-      // Total de notas (documentos distintos) no período — base do % support.
-      const totRes = await pg.queryObject<{ total: bigint | number }>({
-        text: `
+      const { totRows, paresRows } = await withConexao(rede, async (run) => {
+        // Total de notas (documentos distintos) no período — base do % support.
+        const totRows = await run(`
           select count(distinct documento::text) as total
           from lancto
           where operacao = 'V'
@@ -162,15 +133,11 @@ serve(async (req) => {
             and data between $2 and $3
             and documento is not null
             and trim(documento::text) <> ''
-        `,
-        args: [empresasNum, data_de, data_ate],
-      });
-      const total_transacoes = Number(totRes.rows[0]?.total) || 0;
+        `, [empresasNum, data_de, data_ate]);
 
-      // Pares (a < b) — junta lancto consigo mesmo pelo `documento` (mesma nota),
-      // restrita à mesma empresa e à mesma data (notas não compartilham dia entre empresas).
-      const paresRes = await pg.queryObject<Record<string, unknown>>({
-        text: `
+        // Pares (a < b) — junta lancto consigo mesmo pelo `documento` (mesma nota),
+        // restrita à mesma empresa e à mesma data (notas não compartilham dia entre empresas).
+        const paresRows = await run(`
           select
             la.produto                                                as produto_a,
             convert_to(coalesce(pa.nome::text, ''), 'LATIN1')         as produto_a_nome,
@@ -207,19 +174,15 @@ serve(async (req) => {
           group by la.produto, pa.nome, pa.grupo, lb.produto, pb.nome, pb.grupo
           order by count(distinct la.documento::text) desc
           limit 500
-        `,
-        args: [empresasNum, data_de, data_ate, gruposNum],
-      });
+        `, [empresasNum, data_de, data_ate, gruposNum]);
+
+        return { totRows, paresRows };
+      }, { encoding: 'SQL_ASCII' });
+
+      const total_transacoes = Number((totRows[0] as any)?.total) || 0;
 
       const TEXT_PAIR = new Set(['produto_a_nome', 'produto_b_nome']);
-      const pares = paresRes.rows.map((row) => {
-        const out: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(row)) {
-          if (TEXT_PAIR.has(k) && v instanceof Uint8Array) out[k] = decoder.decode(v);
-          else out[k] = v;
-        }
-        return out;
-      });
+      const pares = paresRows.map((row) => decodeRowText(row, TEXT_PAIR, 'windows-1252'));
 
       return json({ pares, total_transacoes });
     }
@@ -417,22 +380,13 @@ serve(async (req) => {
       order by l.data, l.hora
     `;
 
-    const result = await pg.queryObject<Record<string, unknown>>({
-      text: sql,
-      args: (por_dia || por_mes_produto)
+    const result = await executarQuery(rede, sql,
+      (por_dia || por_mes_produto)
         ? [empresasNum, data_de, data_ate, gruposNum]
         : [empresasNum, data_de, data_ate],
-    });
+      { encoding: 'SQL_ASCII' });
 
-    const decoder = new TextDecoder('windows-1252');
-    const itens = result.rows.map((row) => {
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(row)) {
-        if (TEXT_COLUMNS.has(k) && v instanceof Uint8Array) out[k] = decoder.decode(v);
-        else out[k] = v;
-      }
-      return out;
-    });
+    const itens = result.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
 
     // No modo `por_dia` / `por_mes` / `por_mes_produto` devolvemos em chave
     // separada, já que a forma dos itens é diferente.
@@ -445,11 +399,8 @@ serve(async (req) => {
       {
         error: 'Falha ao consultar o servidor Autosystem',
         detail: err instanceof Error ? err.message : String(err),
-        failed_step: failedStep,
       },
       502,
     );
-  } finally {
-    try { await pg.end(); } catch { /* noop */ }
   }
 });

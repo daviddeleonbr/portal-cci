@@ -62,6 +62,43 @@ export function todasPermissoes(tipo) {
   return permissoesPorTipo(tipo).map(p => p.key);
 }
 
+// ========== Hierarquia por permissões ==========
+// Regra: admin só vê/atribui as permissões que ele próprio tem.
+// Master tem TODAS automaticamente (independente do array).
+
+// Retorna o conjunto efetivo de permissões — master => todas.
+export function permissoesEfetivas(usuario) {
+  if (!usuario) return [];
+  if (usuario.is_master) return todasPermissoes(usuario.tipo || 'admin');
+  return Array.isArray(usuario.permissoes) ? usuario.permissoes : [];
+}
+
+// Filtra o catálogo pra mostrar só o que `usuarioLogado` pode delegar.
+export function permissoesQuePodeDelegar(usuarioLogado, tipoAlvo = 'admin') {
+  const efetivas = new Set(permissoesEfetivas(usuarioLogado));
+  return permissoesPorTipo(tipoAlvo).filter(p => efetivas.has(p.key));
+}
+
+export function podeDelegarPermissao(usuarioLogado, permissaoKey) {
+  if (!usuarioLogado) return false;
+  if (usuarioLogado.is_master) return true;
+  return (usuarioLogado.permissoes || []).includes(permissaoKey);
+}
+
+// Cascata: propaga remoção de permissões pra subordinados via RPC.
+// Master nunca perde permissão (já é tudo automático).
+export async function cascataRevogarPermissoes(adminId, permissoesRemovidas) {
+  if (!adminId || !Array.isArray(permissoesRemovidas) || permissoesRemovidas.length === 0) {
+    return 0;
+  }
+  const { data, error } = await supabase.rpc('cascata_revogar_permissoes', {
+    p_admin_id: adminId,
+    p_permissoes_removidas: permissoesRemovidas,
+  });
+  if (error) throw error;
+  return data || 0;
+}
+
 // ========== CRUD ==========
 
 export async function listarUsuarios() {
@@ -119,6 +156,23 @@ export async function atualizarUsuario(id, campos) {
   const payload = sanitizarPayload(campos);
   // Se senha veio vazia no update, mantem a atual
   if (!payload.senha) delete payload.senha;
+
+  // Pra cascata: lê o estado atual e calcula o que foi REMOVIDO.
+  // Só aplica em admins não-master (master é sempre tudo).
+  let permissoesRemovidas = [];
+  if (payload.tipo === 'admin' && Array.isArray(payload.permissoes)) {
+    const { data: atual } = await supabase
+      .from('cci_usuarios_sistema')
+      .select('permissoes, is_master')
+      .eq('id', id)
+      .single();
+    if (atual && !atual.is_master) {
+      const antigas = new Set(atual.permissoes || []);
+      const novas   = new Set(payload.permissoes);
+      permissoesRemovidas = [...antigas].filter(p => !novas.has(p));
+    }
+  }
+
   const { data, error } = await supabase
     .from('cci_usuarios_sistema')
     .update(payload)
@@ -126,6 +180,13 @@ export async function atualizarUsuario(id, campos) {
     .select()
     .single();
   if (error) throw error;
+
+  // Propaga remoção pros subordinados
+  if (permissoesRemovidas.length > 0) {
+    try { await cascataRevogarPermissoes(id, permissoesRemovidas); }
+    catch (err) { console.error('[usuariosSistema] cascata falhou:', err); }
+  }
+
   return data;
 }
 

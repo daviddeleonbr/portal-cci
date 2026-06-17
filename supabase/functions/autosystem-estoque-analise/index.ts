@@ -20,7 +20,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { Client as PgClient } from 'https://deno.land/x/postgres@v0.17.0/mod.ts';
+import { obterRede, executarQuery, decodeRowText } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -81,32 +81,10 @@ serve(async (req) => {
   }
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-  const { data: credRows, error: credErr } = await supabase.rpc(
-    'as_rede_get_credenciais', { p_id: redeId },
-  );
-  if (credErr) return json({ error: 'Falha ao buscar credenciais', detail: credErr.message }, 500);
-  const cred = Array.isArray(credRows) ? credRows[0] : credRows;
-  if (!cred) return json({ error: 'Rede não encontrada' }, 404);
-
-  const { conexao_ip, conexao_porta, conexao_banco, conexao_usuario, conexao_senha } = cred;
-  if (!conexao_ip || !conexao_banco || !conexao_usuario || !conexao_senha) {
-    return json({ error: 'Credenciais incompletas para a rede informada' }, 400);
-  }
-
-  const pg = new PgClient({
-    hostname: conexao_ip, port: conexao_porta || 5432,
-    database: conexao_banco, user: conexao_usuario, password: conexao_senha,
-    tls: { enabled: false },
-  });
-
-  let failedStep = 'connect';
   try {
-    await pg.connect();
-    failedStep = 'set_client_encoding';
-    await pg.queryArray("set client_encoding to 'SQL_ASCII'");
+    const rede = await obterRede(supabase, redeId);
 
     // ─── Bloco 1: snapshot de estoque atual ──────────────────
-    failedStep = 'select_estoque';
     const paramsEst: unknown[] = [dataCorte];
     let condEmpEst = '';
     if (empresaCodigo != null && empresaCodigo !== '') {
@@ -131,12 +109,11 @@ serve(async (req) => {
         ${condEmpEst}
       GROUP BY ep.empresa, ep.produto, gp.nome, sp.nome, p.nome
     `;
-    const resEstoque = await pg.queryObject<Record<string, unknown>>({ text: sqlEstoque, args: paramsEst });
+    const resEstoque = await executarQuery(rede, sqlEstoque, paramsEst, { encoding: 'SQL_ASCII' });
 
     // ─── Bloco 2: agregado de vendas no período ──────────────
     // Cruza lancto + estoque_lancto (pra ter custo médio do item vendido).
     // Exclui devoluções (operacao='DC' linkadas via mlid).
-    failedStep = 'select_vendas';
     const paramsVnd: unknown[] = [dataDe, dataCorte];
     let condEmpVnd = '';
     if (empresaCodigo != null && empresaCodigo !== '') {
@@ -166,14 +143,13 @@ serve(async (req) => {
         ${condEmpVnd}
       GROUP BY l.empresa, l.produto
     `;
-    const resVendas = await pg.queryObject<Record<string, unknown>>({ text: sqlVendas, args: paramsVnd });
+    const resVendas = await executarQuery(rede, sqlVendas, paramsVnd, { encoding: 'SQL_ASCII' });
 
     // ─── Custo unitário "de bolso" ───────────────────────────
     // Para produtos COM venda no período, usamos venda_custo / venda_qtd.
     // Para produtos SEM venda no período (precisam de custo pra valorizar
     // o capital imobilizado), buscamos o último custo médio CONHECIDO no
     // estoque_lancto (qualquer empresa) — fallback razoável.
-    failedStep = 'select_custo_fallback';
     const sqlCustoFallback = `
       SELECT
         sub.produto,
@@ -189,22 +165,12 @@ serve(async (req) => {
       ) sub
       WHERE sub.rn = 1
     `;
-    const resCusto = await pg.queryObject<Record<string, unknown>>({ text: sqlCustoFallback, args: [] });
+    const resCusto = await executarQuery(rede, sqlCustoFallback, [], { encoding: 'SQL_ASCII' });
 
     // ─── Junção no Deno ──────────────────────────────────────
-    const decoder = new TextDecoder('windows-1252');
-    const decodeRow = (row: Record<string, unknown>) => {
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(row)) {
-        if (TEXT_COLUMNS.has(k) && v instanceof Uint8Array) out[k] = decoder.decode(v);
-        else out[k] = v;
-      }
-      return out;
-    };
-
-    const estoque  = resEstoque.rows.map(decodeRow);
-    const vendas   = resVendas.rows;
-    const fallback = resCusto.rows;
+    const estoque  = resEstoque.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
+    const vendas   = resVendas;
+    const fallback = resCusto;
 
     // mapa (empresa, produto) → venda
     const mapaVendas = new Map<string, Record<string, unknown>>();
@@ -259,11 +225,8 @@ serve(async (req) => {
       {
         error: 'Falha ao consultar o servidor Autosystem',
         detail: err instanceof Error ? err.message : String(err),
-        failed_step: failedStep,
       },
       502,
     );
-  } finally {
-    try { await pg.end(); } catch { /* noop */ }
   }
 });
