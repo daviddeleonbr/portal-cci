@@ -96,6 +96,11 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('dre'); // 'dre' | 'empresa' | 'insights'
 
+  // Linha clicada pelo user (grupo/conta/lançamento) fica destacada
+  // pra facilitar leitura horizontal. Único id global por linha — clicar
+  // de novo desmarca.
+  const [linhaSelecionada, setLinhaSelecionada] = useState(null);
+
   // Tabs flutuantes — versão fixa no topo aparece só quando o original
   // sai da viewport durante o scroll.
   const tabsAnchorRef = useRef(null);
@@ -1718,12 +1723,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           <div>
             <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
             <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
-              {[1, 3].map(q => (
+              {[1, 3, 6].map(q => (
                 <button key={q} onClick={() => setQtdMeses(q)}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
                     qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
-                  {q === 1 ? '1 mês' : '3 meses'}
+                  {q === 1 ? '1 mês' : `${q} meses`}
                 </button>
               ))}
             </div>
@@ -1915,7 +1920,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   </colgroup>
                   <thead className="bg-gray-50/80">
                     <tr className="text-gray-500">
-                      <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">Conta</th>
+                      <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 z-20 bg-gray-50 print:static print:bg-transparent">Conta</th>
                       {colunasEmpresa.map(c => (
                         <>
                           <th key={`${c.key}-h`}
@@ -1948,6 +1953,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                         ocultarZeradas={ocultarZeradas}
                         showAH={false}
                         mostrarTotal={mostrarTotal}
+                        linhaSelecionada={linhaSelecionada}
+                        onSelectLinha={setLinhaSelecionada}
                       />
                     ))}
                   </tbody>
@@ -2061,7 +2068,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                 </colgroup>
                 <thead className="bg-gray-50/80">
                   <tr className="text-gray-500">
-                    <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">Conta</th>
+                    <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 z-20 bg-gray-50 print:static print:bg-transparent">Conta</th>
                     {meses.map(m => (
                       <>
                         <th key={`${m.key}-v`} className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">{m.label} (R$)</th>
@@ -2089,6 +2096,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                       ocultarZeradas={ocultarZeradas}
                       showAH={showAH}
                       mostrarTotal={mostrarTotal}
+                      linhaSelecionada={linhaSelecionada}
+                      onSelectLinha={setLinhaSelecionada}
                     />
                   ))}
                 </tbody>
@@ -2330,7 +2339,14 @@ function FriendlyLoader({ progress, cliente, periodoLabel, stageLabel }) {
 }
 
 // ─── Recursive node rows (group + sub-groups + contas) ──────
-function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedContas, onToggleGrupo, onToggleConta, ocultarZeradas, showAH, mostrarTotal = true }) {
+function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedContas, onToggleGrupo, onToggleConta, ocultarZeradas, showAH, mostrarTotal = true, linhaSelecionada, onSelectLinha }) {
+  // Helper: clicar na linha alterna seleção (clica de novo desmarca).
+  // Cliques em botões internos (chevron, etc) NÃO disparam — eles têm
+  // handlers próprios e `closest('button')` evita propagação.
+  const handleSelectLinha = (id) => (e) => {
+    if (e.target.closest('button')) return;
+    onSelectLinha?.(linhaSelecionada === id ? null : id);
+  };
   const isCalc = node.tipo === 'subtotal' || node.tipo === 'resultado';
   const isResultado = node.tipo === 'resultado';
   const isExpanded = expandedGrupos.has(node.id);
@@ -2359,11 +2375,28 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
     : isCalc
       ? 'bg-slate-50'
       : depth === 0 ? 'bg-gray-50/60' : '';
+  // Sticky precisa de fundo OPACO (sem alpha) pra cobrir o conteúdo que
+  // passa atrás durante scroll horizontal. `rowBg` pode ter sufixo /60 etc.
+  // — converto pra opaco direto. No print, desativa sticky.
+  const isSelected = linhaSelecionada === node.id;
+  const stickyColBg = isSelected
+    ? 'bg-amber-100'
+    : isResultado
+      ? (resultadoPositivo ? 'bg-emerald-50' : 'bg-rose-50')
+      : isCalc
+        ? 'bg-slate-50'
+        : depth === 0 ? 'bg-gray-100' : 'bg-white';
+  const stickyColClass = `sticky left-0 z-10 ${stickyColBg} print:static print:bg-transparent`;
+
+  // Destaque amarelo na linha inteira quando selecionada (sobrepõe rowBg/hover).
+  const rowBgFinal = isSelected ? 'bg-amber-100' : rowBg;
+  const hoverFinal = isSelected ? '' : (!isCalc ? 'hover:bg-blue-50/30' : '');
 
   return (
     <>
-      <tr className={`group/row border-b border-gray-50 ${rowBg} ${!isCalc ? 'hover:bg-blue-50/30' : ''}`}>
-        <td className="px-4 py-2 grupo-row overflow-hidden" style={{ paddingLeft: 12 + indent }}>
+      <tr onClick={handleSelectLinha(node.id)}
+        className={`group/row border-b border-gray-50 cursor-pointer ${rowBgFinal} ${hoverFinal}`}>
+        <td className={`px-4 py-2 grupo-row overflow-hidden ${stickyColClass}`} style={{ paddingLeft: 12 + indent }}>
           <div className="flex items-center gap-1.5 min-w-0">
             {hasChildren && !isCalc ? (
               <button onClick={() => onToggleGrupo(node.id)}
@@ -2440,6 +2473,8 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
             ocultarZeradas={ocultarZeradas}
             showAH={showAH}
             mostrarTotal={mostrarTotal}
+            linhaSelecionada={linhaSelecionada}
+            onSelectLinha={onSelectLinha}
           />
         ))}
       </AnimatePresence>
@@ -2451,8 +2486,13 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
         const totalCols = 1 + (meses.length * 2) + (mostrarTotal ? 2 + (showAH ? 1 : 0) : 0);
         return (
           <>
-            <tr key={conta.id} className="conta-row border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
-              <td className="px-4 py-1.5 overflow-hidden" style={{ paddingLeft: 12 + indent + 24 }}>
+            <tr key={conta.id} onClick={handleSelectLinha(conta.id)}
+              className={`conta-row border-b border-gray-50 cursor-pointer transition-colors ${
+                linhaSelecionada === conta.id ? 'bg-amber-100' : 'hover:bg-blue-50/30'
+              }`}>
+              <td className={`px-4 py-1.5 overflow-hidden sticky left-0 z-10 print:static print:bg-transparent ${
+                linhaSelecionada === conta.id ? 'bg-amber-100' : 'bg-white'
+              }`} style={{ paddingLeft: 12 + indent + 24 }}>
                 <div className="flex items-center gap-2 min-w-0">
                   {temLancs ? (
                     <button onClick={() => onToggleConta(conta.id)}
@@ -2514,8 +2554,13 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
               const valorComSinal = l.valor * l.sinal;
               const valorClasses = `text-right px-3 py-1 font-mono tabular-nums text-[10.5px] whitespace-nowrap ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`;
               return (
-                <tr key={`l-${l.id}`} className="lanc-row border-b border-gray-50 bg-gray-50/30 hover:bg-blue-50/30 transition-colors">
-                  <td className="px-4 py-1 overflow-hidden" style={{ paddingLeft: 12 + indent + 24 + 24 }}>
+                <tr key={`l-${l.id}`} onClick={handleSelectLinha(`l-${l.id}`)}
+                  className={`lanc-row border-b border-gray-50 cursor-pointer transition-colors ${
+                    linhaSelecionada === `l-${l.id}` ? 'bg-amber-100' : 'bg-gray-50/30 hover:bg-blue-50/30'
+                  }`}>
+                  <td className={`px-4 py-1 overflow-hidden sticky left-0 z-10 print:static print:bg-transparent ${
+                    linhaSelecionada === `l-${l.id}` ? 'bg-amber-100' : 'bg-gray-50'
+                  }`} style={{ paddingLeft: 12 + indent + 24 + 24 }}>
                     <div className="flex items-center gap-2.5 text-[10.5px] min-w-0">
                       <span className="font-mono text-gray-400 w-14 flex-shrink-0">{formatDataBR(l.data)}</span>
                       <span title={l.descricao} className="text-gray-700 truncate min-w-0 flex-1">{l.descricao}</span>
