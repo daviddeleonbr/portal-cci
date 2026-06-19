@@ -11,6 +11,7 @@ import Toast from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import { useClienteSession } from '../../hooks/useAuth';
 import * as melhoriasService from '../../services/melhoriasService';
+import AnexosMelhoria, { SeletorAnexosPreUpload } from '../../components/melhorias/AnexosMelhoria';
 
 const STATUS_COR = {
   amber:   'bg-amber-50 text-amber-700 border-amber-200',
@@ -52,9 +53,9 @@ export default function ClienteMelhorias() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const salvarNova = async ({ tipo, titulo, descricao }) => {
+  const salvarNova = async ({ tipo, titulo, descricao, anexos = [] }) => {
     try {
-      await melhoriasService.criar({
+      const criada = await melhoriasService.criar({
         usuario,
         tipo, titulo, descricao,
         contexto: {
@@ -63,6 +64,19 @@ export default function ClienteMelhorias() {
           empresa_id:   cliente?.id  || null,
         },
       });
+
+      // Upload dos anexos selecionados (pré-criação). Erros não cancelam
+      // a criação — só mostra toast e segue.
+      for (const file of anexos) {
+        try {
+          await melhoriasService.uploadAnexo({
+            melhoriaId: criada.id, file, autor: usuario, autorTipo: 'cliente',
+          });
+        } catch (err) {
+          showToast('error', `Falha ao anexar "${file.name}": ${err.message}`);
+        }
+      }
+
       showToast('success', 'Solicitação enviada. Acompanhe o status aqui.');
       setModalNovo(false);
       carregar();
@@ -174,7 +188,7 @@ export default function ClienteMelhorias() {
         </div>
       )}
 
-      <ModalNovaSolicitacao open={modalNovo} onClose={() => setModalNovo(false)} onSave={salvarNova} />
+      <ModalNovaSolicitacao open={modalNovo} onClose={() => setModalNovo(false)} onSave={salvarNova} showToast={showToast} />
 
       <ModalDetalhe melhoria={detalhe} usuario={usuario} onClose={() => setDetalhe(null)}
         onComentou={() => carregar()} showToast={showToast} />
@@ -199,14 +213,15 @@ function CardStat({ label, valor, cor }) {
   );
 }
 
-export function ModalNovaSolicitacao({ open, onClose, onSave }) {
+export function ModalNovaSolicitacao({ open, onClose, onSave, showToast }) {
   const [tipo, setTipo] = useState('melhoria');
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
+  const [anexos, setAnexos] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) { setTipo('melhoria'); setTitulo(''); setDescricao(''); setSaving(false); }
+    if (open) { setTipo('melhoria'); setTitulo(''); setDescricao(''); setAnexos([]); setSaving(false); }
   }, [open]);
 
   const pode = titulo.trim().length > 0 && descricao.trim().length >= 10;
@@ -214,7 +229,7 @@ export function ModalNovaSolicitacao({ open, onClose, onSave }) {
   const submit = async () => {
     if (!pode) return;
     setSaving(true);
-    try { await onSave({ tipo, titulo, descricao }); }
+    try { await onSave({ tipo, titulo, descricao, anexos }); }
     finally { setSaving(false); }
   };
 
@@ -273,6 +288,8 @@ export function ModalNovaSolicitacao({ open, onClose, onSave }) {
               : 'Descreva a ideia, qual problema ela resolve e onde encaixaria no sistema.'}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
+
+        <SeletorAnexosPreUpload arquivos={anexos} setArquivos={setAnexos} showToast={showToast} />
 
         <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
           <button type="button" onClick={onClose}
@@ -354,6 +371,14 @@ function ModalDetalhe({ melhoria, usuario, onClose, onComentou, showToast }) {
           <p className="text-[10.5px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Descrição</p>
           <p className="text-[13px] text-gray-800 whitespace-pre-line leading-relaxed">{melhoria.descricao}</p>
         </div>
+
+        {/* Anexos */}
+        <AnexosMelhoria
+          melhoriaId={melhoria.id}
+          autor={usuario}
+          autorTipo="cliente"
+          showToast={showToast}
+        />
 
         {/* Timeline de comentários */}
         <div>

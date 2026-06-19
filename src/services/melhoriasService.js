@@ -152,3 +152,97 @@ export function metaStatus(key) {
 export function metaTipo(key) {
   return TIPOS.find(t => t.key === key) || TIPOS[0];
 }
+
+// ─── Anexos (imagens, PDFs etc) ────────────────────────────────
+export const MAX_ANEXO_BYTES = 5 * 1024 * 1024;       // 5 MB
+export const MAX_ANEXOS_POR_MELHORIA = 3;
+const BUCKET = 'melhorias';
+
+function sanitizarNomeArquivo(nome) {
+  return (nome || 'arquivo')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')   // sem acentos
+    .replace(/[^a-zA-Z0-9._-]/g, '-')                   // só ASCII seguro
+    .replace(/-+/g, '-')
+    .slice(0, 80);
+}
+
+export async function listarAnexos(melhoriaId) {
+  if (!melhoriaId) return [];
+  const { data, error } = await supabase
+    .from('cci_melhorias_anexos')
+    .select('*')
+    .eq('melhoria_id', melhoriaId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function uploadAnexo({ melhoriaId, file, autor, autorTipo }) {
+  if (!melhoriaId) throw new Error('melhoria_id obrigatório.');
+  if (!file)       throw new Error('Arquivo inválido.');
+  if (file.size > MAX_ANEXO_BYTES) {
+    throw new Error(`Arquivo "${file.name}" passa de 5MB.`);
+  }
+
+  // Limite de 3 por melhoria — confere no banco antes.
+  const atuais = await listarAnexos(melhoriaId);
+  if (atuais.length >= MAX_ANEXOS_POR_MELHORIA) {
+    throw new Error(`Limite de ${MAX_ANEXOS_POR_MELHORIA} anexos por solicitação atingido.`);
+  }
+
+  const path = `${melhoriaId}/${crypto.randomUUID()}-${sanitizarNomeArquivo(file.name)}`;
+  const { error: errUp } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+  if (errUp) throw errUp;
+
+  const payload = {
+    melhoria_id:   melhoriaId,
+    storage_path:  path,
+    nome_original: file.name,
+    tamanho_bytes: file.size,
+    tipo_mime:     file.type || null,
+    autor_id:      autor?.id   || null,
+    autor_nome:    autor?.nome || null,
+    autor_tipo:    autorTipo === 'admin' ? 'admin' : 'cliente',
+  };
+  const { data, error } = await supabase
+    .from('cci_melhorias_anexos')
+    .insert(payload)
+    .select()
+    .single();
+  if (error) {
+    // rollback do storage se inserção falhar
+    await supabase.storage.from(BUCKET).remove([path]).catch(() => {});
+    throw error;
+  }
+  return data;
+}
+
+// URL temporária pra download/preview (1 hora).
+export async function obterUrlAnexo(storagePath) {
+  if (!storagePath) return null;
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, 60 * 60);
+  if (error) throw error;
+  return data?.signedUrl || null;
+}
+
+export async function excluirAnexo(anexo) {
+  if (!anexo?.id) throw new Error('anexo inválido.');
+  await supabase.storage.from(BUCKET).remove([anexo.storage_path]).catch(() => {});
+  const { error } = await supabase
+    .from('cci_melhorias_anexos')
+    .delete()
+    .eq('id', anexo.id);
+  if (error) throw error;
+}
+
+export function formatarTamanho(bytes) {
+  if (bytes == null) return '';
+  const KB = 1024, MB = KB * 1024;
+  if (bytes >= MB) return `${(bytes / MB).toFixed(1)} MB`;
+  if (bytes >= KB) return `${(bytes / KB).toFixed(0)} KB`;
+  return `${bytes} B`;
+}

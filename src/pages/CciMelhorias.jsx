@@ -14,6 +14,7 @@ import Modal from '../components/ui/Modal';
 import { useAdminSession } from '../hooks/useAuth';
 import * as melhoriasService from '../services/melhoriasService';
 import { ModalNovaSolicitacao } from './cliente/ClienteMelhorias';
+import AnexosMelhoria from '../components/melhorias/AnexosMelhoria';
 
 const STATUS_COR = {
   amber:   'bg-amber-50 text-amber-700 border-amber-200',
@@ -348,6 +349,14 @@ function ModalDetalheAdmin({ melhoria, usuarioAdmin, onClose, onMudou, showToast
             <p className="text-[10.5px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Descrição</p>
             <p className="text-[13px] text-gray-800 whitespace-pre-line leading-relaxed">{melhoria.descricao}</p>
           </div>
+
+          {/* Anexos (admin pode adicionar/remover seus próprios) */}
+          <AnexosMelhoria
+            melhoriaId={melhoria.id}
+            autor={usuarioAdmin}
+            autorTipo="admin"
+            showToast={showToast}
+          />
 
           {/* Timeline */}
           <div>
