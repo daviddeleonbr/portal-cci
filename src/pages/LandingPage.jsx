@@ -14,7 +14,6 @@ import {
   MessageCircle, X, Loader2,
 } from 'lucide-react';
 import * as cciContatoService from '../services/cciContatoService';
-import LogoCCI from '../components/ui/LogoCCI';
 
 // Custom event para abrir o modal de "Agendar diagnóstico" de qualquer
 // botão na landing sem prop drilling.
@@ -83,15 +82,14 @@ function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         <a href="#top" className="flex items-center gap-3 group">
-          <span className="relative inline-flex h-8 w-8 items-center justify-center">
-            <LogoCCI className="h-full w-full" />
-          </span>
-          <p
-            className="text-[36px] font-bold tracking-tight leading-none mt-[2px]"
-            style={{ fontFamily: "'Sora', sans-serif" }}
-          >
-            CCI
-          </p>
+          {/* Logo nova — usada APENAS na topbar da landing. Componente
+              <LogoCCI> antigo continua em sidebar admin/cliente. */}
+          <img
+            src="/logo-cci-landing.png"
+            alt="CCI"
+            className="h-10 w-auto object-contain"
+            draggable={false}
+          />
           <span className="h-8 w-px bg-slate-600 self-center" />
           <div className="leading-tight text-slate-300 text-[10px] font-normal uppercase tracking-widest self-center">
             <p>Consultoria</p>
