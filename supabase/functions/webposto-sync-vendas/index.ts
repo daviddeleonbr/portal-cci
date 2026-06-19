@@ -222,8 +222,13 @@ serve(async (req) => {
       })
       .filter(Boolean) as any[];
 
-    // ── 5) Upsert em chunks de 500
-    const CHUNK = 500;
+    // ── 5) Upsert em chunks pequenos.
+    // CHUNK=200 escolhido empiricamente — chunks de 500+ davam
+    // "canceling statement due to statement timeout" no orquestrador
+    // do cron por causa do payload pesado (cada item carrega `raw jsonb`
+    // com o objeto VENDA_ITEM completo da Quality). Reduzir o tamanho
+    // do batch mantém cada INSERT abaixo do statement_timeout do PG.
+    const CHUNK = 200;
     for (let i = 0; i < rowsVenda.length; i += CHUNK) {
       const slice = rowsVenda.slice(i, i + CHUNK);
       const { error } = await supabase.from('cci_webposto_venda').upsert(slice, {

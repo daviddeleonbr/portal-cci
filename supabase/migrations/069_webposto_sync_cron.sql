@@ -5,14 +5,18 @@
 -- orquestrador webposto-sync-vendas-batch, que dispara o worker
 -- pra cada empresa com sync ativa.
 --
--- IMPORTANTE: substituir <SUPABASE_PROJECT_REF> e <SERVICE_ROLE_KEY>
--- pelos valores reais do projeto antes de rodar a migration. Em
--- ambiente de produção, gerencie as secrets via:
+-- IMPORTANTE: substituir o subdomínio do projeto na URL inline,
+-- e cadastrar a `service_role_key` no Vault antes de rodar:
 --
---   ALTER DATABASE postgres SET app.settings.webposto_sync_url = '...';
---   ALTER DATABASE postgres SET app.settings.webposto_sync_token = '...';
+--   select vault.create_secret(
+--     '<SERVICE_ROLE_KEY>',
+--     'service_role_key',
+--     'Usada por cron jobs pra chamar edge functions'
+--   );
 --
--- Ou (preferido) configure os GUCs no painel da Supabase.
+-- Por que NÃO usamos `alter database postgres set app.settings.xxx`:
+-- no Supabase managed essa operação precisa superuser e dá
+-- "permission denied". O Vault é a alternativa oficial.
 -- ============================================================
 
 create extension if not exists pg_cron;
@@ -26,15 +30,18 @@ exception when others then null;
 end $$;
 
 -- Agenda 04:00 UTC = 01:00 BRT
+-- URL inline (subdomínio é público — só a service_role_key é secreta).
 select cron.schedule(
   'webposto_sync_diario',
   '0 4 * * *',
   $$
   select net.http_post(
-    url := current_setting('app.settings.webposto_sync_url', true),
+    url := 'https://tyfqqezwekzycfmhehfk.supabase.co/functions/v1/webposto-sync-vendas-batch',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.webposto_sync_token', true)
+      'Authorization', 'Bearer ' || (select decrypted_secret
+                                       from vault.decrypted_secrets
+                                      where name = 'service_role_key')
     ),
     body := '{}'::jsonb
   );
