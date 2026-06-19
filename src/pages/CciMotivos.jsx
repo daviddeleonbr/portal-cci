@@ -198,13 +198,15 @@ export default function CciMotivos({ embedded = false }) {
       <ModalMotivo open={modal.open} data={modal.data} contas={contas}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
-      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">Excluir o motivo <strong>{confirm.nome}</strong>?</p>
+      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir" size="sm"
+        footer={(
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false })} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
             <button onClick={confirm.onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
           </div>
+        )}>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Excluir o motivo <strong>{confirm.nome}</strong>?</p>
         </div>
       </Modal>
     </div>
@@ -233,8 +235,18 @@ function ModalMotivo({ open, data, contas, onClose, onSave }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Motivo' : 'Novo Motivo'} size="md">
-      <form onSubmit={submit} className="space-y-4">
+    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Motivo' : 'Novo Motivo'} size="md"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+          <button type="submit" form="form-motivo" disabled={saving || !form.codigo?.trim() || !form.nome?.trim() || !form.conta_debito_id || !form.conta_credito_id}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {data?.id ? 'Salvar' : 'Criar'}
+          </button>
+        </div>
+      )}>
+      <form id="form-motivo" onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-1">
             <label className="block text-xs font-medium text-gray-700 mb-1">Código *</label>
@@ -291,15 +303,6 @@ function ModalMotivo({ open, data, contas, onClose, onSave }) {
               className="rounded border-gray-300" />
             Ativo
           </label>
-        </div>
-
-        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button type="submit" disabled={saving || !form.codigo?.trim() || !form.nome?.trim() || !form.conta_debito_id || !form.conta_credito_id}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {data?.id ? 'Salvar' : 'Criar'}
-          </button>
         </div>
       </form>
     </Modal>

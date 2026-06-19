@@ -266,20 +266,22 @@ export default function CciRelatoriosBi() {
         onSave={salvar}
       />
 
-      <Modal open={confirm.open} onClose={() => setConfirm({ open: false, item: null })} title="Excluir relatório">
-        <p className="text-sm text-gray-700 mb-4">
+      <Modal open={confirm.open} onClose={() => setConfirm({ open: false, item: null })} title="Excluir relatório"
+        footer={(
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setConfirm({ open: false, item: null })}
+              className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+              Cancelar
+            </button>
+            <button onClick={() => excluir(confirm.item.id)}
+              className="px-4 py-2 text-[13px] font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+              Excluir
+            </button>
+          </div>
+        )}>
+        <p className="text-sm text-gray-700">
           Tem certeza que quer excluir o relatório <strong>{confirm.item?.nome}</strong>? Essa ação não pode ser desfeita.
         </p>
-        <div className="flex justify-end gap-2">
-          <button onClick={() => setConfirm({ open: false, item: null })}
-            className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-            Cancelar
-          </button>
-          <button onClick={() => excluir(confirm.item.id)}
-            className="px-4 py-2 text-[13px] font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
-            Excluir
-          </button>
-        </div>
       </Modal>
     </div>
   );
@@ -367,7 +369,33 @@ function ModalRelatorio({ open, data, redesWp, redesAs, onClose, onSave }) {
   });
 
   return (
-    <Modal open={open} onClose={onClose} title={data ? 'Editar relatório de BI' : 'Novo relatório de BI'} size="lg">
+    <Modal open={open} onClose={onClose} title={data ? 'Editar relatório de BI' : 'Novo relatório de BI'} size="lg"
+      footer={(
+        <div className="flex items-center justify-between">
+          {passo === 1 ? (
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+              Cancelar
+            </button>
+          ) : (
+            <button type="button" onClick={() => setPasso(1)}
+              className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+              ← Voltar
+            </button>
+          )}
+          {passo === 1 ? (
+            <button type="submit" form="form-relatorio" disabled={!podeAvancar}
+              className="px-4 py-2 text-[13px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              Próximo →
+            </button>
+          ) : (
+            <button type="submit" form="form-relatorio"
+              className="px-4 py-2 text-[13px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm">
+              {data ? 'Salvar alterações' : 'Criar relatório'}
+            </button>
+          )}
+        </div>
+      )}>
       {/* Indicador de progresso */}
       <div className="flex items-center gap-2 mb-4">
         <StepDot ativo={passo === 1} concluido={passo > 1} numero={1} label="Identificação" />
@@ -375,7 +403,7 @@ function ModalRelatorio({ open, data, redesWp, redesAs, onClose, onSave }) {
         <StepDot ativo={passo === 2} concluido={false} numero={2} label="Acesso" />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form id="form-relatorio" onSubmit={handleSubmit} className="space-y-4">
         {passo === 1 && (
           <>
             <div>
@@ -490,31 +518,6 @@ function ModalRelatorio({ open, data, redesWp, redesAs, onClose, onSave }) {
             </div>
           </>
         )}
-
-        <div className="flex items-center justify-between border-t border-gray-100 pt-4">
-          {passo === 1 ? (
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-              Cancelar
-            </button>
-          ) : (
-            <button type="button" onClick={() => setPasso(1)}
-              className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-              ← Voltar
-            </button>
-          )}
-          {passo === 1 ? (
-            <button type="submit" disabled={!podeAvancar}
-              className="px-4 py-2 text-[13px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
-              Próximo →
-            </button>
-          ) : (
-            <button type="submit"
-              className="px-4 py-2 text-[13px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm">
-              {data ? 'Salvar alterações' : 'Criar relatório'}
-            </button>
-          )}
-        </div>
       </form>
     </Modal>
   );

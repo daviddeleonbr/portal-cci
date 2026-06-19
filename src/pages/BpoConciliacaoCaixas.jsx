@@ -2061,7 +2061,20 @@ function PainelAutosystem({
 
       {/* Modal: detalhamento das contas não classificadas */}
       <Modal open={modalOutrosOpen} onClose={() => setModalOutrosOpen(false)}
-        title="Detalhamento de contas não classificadas" size="md">
+        title="Detalhamento de contas não classificadas" size="md"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setModalOutrosOpen(false)}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
+              Fechar
+            </button>
+            <a href="/admin/clientes" target="_blank" rel="noreferrer"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 flex items-center gap-2">
+              Abrir Classificar contas
+              <ChevronRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        )}>
         <div className="space-y-4">
           <p className="text-xs text-gray-600">
             As contas abaixo não foram categorizadas em <strong>Dinheiro · Cartão/PIX · Cheque · A prazo · Sobra/Falta caixa</strong>.
@@ -2106,24 +2119,20 @@ function PainelAutosystem({
               </tfoot>
             </table>
           </div>
-
-          <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-            <button onClick={() => setModalOutrosOpen(false)}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
-              Fechar
-            </button>
-            <a href="/admin/clientes" target="_blank" rel="noreferrer"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 flex items-center gap-2">
-              Abrir Classificar contas
-              <ChevronRight className="h-3.5 w-3.5" />
-            </a>
-          </div>
         </div>
       </Modal>
 
       {/* Modal: detalhamento das outras entradas (não-venda) */}
       <Modal open={modalOutrasEntradasOpen} onClose={() => setModalOutrasEntradasOpen(false)}
-        title="Detalhamento de outras entradas (não-venda)" size="md">
+        title="Detalhamento de outras entradas (não-venda)" size="md"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setModalOutrasEntradasOpen(false)}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
+              Fechar
+            </button>
+          </div>
+        )}>
         <div className="space-y-4">
           <p className="text-xs text-gray-600">
             Lançamentos com <code className="font-mono bg-gray-100 px-1 rounded">conta_debitar</code> começando com
@@ -2168,13 +2177,6 @@ function PainelAutosystem({
                 </tr>
               </tfoot>
             </table>
-          </div>
-
-          <div className="flex justify-end pt-2 border-t border-gray-100">
-            <button onClick={() => setModalOutrasEntradasOpen(false)}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
-              Fechar
-            </button>
           </div>
         </div>
       </Modal>

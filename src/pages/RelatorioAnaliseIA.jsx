@@ -436,15 +436,9 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         return null;
       })()}
 
-      <Modal open={modalKey} onClose={() => setModalKey(false)} title="Chave da API Anthropic" size="sm">
-        <div className="space-y-3">
-          <p className="text-[13px] text-gray-600 leading-relaxed">
-            Informe sua chave de API da Anthropic. Fica salva apenas no seu navegador (localStorage).
-          </p>
-          <input type="password" value={tempKey} onChange={e => setTempKey(e.target.value)}
-            placeholder="sk-ant-..." autoFocus
-            className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+      <Modal open={modalKey} onClose={() => setModalKey(false)} title="Chave da API Anthropic" size="sm"
+        footer={(
+          <div className="flex gap-2 justify-end">
             {apiKey && (
               <button onClick={limparChave} className="rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 font-medium">
                 Remover chave
@@ -458,6 +452,14 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
               <RefreshCw className="h-3.5 w-3.5" /> Salvar
             </button>
           </div>
+        )}>
+        <div className="space-y-3">
+          <p className="text-[13px] text-gray-600 leading-relaxed">
+            Informe sua chave de API da Anthropic. Fica salva apenas no seu navegador (localStorage).
+          </p>
+          <input type="password" value={tempKey} onChange={e => setTempKey(e.target.value)}
+            placeholder="sk-ant-..." autoFocus
+            className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
       </Modal>
     </div>

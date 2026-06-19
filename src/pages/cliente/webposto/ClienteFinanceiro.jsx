@@ -134,7 +134,23 @@ export default function ClienteFinanceiro() {
       </div>
 
       {/* Detail Modal */}
-      <Modal open={!!detailBoleto} onClose={() => setDetailBoleto(null)} title="Detalhes do Boleto" size="sm">
+      <Modal open={!!detailBoleto} onClose={() => setDetailBoleto(null)} title="Detalhes do Boleto" size="sm"
+        footer={detailBoleto && detailBoleto.status === 'pendente' ? (
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setDetailBoleto(null); showToast('success', 'Linha copiada!'); }}
+              className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Copy className="h-4 w-4" /> Copiar
+            </button>
+            <button
+              onClick={() => { setDetailBoleto(null); showToast('success', 'Download iniciado!'); }}
+              className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Download className="h-4 w-4" /> Baixar PDF
+            </button>
+          </div>
+        ) : null}>
         {detailBoleto && (
           <div className="space-y-4">
             <div className="text-center pb-4 border-b border-gray-100">
@@ -165,22 +181,6 @@ export default function ClienteFinanceiro() {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 mb-1">Linha Digitavel</p>
                 <p className="text-xs font-mono text-gray-700 break-all">23793.38128 60000.000003 00000.000400 1 87650000004500</p>
-              </div>
-            )}
-            {detailBoleto.status === 'pendente' && (
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setDetailBoleto(null); showToast('success', 'Linha copiada!'); }}
-                  className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Copy className="h-4 w-4" /> Copiar
-                </button>
-                <button
-                  onClick={() => { setDetailBoleto(null); showToast('success', 'Download iniciado!'); }}
-                  className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Download className="h-4 w-4" /> Baixar PDF
-                </button>
               </div>
             )}
           </div>

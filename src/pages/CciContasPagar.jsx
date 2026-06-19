@@ -286,13 +286,15 @@ export default function CciContasPagar({ embedded = false }) {
       <ModalPagamento open={modalPag.open} data={modalPag.data} motivos={motivosPagamento}
         onClose={() => setModalPag({ open: false, data: null })} onSave={marcarPaga} />
 
-      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">Excluir a conta <strong>{confirm.nome}</strong>?</p>
+      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir" size="sm"
+        footer={(
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false })} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
             <button onClick={confirm.onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
           </div>
+        )}>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Excluir a conta <strong>{confirm.nome}</strong>?</p>
         </div>
       </Modal>
     </div>
@@ -351,8 +353,18 @@ function ModalContaPagar({ open, data, fornecedores, planoContas, motivos, onClo
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Conta a Pagar' : 'Nova Conta a Pagar'} size="md">
-      <form onSubmit={submit} className="space-y-4">
+    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Conta a Pagar' : 'Nova Conta a Pagar'} size="md"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+          <button type="submit" form="form-conta-pagar" disabled={saving || !form.descricao?.trim() || !form.vencimento || !form.valor}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {data?.id ? 'Salvar' : (form.quantidade_parcelas > 1 ? `Criar ${form.quantidade_parcelas} parcelas` : 'Criar')}
+          </button>
+        </div>
+      )}>
+      <form id="form-conta-pagar" onSubmit={submit} className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Descrição *</label>
           <input type="text" required autoFocus value={form.descricao || ''}
@@ -459,15 +471,6 @@ function ModalContaPagar({ open, data, fornecedores, planoContas, motivos, onClo
             onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
-
-        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button type="submit" disabled={saving || !form.descricao?.trim() || !form.vencimento || !form.valor}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {data?.id ? 'Salvar' : (form.quantidade_parcelas > 1 ? `Criar ${form.quantidade_parcelas} parcelas` : 'Criar')}
-          </button>
-        </div>
       </form>
     </Modal>
   );
@@ -503,9 +506,19 @@ function ModalPagamento({ open, data, motivos, onClose, onSave }) {
   const totalLiquido = Number(form.valor_pago || 0) + Number(form.juros || 0) - Number(form.desconto || 0);
 
   return (
-    <Modal open={open} onClose={onClose} title="Registrar Pagamento" size="sm">
+    <Modal open={open} onClose={onClose} title="Registrar Pagamento" size="sm"
+      footer={data ? (
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+          <button type="submit" form="form-pagamento" disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Registrar pagamento
+          </button>
+        </div>
+      ) : null}>
       {data && (
-        <form onSubmit={submit} className="space-y-4">
+        <form id="form-pagamento" onSubmit={submit} className="space-y-4">
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Conta</p>
             <p className="text-sm font-medium text-gray-900">{data.descricao}</p>
@@ -594,15 +607,6 @@ function ModalPagamento({ open, data, motivos, onClose, onSave }) {
           <div className="bg-emerald-50 rounded-lg p-3 flex justify-between items-center border border-emerald-100">
             <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Total pago</span>
             <span className="text-lg font-bold text-emerald-700 tabular-nums">{formatCurrency(totalLiquido)}</span>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-            <button type="submit" disabled={saving}
-              className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              Registrar pagamento
-            </button>
           </div>
         </form>
       )}

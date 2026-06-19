@@ -214,17 +214,19 @@ export default function CciMensagensIniciais() {
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
       <Modal open={confirm.open} onClose={() => setConfirm({ open: false, item: null })}
-        title="Excluir mensagem" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Excluir a mensagem <strong>{confirm.item?.titulo}</strong>? Os registros de visualização também serão removidos.
-          </p>
+        title="Excluir mensagem" size="sm"
+        footer={(
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false, item: null })}
               className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
             <button onClick={() => excluir(confirm.item.id)}
               className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
           </div>
+        )}>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Excluir a mensagem <strong>{confirm.item?.titulo}</strong>? Os registros de visualização também serão removidos.
+          </p>
         </div>
       </Modal>
     </div>
@@ -274,7 +276,18 @@ function ModalMensagem({ open, data, onClose, onSave }) {
 
   return (
     <Modal open={open} onClose={onClose}
-      title={data?.id ? 'Editar mensagem' : 'Nova mensagem inicial'} size="lg">
+      title={data?.id ? 'Editar mensagem' : 'Nova mensagem inicial'} size="lg"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+          <button type="button" onClick={submit} disabled={!podeSalvar || saving}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {data?.id ? 'Salvar alterações' : 'Publicar mensagem'}
+          </button>
+        </div>
+      )}>
       <div className="space-y-4">
         <div>
           <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
@@ -335,16 +348,6 @@ function ModalMensagem({ open, data, onClose, onSave }) {
               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             <span className="text-[13px] text-gray-700">Ativa (visível ao cliente)</span>
           </label>
-        </div>
-
-        <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-          <button type="button" onClick={onClose}
-            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button type="button" onClick={submit} disabled={!podeSalvar || saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {data?.id ? 'Salvar alterações' : 'Publicar mensagem'}
-          </button>
         </div>
       </div>
     </Modal>

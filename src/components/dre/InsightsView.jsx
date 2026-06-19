@@ -419,7 +419,19 @@ function ModalApiKey({ open, apiKey, onClose, onSave }) {
   const [value, setValue] = useState(apiKey || '');
 
   return (
-    <Modal open={open} onClose={onClose} title="Chave da API Anthropic" size="sm">
+    <Modal open={open} onClose={onClose} title="Chave da API Anthropic" size="sm"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+            Cancelar
+          </button>
+          <button onClick={() => onSave(value.trim())} disabled={!value.trim()}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+            Salvar e gerar análise
+          </button>
+        </div>
+      )}>
       <div className="space-y-4">
         <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 flex gap-2">
           <Key className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -436,17 +448,6 @@ function ModalApiKey({ open, apiKey, onClose, onSave }) {
           <input type="password" value={value} onChange={e => setValue(e.target.value)}
             placeholder="sk-ant-..."
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-        </div>
-
-        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button type="button" onClick={onClose}
-            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
-            Cancelar
-          </button>
-          <button onClick={() => onSave(value.trim())} disabled={!value.trim()}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
-            Salvar e gerar análise
-          </button>
         </div>
       </div>
     </Modal>

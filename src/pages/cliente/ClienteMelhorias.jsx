@@ -234,7 +234,18 @@ export function ModalNovaSolicitacao({ open, onClose, onSave, showToast }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Nova solicitação" size="lg">
+    <Modal open={open} onClose={onClose} title="Nova solicitação" size="lg"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+          <button type="button" onClick={submit} disabled={!pode || saving}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Send className="h-4 w-4" /> Enviar solicitação
+          </button>
+        </div>
+      )}>
       <div className="space-y-4">
         <div>
           <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tipo</label>
@@ -290,16 +301,6 @@ export function ModalNovaSolicitacao({ open, onClose, onSave, showToast }) {
         </div>
 
         <SeletorAnexosPreUpload arquivos={anexos} setArquivos={setAnexos} showToast={showToast} />
-
-        <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-          <button type="button" onClick={onClose}
-            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button type="button" onClick={submit} disabled={!pode || saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            <Send className="h-4 w-4" /> Enviar solicitação
-          </button>
-        </div>
       </div>
     </Modal>
   );

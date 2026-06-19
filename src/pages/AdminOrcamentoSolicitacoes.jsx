@@ -223,7 +223,25 @@ function ModalDetalhe({ s, onClose, onMudar, onExcluir }) {
   const postos = s.postos || [];
 
   return (
-    <Modal open onClose={onClose} title={`Solicitação · ${s.nome}`} size="lg">
+    <Modal open onClose={onClose} title={`Solicitação · ${s.nome}`} size="lg"
+      footer={(
+        <div className="flex items-center justify-between gap-3">
+          <button onClick={onExcluir}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 px-3 py-1.5 text-[12.5px] font-semibold transition-colors">
+            <Trash2 className="h-3.5 w-3.5" /> Excluir
+          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 px-3 py-1.5 text-[12.5px] font-semibold transition-colors">
+              <Printer className="h-3.5 w-3.5" /> Imprimir
+            </button>
+            <a href={whatsLink} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-[12.5px] font-semibold transition-colors">
+              <Phone className="h-3.5 w-3.5" /> WhatsApp
+            </a>
+          </div>
+        </div>
+      )}>
       <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2">
 
         <Secao titulo="Solicitante" icone={User}>
@@ -287,23 +305,6 @@ function ModalDetalhe({ s, onClose, onMudar, onExcluir }) {
             <Send className="h-3.5 w-3.5" /> Salvar análise
           </button>
         </Secao>
-      </div>
-
-      <div className="flex items-center justify-between gap-3 pt-4 mt-4 border-t border-gray-100">
-        <button onClick={onExcluir}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 px-3 py-1.5 text-[12.5px] font-semibold transition-colors">
-          <Trash2 className="h-3.5 w-3.5" /> Excluir
-        </button>
-        <div className="flex items-center gap-2">
-          <button onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 px-3 py-1.5 text-[12.5px] font-semibold transition-colors">
-            <Printer className="h-3.5 w-3.5" /> Imprimir
-          </button>
-          <a href={whatsLink} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-[12.5px] font-semibold transition-colors">
-            <Phone className="h-3.5 w-3.5" /> WhatsApp
-          </a>
-        </div>
       </div>
     </Modal>
   );

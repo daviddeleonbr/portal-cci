@@ -868,8 +868,17 @@ function ModalChave({ open, data, onClose, onSave }) {
   }, [open, data]);
 
   return (
-    <Modal open={open} onClose={onClose} title={data ? 'Editar Chave API' : 'Nova Chave API'} size="sm">
-      <form onSubmit={async (e) => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-4">
+    <Modal open={open} onClose={onClose} title={data ? 'Editar Chave API' : 'Nova Chave API'} size="sm"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
+          <button type="submit" form="form-chave-api" disabled={saving || !form.nome.trim() || !form.chave.trim()}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />} {data ? 'Salvar' : 'Criar'}
+          </button>
+        </div>
+      )}>
+      <form id="form-chave-api" onSubmit={async (e) => { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome (identificação)</label>
           <input type="text" required value={form.nome} onChange={(e) => setForm(f => ({ ...f, nome: e.target.value }))}
@@ -881,13 +890,6 @@ function ModalChave({ open, data, onClose, onSave }) {
           <input type="text" required value={form.chave} onChange={(e) => setForm(f => ({ ...f, chave: e.target.value }))}
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
             placeholder="f89021bf-d9e5-481d-b6a0-..." />
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
-          <button type="submit" disabled={saving || !form.nome.trim() || !form.chave.trim()}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />} {data ? 'Salvar' : 'Criar'}
-          </button>
         </div>
       </form>
     </Modal>
@@ -1578,8 +1580,18 @@ function ModalContaManual({ open, data, grupos, grupoIdField = 'grupo_dre_id', o
   const gruposSelecionaveis = grupos.filter(g => ['grupo', 'entrada', 'saida'].includes(g.tipo));
 
   return (
-    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Conta' : 'Nova Conta Manual'} size="sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Conta' : 'Nova Conta Manual'} size="sm"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
+          <button type="submit" form="form-conta-manual" disabled={saving || !form.conta_descricao?.trim() || !form[grupoIdField]}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {data?.id ? 'Salvar' : 'Adicionar'}
+          </button>
+        </div>
+      )}>
+      <form id="form-conta-manual" onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Descrição *</label>
           <input type="text" required autoFocus value={form.conta_descricao}
@@ -1635,15 +1647,6 @@ function ModalContaManual({ open, data, grupos, grupoIdField = 'grupo_dre_id', o
             onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
-
-        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
-          <button type="submit" disabled={saving || !form.conta_descricao?.trim() || !form[grupoIdField]}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {data?.id ? 'Salvar' : 'Adicionar'}
-          </button>
-        </div>
       </form>
     </Modal>
   );
@@ -1652,17 +1655,19 @@ function ModalContaManual({ open, data, grupos, grupoIdField = 'grupo_dre_id', o
 // ─── Modal confirmar (reutilizavel) ─────────────────────────
 function ModalConfirmManual({ open, message, onClose, onConfirm }) {
   return (
-    <Modal open={open} onClose={onClose} title="Confirmar" size="sm">
+    <Modal open={open} onClose={onClose} title="Confirmar" size="sm"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
+          <button onClick={onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 transition-colors">Excluir</button>
+        </div>
+      )}>
       <div className="space-y-4">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
             <AlertCircle className="h-5 w-5 text-red-500" />
           </div>
           <p className="text-sm text-gray-600 pt-2">{message}</p>
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
-          <button onClick={onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 transition-colors">Excluir</button>
         </div>
       </div>
     </Modal>

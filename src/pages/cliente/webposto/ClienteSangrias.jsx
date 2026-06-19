@@ -688,7 +688,20 @@ export default function ClienteSangrias() {
 
       {/* Modal de confirmacao */}
       <Modal open={modalConfirmacao} onClose={() => !salvando && setModalConfirmacao(false)}
-        title="Confirmar fechamento de sangria" size="md">
+        title="Confirmar fechamento de sangria" size="md"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setModalConfirmacao(false)} disabled={salvando}
+              className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50">
+              Revisar novamente
+            </button>
+            <button onClick={confirmarSalvamento} disabled={salvando}
+              className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Sim, confirmar e salvar
+            </button>
+          </div>
+        )}>
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
             Revise os dados antes de confirmar. Após salvar, o fechamento fica travado e os valores não podem mais ser alterados.
@@ -741,18 +754,6 @@ export default function ClienteSangrias() {
             <p className="text-[11px] text-amber-800">
               Declaracao de ciência confirmada. Esta ação não pode ser desfeita.
             </p>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-            <button onClick={() => setModalConfirmacao(false)} disabled={salvando}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50">
-              Revisar novamente
-            </button>
-            <button onClick={confirmarSalvamento} disabled={salvando}
-              className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
-              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              Sim, confirmar e salvar
-            </button>
           </div>
         </div>
       </Modal>

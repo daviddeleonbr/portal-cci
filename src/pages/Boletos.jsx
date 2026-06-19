@@ -204,8 +204,18 @@ export default function Boletos({ embedded = false }) {
       </Modal>
 
       {/* Create Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Gerar Boleto" size="md">
-        <form onSubmit={handleCreate} className="space-y-4">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Gerar Boleto" size="md"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" form="form-boleto" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
+              Gerar Boleto
+            </button>
+          </div>
+        )}>
+        <form id="form-boleto" onSubmit={handleCreate} className="space-y-4">
           <div className="p-3 bg-orange-50 rounded-lg border border-orange-100 flex items-center gap-2 mb-2">
             <Building2 className="h-4 w-4 text-orange-600" />
             <span className="text-xs text-orange-700">Emissão via API Banco Inter (simulado)</span>
@@ -232,14 +242,6 @@ export default function Boletos({ embedded = false }) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>
             <input type="text" className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" placeholder="Referente a..." />
-          </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
-              Cancelar
-            </button>
-            <button type="submit" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
-              Gerar Boleto
-            </button>
           </div>
         </form>
       </Modal>

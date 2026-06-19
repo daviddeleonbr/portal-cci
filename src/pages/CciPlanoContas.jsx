@@ -162,13 +162,15 @@ export default function CciPlanoContas({ embedded = false }) {
       <ModalConta open={modal.open} data={modal.data} contas={contas}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
-      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">Excluir a conta <strong>{confirm.nome}</strong>?</p>
+      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir" size="sm"
+        footer={(
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false })} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
             <button onClick={confirm.onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
           </div>
+        )}>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Excluir a conta <strong>{confirm.nome}</strong>?</p>
         </div>
       </Modal>
     </div>
@@ -368,8 +370,18 @@ function ModalConta({ open, data, contas, onClose, onSave }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Conta' : 'Nova Conta'} size="sm">
-      <form onSubmit={submit} className="space-y-4">
+    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Conta' : 'Nova Conta'} size="sm"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+          <button type="submit" form="form-conta" disabled={saving || !codigoPreview?.trim() || !form.nome?.trim()}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {data?.id ? 'Salvar' : 'Criar'}
+          </button>
+        </div>
+      )}>
+      <form id="form-conta" onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-[11rem_1fr] gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Código</label>
@@ -471,15 +483,6 @@ function ModalConta({ open, data, contas, onClose, onSave }) {
               className="rounded border-gray-300" />
             Ativa
           </label>
-        </div>
-
-        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button type="submit" disabled={saving || !codigoPreview?.trim() || !form.nome?.trim()}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {data?.id ? 'Salvar' : 'Criar'}
-          </button>
         </div>
       </form>
     </Modal>

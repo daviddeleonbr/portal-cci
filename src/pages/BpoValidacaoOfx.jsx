@@ -996,12 +996,8 @@ export function BpoValidacaoOfxView() {
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
       <Modal open={confirmExcluir.open} onClose={() => setConfirmExcluir({ open: false, correlacao: null })}
-        title="Excluir vínculo" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Excluir o vínculo <strong>{confirmExcluir.correlacao?.label || String(confirmExcluir.correlacao?.id || '').slice(0, 8)}</strong>?
-            Os lançamentos do OFX e do sistema voltam a ficar disponíveis para novo vínculo.
-          </p>
+        title="Excluir vínculo" size="sm"
+        footer={(
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirmExcluir({ open: false, correlacao: null })}
               className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
@@ -1012,6 +1008,12 @@ export function BpoValidacaoOfxView() {
               Excluir
             </button>
           </div>
+        )}>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Excluir o vínculo <strong>{confirmExcluir.correlacao?.label || String(confirmExcluir.correlacao?.id || '').slice(0, 8)}</strong>?
+            Os lançamentos do OFX e do sistema voltam a ficar disponíveis para novo vínculo.
+          </p>
         </div>
       </Modal>
     </div>

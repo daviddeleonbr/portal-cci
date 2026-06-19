@@ -915,7 +915,52 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={titleFor(step, !!editandoRede)} size={step === 'webposto-select' ? 'lg' : 'md'}>
+    <Modal open={open} onClose={onClose} title={titleFor(step, !!editandoRede)} size={step === 'webposto-select' ? 'lg' : 'md'}
+      footer={
+        step === 'webposto-key' ? (
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
+            <button onClick={buscarEmpresasWebposto} disabled={buscando || !chaveValor.trim()}
+              className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 transition-colors disabled:opacity-50">
+              {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              Buscar empresas
+            </button>
+          </div>
+        ) : step === 'webposto-select' ? (
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
+            <button onClick={importarEmpresasSelecionadas} disabled={saving || selecionadas.size === 0}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Importar {selecionadas.size > 0 ? `(${selecionadas.size})` : ''}
+            </button>
+          </div>
+        ) : step === 'rede-form' ? (
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose}
+              className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" form="form-rede-form" disabled={!redeNome.trim() || !redeSlug.trim()}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+              Próximo <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : step === 'rede-conexao' ? (
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose}
+              className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" form="form-rede-conexao" disabled={saving}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              <Network className="h-4 w-4" />
+              {editandoRede ? 'Atualizar rede' : 'Cadastrar rede'}
+            </button>
+          </div>
+        ) : null
+      }>
       <AnimatePresence mode="wait">
         {/* STEP 1: CHOICE */}
         {step === 'choice' && (
@@ -1001,15 +1046,6 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               <input type="text" value={urlBase} onChange={e => setUrlBase(e.target.value)}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono text-[11px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
-              <button onClick={buscarEmpresasWebposto} disabled={buscando || !chaveValor.trim()}
-                className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 transition-colors disabled:opacity-50">
-                {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                Buscar empresas
-              </button>
-            </div>
           </motion.div>
         )}
 
@@ -1077,14 +1113,6 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               })}
             </div>
 
-            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-              <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
-              <button onClick={importarEmpresasSelecionadas} disabled={saving || selecionadas.size === 0}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Importar {selecionadas.size > 0 ? `(${selecionadas.size})` : ''}
-              </button>
-            </div>
           </motion.div>
         )}
 
@@ -1103,7 +1131,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
 
         {/* STEP 5a: REDE AUTOSYSTEM — Identificação */}
         {step === 'rede-form' && (
-          <motion.form key="rede" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+          <motion.form id="form-rede-form" key="rede" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
             onSubmit={(e) => { e.preventDefault(); setStep('rede-conexao'); }}
             className="space-y-5">
             <div className="flex items-center justify-between">
@@ -1145,23 +1173,12 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
                 className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Gerado automaticamente a partir do nome. Pode ser editado.</p>
             </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-white/10">
-              <button type="button" onClick={onClose}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                Cancelar
-              </button>
-              <button type="submit" disabled={!redeNome.trim() || !redeSlug.trim()}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
-                Próximo <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
           </motion.form>
         )}
 
         {/* STEP 5b: REDE AUTOSYSTEM — Conexão */}
         {step === 'rede-conexao' && (
-          <motion.form key="rede-conexao" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+          <motion.form id="form-rede-conexao" key="rede-conexao" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
             onSubmit={(e) => { e.preventDefault(); salvarRede(); }}
             className="space-y-5">
             <div className="flex items-center justify-between">
@@ -1330,18 +1347,6 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
               </div>
             )}
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-white/10">
-              <button type="button" onClick={onClose}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                Cancelar
-              </button>
-              <button type="submit" disabled={saving}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                <Network className="h-4 w-4" />
-                {editandoRede ? 'Atualizar rede' : 'Cadastrar rede'}
-              </button>
-            </div>
           </motion.form>
         )}
       </AnimatePresence>
@@ -1717,7 +1722,20 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
   // ─── Cliente com Webposto: tela simplificada ──────────
   if (cliente.usa_webposto) {
     return (
-      <Modal open={open} onClose={onClose} title="Editar Cliente" size="sm">
+      <Modal open={open} onClose={onClose} title="Editar Cliente" size="sm"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose}
+              className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+              Fechar
+            </button>
+            <button onClick={atualizarWebposto} disabled={atualizando}
+              className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 transition-colors disabled:opacity-50">
+              {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Atualizar dados do Webposto
+            </button>
+          </div>
+        )}>
         <div className="space-y-5">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700 font-semibold flex-shrink-0">
@@ -1776,17 +1794,6 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-            <button type="button" onClick={onClose}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
-              Fechar
-            </button>
-            <button onClick={atualizarWebposto} disabled={atualizando}
-              className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 transition-colors disabled:opacity-50">
-              {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Atualizar dados do Webposto
-            </button>
-          </div>
         </div>
       </Modal>
     );
@@ -2733,7 +2740,20 @@ function ModalGruposProdutoAutosystem({ open, rede, onClose, showToast }) {
 
   return (
     <Modal open={open} onClose={onClose}
-      title={`Classificar grupos de produto — ${rede?.nome || ''}`} size="xl">
+      title={`Classificar grupos de produto — ${rede?.nome || ''}`} size="xl"
+      footer={!loading && !erro && grupos.length > 0 ? (
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} disabled={saving}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50">
+            Cancelar
+          </button>
+          <button onClick={salvar} disabled={saving || grupos.length === 0}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Salvar classificações
+          </button>
+        </div>
+      ) : null}>
       <div className="space-y-4">
         <p className="text-xs text-gray-600 dark:text-gray-400">
           Para cada grupo de produto trazido do servidor Autosystem, defina a categoria interna do Portal CCI.
@@ -2815,19 +2835,8 @@ function ModalGruposProdutoAutosystem({ open, rede, onClose, showToast }) {
               </table>
             </div>
 
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100 dark:border-white/10">
+            <div className="pt-2 border-t border-gray-100 dark:border-white/10">
               <p className="text-[11px] text-gray-500">Clique novamente em uma categoria para desmarcá-la.</p>
-              <div className="flex gap-3">
-                <button onClick={onClose} disabled={saving}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50">
-                  Cancelar
-                </button>
-                <button onClick={salvar} disabled={saving || grupos.length === 0}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
-                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Salvar classificações
-                </button>
-              </div>
             </div>
           </>
         )}
@@ -3070,7 +3079,20 @@ function ModalContasCategoriaAutosystem({ open, rede, onClose, showToast }) {
 
   return (
     <Modal open={open} onClose={onClose}
-      title={`Classificar contas — ${rede?.nome || ''}`} size="xl">
+      title={`Classificar contas — ${rede?.nome || ''}`} size="xl"
+      footer={!loading && !erro && contas.length > 0 ? (
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} disabled={saving}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50">
+            Cancelar
+          </button>
+          <button onClick={salvar} disabled={saving || contas.length === 0}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Salvar classificações
+          </button>
+        </div>
+      ) : null}>
       <div className="space-y-4">
         <p className="text-xs text-gray-600 dark:text-gray-400">
           Marque as contas que pertencem a uma mesma forma de recebimento e clique em
@@ -3154,21 +3176,10 @@ function ModalContasCategoriaAutosystem({ open, rede, onClose, showToast }) {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
+            <div className="pt-2 border-t border-gray-100">
               <p className="text-[11px] text-gray-500">
                 Categorias: {CATEGORIAS_CONTA.map(c => c.label).join(' · ')}.
               </p>
-              <div className="flex gap-3">
-                <button onClick={onClose} disabled={saving}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50">
-                  Cancelar
-                </button>
-                <button onClick={salvar} disabled={saving || contas.length === 0}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Salvar classificações
-                </button>
-              </div>
             </div>
           </>
         )}
@@ -3245,17 +3256,19 @@ function ArvoreContas({ nodes, visiveis, expandidos, onToggleExpand, selecionado
 // ═══════════════════════════════════════════════════════════
 function ModalConfirm({ open, message, onClose, onConfirm }) {
   return (
-    <Modal open={open} onClose={onClose} title="Confirmar" size="sm">
+    <Modal open={open} onClose={onClose} title="Confirmar" size="sm"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
+          <button onClick={onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 transition-colors">Excluir</button>
+        </div>
+      )}>
       <div className="space-y-4">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
             <AlertCircle className="h-5 w-5 text-red-500" />
           </div>
           <p className="text-sm text-gray-600 pt-2">{message}</p>
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
-          <button onClick={onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 transition-colors">Excluir</button>
         </div>
       </div>
     </Modal>

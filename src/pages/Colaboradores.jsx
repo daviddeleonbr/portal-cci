@@ -155,7 +155,17 @@ export default function Colaboradores({ embedded = false }) {
       </div>
 
       {/* Detail Modal */}
-      <Modal open={!!detailUser} onClose={() => setDetailUser(null)} title="Detalhes do Colaborador" size="md">
+      <Modal open={!!detailUser} onClose={() => setDetailUser(null)} title="Detalhes do Colaborador" size="md"
+        footer={detailUser ? (
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setDetailUser(null); showToast('success', 'Permissões atualizadas!'); }}
+              className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              Salvar Permissões
+            </button>
+          </div>
+        ) : null}>
         {detailUser && (
           <div className="space-y-6">
             <div className="flex items-center gap-4">
@@ -212,21 +222,23 @@ export default function Colaboradores({ embedded = false }) {
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setDetailUser(null); showToast('success', 'Permissões atualizadas!'); }}
-                className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-              >
-                Salvar Permissões
-              </button>
-            </div>
           </div>
         )}
       </Modal>
 
       {/* Create Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Novo Colaborador" size="md">
-        <form onSubmit={(e) => { e.preventDefault(); setModalOpen(false); showToast('success', 'Colaborador cadastrado!'); }} className="space-y-4">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Novo Colaborador" size="md"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" form="form-novo-colaborador" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
+              Cadastrar
+            </button>
+          </div>
+        )}>
+        <form id="form-novo-colaborador" onSubmit={(e) => { e.preventDefault(); setModalOpen(false); showToast('success', 'Colaborador cadastrado!'); }} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome Completo</label>
@@ -252,14 +264,6 @@ export default function Colaboradores({ embedded = false }) {
                 <option>Diretoria</option>
               </select>
             </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
-              Cancelar
-            </button>
-            <button type="submit" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
-              Cadastrar
-            </button>
           </div>
         </form>
       </Modal>

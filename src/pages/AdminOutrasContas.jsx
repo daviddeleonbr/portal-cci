@@ -299,14 +299,8 @@ export default function AdminOutrasContas() {
       )}
 
       {/* Modal devolver */}
-      <Modal open={modalDevolver} onClose={() => { setModalDevolver(false); setMotivoDevolucao(''); }} title="Devolver ao cliente">
-        <div className="space-y-3">
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Descreva o que o cliente precisa corrigir/complementar.
-          </p>
-          <textarea value={motivoDevolucao} onChange={e => setMotivoDevolucao(e.target.value)}
-            rows={5} placeholder="Ex: Falta o comprovante de transferência"
-            className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 p-3 text-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-900/40" />
+      <Modal open={modalDevolver} onClose={() => { setModalDevolver(false); setMotivoDevolucao(''); }} title="Devolver ao cliente"
+        footer={(
           <div className="flex justify-end gap-2">
             <button onClick={() => { setModalDevolver(false); setMotivoDevolucao(''); }}
               className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06]">Cancelar</button>
@@ -315,6 +309,14 @@ export default function AdminOutrasContas() {
               Devolver ao cliente
             </button>
           </div>
+        )}>
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Descreva o que o cliente precisa corrigir/complementar.
+          </p>
+          <textarea value={motivoDevolucao} onChange={e => setMotivoDevolucao(e.target.value)}
+            rows={5} placeholder="Ex: Falta o comprovante de transferência"
+            className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 p-3 text-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-900/40" />
         </div>
       </Modal>
 

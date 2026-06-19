@@ -319,13 +319,15 @@ export default function CciUsuarios({ embedded = false }) {
         empresasPorRede={empresasPorRede} clientes={clientes}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
-      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuário" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">Excluir o usuário <strong>{confirm.nome}</strong>? O acesso sera removido imediatamente.</p>
+      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuário" size="sm"
+        footer={(
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false })} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
             <button onClick={confirm.onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
           </div>
+        )}>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Excluir o usuário <strong>{confirm.nome}</strong>? O acesso sera removido imediatamente.</p>
         </div>
       </Modal>
     </div>
@@ -499,7 +501,36 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
   const temPermissao = (key) => (form.permissoes || []).includes(key);
 
   return (
-    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Usuário' : 'Novo Usuário'} size="lg">
+    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Usuário' : 'Novo Usuário'} size="lg"
+      footer={(
+        <div className="flex items-center justify-between gap-3">
+          <button type="button" onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
+            Cancelar
+          </button>
+
+          <div className="flex items-center gap-2">
+            {step > 1 && (
+              <button type="button" onClick={passoAnterior}
+                className="flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
+                <ChevronLeft className="h-4 w-4" /> Voltar
+              </button>
+            )}
+            {step < STEPS.length ? (
+              <button type="button" onClick={proximoPasso} disabled={!passoValido(step)}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                Avancar <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <button type="button" onClick={submit} disabled={saving || !passoValido(1) || !passoValido(2)}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {data?.id ? 'Salvar alteracoes' : 'Criar usuário'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}>
       {/* Indicador de passos */}
       <div className="flex items-center justify-between mb-5">
         {STEPS.map((s, idx) => {
@@ -783,34 +814,6 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
         )}
       </div>
 
-      {/* Navegacao */}
-      <div className="flex items-center justify-between gap-3 pt-4 border-t border-gray-100 mt-4">
-        <button type="button" onClick={onClose}
-          className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
-          Cancelar
-        </button>
-
-        <div className="flex items-center gap-2">
-          {step > 1 && (
-            <button type="button" onClick={passoAnterior}
-              className="flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
-              <ChevronLeft className="h-4 w-4" /> Voltar
-            </button>
-          )}
-          {step < STEPS.length ? (
-            <button type="button" onClick={proximoPasso} disabled={!passoValido(step)}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-              Avancar <ChevronRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <button type="button" onClick={submit} disabled={saving || !passoValido(1) || !passoValido(2)}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {data?.id ? 'Salvar alteracoes' : 'Criar usuário'}
-            </button>
-          )}
-        </div>
-      </div>
     </Modal>
   );
 }

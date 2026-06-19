@@ -866,9 +866,10 @@ export default function ClienteEstoques() {
       )}
 
       {/* ────────── MODAL DE PARÂMETROS ────────── */}
-      <Modal open={modalParams} onClose={() => setModalParams(false)} title="Parâmetros da análise">
-        <ModalParamsContent params={params} onSave={(p) => { setParams(p); setModalParams(false); }} onCancel={() => setModalParams(false)} />
-      </Modal>
+      <ModalParams open={modalParams}
+        params={params}
+        onSave={(p) => { setParams(p); setModalParams(false); }}
+        onCancel={() => setModalParams(false)} />
 
       {/* ────────── MODAL DE PLANO DE COMPRAS ────────── */}
       <Modal open={modalCompras} onClose={() => setModalCompras(false)} size="xxl"
@@ -1013,10 +1014,23 @@ function ColunaOrd({ label, campo, ord, onClick, align = 'left' }) {
   );
 }
 
-function ModalParamsContent({ params, onSave, onCancel }) {
+function ModalParams({ open, params, onSave, onCancel }) {
   const [draft, setDraft] = useState(params);
+  useEffect(() => { if (open) setDraft(params); }, [open, params]);
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
   return (
+    <Modal open={open} onClose={onCancel} title="Parâmetros da análise"
+      footer={(
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={() => setDraft(PARAMS_DEFAULT)}
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Restaurar padrões</button>
+          <div className="flex-1" />
+          <button onClick={onCancel}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06]">Cancelar</button>
+          <button onClick={() => onSave(draft)}
+            className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700">Aplicar</button>
+        </div>
+      )}>
     <div className="space-y-3">
       <p className="text-xs text-gray-600 dark:text-gray-300">
         Ajuste os parâmetros que regem todos os cálculos. Os valores são aplicados imediatamente ao confirmar.
@@ -1053,16 +1067,8 @@ function ModalParamsContent({ params, onSave, onCancel }) {
             className="w-full h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
         </Campo>
       </div>
-      <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100 dark:border-white/10">
-        <button onClick={() => setDraft(PARAMS_DEFAULT)}
-          className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Restaurar padrões</button>
-        <div className="flex-1" />
-        <button onClick={onCancel}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06]">Cancelar</button>
-        <button onClick={() => onSave(draft)}
-          className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700">Aplicar</button>
-      </div>
     </div>
+    </Modal>
   );
 }
 
