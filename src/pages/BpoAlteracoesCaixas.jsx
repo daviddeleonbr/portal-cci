@@ -504,7 +504,12 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
           buckets.get(t).push(row);
         }
 
-        // Classifica cada bucket em um evento lógico
+        // Classifica cada bucket em um evento lógico.
+        // Filtra AJUSTE/ALTERACAO que não mexeram em nenhum dos 8 campos de
+        // negócio (CAMPOS_RELEVANTES). São carimbos automáticos do Autosystem
+        // (Uo+Un em colunas técnicas tipo pessoa_id/info_adic/conferido) que
+        // poluem o log sem representar uma alteração de fato.
+        // INCLUSAO/EXCLUSAO/INDETERMINADO continuam visíveis.
         const eventosLogicos = Array.from(buckets.entries())
           .map(([t, items]) => {
             const cls = classificarBucket(items);
@@ -514,6 +519,12 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
               items,
               _changes: cls.antes && cls.depois ? calcularDiff(cls.antes, cls.depois) : [],
             };
+          })
+          .filter(ev => {
+            if (ev.tipo === 'AJUSTE' || ev.tipo === 'ALTERACAO') {
+              return mudouAlgoRelevante(ev.antes, ev.depois);
+            }
+            return true;
           })
           .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
 
@@ -543,6 +554,7 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
           maisRecente: ultimo?.timestamp || '',
         };
       })
+      .filter(g => g.eventos.length > 0)
       .sort((a, b) => String(b.maisRecente).localeCompare(String(a.maisRecente)));
   }, [alteracoesFiltradasPorUsuario]);
 
@@ -1018,6 +1030,14 @@ function equivalente(a, b, type) {
     return (Number(a) || 0) === (Number(b) || 0);
   }
   return normalizar(a) === normalizar(b);
+}
+
+// Algum dos 8 campos de CAMPOS_RELEVANTES mudou de fato entre antes/depois?
+// Usado pra esconder ajustes "técnicos" do AS (Uo+Un que só carimba colunas
+// internas como pessoa_id, conferido, info_adic — tudo em CAMPOS_META).
+function mudouAlgoRelevante(antes, depois) {
+  if (!antes || !depois) return true;
+  return CAMPOS_RELEVANTES.some(c => !equivalente(antes[c.key], depois[c.key], c.type));
 }
 
 // Tabela Antes/Depois com TODOS os campos relevantes (mesmo os não alterados).
