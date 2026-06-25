@@ -108,8 +108,8 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
         ]);
         setMascarasDre(mds || []);
         setMascarasFluxo(mfs || []);
-        if (mds?.length && !mascaraDreId) setMascaraDreId(mds[0].id);
-        if (mfs?.length && !mascaraFluxoId) setMascaraFluxoId(mfs[0].id);
+        if (mds?.length && !mascaraDreId) setMascaraDreId((mds.find(m => m.padrao) || mds[0]).id);
+        if (mfs?.length && !mascaraFluxoId) setMascaraFluxoId((mfs.find(m => m.padrao) || mfs[0]).id);
       } catch (e) { setErr(e.message || String(e)); }
       finally { setLoading(false); }
     })();

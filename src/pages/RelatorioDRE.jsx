@@ -165,7 +165,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           const masks = await dreService.listarMascaras();
           setCliente(virtualCliente);
           setMascaras(masks || []);
-          if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
+          if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
         } else {
           const [c, masks] = await Promise.all([
             clientesService.buscarCliente(clienteId),
@@ -173,7 +173,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           ]);
           setCliente(c);
           setMascaras(masks || []);
-          if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
+          if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
         }
       } catch (err) { setError(err.message); }
       finally { setLoading(false); }

@@ -55,6 +55,25 @@ export async function excluirMascara(id) {
   if (error) throw error;
 }
 
+// Define `id` como a máscara DRE padrão. Como existe um índice único parcial
+// (só uma padrão permitida), removemos a padrão atual ANTES de marcar a nova.
+export async function definirMascaraPadrao(id) {
+  const { error: errLimpar } = await supabase
+    .from('mascaras_dre')
+    .update({ padrao: false })
+    .eq('padrao', true);
+  if (errLimpar) throw errLimpar;
+
+  const { data, error } = await supabase
+    .from('mascaras_dre')
+    .update({ padrao: true })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // ===================== GRUPOS =====================
 
 export async function listarGrupos(mascaraId) {

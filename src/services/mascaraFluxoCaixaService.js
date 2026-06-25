@@ -173,6 +173,25 @@ export async function excluirMascara(id) {
   if (error) throw error;
 }
 
+// Define `id` como a máscara de Fluxo de Caixa padrão. Índice único parcial
+// permite só uma padrão — removemos a atual ANTES de marcar a nova.
+export async function definirMascaraPadrao(id) {
+  const { error: errLimpar } = await supabase
+    .from('mascaras_fluxo_caixa')
+    .update({ padrao: false })
+    .eq('padrao', true);
+  if (errLimpar) throw errLimpar;
+
+  const { data, error } = await supabase
+    .from('mascaras_fluxo_caixa')
+    .update({ padrao: true })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // Cria uma mascara pre-preenchida a partir de um modelo padrao.
 // metodo: 'indireto' | 'direto'. nome opcional substitui o default do template.
 export async function criarMascaraDoModeloPadrao(metodo, nomePersonalizado) {

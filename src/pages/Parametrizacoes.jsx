@@ -4,7 +4,7 @@ import {
   Plus, Pencil, Trash2, ChevronRight,
   Layers, Loader2, AlertCircle,
   FileSpreadsheet,
-  ArrowLeft, Equal, FolderOpen, GripVertical
+  ArrowLeft, Equal, FolderOpen, GripVertical, Star
 } from 'lucide-react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -103,6 +103,15 @@ export default function Parametrizacoes() {
     } catch (err) { showToast('error', err.message); }
   };
 
+  const definirPadrao = async (m) => {
+    if (m.padrao) return; // já é a padrão
+    try {
+      await dreService.definirMascaraPadrao(m.id);
+      showToast('success', `"${m.nome}" definida como máscara padrão`);
+      await carregarMascaras();
+    } catch (err) { showToast('error', err.message); }
+  };
+
   const adicionarLinha = async (tipo, parentId = null, afterOrdem = null) => {
     try {
       setSaving(true);
@@ -154,6 +163,7 @@ export default function Parametrizacoes() {
         <MascarasList mascaras={mascaras} loading={loading}
           onSelect={setMascaraSelecionada}
           onEdit={(m) => setModalMascara({ open: true, data: m })}
+          onSetPadrao={definirPadrao}
           onDelete={(m) => setModalConfirm({ open: true, message: `Excluir máscara "${m.nome}"?`, onConfirm: () => { deletarMascara(m.id); setModalConfirm({ open: false }); } })}
         />
       ) : (
@@ -624,7 +634,7 @@ function AddChildDropdown({ onAdd }) {
 // ═══════════════════════════════════════════════════════════
 // Mascaras List
 // ═══════════════════════════════════════════════════════════
-function MascarasList({ mascaras, loading, onSelect, onEdit, onDelete }) {
+function MascarasList({ mascaras, loading, onSelect, onEdit, onDelete, onSetPadrao }) {
   if (loading) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -664,22 +674,33 @@ function MascarasList({ mascaras, loading, onSelect, onEdit, onDelete }) {
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
               <Layers className="h-5 w-5 text-white" />
             </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button onClick={(e) => { e.stopPropagation(); onEdit(m); }} className="rounded-lg p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); onSetPadrao?.(m); }}
+                title={m.padrao ? 'Máscara padrão' : 'Definir como padrão'}
+                className={`rounded-lg p-1.5 transition-colors ${m.padrao ? 'text-amber-500' : 'text-gray-300 opacity-0 group-hover:opacity-100 hover:text-amber-500 hover:bg-amber-50'}`}>
+                <Star className={`h-3.5 w-3.5 ${m.padrao ? 'fill-amber-400' : ''}`} />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); onEdit(m); }} className="rounded-lg p-1.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-blue-600 hover:bg-blue-50 transition-colors">
                 <Pencil className="h-3.5 w-3.5" />
               </button>
-              <button onClick={(e) => { e.stopPropagation(); onDelete(m); }} className="rounded-lg p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+              <button onClick={(e) => { e.stopPropagation(); onDelete(m); }} className="rounded-lg p-1.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-50 transition-colors">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
           <h3 className="text-sm font-semibold text-gray-900 mb-1">{m.nome}</h3>
           {m.descricao && <p className="text-xs text-gray-500 mb-3 line-clamp-2">{m.descricao}</p>}
-          <div className="flex items-center gap-3 text-xs text-gray-400">
+          <div className="flex items-center gap-2 text-xs text-gray-400">
             <span className="flex items-center gap-1"><Layers className="h-3 w-3" /> {m.grupos_dre?.[0]?.count || 0} linhas</span>
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${m.ativo ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
               {m.ativo ? 'Ativa' : 'Inativa'}
             </span>
+            {m.padrao && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                <Star className="h-3 w-3 fill-amber-400" /> Padrão
+              </span>
+            )}
           </div>
         </motion.div>
       ))}

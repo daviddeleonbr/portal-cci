@@ -140,7 +140,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           const masks = await fluxoService.listarMascaras();
           setCliente(virtualCliente);
           setMascaras(masks || []);
-          if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
+          if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
           try {
             if (isAutosystem) {
               // Autosystem: as "contas classificadas" e o "catalogo de contas"
@@ -176,7 +176,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           ]);
           setCliente(c);
           setMascaras(masks || []);
-          if (masks && masks.length > 0) setMascaraSelecionada(masks[0]);
+          if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
           if (c?.as_rede_id) {
             // Cliente Autosystem individual
             try {
