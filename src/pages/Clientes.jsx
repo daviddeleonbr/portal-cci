@@ -1637,10 +1637,36 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
   const [saving, setSaving] = useState(false);
   const [atualizando, setAtualizando] = useState(false);
   const [togglingFlag, setTogglingFlag] = useState(null); // 'exibir_dre' | 'exibir_fluxo_caixa' | null
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [erroCep, setErroCep] = useState('');
 
   useEffect(() => {
     if (open && cliente) setForm(cliente);
   }, [open, cliente]);
+
+  const setField = (campo, value) => setForm(f => ({ ...f, [campo]: value }));
+
+  // Busca endereço no ViaCEP quando o CEP fica com 8 dígitos (só preenche vazios)
+  const handleCepChange = async (raw) => {
+    setField('cep', raw);
+    setErroCep('');
+    const limpo = (raw || '').replace(/\D/g, '');
+    if (limpo.length !== 8) return;
+    try {
+      setBuscandoCep(true);
+      const dados = await buscarCep(limpo);
+      if (!dados) { setErroCep('CEP não encontrado'); return; }
+      setForm(f => ({
+        ...f,
+        endereco: f.endereco || dados.endereco || '',
+        bairro:   f.bairro   || dados.bairro   || '',
+        cidade:   f.cidade   || dados.cidade   || '',
+        estado:   f.estado   || dados.estado   || '',
+      }));
+    } catch (err) {
+      setErroCep(err.message);
+    } finally { setBuscandoCep(false); }
+  };
 
   const toggleRelatorioFlag = async (campo) => {
     if (!cliente) return;
@@ -1722,17 +1748,22 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
   // ─── Cliente com Webposto: tela simplificada ──────────
   if (cliente.usa_webposto) {
     return (
-      <Modal open={open} onClose={onClose} title="Editar Cliente" size="sm"
+      <Modal open={open} onClose={onClose} title="Editar Cliente" size="md"
         footer={(
           <div className="flex justify-end gap-3">
             <button type="button" onClick={onClose}
               className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
               Fechar
             </button>
-            <button onClick={atualizarWebposto} disabled={atualizando}
+            <button onClick={atualizarWebposto} disabled={atualizando || saving}
               className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600 transition-colors disabled:opacity-50">
               {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Atualizar dados do Webposto
+            </button>
+            <button onClick={handleSave} disabled={saving || atualizando}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Salvar
             </button>
           </div>
         )}>
@@ -1764,6 +1795,71 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
           <div className="grid grid-cols-2 gap-2 text-xs">
             <InfoBlock label="Empresa" value={`#${cliente.empresa_codigo}`} mono />
             <InfoBlock label="Cidade" value={cliente.cidade ? `${cliente.cidade}/${cliente.estado}` : '—'} />
+          </div>
+
+          {/* Dados para emissão de NF — editáveis (a API Webposto não traz e-mail
+              e o endereço pode precisar de ajuste). Clicar em "Atualizar dados do
+              Webposto" sobrescreve o endereço, mas NÃO mexe no e-mail. */}
+          <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-gray-900">Dados para emissão de NF</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                E-mail e endereço enviados ao emitir a nota fiscal.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">E-mail</label>
+              <input type="email" value={form.contato_email || ''} onChange={(e) => setField('contato_email', e.target.value)}
+                placeholder="financeiro@empresa.com.br"
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[11px] font-medium text-gray-700 mb-1">CEP</label>
+                <div className="relative">
+                  <input type="text" inputMode="numeric" value={form.cep || ''} onChange={(e) => handleCepChange(e.target.value)}
+                    placeholder="00000-000"
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  {buscandoCep && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
+                </div>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[11px] font-medium text-gray-700 mb-1">Endereço</label>
+                <input type="text" value={form.endereco || ''} onChange={(e) => setField('endereco', e.target.value)}
+                  placeholder="Rua / Avenida"
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+            </div>
+            {erroCep && <p className="-mt-1 text-[11px] text-rose-600">{erroCep}</p>}
+
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[11px] font-medium text-gray-700 mb-1">Número</label>
+                <input type="text" value={form.numero || ''} onChange={(e) => setField('numero', e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[11px] font-medium text-gray-700 mb-1">Bairro</label>
+                <input type="text" value={form.bairro || ''} onChange={(e) => setField('bairro', e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <label className="block text-[11px] font-medium text-gray-700 mb-1">Cidade</label>
+                <input type="text" value={form.cidade || ''} onChange={(e) => setField('cidade', e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-700 mb-1">UF</label>
+                <input type="text" maxLength={2} value={form.estado || ''} onChange={(e) => setField('estado', e.target.value)}
+                  placeholder="ES"
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm uppercase focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+            </div>
           </div>
 
           {/* Relatorios liberados pro portal do cliente */}
