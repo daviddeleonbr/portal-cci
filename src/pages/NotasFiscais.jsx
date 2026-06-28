@@ -1547,10 +1547,15 @@ function ModalAgendamento({ open, agendamento, config, onClose, onSave }) {
                 onChange={(e) => setForm(f => ({ ...f, dia_emissao: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
                 <option value="ultimo">Último dia do mês</option>
-                {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
                   <option key={d} value={String(d)}>Dia {d}</option>
                 ))}
               </select>
+              {['29', '30', '31'].includes(form.dia_emissao) && (
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Nos meses sem o dia {form.dia_emissao}, a emissão ocorre no último dia do mês.
+                </p>
+              )}
             </div>
             <div className="col-span-2">
               <label className="inline-flex items-center gap-2 text-sm text-gray-700">
