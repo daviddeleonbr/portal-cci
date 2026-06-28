@@ -2173,7 +2173,11 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
   const [selecionadas, setSelecionadas] = useState(new Set());
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
-  const FORM_MANUAL_VAZIO = { nome: '', razao_social: '', cnpj: '', empresa_codigo: '' };
+  const FORM_MANUAL_VAZIO = {
+    nome: '', razao_social: '', cnpj: '', empresa_codigo: '',
+    contato_email: '', cep: '', endereco: '', numero: '',
+    bairro: '', cidade: '', estado: '',
+  };
   const [formManual, setFormManual] = useState(FORM_MANUAL_VAZIO);
   const [salvandoManual, setSalvandoManual] = useState(false);
 
@@ -2281,6 +2285,14 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
         razao_social: formManual.razao_social.trim() || null,
         cnpj: formManual.cnpj.trim() || null,
         empresa_codigo: ecNum,
+        // Contato + endereço (usados na emissão de NFS-e)
+        contato_email: formManual.contato_email?.trim() || null,
+        cep:           formManual.cep?.trim()           || null,
+        endereco:      formManual.endereco?.trim()      || null,
+        numero:        formManual.numero?.trim()        || null,
+        bairro:        formManual.bairro?.trim()        || null,
+        cidade:        formManual.cidade?.trim()        || null,
+        estado:        formManual.estado?.trim()        || null,
         as_rede_id: rede.id,
         chave_api_id: null,
         status: 'ativo',
@@ -2486,6 +2498,34 @@ function ConteudoImportarServidor({
 // dependem do banco remoto (Contas a pagar/receber, Vendas, etc.).
 function FormManualEmpresa({ form, setForm, cnpjDuplicado, podeSalvar, salvando, onSalvar, onCancelar }) {
   const set = (campo) => (e) => setForm(f => ({ ...f, [campo]: e.target.value }));
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [erroCep, setErroCep] = useState('');
+
+  // Busca endereço no ViaCEP quando o CEP fica com 8 dígitos (só preenche vazios)
+  const handleCepChange = async (raw) => {
+    setForm(f => ({ ...f, cep: raw }));
+    setErroCep('');
+    const limpo = raw.replace(/\D/g, '');
+    if (limpo.length !== 8) return;
+    try {
+      setBuscandoCep(true);
+      const dados = await buscarCep(limpo);
+      if (!dados) { setErroCep('CEP não encontrado'); return; }
+      setForm(f => ({
+        ...f,
+        endereco: f.endereco || dados.endereco || '',
+        bairro:   f.bairro   || dados.bairro   || '',
+        cidade:   f.cidade   || dados.cidade   || '',
+        estado:   f.estado   || dados.estado   || '',
+      }));
+    } catch (err) {
+      setErroCep(err.message);
+    } finally { setBuscandoCep(false); }
+  };
+
+  const inputCls = 'w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
+  const labelCls = 'block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1';
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-3 py-2.5 flex items-start gap-2.5 text-[12px] text-amber-800 dark:text-amber-200">
@@ -2546,6 +2586,59 @@ function FormManualEmpresa({ form, setForm, cnpjDuplicado, podeSalvar, salvando,
           <p className="mt-1 text-[10.5px] text-gray-400 dark:text-gray-500">
             ID interno da empresa no Autosystem. Sem isso, relatórios do banco remoto ficam indisponíveis.
           </p>
+        </div>
+      </div>
+
+      {/* Contato + endereço — usados na emissão de NFS-e */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
+          Contato e endereço <span className="normal-case font-normal tracking-normal text-gray-400">(usados na emissão de notas fiscais)</span>
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2">
+            <label className={labelCls}>E-mail</label>
+            <input type="email" value={form.contato_email} onChange={set('contato_email')}
+              placeholder="financeiro@empresa.com.br" className={inputCls} />
+          </div>
+
+          <div>
+            <label className={labelCls}>CEP</label>
+            <div className="relative">
+              <input type="text" inputMode="numeric" value={form.cep} onChange={(e) => handleCepChange(e.target.value)}
+                placeholder="00000-000" className={inputCls} />
+              {buscandoCep && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
+            </div>
+            {erroCep && <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-300">{erroCep}</p>}
+          </div>
+
+          <div>
+            <label className={labelCls}>Número</label>
+            <input type="text" value={form.numero} onChange={set('numero')}
+              placeholder="123" className={inputCls} />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Endereço</label>
+            <input type="text" value={form.endereco} onChange={set('endereco')}
+              placeholder="Rua / Avenida" className={inputCls} />
+          </div>
+
+          <div>
+            <label className={labelCls}>Bairro</label>
+            <input type="text" value={form.bairro} onChange={set('bairro')} className={inputCls} />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className={labelCls}>Cidade</label>
+              <input type="text" value={form.cidade} onChange={set('cidade')} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>UF</label>
+              <input type="text" maxLength={2} value={form.estado} onChange={set('estado')}
+                placeholder="SP" className={`${inputCls} uppercase`} />
+            </div>
+          </div>
         </div>
       </div>
 
