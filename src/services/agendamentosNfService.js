@@ -76,6 +76,15 @@ export async function registrarEmissao(id, { sucesso, mensagemErro = null }) {
   return data;
 }
 
+// Status real do cron de emissão automática (lê cron.* + Vault via RPC).
+// Retorna { agendado, ativo, secret_ok, ultima_execucao, ultimo_status, ... }
+// ou { erro } se o pg_cron não estiver disponível.
+export async function verificarStatusCron() {
+  const { data, error } = await supabase.rpc('verificar_status_cron_nf');
+  if (error) throw error;
+  return data;
+}
+
 // ─── Helpers de exibição ───────────────────────────────────────
 export function formatarRecorrencia({ periodicidade, dia_emissao }) {
   if (periodicidade !== 'mensal') return periodicidade;

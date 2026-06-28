@@ -1047,8 +1047,18 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Configuração Asaas" size="md">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal open={open} onClose={onClose} title="Configuração Asaas" size="md"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
+          <button type="submit" form="form-config-asaas" disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            Salvar configuração
+          </button>
+        </div>
+      )}>
+      <form id="form-config-asaas" onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Nome da configuração</label>
           <input type="text" required value={form.nome}
@@ -1117,14 +1127,6 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
-          <button type="submit" disabled={saving}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Salvar configuração
-          </button>
-        </div>
       </form>
     </Modal>
   );
@@ -1204,6 +1206,23 @@ function ModalDetail({ open, nota, onClose }) {
 // Aba: Agendamento — lista de regras recorrentes
 // ═══════════════════════════════════════════════════════════
 function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onRemover, onEmitirAgora }) {
+  const [statusCron, setStatusCron] = useState(null);
+  const [carregandoCron, setCarregandoCron] = useState(true);
+
+  const verificarCron = useCallback(async () => {
+    setCarregandoCron(true);
+    try {
+      const s = await agendamentosNf.verificarStatusCron();
+      setStatusCron(s);
+    } catch (e) {
+      setStatusCron({ erro: e.message });
+    } finally {
+      setCarregandoCron(false);
+    }
+  }, []);
+
+  useEffect(() => { verificarCron(); }, [verificarCron]);
+
   if (loading) return <TableSkeleton rows={4} cols={5} />;
 
   return (
@@ -1312,16 +1331,114 @@ function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onR
         </motion.div>
       )}
 
-      {/* Aviso sobre o worker — necessário pra emissão acontecer sozinha */}
-      <div className="mt-4 rounded-lg bg-amber-50/60 border border-amber-200 p-3 flex gap-2.5">
-        <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-        <div className="text-[11.5px] text-amber-800">
-          <p className="font-semibold">Emissão automática requer cron job ativo</p>
-          <p className="mt-0.5 text-amber-700">
-            Pra rodar sozinho na data programada, é preciso configurar uma edge function + pg_cron
-            no Supabase. Enquanto isso, use o botão <span className="font-mono bg-amber-100 px-1 rounded">⚡ Emitir agora</span> pra disparar manualmente.
-          </p>
+      {/* Status real da emissão automática (cron + edge function + Vault) */}
+      <BannerStatusCron status={statusCron} carregando={carregandoCron} onReverificar={verificarCron} />
+    </div>
+  );
+}
+
+// ─── Banner de status da emissão automática ──────────────────
+// Lê o resultado da RPC verificar_status_cron_nf e mostra verde/amarelo/
+// vermelho conforme o estado real do cron, do secret e da última execução.
+function infoStatusCron(status, carregando) {
+  if (carregando) {
+    return { cor: 'gray', spin: true, titulo: 'Verificando emissão automática…' };
+  }
+  if (!status || status.erro) {
+    return {
+      cor: 'amber', icon: AlertCircle, titulo: 'Não foi possível verificar a emissão automática',
+      detalhe: status?.erro ? `Detalhe: ${status.erro}` : 'Tente reverificar em instantes.',
+    };
+  }
+  if (!status.agendado) {
+    return {
+      cor: 'red', icon: XCircle, titulo: 'Cron não agendado',
+      detalhe: 'O job não existe no pg_cron. Aplique a migration 089 (cron.schedule) no Supabase.',
+      mostrarManual: true,
+    };
+  }
+  if (!status.ativo) {
+    return {
+      cor: 'amber', icon: AlertCircle, titulo: 'Cron pausado',
+      detalhe: 'O job existe mas está inativo (active = false). Reative no Supabase.',
+      mostrarManual: true,
+    };
+  }
+  if (status.secret_ok === false) {
+    return {
+      cor: 'red', icon: XCircle, titulo: 'Falta o secret service_role_key',
+      detalhe: 'Sem ele o cron dispara mas não autentica na edge function. Crie o secret no Vault.',
+      mostrarManual: true,
+    };
+  }
+  // Agendado + ativo + secret ok (ou desconhecido) → olha a última execução
+  if (!status.ultima_execucao) {
+    return {
+      cor: 'blue', icon: Clock, titulo: 'Emissão automática configurada',
+      detalhe: 'Tudo pronto — aguardando a primeira execução (roda todo dia às 4h de Brasília).',
+    };
+  }
+  const quando = new Date(status.ultima_execucao);
+  const dataFmt = quando.toLocaleString('pt-BR');
+  const horas = (Date.now() - quando.getTime()) / 36e5;
+  if (status.ultimo_status === 'succeeded') {
+    if (horas > 48) {
+      return {
+        cor: 'amber', icon: AlertCircle, titulo: 'Sem execução nas últimas 48h',
+        detalhe: `A última execução foi bem-sucedida, mas faz tempo (${dataFmt}). Verifique se o cron continua ativo.`,
+        mostrarManual: true,
+      };
+    }
+    return {
+      cor: 'green', icon: CheckCircle2, titulo: 'Emissão automática ativa',
+      detalhe: `Última execução concluída com sucesso em ${dataFmt}.`,
+    };
+  }
+  if (status.ultimo_status === 'failed') {
+    return {
+      cor: 'red', icon: XCircle, titulo: 'A última execução do cron falhou',
+      detalhe: `${dataFmt} — ${status.ultima_mensagem || 'sem detalhe do erro'}`,
+      mostrarManual: true,
+    };
+  }
+  // running / starting / outro
+  return {
+    cor: 'blue', icon: Clock, titulo: `Execução em andamento (${status.ultimo_status})`,
+    detalhe: `Iniciada em ${dataFmt}.`,
+  };
+}
+
+const CORES_STATUS = {
+  green: { box: 'bg-emerald-50 border-emerald-200', icon: 'text-emerald-600', titulo: 'text-emerald-900', txt: 'text-emerald-700' },
+  amber: { box: 'bg-amber-50/60 border-amber-200',  icon: 'text-amber-600',   titulo: 'text-amber-900',   txt: 'text-amber-700' },
+  red:   { box: 'bg-rose-50 border-rose-200',       icon: 'text-rose-600',    titulo: 'text-rose-900',    txt: 'text-rose-700' },
+  blue:  { box: 'bg-blue-50 border-blue-200',       icon: 'text-blue-600',    titulo: 'text-blue-900',    txt: 'text-blue-700' },
+  gray:  { box: 'bg-gray-50 border-gray-200',       icon: 'text-gray-400',    titulo: 'text-gray-700',    txt: 'text-gray-500' },
+};
+
+function BannerStatusCron({ status, carregando, onReverificar }) {
+  const info = infoStatusCron(status, carregando);
+  const c = CORES_STATUS[info.cor] || CORES_STATUS.gray;
+  const Icon = info.spin ? Loader2 : (info.icon || AlertCircle);
+  return (
+    <div className={`mt-4 rounded-lg border p-3 flex gap-2.5 ${c.box}`}>
+      <Icon className={`h-4 w-4 flex-shrink-0 mt-0.5 ${c.icon} ${info.spin ? 'animate-spin' : ''}`} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <p className={`text-[11.5px] font-semibold ${c.titulo}`}>{info.titulo}</p>
+          {!carregando && (
+            <button onClick={onReverificar} title="Reverificar"
+              className={`inline-flex items-center gap-1 text-[10.5px] font-medium ${c.txt} hover:underline flex-shrink-0`}>
+              <RefreshCw className="h-3 w-3" /> Reverificar
+            </button>
+          )}
         </div>
+        {info.detalhe && <p className={`mt-0.5 text-[11.5px] ${c.txt}`}>{info.detalhe}</p>}
+        {info.mostrarManual && (
+          <p className={`mt-0.5 text-[11.5px] ${c.txt}`}>
+            Enquanto isso, use o botão <span className="font-mono bg-white/60 px-1 rounded">⚡ Emitir agora</span> pra disparar manualmente.
+          </p>
+        )}
       </div>
     </div>
   );
