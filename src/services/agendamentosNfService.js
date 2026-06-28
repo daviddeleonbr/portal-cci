@@ -19,6 +19,9 @@ export async function listarAgendamentos(configId) {
 
 export async function salvarAgendamento(agendamento) {
   const { id, created_at, updated_at, proxima_emissao, notas_emitidas, ...payload } = agendamento;
+  // cliente_id é uuid nullable. Cliente inserido manualmente (sem seleção do
+  // catálogo) vem como '' — o Postgres rejeita '' em coluna uuid, então normaliza.
+  if (payload.cliente_id === '' || payload.cliente_id === undefined) payload.cliente_id = null;
   if (id) {
     const { data, error } = await supabase
       .from('agendamentos_nf')

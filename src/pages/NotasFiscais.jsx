@@ -14,6 +14,7 @@ import * as asaasApi from '../services/asaasApiService';
 import * as asaasConfig from '../services/asaasConfigService';
 import * as clientesService from '../services/clientesService';
 import * as agendamentosNf from '../services/agendamentosNfService';
+import { buscarCep } from '../services/viacepService';
 import { NBS_CODIGOS } from '../data/nbsCodigos';
 
 const STATUS_CONFIG = {
@@ -662,6 +663,27 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
   const [clientes, setClientes] = useState([]);
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState('');
+  const [buscandoCep, setBuscandoCep] = useState(false);
+
+  // Preenche endereço pelo CEP (ViaCEP) — só completa campos vazios
+  const handleCepChange = async (raw) => {
+    setForm(f => ({ ...f, cliente_cep: raw }));
+    const limpo = (raw || '').replace(/\D/g, '');
+    if (limpo.length !== 8) return;
+    try {
+      setBuscandoCep(true);
+      const dados = await buscarCep(limpo);
+      if (!dados) return;
+      setForm(f => ({
+        ...f,
+        cliente_endereco: f.cliente_endereco || dados.endereco || '',
+        cliente_bairro:   f.cliente_bairro   || dados.bairro   || '',
+        cliente_cidade:   f.cliente_cidade   || dados.cidade   || '',
+        cliente_estado:   f.cliente_estado   || dados.estado   || '',
+      }));
+    } catch { /* silencioso */ }
+    finally { setBuscandoCep(false); }
+  };
 
   useEffect(() => {
     if (open && config) {
@@ -861,6 +883,53 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
               <input type="email" value={form.cliente_email}
                 onChange={(e) => setForm(f => ({ ...f, cliente_email: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+
+            {/* Endereço — vai pro Asaas na emissão. Pré-preenchido ao selecionar
+                cliente, editável aqui para ajustes pontuais. */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">CEP</label>
+              <div className="relative">
+                <input type="text" inputMode="numeric" value={form.cliente_cep}
+                  onChange={(e) => handleCepChange(e.target.value)}
+                  placeholder="00000-000"
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                {buscandoCep && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Número</label>
+              <input type="text" value={form.cliente_numero}
+                onChange={(e) => setForm(f => ({ ...f, cliente_numero: e.target.value }))}
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Endereço</label>
+              <input type="text" value={form.cliente_endereco}
+                onChange={(e) => setForm(f => ({ ...f, cliente_endereco: e.target.value }))}
+                placeholder="Rua / Avenida"
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Bairro</label>
+              <input type="text" value={form.cliente_bairro}
+                onChange={(e) => setForm(f => ({ ...f, cliente_bairro: e.target.value }))}
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Cidade</label>
+                <input type="text" value={form.cliente_cidade}
+                  onChange={(e) => setForm(f => ({ ...f, cliente_cidade: e.target.value }))}
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">UF</label>
+                <input type="text" maxLength={2} value={form.cliente_estado}
+                  onChange={(e) => setForm(f => ({ ...f, cliente_estado: e.target.value }))}
+                  placeholder="ES"
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm uppercase focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
             </div>
           </div>
         </div>
@@ -1279,6 +1348,27 @@ function ModalAgendamento({ open, agendamento, config, onClose, onSave }) {
   const [clientes, setClientes] = useState([]);
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState('');
+  const [buscandoCep, setBuscandoCep] = useState(false);
+
+  // Preenche endereço pelo CEP (ViaCEP) — só completa campos vazios
+  const handleCepChange = async (raw) => {
+    setForm(f => ({ ...f, cliente_cep: raw }));
+    const limpo = (raw || '').replace(/\D/g, '');
+    if (limpo.length !== 8) return;
+    try {
+      setBuscandoCep(true);
+      const dados = await buscarCep(limpo);
+      if (!dados) return;
+      setForm(f => ({
+        ...f,
+        cliente_endereco: f.cliente_endereco || dados.endereco || '',
+        cliente_bairro:   f.cliente_bairro   || dados.bairro   || '',
+        cliente_cidade:   f.cliente_cidade   || dados.cidade   || '',
+        cliente_estado:   f.cliente_estado   || dados.estado   || '',
+      }));
+    } catch { /* silencioso — usuário pode preencher manual */ }
+    finally { setBuscandoCep(false); }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -1473,6 +1563,53 @@ function ModalAgendamento({ open, agendamento, config, onClose, onSave }) {
               <input type="email" value={form.cliente_email}
                 onChange={(e) => setForm(f => ({ ...f, cliente_email: e.target.value }))}
                 className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+
+            {/* Endereço — usado na emissão da NF. Pré-preenchido ao selecionar o
+                cliente, mas editável aqui para ajustes pontuais. */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">CEP</label>
+              <div className="relative">
+                <input type="text" inputMode="numeric" value={form.cliente_cep}
+                  onChange={(e) => handleCepChange(e.target.value)}
+                  placeholder="00000-000"
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                {buscandoCep && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Número</label>
+              <input type="text" value={form.cliente_numero}
+                onChange={(e) => setForm(f => ({ ...f, cliente_numero: e.target.value }))}
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Endereço</label>
+              <input type="text" value={form.cliente_endereco}
+                onChange={(e) => setForm(f => ({ ...f, cliente_endereco: e.target.value }))}
+                placeholder="Rua / Avenida"
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Bairro</label>
+              <input type="text" value={form.cliente_bairro}
+                onChange={(e) => setForm(f => ({ ...f, cliente_bairro: e.target.value }))}
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Cidade</label>
+                <input type="text" value={form.cliente_cidade}
+                  onChange={(e) => setForm(f => ({ ...f, cliente_cidade: e.target.value }))}
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">UF</label>
+                <input type="text" maxLength={2} value={form.cliente_estado}
+                  onChange={(e) => setForm(f => ({ ...f, cliente_estado: e.target.value }))}
+                  placeholder="ES"
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm uppercase focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
             </div>
           </div>
         </div>
