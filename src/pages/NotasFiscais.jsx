@@ -95,35 +95,64 @@ export default function NotasFiscais() {
     } catch (err) { showToast('error', err.message); }
   };
 
+  // Monta o form de emissão a partir do snapshot do agendamento
+  const formDeAgendamento = (ag) => ({
+    cliente_nome:     ag.cliente_nome,
+    cliente_cnpj:     ag.cliente_cnpj,
+    cliente_email:    ag.cliente_email,
+    cliente_cep:      ag.cliente_cep,
+    cliente_endereco: ag.cliente_endereco,
+    cliente_numero:   ag.cliente_numero,
+    cliente_bairro:   ag.cliente_bairro,
+    cliente_cidade:   ag.cliente_cidade,
+    cliente_estado:   ag.cliente_estado,
+    descricao:        ag.descricao,
+    observacoes:      ag.observacoes,
+    valor:            ag.valor,
+    deducoes:         ag.deducoes,
+    data_emissao:     new Date().toISOString().slice(0, 10),
+    aliquota_iss:     ag.aliquota_iss,
+    national_service_code: ag.national_service_code,
+    serie:            ag.serie,
+  });
+
   // Dispara emissão imediata a partir de um agendamento (sem esperar a data)
   const emitirAgora = async (ag) => {
     if (!confirm(`Emitir nota fiscal agora para "${ag.cliente_nome}"?`)) return;
     try {
-      await emitirNota({
-        cliente_nome:     ag.cliente_nome,
-        cliente_cnpj:     ag.cliente_cnpj,
-        cliente_email:    ag.cliente_email,
-        cliente_cep:      ag.cliente_cep,
-        cliente_endereco: ag.cliente_endereco,
-        cliente_numero:   ag.cliente_numero,
-        cliente_bairro:   ag.cliente_bairro,
-        cliente_cidade:   ag.cliente_cidade,
-        cliente_estado:   ag.cliente_estado,
-        descricao:        ag.descricao,
-        observacoes:      ag.observacoes,
-        valor:            ag.valor,
-        deducoes:         ag.deducoes,
-        data_emissao:     new Date().toISOString().slice(0, 10),
-        aliquota_iss:     ag.aliquota_iss,
-        national_service_code: ag.national_service_code,
-        serie:            ag.serie,
-      });
+      await emitirNota(formDeAgendamento(ag));
       // Marca como emitido pra recalcular a próxima data
       await agendamentosNf.registrarEmissao(ag.id, { sucesso: true });
       await carregarAgendamentos();
     } catch (err) {
       await agendamentosNf.registrarEmissao(ag.id, { sucesso: false, mensagemErro: err.message });
     }
+  };
+
+  // Emite TODAS as notas dos agendamentos ATIVOS de uma vez (sequencial pra
+  // não estourar limite do Asaas). Cada falha é registrada e não para as demais.
+  const [emitindoTodas, setEmitindoTodas] = useState(false);
+  const emitirTodas = async () => {
+    const ativos = agendamentos.filter(a => a.ativo);
+    if (ativos.length === 0) { showToast('error', 'Nenhum agendamento ativo para emitir.'); return; }
+    if (!confirm(`Emitir agora ${ativos.length} nota(s) fiscal(is) dos agendamentos ativos?\n\nIsso cria as notas no Asaas imediatamente.`)) return;
+    setEmitindoTodas(true);
+    let ok = 0, falhas = 0;
+    for (const ag of ativos) {
+      try {
+        await emitirNota(formDeAgendamento(ag));
+        await agendamentosNf.registrarEmissao(ag.id, { sucesso: true });
+        ok++;
+      } catch (err) {
+        await agendamentosNf.registrarEmissao(ag.id, { sucesso: false, mensagemErro: err.message });
+        falhas++;
+      }
+    }
+    setEmitindoTodas(false);
+    await carregarAgendamentos();
+    await carregarNotas();
+    showToast(falhas === 0 ? 'success' : 'error',
+      `Emissão concluída: ${ok} emitida(s)${falhas ? `, ${falhas} com erro` : ''}.`);
   };
 
   const showToast = (type, message) => {
@@ -519,6 +548,8 @@ export default function NotasFiscais() {
           onToggle={togglerAgendamento}
           onRemover={removerAgendamento}
           onEmitirAgora={emitirAgora}
+          onEmitirTodas={emitirTodas}
+          emitindoTodas={emitindoTodas}
         />
       )}
 
@@ -1205,7 +1236,7 @@ function ModalDetail({ open, nota, onClose }) {
 // ═══════════════════════════════════════════════════════════
 // Aba: Agendamento — lista de regras recorrentes
 // ═══════════════════════════════════════════════════════════
-function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onRemover, onEmitirAgora }) {
+function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onRemover, onEmitirAgora, onEmitirTodas, emitindoTodas }) {
   const [statusCron, setStatusCron] = useState(null);
   const [carregandoCron, setCarregandoCron] = useState(true);
 
@@ -1225,20 +1256,79 @@ function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onR
 
   if (loading) return <TableSkeleton rows={4} cols={5} />;
 
+  const totalAtivos = agendamentos.filter(a => a.ativo);
+  const valorTotal = agendamentos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+  const valorTotalAtivos = totalAtivos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+
+  // Exporta a lista de agendamentos em CSV (separador ';' e vírgula decimal —
+  // padrão do Excel pt-BR; BOM pra acentos abrirem certo).
+  const exportarCsv = () => {
+    const esc = (v) => {
+      const s = v == null ? '' : String(v);
+      return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const cabecalho = ['Cliente', 'CNPJ', 'Descrição', 'Valor', 'Recorrência', 'Próxima emissão', 'Última emissão', 'Status'];
+    const linhas = agendamentos.map(a => [
+      a.cliente_nome || '',
+      a.cliente_cnpj || '',
+      a.descricao || '',
+      (Number(a.valor) || 0).toFixed(2).replace('.', ','),
+      agendamentosNf.formatarRecorrencia(a),
+      a.proxima_emissao ? formatDate(a.proxima_emissao) : '',
+      a.ultima_emissao ? formatDate(a.ultima_emissao) : '',
+      a.ativo ? 'Ativo' : 'Pausado',
+    ]);
+    const csv = [cabecalho, ...linhas].map(l => l.map(esc).join(';')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agendamentos-nf-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       {/* Header da aba */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">Agendamentos recorrentes</h3>
           <p className="text-xs text-gray-500 mt-0.5">
             Configure emissões automáticas — o sistema dispara a NFS-e na data programada de cada mês.
           </p>
+          {agendamentos.length > 0 && (
+            <p className="text-xs text-gray-600 mt-1.5">
+              <span className="font-semibold text-gray-900">{formatCurrency(valorTotalAtivos)}</span>
+              {' '}em {totalAtivos.length} agendamento(s) ativo(s)
+              {agendamentos.length !== totalAtivos.length && (
+                <span className="text-gray-400"> · {formatCurrency(valorTotal)} no total ({agendamentos.length})</span>
+              )}
+            </p>
+          )}
         </div>
-        <button onClick={onNovo}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
-          <Plus className="h-4 w-4" /> Novo agendamento
-        </button>
+        <div className="flex items-center gap-2">
+          {agendamentos.length > 0 && (
+            <>
+              <button onClick={exportarCsv}
+                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                <Download className="h-4 w-4" /> CSV
+              </button>
+              <button onClick={onEmitirTodas} disabled={emitindoTodas || totalAtivos.length === 0}
+                className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                title="Emite agora as notas de todos os agendamentos ativos">
+                {emitindoTodas ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                {emitindoTodas ? 'Emitindo…' : 'Emitir todas'}
+              </button>
+            </>
+          )}
+          <button onClick={onNovo}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+            <Plus className="h-4 w-4" /> Novo agendamento
+          </button>
+        </div>
       </div>
 
       {agendamentos.length === 0 ? (
