@@ -4,8 +4,10 @@
 export { carregarApiKey, salvarApiKey, limparApiKey } from './insightsService';
 import { carregarApiKey as carregarApiKeyLS, salvarApiKey as salvarApiKeyLS } from './insightsService';
 import { obterConfiguracaoIa } from './configuracoesIaService';
+import { getAccessTokenAtivo } from '../lib/authToken';
 
-const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
+const IA_PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ia-proxy`;
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const MODEL_DEFAULT = 'claude-opus-4-7';
 
 // ─── Carrega config IA do Supabase (com fallback localStorage) ─
@@ -18,7 +20,7 @@ export async function carregarConfiguracaoIa() {
   try {
     const cfg = await obterConfiguracaoIa();
     if (cfg?.api_key) {
-      try { salvarApiKeyLS(cfg.api_key); } catch (_) { /* ignore */ }
+      try { salvarApiKeyLS(cfg.api_key); } catch { /* ignore */ }
     }
     return {
       apiKey:           cfg?.api_key || carregarApiKeyLS() || '',
@@ -27,7 +29,7 @@ export async function carregarConfiguracaoIa() {
       adaptiveThinking: cfg?.adaptive_thinking !== false,
       ativo:            cfg?.ativo !== false,
     };
-  } catch (_) {
+  } catch {
     return {
       apiKey:           carregarApiKeyLS() || '',
       modelo:           MODEL_DEFAULT,
@@ -44,56 +46,39 @@ export async function carregarConfiguracaoIa() {
 // - Modelo, adaptiveThinking e maxTokens vêm da config admin (Supabase) por
 //   padrão; podem ser sobrescritos via parâmetros explícitos.
 // - anthropic-dangerous-direct-browser-access pq e front-end
-export async function chamarClaudeAPI({ apiKey, system, user, maxTokens, modelo, adaptiveThinking } = {}) {
-  // Se faltarem parâmetros, busca da config admin no Supabase
-  let cfg = null;
-  if (!apiKey || !modelo || maxTokens == null || adaptiveThinking == null) {
-    cfg = await carregarConfiguracaoIa();
+// Agora chama a Edge Function `ia-proxy` (server-side injeta a chave lida
+// de configuracoes_ia). O param `apiKey` é aceito por compatibilidade mas
+// IGNORADO — a chave não trafega mais pelo navegador. Modelo/maxTokens/
+// adaptiveThinking podem ser sobrescritos; senão o proxy usa a config admin.
+export async function chamarClaudeAPI({ system, user, maxTokens, modelo, adaptiveThinking } = {}) {
+  const token = await getAccessTokenAtivo();
+  let res;
+  try {
+    res = await fetch(IA_PROXY_URL, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ system, user, maxTokens, modelo, adaptiveThinking }),
+    });
+  } catch {
+    throw new Error('Falha de conexão com o serviço de IA.');
   }
-  const finalKey   = apiKey       ?? cfg?.apiKey;
-  const finalModel = modelo       ?? cfg?.modelo ?? MODEL_DEFAULT;
-  const finalMax   = maxTokens    ?? cfg?.maxTokens ?? 20000;
-  const finalThink = adaptiveThinking ?? cfg?.adaptiveThinking ?? true;
-
-  if (!finalKey) throw new Error('Chave de API não configurada');
-
-  const blocks = Array.isArray(system) ? system : [{ type: 'text', text: String(system) }];
-  // cache_control no ULTIMO bloco de system cacheia tudo antes dele (tools + system)
-  if (blocks.length > 0) {
-    blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: { type: 'ephemeral' } };
-  }
-
-  const body = {
-    model: finalModel,
-    max_tokens: finalMax,
-    system: blocks,
-    messages: [{ role: 'user', content: user }],
-  };
-  if (finalThink) body.thinking = { type: 'adaptive' };
-
-  const res = await fetch(CLAUDE_URL, {
-    method: 'POST',
-    headers: {
-      'x-api-key': finalKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify(body),
-  });
 
   if (!res.ok) {
     const errText = await res.text();
     let parsedErr;
-    try { parsedErr = JSON.parse(errText); } catch (_) { /* ignore */ }
-    const msg = parsedErr?.error?.message || errText;
+    try { parsedErr = JSON.parse(errText); } catch { /* ignore */ }
+    const msg = parsedErr?.error?.message || parsedErr?.error || errText;
     const lower = (msg || '').toLowerCase();
     if (lower.includes('credit balance')) {
       const e = new Error('Sua conta Anthropic esta sem creditos. Acesse console.anthropic.com > Plans & Billing.');
       e.code = 'NO_CREDITS'; throw e;
     }
     if (res.status === 401 || res.status === 403) {
-      const e = new Error('Chave de API invalida ou sem permissão.');
+      const e = new Error(msg || 'Chave de API invalida ou sem permissão.');
       e.code = 'INVALID_KEY'; throw e;
     }
     if (res.status === 429) {
@@ -103,16 +88,47 @@ export async function chamarClaudeAPI({ apiKey, system, user, maxTokens, modelo,
     throw new Error(msg);
   }
 
-  const data = await res.json();
-  const textBlock = (data.content || []).find(b => b.type === 'text');
-  if (!textBlock) throw new Error('IA não retornou conteudo de texto');
-  const stopReason = data.stop_reason || null;
+  // Resposta é SSE (repassado da Anthropic): acumula o texto, captura
+  // stop_reason e usage. O streaming mantém a conexão viva (evita o idle
+  // timeout de 150s da Edge Function em respostas longas).
+  let text = '';
+  let stopReason = null;
+  let usage = null;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const linhas = buffer.split('\n');
+    buffer = linhas.pop() || '';
+    for (const linha of linhas) {
+      const l = linha.trim();
+      if (!l.startsWith('data:')) continue;
+      const js = l.slice(5).trim();
+      if (!js || js === '[DONE]') continue;
+      let ev;
+      try { ev = JSON.parse(js); } catch { continue; }
+      if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+        text += ev.delta.text;
+      } else if (ev.type === 'message_start') {
+        usage = ev.message?.usage || usage;
+      } else if (ev.type === 'message_delta') {
+        if (ev.delta?.stop_reason) stopReason = ev.delta.stop_reason;
+        if (ev.usage) usage = { ...(usage || {}), ...ev.usage };
+      } else if (ev.type === 'error') {
+        throw new Error(ev.error?.message || 'Erro da IA durante o streaming.');
+      }
+    }
+  }
+
   try {
-    const insights = extrairJsonDeTexto(textBlock.text);
-    return { insights, usage: data.usage || null, raw: textBlock.text, stop_reason: stopReason };
-  } catch (err) {
+    const insights = extrairJsonDeTexto(text);
+    return { insights, usage, raw: text, stop_reason: stopReason };
+  } catch {
     // Trunca + loga amostra pra diagnostico; se foi max_tokens, avisa explicitamente
-    const amostra = String(textBlock.text || '').slice(-400);
+    const amostra = String(text || '').slice(-400);
     const motivo = stopReason === 'max_tokens'
       ? 'Resposta foi truncada (max_tokens). Tente novamente ou simplifique o payload.'
       : 'Resposta da IA não esta em JSON valido';
@@ -133,13 +149,13 @@ export function extrairJsonDeTexto(raw) {
     .replace(/\s*```\s*$/i, '')
     .trim();
   // 2) Tenta parse direto
-  try { return JSON.parse(semFence); } catch (_) { /* fallthrough */ }
+  try { return JSON.parse(semFence); } catch { /* fallthrough */ }
   // 3) Tenta extrair o maior bloco {...} no texto (caso tenha prosa ao redor)
   const primeiroBrace = semFence.indexOf('{');
   const ultimoBrace = semFence.lastIndexOf('}');
   if (primeiroBrace >= 0 && ultimoBrace > primeiroBrace) {
     const candidato = semFence.slice(primeiroBrace, ultimoBrace + 1);
-    try { return JSON.parse(candidato); } catch (_) { /* fallthrough */ }
+    try { return JSON.parse(candidato); } catch { /* fallthrough */ }
   }
   throw new Error('Resposta da IA não esta em JSON valido');
 }
