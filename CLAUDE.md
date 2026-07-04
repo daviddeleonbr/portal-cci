@@ -73,3 +73,34 @@ This is a **BPO contábil** (accounting outsourcing) product for fuel-station ne
 ### Routing notes
 
 Many legacy paths `<Navigate>`-redirect to current ones, and several admin "tab" pages (Cadastros, Financeiro, Parâmetros) are reached by multiple URLs that all render one component — the URL just picks the initial tab. When adding routes, mirror this and keep the `webposto`/`autosystem` pair in sync.
+
+## Security (READ FIRST when touching auth, RLS, secrets, or Edge Functions)
+
+> This project currently ships with a **systemic critical vulnerability class** that must not be replicated in new code, and should be actively remediated. Treat everything in this section as mandatory, not advisory. When a change would touch auth, database policies, secrets, or the Edge Function boundary, prefer the secure pattern below even if the surrounding legacy code does it the insecure way — and flag the legacy instance so it gets fixed.
+
+### The root cause you must understand
+
+Auth is **custom (localStorage), not Supabase Auth**. The database therefore only ever sees the public **`anon`** role — the same anon key shipped in the frontend bundle. Yet nearly every table is protected only by `create policy "Allow all" ... using (true) with check (true)` plus default (or explicit) `grant ... to anon`. **Net effect: the public anon key is a read/write superuser over the whole database.** Route guards (`RequireAdmin`, `hasPermissaoCliente`, etc.) and the localStorage session are **cosmetic** — they gate the UI, not the data. Anyone with the anon key (it is in the JS bundle) can bypass the entire app and call PostgREST / RPCs directly.
+
+Because of this, the following are all currently exploitable by an anonymous client and **must be fixed** (do not add more of the same):
+
+- **Plaintext passwords.** `cci_usuarios_sistema.senha` is stored in cleartext and compared client-side in [src/lib/auth.js](src/lib/auth.js) (`usuario.senha !== senha`). Anon can `select email, senha, permissoes` and dump every admin+client credential, or `update` its own `permissoes` to escalate. A seed admin password is even committed in migration `016`.
+- **Reset-token takeover.** `password_reset_tokens` (migration `042`) is anon read/write — anyone can read or mint a valid token for any user and complete the redefinir-senha flow.
+- **Decryptable ERP credentials.** `as_rede` ciphertext columns (`*_enc`) are anon-readable, and the `SECURITY DEFINER` functions `as_rede_decrypt` / `as_rede_encrypt` / `as_rede_crypto_key` have no `REVOKE EXECUTE FROM public`, so anon can call `rpc('as_rede_decrypt', …)` and recover every Autosystem client's live Postgres password + tunnel token. This nullifies the role-gated `as_rede_get_credenciais` masking added in migrations `096`–`098`.
+- **Plaintext third-party keys readable by anon.** Quality API keys (`chaves_api.chave`), the Asaas token (`configuracoes_asaas.api_key`), and the Anthropic key (`configuracoes_ia.api_key` — this table never even had `enable row level security`).
+- **Open Edge Functions with service-role DB access.** The `autosystem-*`, `webposto-sync-*`, and `agendamentos-nf-emitir` functions create a `SERVICE_ROLE_KEY` client and **do no caller authN/authZ** — they trust a `rede_id`/`chave_api_id` from the request body. CORS is `*`. This is cross-tenant IDOR: enumerate UUIDs → pull any client's financials. `cci_webposto_dispara_worker` (migration `080`, `grant execute to anon`) takes a caller-supplied URL + bearer token → SSRF.
+- **Plaintext TCP to client DBs.** [supabase/functions/_shared/autosystem-query.ts](supabase/functions/_shared/autosystem-query.ts) uses `tls: { enabled: false }` in direct-TCP mode.
+
+### Mandatory rules for new code
+
+1. **Never store or compare passwords in plaintext.** Passwords must be hashed (bcrypt/argon2) and verified **server-side** (Edge Function or Postgres function), never in the browser. Never `select` a password/secret column into the client. Never commit a credential to a migration or the repo.
+2. **RLS must actually restrict.** Do **not** write `using (true) with check (true)` on any new table, and do not `grant ... to anon` tables holding user data, financials, PII, or secrets. Every new table gets `enable row level security` plus a policy scoped to the real tenant/identity. Until the app moves to a trusted server identity (see below), any table exposed to the browser must assume the reader is a hostile anonymous client.
+3. **Secrets never reach the browser.** API keys (Anthropic, Asaas, Quality) and any credential belong server-side (Edge Function env / Supabase Vault), fronted by a function that authorizes the caller. Do not add new "call the vendor API directly from the browser with the key" paths (the existing Anthropic-in-browser and localStorage key are legacy debt to unwind, not a pattern to copy).
+4. **Every Edge Function must authenticate and authorize the caller** before doing service-role work. Verify a real session/token, resolve *who* is calling, and check they own the `rede_id`/`cliente_id`/empresa they're asking about. Do not trust tenant identifiers from the request body. Keep `verify_jwt` on; commit `supabase/config.toml` so function auth settings are reviewable. Tighten CORS to known origins.
+5. **`SECURITY DEFINER` functions must be locked down.** Add `REVOKE EXECUTE ... FROM public;` and grant execute only to the intended role. Never expose a decrypt/crypto-key primitive to `anon`/`public`. Never accept a target URL or credential as a caller-supplied parameter to a definer function (SSRF).
+6. **Encrypt transport to client databases** (`tls: { enabled: true }`) and keep encryption keys in Vault, never hardcoded in a migration.
+7. **Validate and parameterize.** Keep SQL parameterized (`$1..$n`) — never string-concatenate user input into SQL. Sanitize file names/paths (see `sanitizarNomeArquivo`). Avoid `dangerouslySetInnerHTML`/`innerHTML`/`eval` (currently none in the codebase — keep it that way).
+
+### The real fix (when the user prioritizes it)
+
+The durable remediation is to give the database a **trusted identity** so RLS can mean something — either migrate to Supabase Auth, or issue signed JWTs from a login Edge Function and have RLS policies read `auth.uid()`/claims instead of `using (true)`. Passwords move to server-side hashing; secrets move behind authorized functions; Edge Functions gain caller authorization. Until then, be explicit with the user that the portal's access control is **UI-only** and the anon key is effectively a master key. Do not describe the current state as secure.

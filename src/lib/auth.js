@@ -53,117 +53,117 @@ function emitSessionChange() {
 
 // ==================== Login ====================
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Verifica credenciais SERVER-SIDE (hash) e obtém tokens via Edge Function
+// `auth-login`. A comparação de senha não roda mais no navegador.
+// Retorna { access_token, refresh_token, expires_in, usuario } — onde
+// usuario traz chaves_api/as_rede embutidos (mas nunca a senha/hash).
+async function chamarAuthLogin(email, senha, portal) {
+  const emailNorm = (email || '').trim().toLowerCase();
+  if (!emailNorm || !senha) throw new Error('Informe e-mail e senha.');
+  let res;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/auth-login`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${SUPABASE_ANON}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ email: emailNorm, senha, portal }),
+    });
+  } catch {
+    throw new Error('Falha de conexão ao validar credenciais.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || 'E-mail ou senha invalidos.');
+  return data;
+}
+
+function expiraEmSeg(expiresIn) {
+  return Math.floor(Date.now() / 1000) + (Number(expiresIn) || 3600);
+}
+
 export async function loginAdmin(email, senha) {
-  const { usuario } = await autenticar(email, senha, 'admin');
-  const session = { usuario, loggedAt: new Date().toISOString() };
+  const { access_token, refresh_token, expires_in, usuario } =
+    await chamarAuthLogin(email, senha, 'admin');
+  const session = {
+    usuario,
+    access_token,
+    refresh_token,
+    access_exp: expiraEmSeg(expires_in),
+    loggedAt: new Date().toISOString(),
+  };
   setAdminSession(session);
   return session;
 }
 
-// Login do cliente: detecta automaticamente se é portal Webposto ou
-// Autosystem baseado em qual coluna do usuário está preenchida.
-// A sessão inclui `tipoCliente` que governa o prefixo de URLs.
+// Login do cliente: o auth-login já validou senha/status/portal e devolve o
+// usuario com chaves_api/as_rede embutidos. Derivamos o tipoCliente e
+// carregamos as empresas da rede (via client já autenticado).
 export async function loginCliente(email, senha) {
-  const { usuario, chaveApi, asRede, clientesRede, tipoCliente } =
-    await autenticar(email, senha, 'cliente');
+  const { access_token, refresh_token, expires_in, usuario } =
+    await chamarAuthLogin(email, senha, 'cliente');
 
+  const chaveApi = usuario.chaves_api || null;
+  const asRede = usuario.as_rede || null;
+  let tipoCliente = null;
+  if (asRede?.id) tipoCliente = 'autosystem';
+  else if (chaveApi?.id) tipoCliente = 'webposto';
   if (!tipoCliente) {
     throw new Error('Este usuário não está vinculado a nenhuma rede.');
   }
 
-  const rede = tipoCliente === 'autosystem' ? asRede : chaveApi;
-  if (!clientesRede || clientesRede.length === 0) {
-    throw new Error(`A rede "${rede?.nome || ''}" ainda não tem empresas cadastradas. Contate o administrador.`);
-  }
-  // Cliente ativo = primeira empresa da rede. O usuario podera trocar no portal.
-  const cliente = clientesRede[0];
-  const session = {
-    usuario,
-    cliente,
+  const usuarioLimpo = { ...usuario };
+  delete usuarioLimpo.chaves_api;
+  delete usuarioLimpo.as_rede;
+
+  // Grava a sessão parcial já com o token pra que a leitura das empresas
+  // abaixo use o client autenticado (getAccessTokenAtivo lê daqui).
+  const base = {
+    usuario: usuarioLimpo,
     tipoCliente,
     chaveApi,
     asRede,
-    clientesRede,
+    access_token,
+    refresh_token,
+    access_exp: expiraEmSeg(expires_in),
     loggedAt: new Date().toISOString(),
   };
+  setClienteSession(base);
+
+  // Carrega empresas da rede respeitando empresas_permitidas.
+  const col = tipoCliente === 'autosystem' ? 'as_rede_id' : 'chave_api_id';
+  const val = tipoCliente === 'autosystem' ? asRede.id : chaveApi.id;
+  const { data: emps, error: errEmps } = await supabase
+    .from('clientes')
+    .select('*')
+    .eq(col, val)
+    .eq('status', 'ativo')
+    .order('nome', { ascending: true });
+  if (errEmps) {
+    logoutCliente();
+    throw new Error('Falha ao carregar empresas da rede: ' + errEmps.message);
+  }
+
+  const permitidas = Array.isArray(usuarioLimpo.empresas_permitidas)
+    ? usuarioLimpo.empresas_permitidas
+    : null;
+  const clientesRede = permitidas && permitidas.length > 0
+    ? (emps || []).filter(c => permitidas.includes(c.id))
+    : (emps || []);
+  if (!clientesRede.length) {
+    const nomeRede = (asRede || chaveApi)?.nome || '';
+    logoutCliente();
+    throw new Error(`A rede "${nomeRede}" ainda não tem empresas cadastradas. Contate o administrador.`);
+  }
+
+  // Cliente ativo = primeira empresa da rede. O usuario podera trocar no portal.
+  const session = { ...base, cliente: clientesRede[0], clientesRede };
   setClienteSession(session);
   return session;
-}
-
-async function autenticar(email, senha, tipoEsperado) {
-  const emailNorm = (email || '').trim().toLowerCase();
-  if (!emailNorm || !senha) throw new Error('Informe e-mail e senha.');
-
-  const { data: usuario, error } = await supabase
-    .from('cci_usuarios_sistema')
-    .select('*, chaves_api(*), as_rede(*)')
-    .eq('email', emailNorm)
-    .maybeSingle();
-  if (error) throw new Error('Falha ao validar credenciais: ' + error.message);
-  if (!usuario) throw new Error('E-mail ou senha invalidos.');
-
-  if (usuario.status !== 'ativo') throw new Error('Usuário inativo. Contate o administrador.');
-  if (usuario.tipo !== tipoEsperado) {
-    throw new Error(
-      tipoEsperado === 'admin'
-        ? 'Este acesso e exclusivo para administradores. Use o Portal do Cliente.'
-        : 'Este acesso e exclusivo para clientes. Use o Portal Admin.'
-    );
-  }
-  if (usuario.senha !== senha) throw new Error('E-mail ou senha invalidos.');
-
-  // Atualiza ultimo acesso (best-effort, nao bloqueia login em caso de erro)
-  supabase
-    .from('cci_usuarios_sistema')
-    .update({ ultimo_acesso: new Date().toISOString() })
-    .eq('id', usuario.id)
-    .then(() => {}, () => {});
-
-  const chaveApi = usuario.chaves_api || null;
-  const asRede = usuario.as_rede || null;
-  const usuarioSemSenha = { ...usuario };
-  delete usuarioSemSenha.senha;
-  delete usuarioSemSenha.chaves_api;
-  delete usuarioSemSenha.as_rede;
-
-  // Determina tipo do portal cliente pelo vínculo (constraint XOR no schema garante exclusividade)
-  let tipoCliente = null;
-  if (tipoEsperado === 'cliente') {
-    if (asRede?.id) tipoCliente = 'autosystem';
-    else if (chaveApi?.id) tipoCliente = 'webposto';
-  }
-
-  // Para usuario cliente, carrega empresas da rede respeitando empresas_permitidas
-  let clientesRede = null;
-  if (tipoCliente === 'webposto') {
-    const { data: emps, error: errEmps } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('chave_api_id', chaveApi.id)
-      .eq('status', 'ativo')
-      .order('nome', { ascending: true });
-    if (errEmps) throw new Error('Falha ao carregar empresas da rede: ' + errEmps.message);
-
-    const permitidas = Array.isArray(usuarioSemSenha.empresas_permitidas) ? usuarioSemSenha.empresas_permitidas : null;
-    clientesRede = permitidas && permitidas.length > 0
-      ? (emps || []).filter(c => permitidas.includes(c.id))
-      : (emps || []);
-  } else if (tipoCliente === 'autosystem') {
-    const { data: emps, error: errEmps } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('as_rede_id', asRede.id)
-      .eq('status', 'ativo')
-      .order('nome', { ascending: true });
-    if (errEmps) throw new Error('Falha ao carregar empresas da rede: ' + errEmps.message);
-
-    const permitidas = Array.isArray(usuarioSemSenha.empresas_permitidas) ? usuarioSemSenha.empresas_permitidas : null;
-    clientesRede = permitidas && permitidas.length > 0
-      ? (emps || []).filter(c => permitidas.includes(c.id))
-      : (emps || []);
-  }
-
-  return { usuario: usuarioSemSenha, chaveApi, asRede, clientesRede, tipoCliente };
 }
 
 // ─── Acesso DEMO: admin vê o portal cliente com nomes fictícios ─────
