@@ -1,5 +1,9 @@
 import { supabase } from '../lib/supabase';
 
+// Colunas seguras (NUNCA inclui senha/senha_hash — o RLS revoga o SELECT
+// dessas colunas). Todo select da tabela usa esta lista.
+const COLS = 'id, nome, email, tipo, chave_api_id, as_rede_id, permissoes, status, is_master, empresas_permitidas, ultimo_acesso, observacoes, criado_por, created_at, updated_at';
+
 // ========== Catalogo de permissoes ==========
 // Usado pela UI pra renderizar os checkboxes. Cada chave deve
 // bater com a string armazenada em cci_usuarios_sistema.permissoes.
@@ -104,7 +108,7 @@ export async function cascataRevogarPermissoes(adminId, permissoesRemovidas) {
 export async function listarUsuarios() {
   const { data, error } = await supabase
     .from('cci_usuarios_sistema')
-    .select('*, chaves_api(id, nome, provedor), as_rede(id, nome, slug)')
+    .select(`${COLS}, chaves_api(id, nome, provedor), as_rede(id, nome, slug)`)
     .order('nome', { ascending: true });
   if (error) throw error;
   return data || [];
@@ -121,7 +125,7 @@ export async function listarUsuariosDaRede(arg) {
   if (!chave_api_id && !as_rede_id) return [];
   let query = supabase
     .from('cci_usuarios_sistema')
-    .select('*')
+    .select(COLS)
     .eq('tipo', 'cliente');
   if (chave_api_id) query = query.eq('chave_api_id', chave_api_id);
   if (as_rede_id)   query = query.eq('as_rede_id',   as_rede_id);
@@ -133,7 +137,7 @@ export async function listarUsuariosDaRede(arg) {
 export async function buscarUsuario(id) {
   const { data, error } = await supabase
     .from('cci_usuarios_sistema')
-    .select('*, chaves_api(id, nome, provedor)')
+    .select(`${COLS}, chaves_api(id, nome, provedor)`)
     .eq('id', id)
     .single();
   if (error) throw error;
@@ -146,7 +150,7 @@ export async function criarUsuario(campos) {
   const { data, error } = await supabase
     .from('cci_usuarios_sistema')
     .insert(payload)
-    .select()
+    .select(COLS)
     .single();
   if (error) throw error;
   return data;
@@ -177,7 +181,7 @@ export async function atualizarUsuario(id, campos) {
     .from('cci_usuarios_sistema')
     .update(payload)
     .eq('id', id)
-    .select()
+    .select(COLS)
     .single();
   if (error) throw error;
 

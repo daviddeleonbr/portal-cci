@@ -22,11 +22,11 @@ Plano B registrado: Supabase Auth nativo (mais robusto em reset/refresh/MFA, ref
 | 0 | Preparação, mapa de tenant, matriz de fumaça | Total | ✅ concluída (`MAPA_TENANT.md`, `MATRIZ_FUMACA.md`) |
 | 1 | Senhas com hash (coluna nova, dual-read) | Total | ✅ migration `108` authorada — **falta aplicar** (`npx supabase db push`) |
 | 2 | Login por Edge Function emitindo JWT assinado | Total (RLS ainda allow-all) | ✅ backend deployado+validado (login/refresh/rotação OK) · ✅ cutover do frontend authorado (`auth.js`, `authToken.js`, `supabase.js`, migr. 110 self-heal). Falta: aplicar 110 + smoke test via `npm run dev` |
-| 3 | RLS real por tenant, tabela a tabela (canário) | Por-tabela | 🔶 A/B/C/D/E ✅ · F/G1/G2/Público `120`–`123` ▶ (fecha TODAS as não-segredo) · falta só H (segredos) após Fase 4 + buckets Storage |
+| 3 | RLS real por tenant, tabela a tabela (canário) | Por-tabela | ✅ TODAS as tabelas (não-segredo `112`–`123` + segredos/H `124`–`129`). Admin vê tudo, cliente só a própria rede, senha protegida por coluna. |
 | 4 | Segredos fora do navegador (IA/Quality/Asaas) | Reversível c/ flag | ✅ 4a-IA (proxy + `124`) · 4b-Asaas (admin-only `125`) · 4c-Quality (Opção A: RLS por tenant em `chaves_api` `126`). Chaves Anthropic/Asaas/Quality não são mais legíveis por anônimo. |
-| 5 | Autorização nas Edge Functions (fecha IDOR) | Reversível | ⬜ |
-| 6 | Reset tokens, TLS Autosystem, **rotação de chaves** | Ponto de não-retorno parcial | ⬜ |
-| 7 | Verificação final, drop do texto puro, monitoração | Ponto de não-retorno final | ⬜ |
+| 5 | Autorização nas Edge Functions (fecha IDOR) | Reversível | 🔶 parcial: auth-login/refresh/reset/ia-proxy checam o chamador (cci_tipo). **Falta:** `autosystem-*`/`webposto-*` ainda confiam no `rede_id` do body (IDOR cross-tenant entre clientes autenticados) + `config.toml`/CORS. |
+| 6 | Reset tokens, TLS Autosystem, **rotação de chaves** | Ponto de não-retorno parcial | 🔶 reset tokens ✅ (auth-reset `129`). **Falta:** TLS nas conexões Autosystem (testar rede a rede) + **rotação** de tudo que foi legível por anon (Quality/Asaas/Anthropic/senhas ERP/chave do Vault). |
+| 7 | Verificação final, drop do texto puro, monitoração | Ponto de não-retorno final | ⬜ **Falta:** drop da coluna `senha` (após todos self-heal), policies de Storage (buckets), auditoria "deny by default", atualizar seção Security do CLAUDE.md. |
 
 As Fases 0–2 não têm impacto para o usuário — a identidade passa a existir mas ainda não gateia nada. O risco real começa na Fase 3.
 
