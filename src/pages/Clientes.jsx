@@ -16,6 +16,7 @@ import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as autosystemService from '../services/autosystemService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
+import * as administradorasService from '../services/clienteAdministradorasService';
 import { buscarCep } from '../services/viacepService';
 
 // Mascara IP exibindo apenas o primeiro e o ultimo octeto (ex.: 187.***.***.45).
@@ -51,6 +52,7 @@ export default function Clientes({ embedded = false }) {
   const [modalDetail, setModalDetail] = useState({ open: false, cliente: null });
   const [modalConfirm, setModalConfirm] = useState({ open: false, message: '', onConfirm: null });
   const [modalContas, setModalContas] = useState({ open: false, cliente: null });
+  const [modalAdmin, setModalAdmin] = useState({ open: false, cliente: null });
   const [expandedRedes, setExpandedRedes] = useState(new Set());
   const [redesAutosystem, setRedesAutosystem] = useState([]);
   const [modalEmpresasAS, setModalEmpresasAS] = useState({ open: false, rede: null });
@@ -343,6 +345,10 @@ export default function Clientes({ embedded = false }) {
                                   className="rounded-md p-1.5 text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Classificar contas bancárias">
                                   <Landmark className="h-3.5 w-3.5" />
                                 </button>
+                                <button onClick={() => setModalAdmin({ open: true, cliente: rede.empresas[0] })}
+                                  className="rounded-md p-1.5 text-gray-500 hover:text-violet-600 hover:bg-violet-50 transition-colors" title="Administradoras (cartões frota)">
+                                  <CreditCard className="h-3.5 w-3.5" />
+                                </button>
                               </>
                             )}
                           </div>
@@ -458,6 +464,12 @@ export default function Clientes({ embedded = false }) {
       <ModalContasBancarias
         open={modalContas.open} cliente={modalContas.cliente}
         onClose={() => setModalContas({ open: false, cliente: null })}
+        showToast={showToast}
+      />
+
+      <ModalAdministradorasFrota
+        open={modalAdmin.open} cliente={modalAdmin.cliente}
+        onClose={() => setModalAdmin({ open: false, cliente: null })}
         showToast={showToast}
       />
 
@@ -2251,6 +2263,158 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
             <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/40 text-[10.5px] text-gray-500">
               <strong className="text-gray-700">Sangrias:</strong> marque as contas cujos lançamentos devem aparecer na ferramenta de Sangrias do portal cliente. Contas inativas não podem ser marcadas.
             </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Modal: Administradoras de cartão — marcar quais são FROTA
+// ═══════════════════════════════════════════════════════════
+function ModalAdministradorasFrota({ open, cliente, onClose, showToast }) {
+  const [loading, setLoading] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [error, setError] = useState(null);
+  const [itens, setItens] = useState([]);
+  const [salvandoId, setSalvandoId] = useState(null);
+  const [busca, setBusca] = useState('');
+
+  useEffect(() => {
+    if (!open || !cliente?.chave_api_id) return;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        setBusca('');
+        const existentes = await administradorasService.listarPorRede(cliente.chave_api_id);
+        setItens(existentes);
+        // Primeira abertura sem classificações → sincroniza automaticamente
+        if (existentes.length === 0 && cliente.usa_webposto) {
+          await executarSincronizacao();
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally { setLoading(false); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, cliente?.chave_api_id]);
+
+  const executarSincronizacao = async () => {
+    if (!cliente?.chave_api_id) return;
+    try {
+      setSincronizando(true);
+      setError(null);
+      const chaves = await mapService.listarChavesApi();
+      const chave = chaves.find(c => c.id === cliente.chave_api_id);
+      if (!chave) throw new Error('Chave API não encontrada');
+      const adminsQuality = await qualityApi.buscarAdministradoras(chave.chave);
+      const atualizados = await administradorasService.sincronizarComQuality(cliente.chave_api_id, adminsQuality || []);
+      setItens(atualizados);
+      showToast?.('success', `${atualizados.length} administradora(s) sincronizada(s)`);
+    } catch (err) {
+      setError('Erro ao sincronizar: ' + err.message);
+    } finally { setSincronizando(false); }
+  };
+
+  const mudarFrota = async (item, frota) => {
+    try {
+      setSalvandoId(item.id);
+      const atualizado = await administradorasService.atualizar(item.id, { frota });
+      setItens(prev => prev.map(i => i.id === item.id ? atualizado : i));
+    } catch (err) {
+      showToast?.('error', 'Erro ao salvar: ' + err.message);
+    } finally { setSalvandoId(null); }
+  };
+
+  if (!open || !cliente) return null;
+
+  const redeNome = cliente.chaves_api?.nome || 'Rede';
+  const qtdFrota = itens.filter(i => i.frota).length;
+  const filtrados = busca.trim()
+    ? itens.filter(i => (i.descricao || '').toLowerCase().includes(busca.trim().toLowerCase())
+        || String(i.administradora_codigo).includes(busca.trim()))
+    : itens;
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Administradoras · cartões frota — ${redeNome}`} size="lg">
+      <div className="space-y-4">
+        <div className="rounded-lg bg-violet-50/60 border border-violet-200 p-3 text-[11px] text-violet-800">
+          Marque quais administradoras são de <strong>cartão frota</strong>. A classificação é por
+          <strong> rede</strong> — vale para todas as empresas da {redeNome}.
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-gray-700">
+            {qtdFrota} de {itens.length} marcada{qtdFrota === 1 ? '' : 's'} como frota
+          </p>
+          <button type="button" onClick={executarSincronizacao} disabled={sincronizando || loading}
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            {sincronizando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Sincronizar com Quality
+          </button>
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-red-700">{error}</p>
+          </div>
+        )}
+
+        {itens.length > 0 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar administradora…"
+              className="w-full h-9 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+          </div>
+        ) : itens.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-200 px-6 py-10 text-center">
+            <CreditCard className="h-7 w-7 text-gray-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-600">Nenhuma administradora classificada.</p>
+            <p className="text-[11px] text-gray-400 mt-1">Clique em "Sincronizar com Quality" para puxar as administradoras.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-200 overflow-hidden max-h-[50vh] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0">
+                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2">Administradora</th>
+                  <th className="px-3 py-2 text-center">Frota</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtrados.map(item => (
+                  <tr key={item.id} className={item.frota ? 'bg-violet-50/40' : ''}>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className={`h-3.5 w-3.5 ${item.frota ? 'text-violet-600' : 'text-gray-300'}`} />
+                        <div>
+                          <p className="text-[13px] text-gray-800">{item.descricao || `Administradora #${item.administradora_codigo}`}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">#{item.administradora_codigo}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <label className="inline-flex items-center cursor-pointer">
+                        <input type="checkbox" checked={!!item.frota}
+                          onChange={(e) => mudarFrota(item, e.target.checked)}
+                          disabled={salvandoId === item.id}
+                          className="rounded border-gray-300 text-violet-600 focus:ring-violet-400 disabled:opacity-50" />
+                      </label>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

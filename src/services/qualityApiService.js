@@ -300,9 +300,12 @@ export async function buscarClientesQuality(apiKey, urlBase = DEFAULT_URL_BASE) 
   return fetchCatalogo(urlBase, 'CLIENTE', apiKey, { limite: LIMITE_PADRAO });
 }
 
-// Contas bancarias (CONTA) - referenciadas por MOVIMENTO_CONTA.contaCodigo
-export async function buscarContas(apiKey, urlBase = DEFAULT_URL_BASE) {
-  return fetchCatalogo(urlBase, 'CONTA', apiKey, { limite: LIMITE_PADRAO });
+// Contas bancarias (CONTA) - referenciadas por MOVIMENTO_CONTA.contaCodigo.
+// empresaCodigo (opcional) filtra as contas de UMA empresa Webposto.
+export async function buscarContas(apiKey, urlBase = DEFAULT_URL_BASE, { empresaCodigo } = {}) {
+  const params = { limite: LIMITE_PADRAO };
+  if (empresaCodigo != null && empresaCodigo !== '') params.empresaCodigo = empresaCodigo;
+  return fetchCatalogo(urlBase, 'CONTA', apiKey, params);
 }
 
 // Fornecedores - referenciados por MOVIMENTO_CONTA quando tipoPessoa='F'
@@ -351,6 +354,23 @@ export async function buscarNotaManifestacao(
     try { localStorage.removeItem(`${LOCAL_CACHE_PREFIX}${key}`); } catch { /* ignore */ }
   }
   return fetchCatalogo(urlBase, 'NOTA_MANIFESTACAO', apiKey, params);
+}
+
+// Compras (COMPRA) — notas fiscais de ENTRADA lançadas no sistema.
+// Cada resultado é uma nota de compra (dataMovimento, dataEntrada, notaNumero,
+// notaSerie, fornecedorCodigo, valorTotal, chaveDocumento, ...).
+//   - empresaCodigo (int, opcional): filtra por empresa Webposto.
+//   - dataInicial / dataFinal (date 'YYYY-MM-DD', opcionais): janela.
+export async function buscarCompras(
+  apiKey,
+  { empresaCodigo, dataInicial, dataFinal } = {},
+  urlBase = DEFAULT_URL_BASE,
+) {
+  const params = { limite: LIMITE_PADRAO };
+  if (empresaCodigo != null && empresaCodigo !== '') params.empresaCodigo = empresaCodigo;
+  if (dataInicial) params.dataInicial = dataInicial;
+  if (dataFinal)   params.dataFinal   = dataFinal;
+  return fetchCatalogo(urlBase, 'COMPRA', apiKey, params);
 }
 
 // Endpoints com filtro de data - paralelos + cached em memoria (5 min)
