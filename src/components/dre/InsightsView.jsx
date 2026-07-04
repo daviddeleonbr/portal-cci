@@ -34,14 +34,15 @@ export default function InsightsView({ dreTree, mascara, periodoLabel, cliente }
   }, []);
 
   const gerarInsights = async () => {
-    let key = apiKey;
-    if (!key) { setModalKey(true); return; }
+    // A chave é central (admin) e injetada server-side pelo ia-proxy — o
+    // navegador não precisa dela. Se a IA não estiver configurada/ativa, o
+    // proxy retorna erro e cai no bloco catch.
     try {
       setLoading(true);
       setError(null);
       setErrorCode(null);
       const dreData = insightsService.dreParaPrompt(dreTree, mascara, periodoLabel, cliente, kpis);
-      const result = await insightsService.gerarInsightsIA(dreData, key);
+      const result = await insightsService.gerarInsightsIA(dreData);
       setInsights(result);
       setInsightsSource('ia');
     } catch (err) {
