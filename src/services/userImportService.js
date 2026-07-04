@@ -1,51 +1,55 @@
 // ============================================================
-// userImportService — utilitários para o fluxo de "primeiro
-// acesso" (usuários cadastrados sem senha → criar senha no
-// primeiro login).
+// userImportService — fluxo de "primeiro acesso" (usuários
+// cadastrados sem senha → criar senha no primeiro login).
 //
-// O auto-detect ocorre em /cliente/login: se o e-mail existe
-// e a senha está NULL, o usuário é redirecionado para
-// /cliente/criar-senha.
+// A verificação e a definição da senha rodam na Edge Function
+// `auth-primeiro-acesso` (service_role) — o navegador não lê/escreve
+// `cci_usuarios_sistema` direto. Primeiro acesso = senha_hash IS NULL.
 // ============================================================
 
-import { supabase } from '../lib/supabase';
 import { loginCliente } from '../lib/auth';
 
-// Verifica se o e-mail pertence a um cliente ativo que ainda
-// NÃO definiu senha. Usado em /cliente/login para redirecionar.
+const URL = import.meta.env.VITE_SUPABASE_URL;
+const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+async function chamar(action, payload = {}) {
+  let res;
+  try {
+    res = await fetch(`${URL}/functions/v1/auth-primeiro-acesso`, {
+      method: 'POST',
+      headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ action, ...payload }),
+    });
+  } catch {
+    throw new Error('Falha de conexão. Tente novamente.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && data?.error) throw new Error(data.error);
+  return data;
+}
+
+// Verifica se o e-mail pertence a um cliente ativo que ainda NÃO definiu
+// senha. Usado em /cliente/login para redirecionar. Best-effort (false em erro).
 export async function verificarPrimeiroAcesso(email) {
   const emailNorm = (email || '').trim().toLowerCase();
   if (!emailNorm) return false;
-  const { data, error } = await supabase
-    .from('cci_usuarios_sistema')
-    .select('id, senha, tipo, status')
-    .eq('email', emailNorm)
-    .maybeSingle();
-  if (error || !data) return false;
-  return data.tipo === 'cliente'
-    && data.status === 'ativo'
-    && (data.senha === null || data.senha === '');
+  try {
+    const data = await chamar('verificar', { email: emailNorm });
+    return !!data.primeiroAcesso;
+  } catch {
+    return false;
+  }
 }
 
-// Define a senha do primeiro acesso e já autentica.
+// Define a senha do primeiro acesso (hash, server-side) e já autentica.
 // Falha se o usuário já tem senha (proteção contra reescrita).
 export async function definirSenhaPrimeiroAcesso(email, novaSenha) {
   const emailNorm = (email || '').trim().toLowerCase();
   if (!emailNorm) throw new Error('Informe o e-mail.');
   if (!novaSenha || novaSenha.length < 6) throw new Error('A senha precisa ter ao menos 6 caracteres.');
 
-  // Update condicional: só atualiza se senha estiver NULL.
-  // Postgrest devolve 0 linhas se a condição não bater.
-  const { data, error } = await supabase
-    .from('cci_usuarios_sistema')
-    .update({ senha: novaSenha })
-    .eq('email', emailNorm)
-    .is('senha', null)
-    .select('id');
-  if (error) throw new Error('Falha ao salvar a senha: ' + error.message);
-  if (!data || data.length === 0) {
-    throw new Error('Este e-mail já tem senha cadastrada. Use a tela de login.');
-  }
+  const data = await chamar('definir', { email: emailNorm, novaSenha });
+  if (!data.ok) throw new Error(data.error || 'Falha ao salvar a senha.');
 
   return loginCliente(emailNorm, novaSenha);
 }
