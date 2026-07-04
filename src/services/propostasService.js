@@ -54,7 +54,9 @@ export async function buscarProposta(id) {
 
 // ─── Salvar proposta + itens (transação manual em 2 etapas) ────
 export async function salvarProposta(proposta, itens) {
-  const { id, cliente, created_at, updated_at, ...header } = proposta;
+  // `itens` e `cliente` vêm anexados quando a proposta é carregada (buscarProposta)
+  // — não são colunas de cci_propostas, então precisam ficar fora do header.
+  const { id, cliente, itens: _itensAnexados, created_at, updated_at, ...header } = proposta;
 
   // Recalcula totais a partir dos itens (não confia no que vem do front)
   const t = calcularTotais(itens, header.desconto_valor, header.desconto_percentual);

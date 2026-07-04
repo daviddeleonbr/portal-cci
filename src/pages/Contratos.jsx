@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  FileCheck, FileText, Briefcase, AlertCircle,
+  FileCheck, FileText, Briefcase, AlertCircle, Calculator,
   Plus, Search, Pencil, Trash2, CheckCircle2, Pause, Play, Loader2,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -17,11 +17,15 @@ import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import { formatCurrency } from '../utils/format';
 import * as servicosService from '../services/servicosOferecidosService';
 import AbaPropostas from './contratos/AbaPropostas';
+import AbaPrecificacao from './contratos/AbaPrecificacao';
+import AbaRascunhos from './contratos/AbaRascunhos';
 
 const TABS = [
-  { key: 'ativos',    label: 'Ativos',              icon: FileCheck },
-  { key: 'propostas', label: 'Propostas',           icon: FileText  },
-  { key: 'servicos',  label: 'Serviços oferecidos', icon: Briefcase },
+  { key: 'ativos',        label: 'Ativos',              icon: FileCheck  },
+  { key: 'rascunhos',     label: 'Rascunhos',           icon: Pencil     },
+  { key: 'propostas',     label: 'Propostas',           icon: FileText   },
+  { key: 'servicos',      label: 'Serviços oferecidos', icon: Briefcase  },
+  { key: 'precificacao',  label: 'Precificação',        icon: Calculator },
 ];
 
 export default function Contratos() {
@@ -61,9 +65,11 @@ export default function Contratos() {
         })}
       </div>
 
-      {aba === 'ativos'    && <Placeholder titulo="Contratos ativos" descricao="Liste aqui os contratos em vigor com cada cliente." />}
-      {aba === 'propostas' && <AbaPropostas showToast={showToast} />}
-      {aba === 'servicos'  && <AbaServicos showToast={showToast} />}
+      {aba === 'ativos'       && <Placeholder titulo="Contratos ativos" descricao="Liste aqui os contratos em vigor com cada cliente." />}
+      {aba === 'rascunhos'    && <AbaRascunhos showToast={showToast} />}
+      {aba === 'propostas'    && <AbaPropostas showToast={showToast} />}
+      {aba === 'servicos'     && <AbaServicos showToast={showToast} />}
+      {aba === 'precificacao' && <AbaPrecificacao showToast={showToast} />}
     </div>
   );
 }

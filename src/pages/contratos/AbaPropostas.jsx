@@ -14,6 +14,7 @@ import { formatCurrency, formatDate } from '../../utils/format';
 import * as propostasService from '../../services/propostasService';
 import * as servicosService from '../../services/servicosOferecidosService';
 import * as clientesService from '../../services/clientesService';
+import * as contratosService from '../../services/contratosService';
 
 const STATUS_STYLE = {
   rascunho:   'bg-gray-100   text-gray-600    border-gray-200',
@@ -30,6 +31,7 @@ export default function AbaPropostas({ showToast }) {
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [modal, setModal] = useState({ open: false, propostaId: null });
+  const [converterId, setConverterId] = useState(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -219,9 +221,137 @@ export default function AbaPropostas({ showToast }) {
         propostaId={modal.propostaId}
         onClose={() => setModal({ open: false, propostaId: null })}
         onSaved={() => { setModal({ open: false, propostaId: null }); carregar(); }}
+        onConverter={(id) => { setModal({ open: false, propostaId: null }); setConverterId(id); }}
+        showToast={showToast}
+      />
+
+      <ModalConverter
+        propostaId={converterId}
+        onClose={() => setConverterId(null)}
+        onDone={() => { setConverterId(null); carregar(); }}
         showToast={showToast}
       />
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Modal: Converter proposta em contrato (por empresa na rede)
+// ═══════════════════════════════════════════════════════════
+function ModalConverter({ propostaId, onClose, onDone, showToast }) {
+  const [proposta, setProposta] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [selecionadas, setSelecionadas] = useState(new Set());
+  const [gerando, setGerando] = useState(false);
+
+  useEffect(() => {
+    if (!propostaId) { setProposta(null); return; }
+    let cancelado = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const p = await propostasService.buscarProposta(propostaId);
+        if (cancelado) return;
+        setProposta(p);
+        // Por padrão, todas as empresas marcadas.
+        const emp = Array.isArray(p.empresas) ? p.empresas : [];
+        setSelecionadas(new Set(emp.map((_, i) => i)));
+      } catch (e) {
+        showToast('error', 'Erro ao carregar proposta: ' + e.message);
+        onClose();
+      } finally {
+        if (!cancelado) setLoading(false);
+      }
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propostaId]);
+
+  const empresas = Array.isArray(proposta?.empresas) ? proposta.empresas : [];
+  const ehRede = empresas.length > 0;
+
+  const toggle = (i) => setSelecionadas(prev => {
+    const n = new Set(prev);
+    n.has(i) ? n.delete(i) : n.add(i);
+    return n;
+  });
+
+  const gerar = async () => {
+    if (!proposta) return;
+    setGerando(true);
+    try {
+      let qtd = 0;
+      if (ehRede) {
+        const escolhidas = empresas.filter((_, i) => selecionadas.has(i));
+        if (escolhidas.length === 0) { showToast('error', 'Selecione ao menos uma empresa.'); setGerando(false); return; }
+        for (const emp of escolhidas) {
+          await contratosService.criarDeEmpresa(proposta, emp);
+          qtd++;
+        }
+      } else {
+        await contratosService.criarDeProposta(proposta);
+        qtd = 1;
+      }
+      await propostasService.alterarStatus(proposta.id, 'convertida');
+      showToast('success', `${qtd} contrato(s) criado(s) em Rascunhos. Revise antes de enviar para assinatura.`);
+      onDone();
+    } catch (e) {
+      showToast('error', 'Erro ao gerar contrato: ' + e.message);
+    } finally {
+      setGerando(false);
+    }
+  };
+
+  return (
+    <Modal open={!!propostaId} onClose={onClose} title="Converter em contrato" size="md"
+      footer={(
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
+          <button onClick={gerar} disabled={gerando || loading || !proposta}
+            className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50">
+            {gerando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
+            {ehRede ? `Gerar ${selecionadas.size} contrato(s)` : 'Gerar contrato'}
+          </button>
+        </div>
+      )}>
+      {loading || !proposta ? (
+        <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>
+      ) : ehRede ? (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Esta é uma proposta de rede. Marque as empresas para as quais deseja gerar um <strong>contrato separado</strong> (rascunho):
+          </p>
+          <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-[50vh] overflow-y-auto">
+            {empresas.map((emp, i) => (
+              <label key={i} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50">
+                <input type="checkbox" checked={selecionadas.has(i)} onChange={() => toggle(i)}
+                  className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-400" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-gray-900 truncate">{emp.nome}</p>
+                  {emp.cnpj && <p className="text-[10.5px] text-gray-400 font-mono">{emp.cnpj}</p>}
+                </div>
+                <span className="text-[13px] font-semibold text-gray-800 tabular-nums whitespace-nowrap">
+                  {formatCurrency(Number(emp.total || 0))}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400">
+            Cada empresa marcada vira um contrato individual em Rascunhos, com os serviços e o valor daquela empresa.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-600">Gerar um contrato (rascunho) para:</p>
+          <div className="rounded-lg border border-gray-200 px-3 py-2.5">
+            <p className="text-sm font-semibold text-gray-900">{proposta.cliente_nome}</p>
+            {proposta.cliente_cnpj && <p className="text-[11px] text-gray-400 font-mono">{proposta.cliente_cnpj}</p>}
+            <p className="text-[13px] font-semibold text-gray-800 mt-1">{formatCurrency(Number(proposta.valor_total || 0))}/mês</p>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -243,7 +373,7 @@ function KpiInline({ label, value, color }) {
 // ═══════════════════════════════════════════════════════════
 // Modal: criar / editar proposta
 // ═══════════════════════════════════════════════════════════
-function ModalProposta({ open, propostaId, onClose, onSaved, showToast }) {
+function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showToast }) {
   const [form, setForm] = useState(estadoInicial());
   const [itens, setItens] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -407,6 +537,12 @@ function ModalProposta({ open, propostaId, onClose, onSaved, showToast }) {
             <span className="ml-2">Total: <span className="text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(totais.total)}</span></span>
           </div>
           <div className="flex items-center gap-3">
+            {propostaId && (
+              <button type="button" onClick={() => onConverter?.(propostaId)} disabled={salvando}
+                className="flex items-center gap-2 rounded-lg border border-violet-300 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors disabled:opacity-50">
+                <Receipt className="h-4 w-4" /> Converter em contrato
+              </button>
+            )}
             <button type="button" onClick={onClose}
               className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
               Cancelar
