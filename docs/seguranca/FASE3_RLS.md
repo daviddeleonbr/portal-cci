@@ -34,15 +34,40 @@ Cada migração de lote **dropa a policy allow-all pelo nome exato** (senão a p
 | Lote | Alvo | Objetivo | Migração |
 |---|---|---|---|
 | **A — Canário** | `cci_fornecedores` (admin ✅ aplicado), `cliente_administradoras` (webposto), `as_rede_grupo_produto` (autosystem) | Validar os 3 caminhos de token isoladamente | `112` ✅, `113` ▶, `114` ▶ |
-| B — Admin-global | masks DRE/fluxo, plano_contas, motivos, fornecedores(já), catálogos, propostas/contratos | admin-only ou read-all/write-admin | — |
-| C — Tenant Webposto | cci_webposto_venda(_item), empresas_api, mapeamentos, cliente_contas_bancarias | `cci_rede_bate` | — |
-| D — Tenant Autosystem | as_rede_* (mapeamento/categoria/prefixo) | `cci_rede_bate` | — |
-| E — Por empresa | nf_manifestacao, outra_conta_pagar, cliente_sangrias, pendências | `cci_pode_ver_cliente` | — |
-| F — Sem RLS hoje | ofx_correlacao(_item), chave_api_produto_mix, as_rede_conta_caixa_banco, mapeamento_vendas_autosystem, as_rede_produto_mix, bpo_conciliacoes_caixas | `enable rls` + policy juntos | — |
-| G — Filhas indiretas | *_item, *_produto, *_arquivo, comentarios/anexos, mensagens | via FK do pai | — |
+| **B1 — Admin-only** | contas_pagar, lancamentos, notas/asaas, propostas, contratos, agendamentos_nf, nfse, motivos, servicos, precificacao | `cci_is_admin()` (read+write) | `115` ▶ |
+| **B2 — Config DRE/Fluxo** | plano_contas, mascaras/grupos/mapeamentos DRE e Fluxo | read `true` · write `cci_is_admin()` | `116` ▶ |
+| **C — Tenant Webposto** | cci_webposto_venda(_item), empresas_api, mapeamentos, cliente_contas_bancarias, extratos, pendencias, sync_* | select `admin or chave_api_id` · write admin | `117` ▶ |
+| **D — Tenant Autosystem** | as_rede_conta_categoria/receber/prefixo | select `admin or as_rede_id` · write admin | `118` ▶ |
+| **E — Por empresa (+ escrita cliente)** | clientes, nf_manifestacao, outra_conta_pagar, cliente_sangrias, pendencia_visualizacao, mapeamento_manual(_fluxo) | `cci_pode_ver_cliente(cliente_id)` (using **e** with check) | `119` ▶ |
+| **F — Sem RLS hoje** | ofx_correlacao(_item), chave_api_produto_mix, as_rede_conta_caixa_banco, mapeamento_vendas_autosystem, as_rede_produto_mix, **bpo_conciliacoes_caixas** (grava do cliente!) | `enable rls` + policy juntos | `120` ▶ |
+| **G1 — Filhas indiretas** | nf_manifestacao_produto/_arquivo, outra_conta_arquivo, cci_pendencia_resposta, cci_pedidos_compra(_item) | helpers `cci_pode_ver_<pai>()` | `121` ▶ |
+| **G2 — Ambos / per-usuário** | melhorias(_comentarios/_anexos), suporte(_conversa/_mensagem), uso_portal, notificacoes, mensagens_iniciais(_views), relatorios_bi(_usuario), reunioes(_kpis) | rede / usuario_id / via pai | `122` ▶ |
+| **Público** | cci_orcamento_solicitacoes (insert público), cci_contato (leitura pública) | insert `true` / select `true` · resto admin | `123` ▶ |
+
+**Após os lotes 112–123, TODAS as tabelas não-segredo têm RLS real.** Só falta o **Lote H (segredos)** — que depende da **Fase 4** (tirar as chaves Quality/Asaas/Anthropic do navegador), senão a policy trava features que ainda leem essas chaves no cliente.
+
+### Pendência à parte: policies de Storage (buckets)
+Os buckets `extratos_bancarios`, `nf_manifestacao`, `outras-contas`, `melhorias`, suporte (anexos) ainda têm policy allow-all em `storage.objects` (separadas das tabelas). Fazer um lote de Storage por tenant depois — fora do escopo destas migrations de tabela.
 | H — Segredos | chaves_api, as_rede, configuracoes_*, password_reset_tokens, cci_usuarios_sistema | **só depois da Fase 4** (tirar segredos do browser) | — |
 
 Lotes C–G podem correr em paralelo por domínio depois que o Canário (A) confirmar os 3 caminhos.
+
+### ⚠️ Achados para os próximos lotes (nomes de policy fora do padrão)
+Ao dropar, usar o nome EXATO — **não** assumir "Allow all for &lt;tabela&gt;":
+- `"todos"` em **3 tabelas**: `cci_orcamento_solicitacoes`, `cci_pedidos_compra`, `cci_pedidos_compra_item` → `drop policy "todos" on <tabela>` qualificado.
+- `p_webposto_venda_all` / `p_webposto_venda_item_all` / `p_webposto_sync_config_all` / `p_webposto_sync_job_all` / `p_webposto_sync_config_rede_all`.
+- `p_pendencias_all` / `p_pendencia_resp_all` / `p_pendencia_visualiz_all`.
+- `p_suporte_conversa_all` / `p_suporte_mensagem_all`.
+- `"Allow all for rel_bi_usuario"` (tabela `cliente_relatorios_bi_usuario`).
+- `cci_uso_portal`: DUAS policies (`"Insert allowed for cci_uso_portal"` + `"Select allowed for cci_uso_portal"`).
+
+> **Adiado do Lote C:** `cci_pedidos_compra` — apesar das colunas webposto, é lido/escrito pelo portal **Autosystem** (`ClienteCompras`). Vai no lote de escrita-do-cliente com `with check` do próprio tenant.
+
+### Tabelas ESCRITAS pelo portal do cliente (policy precisa de `with check` do próprio tenant)
+notificacoes, cci_mensagens_iniciais_views, cci_pendencia_resposta, cci_pendencia_visualizacao, cci_pedidos_compra(_item), cci_sangrias/`cliente_sangrias_fechamento`, nf_manifestacao(_produto/_arquivo), outra_conta_pagar(_arquivo), cci_melhorias(_comentarios/_anexos), cci_suporte_conversa/_mensagem, cci_uso_portal, **bpo_conciliacoes_caixas**.
+
+### Leituras públicas (pré-login) — manter acesso
+`cci_orcamento_solicitacoes` (insert público do form), `cci_contato` (insert landing). `clientes` era lido pré-auth no login antigo — no fluxo novo é lido já com token, mas confirmar que nenhuma página pública lê `clientes`.
 
 ## Notas de risco (do MAPA_TENANT)
 

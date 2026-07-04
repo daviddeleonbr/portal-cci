@@ -22,7 +22,7 @@ Plano B registrado: Supabase Auth nativo (mais robusto em reset/refresh/MFA, ref
 | 0 | Preparação, mapa de tenant, matriz de fumaça | Total | ✅ concluída (`MAPA_TENANT.md`, `MATRIZ_FUMACA.md`) |
 | 1 | Senhas com hash (coluna nova, dual-read) | Total | ✅ migration `108` authorada — **falta aplicar** (`npx supabase db push`) |
 | 2 | Login por Edge Function emitindo JWT assinado | Total (RLS ainda allow-all) | ✅ backend deployado+validado (login/refresh/rotação OK) · ✅ cutover do frontend authorado (`auth.js`, `authToken.js`, `supabase.js`, migr. 110 self-heal). Falta: aplicar 110 + smoke test via `npm run dev` |
-| 3 | RLS real por tenant, tabela a tabela (canário) | Por-tabela | 🔶 fundação pronta (helpers migr. `111`) + plano `FASE3_RLS.md` + canário #1 `112` (travado até Fase 2 validada no app) |
+| 3 | RLS real por tenant, tabela a tabela (canário) | Por-tabela | 🔶 A/B/C/D/E ✅ · F/G1/G2/Público `120`–`123` ▶ (fecha TODAS as não-segredo) · falta só H (segredos) após Fase 4 + buckets Storage |
 | 4 | Segredos fora do navegador (IA/Quality/Asaas) | Reversível c/ flag | ⬜ |
 | 5 | Autorização nas Edge Functions (fecha IDOR) | Reversível | ⬜ |
 | 6 | Reset tokens, TLS Autosystem, **rotação de chaves** | Ponto de não-retorno parcial | ⬜ |
