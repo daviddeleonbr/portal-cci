@@ -2,7 +2,7 @@
 // Lista os contratos em rascunho / enviados para assinatura (gerados a partir
 // de propostas) e permite visualizar/imprimir o contrato antes da assinatura.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
@@ -22,6 +22,7 @@ const CONTRATADA = {
   nome: 'CCI · Consultoria Inteligente',
   cnpj: '57.268.175/0001-00',
   endereco: 'Rua Humaitá, Divino Espírito Santo · Vila Velha - ES · 29.107-250',
+  local: 'Vila Velha - ES',
 };
 
 const STATUS_STYLE = {
@@ -205,6 +206,8 @@ function BlocoClausula({ bloco }) {
 function RelatorioContrato({ contratoId, showToast, onFechar }) {
   const [contrato, setContrato] = useState(null);
   const [carregando, setCarregando] = useState(true);
+  const [paginas, setPaginas] = useState(null);
+  const medRefs = useRef([]);
 
   useEffect(() => {
     let cancelado = false;
@@ -223,6 +226,107 @@ function RelatorioContrato({ contratoId, showToast, onFechar }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratoId]);
 
+  const dataExtenso = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  // Blocos do contrato = unidades de paginação (medidas e distribuídas em A4).
+  const blocos = [];
+  if (contrato) {
+    const itens = contrato.conteudo?.itens || [];
+    const clausulas = (contrato.conteudo?.clausulaIds || []).map(id => CLAUSULAS_SERVICO[id]).filter(Boolean);
+
+    blocos.push(
+      <h1 className="text-center text-base font-bold text-gray-900 uppercase">Contrato de Prestação de Serviços de BPO</h1>,
+    );
+    blocos.push(
+      <div className="mt-5 text-[11px] leading-relaxed text-gray-700 text-justify space-y-2">
+        <p><strong>CONTRATADA:</strong> {CONTRATADA.nome}, inscrita no CNPJ sob o nº {CONTRATADA.cnpj}, com sede em {CONTRATADA.endereco}.</p>
+        <p><strong>CONTRATANTE:</strong> {contrato.cliente_nome}{contrato.cliente_cnpj ? `, inscrita no CNPJ sob o nº ${contrato.cliente_cnpj}` : ''}.</p>
+        <p>As partes acima qualificadas têm entre si, justo e contratado, o presente Contrato de Prestação de Serviços de Terceirização de Processos de Negócios (BPO), que se regerá pelas cláusulas seguintes.</p>
+      </div>,
+    );
+    blocos.push(
+      <div className="mt-5">
+        <p className="text-[12px] font-bold text-gray-900">CLÁUSULA 1ª — DO OBJETO E DO PREÇO</p>
+        <p className="mt-1.5 text-[11px] leading-relaxed text-gray-700 text-justify">
+          O objeto deste contrato é a prestação, pela CONTRATADA, dos serviços de BPO de apoio administrativo-financeiro abaixo relacionados, com a seguinte forma de cobrança:
+        </p>
+      </div>,
+    );
+    blocos.push(
+      <table className="w-full mt-2 text-[11px] border-collapse">
+        <thead>
+          <tr className="border-b-2 border-gray-300 text-left text-[9.5px] uppercase tracking-wide text-gray-500">
+            <th className="py-1 pr-2">Serviço</th><th className="py-1 px-2">Forma de cobrança</th><th className="py-1 pl-2 text-right">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {itens.map((it, i) => {
+            const fixo = it.tipo_valor === 'fixo' || !it.unidade;
+            return (
+              <tr key={i} className="border-b border-gray-100 align-top">
+                <td className="py-0.5 pr-2 font-medium text-gray-900">{it.nome}</td>
+                <td className="py-0.5 px-2 text-gray-600">{fixo ? 'Valor fixo mensal' : `Por ${it.unidade}`}</td>
+                <td className="py-0.5 pl-2 text-right text-gray-900 tabular-nums whitespace-nowrap">
+                  {fixo ? `${formatCurrency(Number(it.valor_unitario ?? it.valor_total ?? 0))} / mês` : `${formatCurrency(Number(it.valor_unitario ?? 0))} / ${it.unidade}`}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>,
+    );
+    blocos.push(
+      <p className="mt-2 text-[11px] leading-relaxed text-gray-700 text-justify">
+        Os serviços de <strong>valor fixo</strong> são cobrados mensalmente pelo valor indicado. Os serviços cobrados <strong>por unidade</strong> são faturados conforme o volume efetivamente realizado no período, multiplicando-se o valor unitário pela quantidade — podendo, portanto, variar mês a mês. A título ilustrativo, o valor total apurado no último mês de operação foi de {formatCurrency(Number(contrato.valor_total || 0))}.
+      </p>,
+    );
+    clausulas.forEach((cl, idx) => {
+      const [primeiro, ...resto] = cl.blocos;
+      blocos.push(
+        <div className="mt-5">
+          <p className="text-[12px] font-bold text-gray-900">CLÁUSULA {idx + 2}ª — {cl.titulo.toUpperCase()}</p>
+          {primeiro && <BlocoClausula bloco={primeiro} />}
+        </div>,
+      );
+      resto.forEach((b) => blocos.push(<BlocoClausula bloco={b} />));
+    });
+    blocos.push(
+      <p className="mt-5 text-[10px] text-gray-400">As condições gerais (vigência, reajuste, rescisão e foro) serão incluídas conforme definição.</p>,
+    );
+    blocos.push(
+      <div className="mt-12">
+        <p className="text-[11px] text-gray-700">{CONTRATADA.local}, {dataExtenso}.</p>
+        <div className="mt-16 grid grid-cols-2 gap-10 text-center text-[10.5px] text-gray-700">
+          <div className="border-t border-gray-500 pt-1"><p className="font-semibold text-gray-900">{CONTRATADA.nome}</p><p>CONTRATADA · CNPJ {CONTRATADA.cnpj}</p></div>
+          <div className="border-t border-gray-500 pt-1"><p className="font-semibold text-gray-900">{contrato.cliente_nome}</p><p>CONTRATANTE{contrato.cliente_cnpj ? ` · CNPJ ${contrato.cliente_cnpj}` : ''}</p></div>
+        </div>
+        <div className="mt-12 grid grid-cols-2 gap-10 text-center text-[10px] text-gray-500">
+          <div className="border-t border-gray-400 pt-1">Testemunha 1 · CPF</div>
+          <div className="border-t border-gray-400 pt-1">Testemunha 2 · CPF</div>
+        </div>
+      </div>,
+    );
+  }
+
+  // Mede a altura de cada bloco e distribui em páginas A4.
+  useLayoutEffect(() => {
+    if (!contrato || blocos.length === 0) return;
+    const mmToPx = 96 / 25.4;
+    const maxPx = (297 - MARGENS_A4.topo - MARGENS_A4.base) * mmToPx;
+    const pages = [[]];
+    let acc = 0;
+    for (let i = 0; i < blocos.length; i++) {
+      const h = medRefs.current[i]?.offsetHeight || 0;
+      const cur = pages[pages.length - 1];
+      if (cur.length > 0 && acc + h > maxPx) { pages.push([]); acc = 0; }
+      pages[pages.length - 1].push(i);
+      acc += h;
+    }
+    setPaginas(pages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contrato]);
+
+  const larguraConteudo = 210 - 2 * MARGENS_A4.laterais;
   const bg = PAPEL_TIMBRADO_URL
     ? { backgroundImage: `url(${PAPEL_TIMBRADO_URL})`, backgroundSize: '210mm 297mm', backgroundRepeat: 'no-repeat' }
     : {};
@@ -231,10 +335,7 @@ function RelatorioContrato({ contratoId, showToast, onFechar }) {
     padding: `${MARGENS_A4.topo}mm ${MARGENS_A4.laterais}mm ${MARGENS_A4.base}mm`,
     ...bg,
   };
-
-  const itens = contrato?.conteudo?.itens || [];
-  const clausulaIds = contrato?.conteudo?.clausulaIds || [];
-  const clausulas = clausulaIds.map(id => CLAUSULAS_SERVICO[id]).filter(Boolean);
+  const pgs = paginas || (blocos.length ? [blocos.map((_, i) => i)] : []);
 
   return createPortal(
     <div className="relatorio-overlay fixed inset-0 z-[60] bg-gray-700/70 overflow-auto">
@@ -253,7 +354,7 @@ function RelatorioContrato({ contratoId, showToast, onFechar }) {
       `}</style>
 
       <div className="no-print sticky top-0 z-10 flex items-center justify-between bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2.5">
-        <p className="text-sm font-medium text-gray-700">Pré-visualização do contrato (rascunho)</p>
+        <p className="text-sm font-medium text-gray-700">Pré-visualização do contrato (rascunho){pgs.length ? ` · ${pgs.length} página(s)` : ''}</p>
         <div className="flex items-center gap-2">
           <button onClick={() => window.print()} disabled={carregando || !contrato}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
@@ -266,64 +367,24 @@ function RelatorioContrato({ contratoId, showToast, onFechar }) {
         </div>
       </div>
 
-      <div id="contrato-doc" className="py-6 px-3">
-        {carregando || !contrato ? (
-          <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
-        ) : (
-          <div className="folha bg-white shadow-xl mx-auto mb-6" style={folhaStyle}>
-            <h1 className="text-center text-base font-bold text-gray-900 uppercase">Contrato de Prestação de Serviços de BPO Contábil</h1>
+      {/* Medição invisível para paginar */}
+      {contrato && (
+        <div aria-hidden style={{ position: 'fixed', left: '-9999px', top: 0, width: `${larguraConteudo}mm`, visibility: 'hidden' }}>
+          {blocos.map((b, i) => <div key={i} ref={(el) => { medRefs.current[i] = el; }}>{b}</div>)}
+        </div>
+      )}
 
-            {/* Partes */}
-            <div className="mt-5 text-[11px] leading-relaxed text-gray-700 text-justify space-y-2">
-              <p>
-                <strong>CONTRATADA:</strong> {CONTRATADA.nome}, inscrita no CNPJ sob o nº {CONTRATADA.cnpj},
-                com sede em {CONTRATADA.endereco}.
-              </p>
-              <p>
-                <strong>CONTRATANTE:</strong> {contrato.cliente_nome}
-                {contrato.cliente_cnpj ? `, inscrita no CNPJ sob o nº ${contrato.cliente_cnpj}` : ''}.
-              </p>
-              <p>
-                As partes acima qualificadas têm entre si, justo e contratado, o presente Contrato de Prestação de
-                Serviços de Terceirização de Processos de Negócios (BPO), que se regerá pelas cláusulas seguintes.
-              </p>
+      {carregando || !contrato ? (
+        <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+      ) : (
+        <div id="contrato-doc" className="py-6 px-3">
+          {pgs.map((idxs, p) => (
+            <div key={p} className="folha bg-white shadow-xl mx-auto mb-6" style={folhaStyle}>
+              {idxs.map((i) => <div key={i}>{blocos[i]}</div>)}
             </div>
-
-            {/* Cláusula do objeto */}
-            <p className="mt-5 text-[12px] font-bold text-gray-900">CLÁUSULA 1ª — DO OBJETO E DO VALOR</p>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-gray-700 text-justify">
-              O objeto deste contrato é a prestação, pela CONTRATADA, dos serviços de BPO abaixo relacionados,
-              mediante o valor mensal total de <strong>{formatCurrency(Number(contrato.valor_total || 0))}</strong>,
-              apurado por esforço conforme o volume de trabalho:
-            </p>
-            <table className="w-full mt-2 text-[11px] border-collapse">
-              <tbody>
-                {itens.map((it, i) => (
-                  <tr key={i} className="border-b border-gray-100">
-                    <td className="py-0.5 text-gray-700">{it.nome}</td>
-                    <td className="py-0.5 text-right text-gray-700 tabular-nums whitespace-nowrap">
-                      {formatCurrency(Number(it.valor_total || 0))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Cláusulas de serviço */}
-            {clausulas.map((cl, idx) => (
-              <div key={idx} className="mt-5" style={{ breakInside: 'avoid' }}>
-                <p className="text-[12px] font-bold text-gray-900">CLÁUSULA {idx + 2}ª — {cl.titulo.toUpperCase()}</p>
-                {cl.blocos.map((b, i) => <BlocoClausula key={i} bloco={b} />)}
-              </div>
-            ))}
-
-            <p className="mt-6 text-[10px] text-gray-400">
-              Rascunho de contrato gerado a partir da proposta. As condições gerais (vigência, reajuste, rescisão e
-              foro) serão incluídas conforme definição.
-            </p>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>,
     document.body,
   );

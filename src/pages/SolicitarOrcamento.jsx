@@ -235,7 +235,7 @@ export default function SolicitarOrcamento() {
                 <h2 className="text-xl sm:text-2xl font-semibold tracking-tight mb-1">Conte sobre seu posto ou rede</h2>
                 <Campo icon={Sparkles} label="O que você deseja melhorar?" obrigatorio>
                   <textarea value={dados.desejo} onChange={e => set('desejo', e.target.value)}
-                    placeholder="Ex: Reduzir custos do financeiro, ter dashboards de gestão, terceirizar BPO contábil, melhorar conciliação..."
+                    placeholder="Ex: Reduzir custos do financeiro, ter dashboards de gestão, terceirizar BPO, melhorar conciliação..."
                     rows={6}
                     className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
                 </Campo>

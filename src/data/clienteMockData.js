@@ -104,7 +104,7 @@ export const servicosBPO = [
   },
   {
     id: 2,
-    nome: 'BPO Contábil',
+    nome: 'BPO',
     descricao: 'Escrituração contábil, balancetes mensais, demonstrações financeiras e obrigações acessórias.',
     icone: 'calculator',
     status: 'ativo',

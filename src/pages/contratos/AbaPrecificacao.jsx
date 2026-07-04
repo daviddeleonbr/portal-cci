@@ -1,5 +1,5 @@
 // Aba "Precificação" da página Contratos.
-// Calculadora de precificação de serviços de BPO contábil para postos de
+// Calculadora de precificação de serviços de BPO para postos de
 // combustíveis. Cobrança por esforço: soma linhas por serviço e compara com
 // o custo interno atual pra mostrar a economia.
 
@@ -488,7 +488,7 @@ export default function AbaPrecificacao({ showToast }) {
     setItensProposta(construirItens(inputs, 1));
     setEmpresasProposta(null);
     setPeriodoProposta(precificacaoService.periodoMesAnterior().label);
-    setTituloProposta(`Proposta de BPO contábil — ${clienteSel.razao_social || clienteSel.nome}`);
+    setTituloProposta(`Proposta de BPO — ${clienteSel.razao_social || clienteSel.nome}`);
     setObsProposta(INTRO_PROPOSTA);
     setModalProposta(true);
   };
@@ -506,7 +506,7 @@ export default function AbaPrecificacao({ showToast }) {
     setItensProposta(construirItens(agregado, emp.length));
     setEmpresasProposta(emp);
     setPeriodoProposta(resultadoRede.label);
-    setTituloProposta(`Proposta de BPO contábil — Rede ${resultadoRede.rede.nome}`);
+    setTituloProposta(`Proposta de BPO — Rede ${resultadoRede.rede.nome}`);
     setObsProposta(`${INTRO_PROPOSTA} Esta proposta cobre ${emp.length} empresa(s) da rede, com o detalhamento individual de cada uma.`);
     setModalProposta(true);
   };
@@ -536,7 +536,7 @@ export default function AbaPrecificacao({ showToast }) {
           cliente_cnpj:  clienteProposta.cnpj || null,
           cliente_email: clienteProposta.contato_email || null,
           titulo:        tituloProposta.trim() || `Proposta — ${clienteProposta.nome}`,
-          descricao:     'Proposta de serviços de BPO contábil — cobrança por esforço.',
+          descricao:     'Proposta de serviços de BPO — cobrança por esforço.',
           observacoes:   obsProposta,
           empresas,
           status:        'rascunho',
