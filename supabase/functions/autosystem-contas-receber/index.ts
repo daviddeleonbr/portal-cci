@@ -32,7 +32,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { obterRede, withConexao, decodeRowText } from '../_shared/autosystem-query.ts';
+import { obterRede, withConexao, decodeBytea } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -131,122 +131,28 @@ serve(async (req) => {
       order by m.vencto, m.data
     `;
 
-    // Diagnóstico: contagens em cada etapa do filtro para identificar
-    // onde registros estão sendo cortados (usado pelo console do front).
-    const baseDateConds: string[] = [];
-    const baseDateParams: unknown[] = [empresaCodigo];
-    if (vencto_de)  { baseDateParams.push(vencto_de);  baseDateConds.push(`vencto >= $${baseDateParams.length}`); }
-    if (vencto_ate) { baseDateParams.push(vencto_ate); baseDateConds.push(`vencto <= $${baseDateParams.length}`); }
-    const dateExtra = baseDateConds.length ? ' and ' + baseDateConds.join(' and ') : '';
+    // Só a query principal. As contagens de diagnóstico foram removidas:
+    // rodavam 5-6 queries extras e só alimentavam um console.log no front —
+    // custo que, em "Todo o período" via IP externo, ajudava a estourar o
+    // worker (WORKER_RESOURCE_LIMIT).
+    const result = await withConexao(
+      rede,
+      (run) => run(sql, params),
+      { encoding: 'SQL_ASCII' },
+    ) as Record<string, unknown>[];
 
-    const {
-      result,
-      total_debito_1_3,
-      total_debito_1_3_03_2,
-      total_debito_1_3_03_2_no_periodo,
-      total_debito_1_3_03_2_no_periodo_child0,
-      distintos_child_1_3_03_2,
-      cartoes_por_conta,
-    } = await withConexao(rede, async (run) => {
-      const result = await run(sql, params);
+    // Decodifica os campos texto IN-PLACE. Via proxy HTTPS (IP externo) cada
+    // coluna `bytea` (convert_to) chega como array de bytes, pesadíssimo em
+    // memória; ao trocar pelo texto já decodificado liberamos esses arrays
+    // para o GC e evitamos manter uma segunda cópia do resultado inteiro
+    // (antes: result + linhas + JSON.stringify simultâneos).
+    for (const row of result) {
+      for (const col of TEXT_COLUMNS) {
+        if (col in row) row[col] = decodeBytea(row[col], 'windows-1252');
+      }
+    }
 
-      const fazContagem = async (s: string, args: unknown[]) => {
-        try {
-          const r = await run(s, args) as { n: bigint | number }[];
-          const n = r[0]?.n;
-          return typeof n === 'bigint' ? Number(n) : Number(n) || 0;
-        } catch {
-          return -1;
-        }
-      };
-
-      const total_debito_1_3 = await fazContagem(
-        "select count(*)::int as n from movto where (conta_debitar = '1.3' or conta_debitar like '1.3.%') and empresa = $1",
-        [empresaCodigo],
-      );
-      const total_debito_1_3_03_2 = await fazContagem(
-        "select count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1",
-        [empresaCodigo],
-      );
-      const total_debito_1_3_03_2_no_periodo = await fazContagem(
-        `select count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1${dateExtra}`,
-        baseDateParams,
-      );
-      const total_debito_1_3_03_2_no_periodo_child0 = await fazContagem(
-        `select count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1 and child = 0${dateExtra}`,
-        baseDateParams,
-      );
-
-      let distintos_child_1_3_03_2: { child: unknown; n: number }[] | null = null;
-      try {
-        const r = await run(
-          `select child, count(*)::int as n from movto where conta_debitar like '1.3.03.2%' and empresa = $1${dateExtra} group by child order by child`,
-          baseDateParams,
-        ) as { child: unknown; n: bigint | number }[];
-        distintos_child_1_3_03_2 = r.map(row => ({
-          child: typeof row.child === 'bigint' ? Number(row.child) : row.child,
-          n: typeof row.n === 'bigint' ? Number(row.n) : Number(row.n) || 0,
-        }));
-      } catch { distintos_child_1_3_03_2 = null; }
-
-      // Breakdown por conta_debitar dentro de cartões (1.3.01.*) — total
-      // e quanto sai com child = 0; ajuda a ver contas tipo ALELO que
-      // somem porque os registros têm child ≠ 0.
-      let cartoes_por_conta:
-        | { conta_debitar: unknown; total: number; com_child_0: number; soma_total: unknown; soma_child_0: unknown }[]
-        | null = null;
-      try {
-        const r = await run(`
-              select
-                conta_debitar,
-                count(*)::int                                 as total,
-                sum(case when child = 0 then 1 else 0 end)::int as com_child_0,
-                sum(valor)                                    as soma_total,
-                sum(case when child = 0 then valor else 0 end) as soma_child_0
-              from movto
-              where conta_debitar like '1.3.01%' and empresa = $1${dateExtra}
-              group by conta_debitar
-              order by conta_debitar
-            `, baseDateParams) as {
-              conta_debitar: unknown; total: bigint | number; com_child_0: bigint | number;
-              soma_total: unknown; soma_child_0: unknown;
-            }[];
-        cartoes_por_conta = r.map(row => ({
-          conta_debitar: row.conta_debitar,
-          total: typeof row.total === 'bigint' ? Number(row.total) : Number(row.total) || 0,
-          com_child_0: typeof row.com_child_0 === 'bigint' ? Number(row.com_child_0) : Number(row.com_child_0) || 0,
-          soma_total: typeof row.soma_total === 'bigint' ? Number(row.soma_total) : Number(row.soma_total),
-          soma_child_0: typeof row.soma_child_0 === 'bigint' ? Number(row.soma_child_0) : Number(row.soma_child_0),
-        }));
-      } catch { cartoes_por_conta = null; }
-
-      return {
-        result,
-        total_debito_1_3,
-        total_debito_1_3_03_2,
-        total_debito_1_3_03_2_no_periodo,
-        total_debito_1_3_03_2_no_periodo_child0,
-        distintos_child_1_3_03_2,
-        cartoes_por_conta,
-      };
-    }, { encoding: 'SQL_ASCII' });
-
-    const linhas = result.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
-
-    const diag = {
-      empresa_codigo: empresaCodigo,
-      vencto_de: vencto_de || null,
-      vencto_ate: vencto_ate || null,
-      total_debito_1_3,
-      total_debito_1_3_03_2,
-      total_debito_1_3_03_2_no_periodo,
-      total_debito_1_3_03_2_no_periodo_child0,
-      distintos_child_1_3_03_2,
-      cartoes_por_conta,
-      retornados: linhas.length,
-    };
-
-    return json({ contas: linhas, diag });
+    return json({ contas: result });
   } catch (err) {
     return json(
       {
