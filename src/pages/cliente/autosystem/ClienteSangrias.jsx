@@ -10,6 +10,7 @@ import Toast from '../../../components/ui/Toast';
 import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
+import CardEmpresaAtiva from '../../../components/cliente/CardEmpresaAtiva';
 import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
 import * as sangriasService from '../../../services/clienteSangriasService';
 import * as autosystemService from '../../../services/autosystemService';
@@ -272,25 +273,13 @@ export default function ClienteSangrias() {
         </button>
       </PageHeader>
 
-      {/* Empresa ativa */}
-      <div className="mb-4 rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-blue-50/40 p-3 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-          <Building2 className="h-5 w-5 text-white" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Empresa selecionada</p>
-          <p className="text-sm font-semibold text-gray-900 truncate">{empresa?.nome}</p>
-          <div className="flex items-center gap-3 mt-0.5">
-            {empresa?.cnpj && <p className="text-[11px] text-gray-500 font-mono">{empresa.cnpj}</p>}
-            {empresa?.empresa_codigo != null && <p className="text-[11px] text-gray-400">cod {empresa.empresa_codigo}</p>}
-          </div>
-        </div>
-        {asRede?.nome && (
-          <p className="text-[11px] text-blue-600 italic hidden sm:block">
-            {asRede.nome}
-          </p>
-        )}
-      </div>
+      {/* Empresa ativa (troca inline se houver >1 empresa) */}
+      <CardEmpresaAtiva
+        empresa={empresa}
+        empresas={empresasDisponiveis}
+        onTrocar={setEmpresaId}
+        redeNome={asRede?.nome}
+      />
 
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr_auto] gap-3 items-end">

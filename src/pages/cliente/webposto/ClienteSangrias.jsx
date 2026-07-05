@@ -9,6 +9,8 @@ import PageHeader from '../../../components/ui/PageHeader';
 import Toast from '../../../components/ui/Toast';
 import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
+import { trocarEmpresaAtiva } from '../../../lib/auth';
+import CardEmpresaAtiva from '../../../components/cliente/CardEmpresaAtiva';
 import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
 import * as sangriasService from '../../../services/clienteSangriasService';
@@ -338,25 +340,12 @@ export default function ClienteSangrias() {
         </button>
       </PageHeader>
 
-      {/* Empresa ativa */}
-      <div className="mb-4 rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-blue-50/40 p-3 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-          <Building2 className="h-5 w-5 text-white" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Empresa selecionada</p>
-          <p className="text-sm font-semibold text-gray-900 truncate">{cliente.nome}</p>
-          <div className="flex items-center gap-3 mt-0.5">
-            {cliente.cnpj && <p className="text-[11px] text-gray-500 font-mono">{cliente.cnpj}</p>}
-            {cliente.empresa_codigo && <p className="text-[11px] text-gray-400">cod {cliente.empresa_codigo}</p>}
-          </div>
-        </div>
-        {(session?.clientesRede?.length || 0) > 1 && usuario?.permissoes?.includes('trocar_empresa') && (
-          <p className="text-[11px] text-blue-600 italic hidden sm:block">
-            Troque no seletor do topo
-          </p>
-        )}
-      </div>
+      {/* Empresa ativa (troca inline se tiver >1 empresa e permissão) */}
+      <CardEmpresaAtiva
+        empresa={cliente}
+        empresas={session?.clientesRede || []}
+        onTrocar={usuario?.permissoes?.includes('trocar_empresa') ? trocarEmpresaAtiva : undefined}
+      />
 
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr_auto] gap-3 items-end">
