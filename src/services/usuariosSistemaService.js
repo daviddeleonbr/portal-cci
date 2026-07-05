@@ -146,20 +146,26 @@ export async function buscarUsuario(id) {
 
 export async function criarUsuario(campos) {
   const payload = sanitizarPayload(campos);
-  if (!payload.senha) throw new Error('Informe uma senha inicial para o usuário.');
+  const senha = payload.senha;
+  delete payload.senha;                 // nunca grava texto puro
+  if (!senha) throw new Error('Informe uma senha inicial para o usuário.');
   const { data, error } = await supabase
     .from('cci_usuarios_sistema')
     .insert(payload)
     .select(COLS)
     .single();
   if (error) throw error;
+  // Define a senha já com HASH (server-side, via RPC autorizado).
+  const { error: errSenha } = await supabase.rpc('cci_admin_definir_senha', { p_usuario_id: data.id, p_senha: senha });
+  if (errSenha) throw new Error('Usuário criado, mas falha ao definir a senha: ' + errSenha.message);
   return data;
 }
 
 export async function atualizarUsuario(id, campos) {
   const payload = sanitizarPayload(campos);
-  // Se senha veio vazia no update, mantem a atual
-  if (!payload.senha) delete payload.senha;
+  // Senha nunca vai no update da tabela — vai pelo RPC com hash (abaixo).
+  const senha = payload.senha;
+  delete payload.senha;
 
   // Pra cascata: lê o estado atual e calcula o que foi REMOVIDO.
   // Só aplica em admins não-master (master é sempre tudo).
@@ -184,6 +190,12 @@ export async function atualizarUsuario(id, campos) {
     .select(COLS)
     .single();
   if (error) throw error;
+
+  // Troca de senha (se informada) — com HASH server-side.
+  if (senha) {
+    const { error: errSenha } = await supabase.rpc('cci_admin_definir_senha', { p_usuario_id: id, p_senha: senha });
+    if (errSenha) throw new Error('Dados salvos, mas falha ao atualizar a senha: ' + errSenha.message);
+  }
 
   // Propaga remoção pros subordinados
   if (permissoesRemovidas.length > 0) {
