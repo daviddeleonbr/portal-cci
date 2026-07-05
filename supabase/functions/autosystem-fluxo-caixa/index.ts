@@ -95,7 +95,7 @@ serve(async (req) => {
   });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     const codigosCaixa = (contas_caixa_banco || []).map(c => String(c));
     const empresasNum = (empresaCodigos || []).map(e => Number(e)).filter(n => Number.isFinite(n));

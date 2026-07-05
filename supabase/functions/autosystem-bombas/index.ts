@@ -81,7 +81,7 @@ serve(async (req) => {
   }
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     const { bombas, bicos, uso_bicos, litros_dia_semana, afericoes } = await withConexao(rede, async (run) => {
       const bombasRows = await run(`

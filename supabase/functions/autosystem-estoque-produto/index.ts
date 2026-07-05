@@ -83,7 +83,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     // Subquery agregada (MAX data + SUM estoque) → join nos nomes.
     const params: unknown[] = [dataCorte];

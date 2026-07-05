@@ -74,7 +74,7 @@ serve(async (req) => {
   });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     const empresasNum = empresaCodigos.map(v => Number(v)).filter(n => Number.isFinite(n));
     const excluir = Array.isArray(contas_creditar_excluir) ? contas_creditar_excluir.map(String) : [];

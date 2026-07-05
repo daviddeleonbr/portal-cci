@@ -82,7 +82,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     // ─── Bloco 1: snapshot de estoque atual ──────────────────
     const paramsEst: unknown[] = [dataCorte];

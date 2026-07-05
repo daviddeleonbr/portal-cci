@@ -80,7 +80,7 @@ serve(async (req) => {
   const diag: Record<string, unknown> = {};
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     // Tipos textuais → cast para bytea (evita validação UTF-8)
     const TEXT_TYPES = new Set([

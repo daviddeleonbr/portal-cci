@@ -101,7 +101,7 @@ serve(async (req) => {
   });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     // 2) Em aberto = NÃO está em movto_bordero (mesma heurística do
     //    cliente nativo Autosystem). Conta_creditar exatamente '2.1.1'

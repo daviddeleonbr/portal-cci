@@ -90,7 +90,7 @@ serve(async (req) => {
   });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     // Normaliza códigos como TEXT (campo `conta_debitar`/`conta_creditar` em
     // `movto` é varchar/text com formato "1.1.2.001").

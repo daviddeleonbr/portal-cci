@@ -80,7 +80,7 @@ serve(async (req) => {
   });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     const sql = `
       select

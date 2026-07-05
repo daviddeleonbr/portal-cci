@@ -99,7 +99,7 @@ serve(async (req) => {
   };
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     const out = await withConexao(rede, async (run) => {
     // 1) Schema de movto_flow

@@ -62,7 +62,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     const params: unknown[] = [];
     // Filtro fixo: somente pessoas ATIVAS (flag = 'A')

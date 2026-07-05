@@ -82,7 +82,7 @@ serve(async (req) => {
   const pComum        = toBigArr(produtos_comum);
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     // CTE: filtra V (sem DC) e calcula custo (via subquery escalar) e grupo do produto.
     // Em seguida agrupa por vendedor com totais e quebra por categoria.

@@ -64,7 +64,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     const params: unknown[] = [];
     // Filtro fixo: ignora produtos inativos (campo `flag` char A/D na tabela `produto`).

@@ -90,7 +90,7 @@ serve(async (req) => {
   };
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     const prodRows = await executarQuery(rede, `
         select

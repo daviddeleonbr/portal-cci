@@ -49,8 +49,40 @@ export interface QueryOpts {
   setup?: string[];
 }
 
+// ─── Autorização do chamador (fecha IDOR cross-tenant) ──────────────
+// As funções rodam com service_role (que decifra credenciais de QUALQUER
+// rede). Sem checar o chamador, um cliente autenticado poderia pedir o
+// `rede_id` de outra rede. Aqui validamos o JWT do usuário (mandado pelo
+// supabase.functions.invoke): admin acessa qualquer rede; cliente só a
+// própria (`as_rede_id` do claim). A assinatura já foi validada pelo gateway.
+export class RedeNaoAutorizadaError extends Error {
+  constructor(msg = 'Rede não autorizada para este usuário.') { super(msg); this.name = 'RedeNaoAutorizadaError'; }
+}
+
+function claimsDoToken(req: Request): Record<string, any> | null {
+  const auth = req.headers.get('Authorization') || '';
+  const token = auth.replace(/^Bearer\s+/i, '');
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(b64));
+  } catch { return null; }
+}
+
+export function autorizarRede(req: Request, redeId: string): void {
+  const claims = claimsDoToken(req);
+  if (claims?.cci_tipo === 'admin') return;             // admin: qualquer rede
+  const asRedeId = claims?.as_rede_id;
+  if (!asRedeId || String(asRedeId) !== String(redeId)) {
+    throw new RedeNaoAutorizadaError();
+  }
+}
+
 // Busca credenciais decifradas via RPC. Lança erro se a rede não existir.
-export async function obterRede(supabase: any, redeId: string): Promise<RedeCredenciais> {
+// Se `req` for passado, valida a POSSE da rede pelo chamador (autorizarRede).
+export async function obterRede(supabase: any, redeId: string, req?: Request): Promise<RedeCredenciais> {
+  if (req) autorizarRede(req, redeId);
   const { data, error } = await supabase.rpc('as_rede_get_credenciais', { p_id: redeId });
   if (error) throw new Error(`Falha ao buscar credenciais: ${error.message}`);
   const rede = Array.isArray(data) ? data[0] : data;

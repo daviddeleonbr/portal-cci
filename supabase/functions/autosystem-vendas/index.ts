@@ -102,7 +102,7 @@ serve(async (req) => {
   });
 
   try {
-    const rede = await obterRede(supabase, redeId);
+    const rede = await obterRede(supabase, redeId, req);
 
     // `lancto.empresa`, `lancto.produto` e `produto.grid` são numéricos
     // (bigint). Envia o array de empresas como números e compara via bigint[].
