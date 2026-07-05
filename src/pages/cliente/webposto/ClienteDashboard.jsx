@@ -31,6 +31,7 @@ import { classificarItem } from '../../../services/mapeamentoVendasService';
 import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil } from '../../../utils/diasUteis';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import { useAtualizarDados } from '../../../hooks/useAtualizarDados';
 import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 import { mascarar } from '../../../utils/demoMascarar';
@@ -87,6 +88,13 @@ export default function ClienteDashboard() {
   const empresasSel = useMemo(
     () => empresasDisponiveis.filter(c => empresasSelIds.has(c.id)),
     [empresasDisponiveis, empresasSelIds],
+  );
+
+  // Mesma chave usada no cache (carregar) — pro IndicadorAtualizacao ler o
+  // timestamp certo (senão desalinha ao trocar de empresa).
+  const chavePaginaDash = useMemo(
+    () => `dashboard:${empresasSel.map(e => e.id).sort().join(',')}`,
+    [empresasSel],
   );
 
   const dataDe  = useMemo(() => primeiroDiaDoMes(), []);
@@ -314,6 +322,9 @@ export default function ClienteDashboard() {
   useAutoRefresh(() => {
     if (empresasSel.length > 0) carregar({ force: true, silencioso: true });
   });
+
+  // Refresh in-place quando o toast global (layout) pede atualização.
+  useAtualizarDados(() => carregar({ force: true }));
 
   // ─── Contas a pagar (janela atrás 60d + frente 30d) ───────
   const cacheInicialCP = useMemo(() => {
@@ -639,7 +650,7 @@ export default function ClienteDashboard() {
             )}
           />
         )}
-        <IndicadorAtualizacao pagina="dashboard" chaveApiId={chaveApiIdAtiva} />
+        <IndicadorAtualizacao pagina={chavePaginaDash} chaveApiId={chaveApiIdAtiva} />
       </PageHeader>
 
       <BarraProgressoFetch loading={loading} feitos={progresso.feitos} total={progresso.total} />

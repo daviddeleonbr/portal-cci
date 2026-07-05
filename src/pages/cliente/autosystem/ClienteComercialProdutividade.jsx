@@ -17,19 +17,14 @@ import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
 import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
+import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
+import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
+import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function fmtNum(v, casas = 0) {
   if (v == null || !Number.isFinite(Number(v))) return '0';
   return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
-}
-function isoHoje() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-function primeiroDiaDoMesIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
 }
 function diasEntre(de, ate) {
   if (!de || !ate) return 0;
@@ -73,8 +68,18 @@ export default function ClienteComercialProdutividade() {
   );
 
   // Período: usuário escolhe data inicial e final. Default = mês atual.
-  const [dataDe, setDataDe] = useState(primeiroDiaDoMesIso());
-  const [dataAte, setDataAte] = useState(isoHoje());
+  // Filtros — período por MÊS + ANO (mês fechado)
+  const [mes, setMes] = useState(() => new Date().getMonth() + 1);
+  const [ano, setAno] = useState(() => new Date().getFullYear());
+  const [apenasFechados, setApenasFechados] = useState(true);
+  const dataDe = useMemo(() => primeiroDiaMesIso(ano, mes), [ano, mes]);
+  const dataAte = useMemo(() => {
+    const ultimo = ultimoDiaMesIso(ano, mes);
+    if (!apenasFechados) return ultimo;
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    const ontem = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return ultimo < ontem ? ultimo : ontem;   // mês passado: mês inteiro; mês atual: até ontem
+  }, [ano, mes, apenasFechados]);
   const periodoDias = useMemo(() => diasEntre(dataDe, dataAte), [dataDe, dataAte]);
   const [vendedores, setVendedores] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -437,16 +442,14 @@ export default function ClienteComercialProdutividade() {
   return (
     <div>
       <PageHeader title="Produtividade" description={asRede?.nome || 'Vendas por vendedor'}>
-        <div className="hidden md:flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
-            <Calendar className="h-3 w-3" /> Período
-          </span>
-          <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)} max={dataAte}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          <span className="text-[10px] text-gray-400">e</span>
-          <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)} min={dataDe}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-        </div>
+        <SeletorMesAno mes={mes} ano={ano} onChange={(m, a) => { setMes(m); setAno(a); }} />
+        <label className="hidden md:inline-flex items-center gap-1.5 h-9 px-2 cursor-pointer select-none"
+          title="Limita o período a ontem (exclui o dia corrente, ainda em aberto)">
+          <input type="checkbox" checked={apenasFechados}
+            onChange={e => setApenasFechados(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+          <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Apenas dias fechados</span>
+        </label>
         {empresasDisponiveis.length > 1 && (
           <EmpresaSeletorCompartilhado
             single
@@ -463,10 +466,7 @@ export default function ClienteComercialProdutividade() {
       </PageHeader>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-          <span className="text-sm">Carregando produtividade...</span>
-        </div>
+        <SkeletonComercial linhas={8} />
       ) : erro ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />

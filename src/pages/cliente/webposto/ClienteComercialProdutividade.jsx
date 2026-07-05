@@ -8,7 +8,8 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import PageHeader from '../../../components/ui/PageHeader';
 import BannerCarregando from '../../../components/vendas/BannerCarregando';
-import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
+import ProgressoEtapas from '../../../components/vendas/ProgressoEtapas';
+import { useAtualizarDados } from '../../../hooks/useAtualizarDados';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
 import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
@@ -19,19 +20,14 @@ import * as qualityApi from '../../../services/qualityApiService';
 import * as mapService from '../../../services/mapeamentoService';
 import { classificarItem } from '../../../services/mapeamentoVendasService';
 import { formatCurrency } from '../../../utils/format';
+import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
+import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
+import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function fmtNum(v, casas = 0) {
   if (v == null || !Number.isFinite(Number(v))) return '0';
   return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
-}
-function isoHoje() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-function primeiroDiaDoMesIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
 }
 function diasEntre(de, ate) {
   if (!de || !ate) return 0;
@@ -40,6 +36,13 @@ function diasEntre(de, ate) {
   const a = new Date(y1, m1 - 1, d1);
   const b = new Date(y2, m2 - 1, d2);
   return Math.max(1, Math.round((b - a) / 86400000) + 1);
+}
+
+// Chave de cache da Produtividade — inclui período E empresas selecionadas
+// (senão trocar de empresa devolve o cache do conjunto anterior).
+function keyProdutividade(dataDe, dataAte, empresasSel) {
+  const emps = (empresasSel || []).map(e => e.empresa_codigo).sort().join('_');
+  return `produtividade:${dataDe}:${dataAte}:${emps}`;
 }
 
 const ABAS = [
@@ -65,13 +68,23 @@ export default function ClienteComercialProdutividade() {
     [empresasDisponiveis, empresasSelIds],
   );
 
-  const [dataDe, setDataDe] = useState(primeiroDiaDoMesIso());
-  const [dataAte, setDataAte] = useState(isoHoje());
+  // Filtros — período por MÊS + ANO (mês fechado)
+  const [mes, setMes] = useState(() => new Date().getMonth() + 1);
+  const [ano, setAno] = useState(() => new Date().getFullYear());
+  const [apenasFechados, setApenasFechados] = useState(true);
+  const dataDe = useMemo(() => primeiroDiaMesIso(ano, mes), [ano, mes]);
+  const dataAte = useMemo(() => {
+    const ultimo = ultimoDiaMesIso(ano, mes);
+    if (!apenasFechados) return ultimo;
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    const ontem = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return ultimo < ontem ? ultimo : ontem;   // mês passado: mês inteiro; mês atual: até ontem
+  }, [ano, mes, apenasFechados]);
   const periodoDias = useMemo(() => diasEntre(dataDe, dataAte), [dataDe, dataAte]);
   // Cache v2 — chave determinística (pagina + chaveApiId)
   const chaveApiIdAtiva = chaveApi?.id || null;
   const cacheInicialProd = useMemo(() => {
-    return chaveApiIdAtiva ? lerCacheV2('produtividade', chaveApiIdAtiva) : null;
+    return chaveApiIdAtiva ? lerCacheV2(keyProdutividade(dataDe, dataAte, empresasSel), chaveApiIdAtiva) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [vendedores, setVendedores] = useState(() => cacheInicialProd?.vendedores || []);
@@ -80,7 +93,7 @@ export default function ClienteComercialProdutividade() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   // Progresso do fetch
-  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
+  const [etapas, setEtapas] = useState([]);
   const [busca, setBusca] = useState('');
   const [aba, setAba] = useState('pista');
 
@@ -112,7 +125,7 @@ export default function ClienteComercialProdutividade() {
     setErro('');
 
     if (!force) {
-      const cache = lerCacheV2('produtividade', chaveApiId);
+      const cache = lerCacheV2(keyProdutividade(dataDe, dataAte, empresasSel), chaveApiId);
       // Valida estrutura: cache deve ter `heatmapConv` (Map) e vendedores
       // com `convPorDia` — caso contrário, refaz fetch.
       const temEstruturaNova = Array.isArray(cache?.vendedores)
@@ -128,8 +141,24 @@ export default function ClienteComercialProdutividade() {
     }
     if (!silencioso) setLoading(true);
     // Etapas: 3 catálogos + N empresas
-    if (!silencioso) setProgresso({ feitos: 0, total: 3 + empresasSel.length });
-    const tick = () => { if (!silencioso) setProgresso(p => ({ ...p, feitos: p.feitos + 1 })); };
+    // Progresso por ETAPAS: catálogos (funcionários/produtos/grupos) + cada
+    // empresa. Cada etapa marca ✓ ao completar — feedback contínuo mesmo com
+    // uma empresa só (os catálogos vêm antes, depois as empresas).
+    if (!silencioso) {
+      setEtapas([
+        { id: 'funcionarios', label: 'Funcionários', status: 'load' },
+        { id: 'produtos',     label: 'Produtos',     status: 'load' },
+        { id: 'grupos',       label: 'Grupos',       status: 'load' },
+        ...empresasSel.map(e => ({
+          id: `emp-${e.empresa_codigo}`,
+          label: e.fantasia || e.nome || `Empresa ${e.empresa_codigo}`,
+          status: 'load',
+        })),
+      ]);
+    }
+    const marcarEtapa = (id) => {
+      if (!silencioso) setEtapas(prev => prev.map(e => (e.id === id ? { ...e, status: 'ok' } : e)));
+    };
     try {
       const apiKey = chaveApi.chave;
       const filtros = { dataInicial: dataDe, dataFinal: dataAte };
@@ -137,9 +166,9 @@ export default function ClienteComercialProdutividade() {
       // Catálogos (cacheados pelo qualityApi). Necessários para resolver nome
       // do funcionário e classificar produto em combustivel/automotivos/conveniencia.
       const [funcionarios, produtos, grupos] = await Promise.all([
-        qualityApi.buscarFuncionarios(apiKey).catch(() => []).finally(tick),
-        qualityApi.buscarProdutos(apiKey).catch(() => []).finally(tick),
-        qualityApi.buscarGrupos(apiKey).catch(() => []).finally(tick),
+        qualityApi.buscarFuncionarios(apiKey).catch(() => []).finally(() => marcarEtapa('funcionarios')),
+        qualityApi.buscarProdutos(apiKey).catch(() => []).finally(() => marcarEtapa('produtos')),
+        qualityApi.buscarGrupos(apiKey).catch(() => []).finally(() => marcarEtapa('grupos')),
       ]);
       const funcionariosMap = new Map();
       (funcionarios || []).forEach(f => {
@@ -166,7 +195,7 @@ export default function ClienteComercialProdutividade() {
           qualityApi.buscarVendaItens(apiKey, filtrosEmp).catch(() => []),
           qualityApi.buscarAbastecimentos(apiKey, filtrosEmp).catch(() => []),
         ]);
-        tick();
+        marcarEtapa(`emp-${emp.empresa_codigo}`);
         return { emp, vendas: vendas || [], vendaItens: vendaItens || [], abastecimentos: abastecimentos || [] };
       }));
 
@@ -305,7 +334,7 @@ export default function ClienteComercialProdutividade() {
       setVendedores(novosVendedores);
       setHeatmapConv(convHeatmap);
       // Salva cache v2
-      salvarCacheV2('produtividade', chaveApiId, {
+      salvarCacheV2(keyProdutividade(dataDe, dataAte, empresasSel), chaveApiId, {
         vendedores: novosVendedores,
         heatmapConv: convHeatmap,
       });
@@ -325,6 +354,9 @@ export default function ClienteComercialProdutividade() {
   useAutoRefresh(() => {
     if (chaveApi?.chave && empresasSel.length > 0) carregar({ force: true, silencioso: true });
   });
+
+  // Refresh in-place quando o toast global (layout) pede atualização.
+  useAtualizarDados(() => carregar({ force: true }));
 
   // Enriquece cada vendedor com totais escopados por aba (pista / conv).
   const vendedoresEnriquecidos = useMemo(() => {
@@ -551,16 +583,14 @@ export default function ClienteComercialProdutividade() {
   return (
     <div>
       <PageHeader title="Produtividade" description={chaveApi?.nome || 'Vendas por vendedor'}>
-        <div className="hidden md:flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
-            <Calendar className="h-3 w-3" /> Período
-          </span>
-          <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)} max={dataAte}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          <span className="text-[10px] text-gray-400">e</span>
-          <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)} min={dataDe}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-        </div>
+        <SeletorMesAno mes={mes} ano={ano} onChange={(m, a) => { setMes(m); setAno(a); }} />
+        <label className="hidden md:inline-flex items-center gap-1.5 h-9 px-2 cursor-pointer select-none"
+          title="Limita o período a ontem (exclui o dia corrente, ainda em aberto)">
+          <input type="checkbox" checked={apenasFechados}
+            onChange={e => setApenasFechados(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+          <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Apenas dias fechados</span>
+        </label>
         {empresasDisponiveis.length > 1 && (
           <EmpresaMultiSelect
             clientesRede={empresasDisponiveis}
@@ -575,13 +605,19 @@ export default function ClienteComercialProdutividade() {
             )}
           />
         )}
-        <IndicadorAtualizacao pagina="produtividade" chaveApiId={chaveApiIdAtiva} />
+        <button onClick={() => carregar({ force: true })} disabled={loading}
+          title="Atualizar dados" aria-label="Atualizar dados"
+          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Atualizar</span>
+        </button>
+        <IndicadorAtualizacao pagina={keyProdutividade(dataDe, dataAte, empresasSel)} chaveApiId={chaveApiIdAtiva} />
       </PageHeader>
 
-      <BarraProgressoFetch loading={loading} feitos={progresso.feitos} total={progresso.total} label="Carregando produtividade..." />
+      {loading && <ProgressoEtapas etapas={etapas} />}
 
       {loading ? (
-        <div className="h-32" />
+        <SkeletonComercial linhas={8} />
       ) : erro ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />

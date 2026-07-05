@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ClienteSidebar from './ClienteSidebar';
@@ -10,6 +10,8 @@ import ModalPendenciasLogin from './ModalPendenciasLogin';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { registrarPageview } from '../../../services/usoPortalService';
 import { EmpresaAtivaProvider } from '../../../contexts/EmpresaAtivaContext';
+import AvisoAtualizar from '../../vendas/AvisoAtualizar';
+import { dispararAtualizacao } from '../../../hooks/useAtualizarDados';
 
 export default function ClienteLayout() {
   // collapsed: controla largura no desktop (≥lg). mobileOpen: drawer overlay no mobile.
@@ -35,6 +37,28 @@ export default function ClienteLayout() {
   // Fecha drawer mobile ao navegar
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
+  // Aviso global "pode haver dados mais recentes" após 3 min na mesma página.
+  // Reinicia a cada navegação. Ao atualizar, páginas que sabem se recarregar
+  // tratam o evento (in-place); senão, reload.
+  // Aviso global "pode haver dados mais recentes": aparece 3 min após entrar
+  // no portal e, a cada fechar OU atualizar, reaparece a cada 5 min (ciclo).
+  const [avisoVisivel, setAvisoVisivel] = useState(false);
+  const avisoTimerRef = useRef(null);
+  const agendarAviso = useCallback((delayMs) => {
+    if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current);
+    avisoTimerRef.current = setTimeout(() => setAvisoVisivel(true), delayMs);
+  }, []);
+  useEffect(() => {
+    agendarAviso(3 * 60 * 1000);   // primeira aparição
+    return () => { if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current); };
+  }, [agendarAviso]);
+  const fecharAviso = () => { setAvisoVisivel(false); agendarAviso(5 * 60 * 1000); };
+  const handleAtualizar = () => {
+    setAvisoVisivel(false);
+    agendarAviso(5 * 60 * 1000);
+    if (!dispararAtualizacao()) window.location.reload();
+  };
+
   return (
     <EmpresaAtivaProvider><div className="min-h-screen relative app-bg">
       <BannerModoDemo />
@@ -50,6 +74,7 @@ export default function ClienteLayout() {
       <ModalNovidades />
       <ModalPendenciasLogin />
       <PrefetcherWebposto />
+      <AvisoAtualizar visivel={avisoVisivel} onAtualizar={handleAtualizar} onFechar={fecharAviso} />
 
       {/* Backdrop mobile */}
       {mobileOpen && (

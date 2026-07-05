@@ -12,6 +12,7 @@ import BannerCarregando from '../../../components/vendas/BannerCarregando';
 import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import { useAtualizarDados } from '../../../hooks/useAtualizarDados';
 import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 
@@ -253,6 +254,9 @@ export default function ClienteComercialOperacao() {
   useAutoRefresh(() => {
     if (empresasSel.length > 0) carregar({ force: true, silencioso: true });
   });
+
+  // Refresh in-place quando o toast global (layout) pede atualização.
+  useAtualizarDados(() => carregar({ force: true }));
 
   // ─── Enriquecimento dos turnos por empresa ──────────────────
   const empresasComTurnos = useMemo(() => {

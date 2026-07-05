@@ -98,15 +98,13 @@ import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
 import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
+import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
+import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
 
 // ─── Helpers ─────────────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
-function isoHoje() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 // Mesma data 1 ano atrás; se cair em 29/02 num ano não-bissexto, usa 28/02.
 function subtrairUmAno(iso) {
   const [y, m, d] = String(iso).split('-').map(Number);
@@ -146,10 +144,6 @@ function ontemIso() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 function minIso(a, b) { return a < b ? a : b; }
-function inicioMesAtual() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
-}
 function formatDataBR(s) {
   if (!s) return '—';
   const iso = String(s).slice(0, 10);
@@ -197,26 +191,15 @@ export default function ClienteComercialVendas() {
     [empresaId],
   );
 
-  const [dataDe, setDataDe] = useState(inicioMesAtual());
-  // Quando true, limita o `data_ate` efetivo a ontem (exclui o dia corrente
-  // que ainda está aberto). Marcado por padrão — por isso o `dataAte` também
-  // começa em ontem.
+  // Filtros — período por MÊS + ANO (mês fechado)
+  const [mes, setMes] = useState(() => new Date().getMonth() + 1);
+  const [ano, setAno] = useState(() => new Date().getFullYear());
   const [apenasFechados, setApenasFechados] = useState(true);
-  const [dataAte, setDataAte] = useState(ontemIso());
-  // Marcar: recua o `dataAte` para ontem (se estiver em hoje/futuro).
-  // Desmarcar: avança para hoje (se estiver em ontem) — assume que o usuário
-  // quer ver o dia corrente assim que abre o filtro.
-  function handleApenasFechadosChange(checked) {
-    setApenasFechados(checked);
-    if (checked) {
-      const ontem = ontemIso();
-      if (dataAte > ontem) setDataAte(ontem);
-    } else {
-      setDataAte(isoHoje());
-    }
-  }
-  // Data limite real usada nas consultas — derivada de dataAte + apenasFechados
-  // (safety net caso o `max` do input seja contornado).
+
+  const dataDe  = useMemo(() => primeiroDiaMesIso(ano, mes), [ano, mes]);
+  const dataAte = useMemo(() => ultimoDiaMesIso(ano, mes), [ano, mes]);
+
+  // Data limite real usada nas consultas — clamp em ontem quando "apenas fechados"
   const dataAteEfetivo = useMemo(
     () => apenasFechados ? minIso(dataAte, ontemIso()) : dataAte,
     [dataAte, apenasFechados],
@@ -1796,21 +1779,11 @@ export default function ClienteComercialVendas() {
   return (
     <div>
       <PageHeader title="Vendas" description={asRede?.nome ? `${asRede.nome}` : 'Itens vendidos no período'}>
-        <div className="hidden md:flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
-            <Calendar className="h-3 w-3" /> Período
-          </span>
-          <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          <span className="text-[10px] text-gray-400">e</span>
-          <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)}
-            max={apenasFechados ? ontemIso() : undefined}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-        </div>
+        <SeletorMesAno mes={mes} ano={ano} onChange={(m, a) => { setMes(m); setAno(a); }} />
         <label className="hidden md:inline-flex items-center gap-1.5 h-9 px-2 cursor-pointer select-none"
           title="Limita o período a ontem (exclui o dia corrente, ainda em aberto)">
           <input type="checkbox" checked={apenasFechados}
-            onChange={e => handleApenasFechadosChange(e.target.checked)}
+            onChange={e => setApenasFechados(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
           <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Apenas dias fechados</span>
         </label>

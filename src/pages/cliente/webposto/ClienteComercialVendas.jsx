@@ -44,10 +44,14 @@ import {
   formatNumero,
 } from '../../../components/vendas/VendasCompartilhado';
 import EmpresaMultiSelect from '../../../components/vendas/EmpresaMultiSelect';
+import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
+import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
+import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
 import BannerCarregando from '../../../components/vendas/BannerCarregando';
 import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
+import { useAtualizarDados } from '../../../hooks/useAtualizarDados';
 import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 
@@ -62,17 +66,9 @@ function formatDataBR(s) {
   const [y, m, d] = String(s).slice(0, 10).split('-');
   return y && m && d ? `${d}/${m}/${y}` : s;
 }
-function isoHoje() {
-  const d = new Date();
-  return ymd(d);
-}
 function ontemIso() {
   const d = new Date(); d.setDate(d.getDate() - 1);
   return ymd(d);
-}
-function inicioMesAtual() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
 }
 function minIso(a, b) { return a < b ? a : b; }
 function diasNoIntervalo(de, ate) {
@@ -179,20 +175,13 @@ export default function ClienteComercialVendas() {
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [tab, setTab] = useState('geral');
 
-  // Filtros
-  const [dataDe, setDataDe]             = useState(inicioMesAtual());
-  const [dataAte, setDataAte]           = useState(ontemIso());
+  // Filtros — período por MÊS + ANO (mês fechado)
+  const [mes, setMes] = useState(() => new Date().getMonth() + 1);
+  const [ano, setAno] = useState(() => new Date().getFullYear());
   const [apenasFechados, setApenasFechados] = useState(true);
 
-  const handleApenasFechadosChange = (checked) => {
-    setApenasFechados(checked);
-    if (checked) {
-      const ontem = ontemIso();
-      if (dataAte > ontem) setDataAte(ontem);
-    } else {
-      setDataAte(isoHoje());
-    }
-  };
+  const dataDe  = useMemo(() => primeiroDiaMesIso(ano, mes), [ano, mes]);
+  const dataAte = useMemo(() => ultimoDiaMesIso(ano, mes), [ano, mes]);
 
   // Data limite real usada nas consultas — clamp em ontem quando "apenas fechados"
   const dataAteEfetivo = useMemo(
@@ -385,6 +374,9 @@ export default function ClienteComercialVendas() {
     if (empresasSel.length > 0) carregar({ force: true, silencioso: true });
   });
 
+  // Refresh in-place quando o toast global (layout) pede atualização.
+  useAtualizarDados(() => carregar({ force: true }));
+
   // Auto-carregar quando filtros mudam (após 1ª carga). Debounce pra
   // evitar disparar a cada tecla quando o usuário digita data manualmente.
   // Banner sutil aparece durante o fetch — sem precisar clicar "Atualizar".
@@ -491,21 +483,11 @@ export default function ClienteComercialVendas() {
       <BarraProgressoFetch loading={loadingDados} feitos={progresso.feitos} total={progresso.total} label="Carregando vendas..." />
       <PageHeader title="Vendas"
         description={session?.chaveApi?.nome || 'Itens vendidos no período'}>
-        <div className="hidden md:flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
-            <Calendar className="h-3 w-3" /> Período
-          </span>
-          <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          <span className="text-[10px] text-gray-400">e</span>
-          <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)}
-            max={apenasFechados ? ontemIso() : undefined}
-            className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-        </div>
+        <SeletorMesAno mes={mes} ano={ano} onChange={(m, a) => { setMes(m); setAno(a); }} />
         <label className="hidden md:inline-flex items-center gap-1.5 h-9 px-2 cursor-pointer select-none"
           title="Limita o período a ontem (exclui o dia corrente, ainda em aberto)">
           <input type="checkbox" checked={apenasFechados}
-            onChange={e => handleApenasFechadosChange(e.target.checked)}
+            onChange={e => setApenasFechados(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
           <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Apenas dias fechados</span>
         </label>
@@ -548,10 +530,10 @@ export default function ClienteComercialVendas() {
         </div>
       )}
 
-      {loadingDados && !dadosRaw ? (
-        // Modal envolvente cuida do feedback — esse div é só placeholder
-        // pra reservar espaço sem mostrar nada visual atrás dele.
-        <div className="h-32" />
+      {loadingDados ? (
+        // Skeleton em todo carregamento bloqueante (1ª carga, troca de mês,
+        // troca de empresa, "Atualizar"). Refresh silencioso mantém os dados.
+        <SkeletonComercial />
       ) : arvore.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">

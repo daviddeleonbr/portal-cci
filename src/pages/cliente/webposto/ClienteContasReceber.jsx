@@ -58,11 +58,17 @@ function extrairValor(t) {
 }
 
 function extrairVencimento(t) {
-  // Cartao costuma usar dataCredito/dataPrevisao (quando a adquirente repassa);
-  // Cheque pode usar dataBomPara/dataDeposito
+  // Cartao: dataCredito/dataPrevisao (repasse da adquirente).
+  // Cheque "Bom para" (data de depósito/vencimento): a API Quality pode
+  // nomear de várias formas — cobrimos as mais prováveis. Se ainda vier
+  // vazio, o log "[CHEQUE campos]" (dev) revela o nome exato do campo.
   const raw = t.dataVencimento || t.vencimento || t.dataVenc || t.data_vencimento ||
+    t.dataVencto || t.vencto ||
     t.dataCredito || t.dataPrevisao || t.dataPrevisaoCredito ||
-    t.dataBomPara || t.dataDeposito || t.dataCompensacao || null;
+    t.dataBomPara || t.bomPara || t.dataBomPra || t.dataBom || t.dtBomPara || t.bom_para ||
+    t.dataDeposito || t.dataDepositar || t.dataParaDeposito ||
+    t.dataCompensacao || t.dataCompensar ||
+    t.dataPreDatado || t.dataPre || null;
   return raw ? String(raw).slice(0, 10) : null;
 }
 
@@ -295,6 +301,11 @@ export default function ClienteContasReceber() {
           seguro(`CARTAO #${emp.empresa_codigo}`,         qualityApi.buscarCartoes(chave.chave, filtros)),
           seguro(`CHEQUE #${emp.empresa_codigo}`,         qualityApi.buscarCheques(chave.chave, filtros)),
         ]);
+        // Diagnóstico (dev): revela os campos reais do cheque — procure a
+        // data "Bom para" para mapear em extrairVencimento se ainda vier vazia.
+        if (import.meta.env.DEV && Array.isArray(cheques) && cheques.length) {
+          console.info('[CHEQUE campos]', Object.keys(cheques[0]), cheques[0]);
+        }
         const tag = (arr, fonte) => (arr || []).map(r => ({
           fonte,
           raw: r,
