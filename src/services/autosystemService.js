@@ -150,6 +150,18 @@ export async function obterCredenciais(id) {
   return Array.isArray(data) ? data[0] : data;
 }
 
+// Quando o volume de dados estoura o worker Deno da Edge Function, o gateway
+// mata a função e devolve WORKER_RESOURCE_LIMIT. Nesse caso não adianta mostrar
+// o erro tecnico — orientamos o usuario a reduzir o periodo.
+const MSG_LIMITE_RECURSOS =
+  'Há muitos dados para carregar de uma vez. Selecione um período menor ' +
+  '(desmarque "Todo o período" e escolha um intervalo de vencimento).';
+
+function _ehLimiteRecursos(txt) {
+  return /WORKER_RESOURCE_LIMIT|not having enough compute resources|resource limit|memory limit|out of memory/i
+    .test(String(txt || ''));
+}
+
 // Helper compartilhado: extrai mensagem detalhada de FunctionsHttpError
 async function _extrairErroFn(error, dataFallback) {
   let detail = error.message;
@@ -158,12 +170,18 @@ async function _extrairErroFn(error, dataFallback) {
       const body = await error.context.json();
       // eslint-disable-next-line no-console
       console.error('[autosystem fn] erro:', body);
+      if (_ehLimiteRecursos(body?.code) || _ehLimiteRecursos(body?.message)) {
+        return new Error(MSG_LIMITE_RECURSOS);
+      }
       detail = body?.detail || body?.error || JSON.stringify(body);
     } else if (error.context && typeof error.context.text === 'function') {
       detail = await error.context.text();
     }
   } catch {
     // mantém error.message
+  }
+  if (_ehLimiteRecursos(detail) || _ehLimiteRecursos(error.message)) {
+    return new Error(MSG_LIMITE_RECURSOS);
   }
   return new Error(detail || dataFallback || 'Falha ao chamar Edge Function');
 }
