@@ -26,7 +26,7 @@ Plano B registrado: Supabase Auth nativo (mais robusto em reset/refresh/MFA, ref
 | 4 | Segredos fora do navegador (IA/Quality/Asaas) | Reversível c/ flag | ✅ 4a-IA (proxy + `124`) · 4b-Asaas (admin-only `125`) · 4c-Quality (Opção A: RLS por tenant em `chaves_api` `126`). Chaves Anthropic/Asaas/Quality não são mais legíveis por anônimo. |
 | 5 | Autorização nas Edge Functions (fecha IDOR) | Reversível | ✅ as 20 `autosystem-*` validam a posse da rede (admin ou `as_rede_id` do JWT) via `autorizarRede`/`obterRede`. auth-*/ia-proxy checam `cci_tipo`. `webposto-sync-*` são cron/service_role (sem IDOR de navegador). Resíduo menor: apertar CORS `*`. |
 | 6 | Reset tokens, TLS Autosystem, **rotação de chaves** | Ponto de não-retorno parcial | 🔶 reset tokens ✅ (auth-reset `129`). **Falta:** TLS nas conexões Autosystem (testar rede a rede) + **rotação** de tudo que foi legível por anon (Quality/Asaas/Anthropic/senhas ERP/chave do Vault). |
-| 7 | Verificação final, drop do texto puro, monitoração | Ponto de não-retorno final | ⬜ **Falta:** drop da coluna `senha` (após todos self-heal), policies de Storage (buckets), auditoria "deny by default", atualizar seção Security do CLAUDE.md. |
+| 7 | Verificação final, drop do texto puro, monitoração | Ponto de não-retorno final | 🔶 ✅ CLAUDE.md atualizado · ✅ criação/senha gravam hash (`130`) · drop da coluna `senha` (`131` ▶, ponto sem retorno) · **Falta:** policies de Storage (buckets), auditoria "deny by default". |
 
 As Fases 0–2 não têm impacto para o usuário — a identidade passa a existir mas ainda não gateia nada. O risco real começa na Fase 3.
 
