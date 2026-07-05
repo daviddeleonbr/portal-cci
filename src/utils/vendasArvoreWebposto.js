@@ -520,47 +520,35 @@ export async function buscarSeriesMargem12mWebposto({
   const pad  = (n) => String(n).padStart(2, '0');
   const ymd  = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-  // PARTICIONAMENTO: a RPC pra 12 meses inteiros estourava o statement_timeout
-  // do PostgREST (era ~5M rows agregadas em rede grande). Divide em 12
-  // chamadas mensais paralelas (4 simultâneas) — cada uma pesa só ~500k rows
-  // e cabe folgado nos 8s do PostgREST. Total ainda < 15s mesmo na pior rede.
-  const meses = [];
-  for (let i = 11; i >= 0; i--) {
-    const ini = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    const fim = new Date(hoje.getFullYear(), hoje.getMonth() - i + 1, 0);
-    meses.push({ ini: ymd(ini), fim: ymd(fim) });
-  }
-  const empCodigos = empresasCodigos.map(Number);
+  // Janela de 12 meses (do 1º dia de 11 meses atrás até o último dia do mês atual).
+  const dataDe  = ymd(new Date(hoje.getFullYear(), hoje.getMonth() - 11, 1));
+  const dataAte = ymd(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0));
 
-  // Worker-pool com semáforo simples (4 paralelas)
-  const MAX_PAR = 4;
-  let cursor = 0;
-  const data = [];
-  const erros = [];
-  const consumir = async () => {
-    while (cursor < meses.length) {
-      const idx = cursor++;
-      const { ini, fim } = meses[idx];
-      try {
-        const { data: chunk, error: errRpc } = await supabase.rpc('cci_webposto_evolucao_mensal_produto', {
-          p_chave_api_id:     chaveApiId,
-          p_empresas_codigos: empCodigos,
-          p_data_de:          ini,
-          p_data_ate:         fim,
-        });
-        if (errRpc) erros.push(errRpc); else if (Array.isArray(chunk)) data.push(...chunk);
-      } catch (err) { erros.push(err); }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(MAX_PAR, meses.length) }, () => consumir()));
-  // Se TODOS os meses falharam, propaga erro. Senão segue com o que veio.
-  if (erros.length === meses.length) throw erros[0];
-  if (erros.length > 0) {
-    // eslint-disable-next-line no-console
-    console.warn(`[series 12m] ${erros.length}/${meses.length} mes(es) falharam:`, erros[0]?.message);
+  // A classificação produto->categoria vive no catálogo do Quality (só no
+  // cliente). Montamos o mapa (código -> categoria já resolvida, com
+  // outros->automotivos) e enviamos ao banco, que agrega por mês+categoria.
+  // Antes: 12 chamadas trazendo 1 linha por produto/mês (milhões de linhas)
+  // + classificação/agregação no navegador. Agora: 1 chamada, ~48 linhas.
+  const produtoCodigos = [];
+  const categorias = [];
+  for (const codigo of produtosMap.keys()) {
+    const cat = _classificarItem({ produtoCodigo: Number(codigo) }, produtosMap, gruposMap);
+    produtoCodigos.push(Number(codigo));
+    categorias.push(cat === 'outros' ? 'automotivos' : cat);
   }
 
-  // Agrega por (ano_mes, categoria) acumulando fat + custo + qtd
+  const { data, error: errRpc } = await supabase.rpc('cci_webposto_lucro_bruto_categoria_mensal', {
+    p_chave_api_id:     chaveApiId,
+    p_empresas_codigos: empresasCodigos.map(Number),
+    p_data_de:          dataDe,
+    p_data_ate:         dataAte,
+    p_produto_codigos:  produtoCodigos,
+    p_categorias:       categorias,
+  });
+  if (errRpc) throw errRpc;
+
+  // Agrega por (ano_mes, categoria) — já vem pré-agregado do banco. Produtos
+  // fora do catálogo caem em 'outros' (também tratado como automotivos).
   const porMesCat = new Map();
   (data || []).forEach(r => {
     const ym = String(r.ano_mes);
@@ -577,9 +565,8 @@ export async function buscarSeriesMargem12mWebposto({
       };
       porMesCat.set(ym, cur);
     }
-    const cat = _classificarItem({ produtoCodigo: Number(r.produto_codigo) }, produtosMap, gruposMap);
-    const ck = cat === 'outros' ? 'automotivos' : cat;
-    if (cur[ck]) { cur[ck].fat += fat; cur[ck].custo += custo; cur[ck].qtd += qtd; }
+    const ck = (r.categoria === 'combustivel' || r.categoria === 'conveniencia') ? r.categoria : 'automotivos';
+    cur[ck].fat += fat; cur[ck].custo += custo; cur[ck].qtd += qtd;
     cur.global.fat += fat; cur.global.custo += custo; cur.global.qtd += qtd;
   });
 
