@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
 import {
   Loader2, AlertCircle, Search, RefreshCw, ChevronDown, ChevronRight,
   Clock, AlertTriangle, CheckCircle2, Calendar, Users,
   DollarSign, FileText, CreditCard, ScrollText, Landmark,
-  FileCheck, Building2, LayoutGrid,
+  FileCheck, Building2, LayoutGrid, PieChart as PieChartIcon, BarChart3,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
@@ -24,15 +27,6 @@ function formatDataBR(s) {
   return y && m && d ? `${d}/${m}/${y}` : s;
 }
 
-const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-function diaSemana(iso) {
-  if (!iso) return '';
-  const [y, m, d] = String(iso).slice(0, 10).split('-');
-  if (!y || !m || !d) return '';
-  const dt = new Date(+y, +m - 1, +d);
-  return DIAS_SEMANA[dt.getDay()] || '';
-}
-
 function diffDias(dataIso) {
   if (!dataIso) return null;
   const [y, m, d] = String(dataIso).slice(0, 10).split('-');
@@ -49,6 +43,21 @@ const toNumber = (v) => {
   const n = Number(v);
   return isNaN(n) ? 0 : n;
 };
+
+const pad = (n) => String(n).padStart(2, '0');
+
+// Top clientes com maior valor vencido de uma fonte (agregado por cliente).
+function topClientesFonteVencidos(lista, fonte, limite = 5) {
+  const mapa = new Map();
+  lista.forEach(t => {
+    if (t.fonte !== fonte || !t.vencido) return;
+    const nome = t.clienteNome || '—';
+    let g = mapa.get(nome);
+    if (!g) { g = { nome, valor: 0, qtd: 0 }; mapa.set(nome, g); }
+    g.valor += t.valor; g.qtd++;
+  });
+  return Array.from(mapa.values()).sort((a, b) => b.valor - a.valor).slice(0, limite);
+}
 
 function extrairValor(t) {
   return toNumber(
@@ -154,6 +163,27 @@ const FONTE_CFG = {
   },
 };
 
+// Cor do "dot" por fonte, usado na tree-table.
+const DOT_FONTE = {
+  titulo: 'bg-indigo-400', duplicata: 'bg-violet-400',
+  cartao: 'bg-cyan-400', cheque: 'bg-teal-400',
+};
+
+// Cores (hex) por fonte para os gráficos.
+const CORES_FONTE = { titulo: '#8b5cf6', duplicata: '#6366f1', cartao: '#0ea5e9', cheque: '#14b8a6' };
+
+// Ordem das fontes na rosca/legenda (espelha o autosystem: Cartões, Notas
+// (=Títulos), Faturas (=Duplicatas), Cheques).
+const ORDEM_FONTES = ['cartao', 'titulo', 'duplicata', 'cheque'];
+
+// Formata valores compactos para eixos (1,2M / 340k).
+const fmtCompacto = (v) => {
+  const n = Math.abs(v);
+  if (n >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(v / 1000)}k`;
+  return String(Math.round(v));
+};
+
 // ─── Cache em memoria (sobrevive a desmontagens da pagina) ──────
 // TTL = 5 min, mesmo padrao dos endpoints internos do qualityApi.
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -186,7 +216,6 @@ export default function ClienteContasReceber() {
     [clientesRede, empresasSelIds]
   );
   const podeFiltrarEmpresa = clientesRede.length > 1;
-  const multiEmpresa = empresasSel.length > 1;
 
   // Hidrata a partir do cache
   const empresasKeyInicial = chaveEmpresas(empresasSelIds);
@@ -474,11 +503,8 @@ export default function ClienteContasReceber() {
     return arr;
   };
 
-  const grupos = useMemo(() => agruparPorData(filtrados), [filtrados]);
-
-  // Em modo multi-empresa, agrupa: empresa → data → itens
+  // Sempre agrupa em árvore: empresa → data → itens (tree-table).
   const empresasComGrupos = useMemo(() => {
-    if (!multiEmpresa) return [];
     const porEmp = new Map();
     filtrados.forEach(t => {
       const empId = t.empresaId ?? 'sem-empresa';
@@ -497,38 +523,94 @@ export default function ClienteContasReceber() {
     return Array.from(porEmp.values())
       .map(e => ({ ...e, grupos: agruparPorData(e.itens), qtd: e.itens.length }))
       .sort((a, b) => b.total - a.total);
-  }, [filtrados, multiEmpresa]);
+  }, [filtrados]);
+
+  // Base dos cards: reflete a aba (fonte) + busca, mas NÃO o status — pois os
+  // 4 cards são justamente a quebra por status (total/vencidos/próximos/a vencer)
+  // daquela aba. Ao trocar de aba, os cards acompanham os valores da fonte.
+  const baseCards = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return enriched.filter(t => {
+      if (filtroFonte !== 'todos' && t.fonte !== filtroFonte) return false;
+      if (!q) return true;
+      return (
+        t.clienteNome.toLowerCase().includes(q) ||
+        String(t.documento).toLowerCase().includes(q) ||
+        (t.historico || '').toLowerCase().includes(q)
+      );
+    });
+  }, [enriched, filtroFonte, busca]);
 
   const totais = useMemo(() => {
-    const tot = enriched.reduce((s, t) => s + t.valor, 0);
-    const vencidos = enriched.filter(t => t.vencido);
-    const proximos = enriched.filter(t => !t.vencido && t.proximo);
-    const futuros = enriched.filter(t => !t.vencido && !t.proximo);
-    const porFonte = { titulo: 0, duplicata: 0, cartao: 0, cheque: 0 };
-    const qtdPorFonte = { titulo: 0, duplicata: 0, cartao: 0, cheque: 0 };
-    enriched.forEach(t => {
-      porFonte[t.fonte] = (porFonte[t.fonte] || 0) + t.valor;
-      qtdPorFonte[t.fonte] = (qtdPorFonte[t.fonte] || 0) + 1;
-    });
+    const vencidos = baseCards.filter(t => t.vencido);
+    const proximos = baseCards.filter(t => !t.vencido && t.proximo);
+    const futuros = baseCards.filter(t => !t.vencido && !t.proximo);
     return {
-      total: tot,
-      qtd: enriched.length,
+      total: baseCards.reduce((s, t) => s + t.valor, 0),
       vencidos: vencidos.reduce((s, t) => s + t.valor, 0),
-      qtdVencidos: vencidos.length,
       proximos: proximos.reduce((s, t) => s + t.valor, 0),
-      qtdProximos: proximos.length,
       futuros: futuros.reduce((s, t) => s + t.valor, 0),
-      qtdFuturos: futuros.length,
-      porFonte,
-      qtdPorFonte,
     };
+  }, [baseCards]);
+
+  // ── Dashboard da Visão Geral (modelo autosystem) ──
+  // Participação por categoria (rosca) — panorama completo, independe de busca.
+  const participacaoCategorias = useMemo(() => {
+    const acc = {}; const qtd = {};
+    ORDEM_FONTES.forEach(k => { acc[k] = 0; qtd[k] = 0; });
+    enriched.forEach(t => { acc[t.fonte] = (acc[t.fonte] || 0) + t.valor; qtd[t.fonte] = (qtd[t.fonte] || 0) + 1; });
+    return ORDEM_FONTES
+      .map(k => ({ key: k, label: FONTE_CFG[k]?.label || k, valor: acc[k] || 0, qtd: qtd[k] || 0, cor: CORES_FONTE[k] || '#94a3b8' }))
+      .filter(c => c.valor > 0);
   }, [enriched]);
 
-  // Recolhe a tree quando filtros/empresas mudam — usuario expande sob demanda
+  // A receber nos próximos 14 dias — soma por dia de vencimento (inclui fins
+  // de semana com valor 0).
+  const proximos14dias = useMemo(() => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const dias = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(hoje); d.setDate(d.getDate() + i);
+      const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const dow = d.getDay();
+      dias.push({
+        iso, label: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`,
+        diaSemana: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][dow],
+        ehFimSemana: dow === 0 || dow === 6, valor: 0, qtd: 0,
+      });
+    }
+    const mapaDias = new Map(dias.map(d => [d.iso, d]));
+    enriched.forEach(t => { const g = mapaDias.get(t.vencimento); if (g) { g.valor += t.valor; g.qtd++; } });
+    return dias;
+  }, [enriched]);
+
+  // Top 5 clientes vencidos (Duplicatas ↔ Faturas; Títulos ↔ Notas a prazo).
+  const topDuplicatasVencidas = useMemo(() => topClientesFonteVencidos(enriched, 'duplicata'), [enriched]);
+  const topTitulosVencidos = useMemo(() => topClientesFonteVencidos(enriched, 'titulo'), [enriched]);
+
+  // Cartões vencidos por administradora (equivalente ao "por conta" do autosystem).
+  const cartoesVencidosPorAdm = useMemo(() => {
+    const mapa = new Map();
+    enriched.forEach(t => {
+      if (!t.vencido || t.fonte !== 'cartao') return;
+      const nome = t.administradoraNome || 'Sem administradora';
+      let g = mapa.get(nome);
+      if (!g) { g = { nome, valor: 0, qtd: 0 }; mapa.set(nome, g); }
+      g.valor += t.valor; g.qtd++;
+    });
+    return Array.from(mapa.values()).sort((a, b) => b.valor - a.valor);
+  }, [enriched]);
+
+  // Recolhe a tree quando filtros/empresas mudam — usuario expande sob demanda.
+  // Com uma única empresa, já deixa ela aberta (evita um clique que não agrega).
   useEffect(() => {
-    setEmpresasExpandidas(new Set());
+    setEmpresasExpandidas(
+      empresasComGrupos.length === 1
+        ? new Set([empresasComGrupos[0].empresaId])
+        : new Set()
+    );
     setExpandedDates(new Set());
-  }, [filtroStatus, filtroFonte, multiEmpresa, empresasComGrupos, grupos.length]);
+  }, [filtroStatus, filtroFonte, empresasComGrupos]);
 
   const toggleDate = (key) => {
     setExpandedDates(prev => {
@@ -547,16 +629,12 @@ export default function ClienteContasReceber() {
   };
 
   const expandirTodos = () => {
-    if (multiEmpresa) {
-      setEmpresasExpandidas(new Set(empresasComGrupos.map(e => e.empresaId)));
-      const datas = new Set();
-      empresasComGrupos.forEach(e =>
-        e.grupos.forEach(g => datas.add(`${e.empresaId}|${g.data || 'sem-data'}`))
-      );
-      setExpandedDates(datas);
-    } else {
-      setExpandedDates(new Set(grupos.map(g => g.data || 'sem-data')));
-    }
+    setEmpresasExpandidas(new Set(empresasComGrupos.map(e => e.empresaId)));
+    const datas = new Set();
+    empresasComGrupos.forEach(e =>
+      e.grupos.forEach(g => datas.add(`${e.empresaId}|${g.data || 'sem-data'}`))
+    );
+    setExpandedDates(datas);
   };
   const colapsarTodos = () => {
     setExpandedDates(new Set());
@@ -621,68 +699,74 @@ export default function ClienteContasReceber() {
         </div>
       )}
 
-      {/* Resumo */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <ResumoCard icon={DollarSign} iconBg="bg-emerald-50" iconColor="text-emerald-600"
-          label="Total em aberto" valor={formatCurrency(totais.total)}
-          sub={`${totais.qtd} ${totais.qtd === 1 ? 'lancamento' : 'lancamentos'}`} highlight />
-        <ResumoCard icon={AlertTriangle} iconBg="bg-red-50" iconColor="text-red-600"
-          label="Vencidos" valor={formatCurrency(totais.vencidos)}
-          sub={`${totais.qtdVencidos} ${totais.qtdVencidos === 1 ? 'lancamento' : 'lancamentos'}`} />
-        <ResumoCard icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600"
-          label="Próximos 7 dias" valor={formatCurrency(totais.proximos)}
-          sub={`${totais.qtdProximos} ${totais.qtdProximos === 1 ? 'lancamento' : 'lancamentos'}`} />
-        <ResumoCard icon={Calendar} iconBg="bg-blue-50" iconColor="text-blue-600"
-          label="A vencer" valor={formatCurrency(totais.futuros)}
-          sub={`${totais.qtdFuturos} ${totais.qtdFuturos === 1 ? 'lancamento' : 'lancamentos'}`} />
-      </div>
-
-      {/* Abas por tipo (fonte) */}
+      {/* Abas por tipo (fonte) — acima dos cards. Ao clicar, os cards abaixo
+          passam a refletir os valores daquela fonte. */}
       <div className="bg-white rounded-xl border border-gray-100 dark:border-white/10 mb-4 overflow-hidden">
-        <div className="flex items-center gap-1 px-2 border-b border-gray-100 dark:border-white/10 overflow-x-auto">
+        <div className="flex items-center gap-1 px-2 overflow-x-auto">
           {[
-            { k: 'todos',     label: 'Visão Geral', icon: LayoutGrid,                qtd: totais.qtd,                       valor: totais.total,                cor: 'emerald' },
-            { k: 'titulo',    label: 'Títulos',     icon: FONTE_CFG.titulo.icon,    qtd: totais.qtdPorFonte.titulo || 0,    valor: totais.porFonte.titulo || 0,    cor: 'indigo'  },
-            { k: 'duplicata', label: 'Duplicatas',  icon: FONTE_CFG.duplicata.icon, qtd: totais.qtdPorFonte.duplicata || 0, valor: totais.porFonte.duplicata || 0, cor: 'violet'  },
-            { k: 'cartao',    label: 'Cartões',     icon: FONTE_CFG.cartao.icon,    qtd: totais.qtdPorFonte.cartao || 0,    valor: totais.porFonte.cartao || 0,    cor: 'cyan'    },
-            { k: 'cheque',    label: 'Cheques',     icon: FONTE_CFG.cheque.icon,    qtd: totais.qtdPorFonte.cheque || 0,    valor: totais.porFonte.cheque || 0,    cor: 'teal'    },
+            { k: 'todos',     label: 'Visão Geral', icon: LayoutGrid,               ativoCls: 'border-emerald-600 text-emerald-700' },
+            { k: 'titulo',    label: 'Títulos',     icon: FONTE_CFG.titulo.icon,    ativoCls: 'border-blue-600 text-blue-700' },
+            { k: 'duplicata', label: 'Duplicatas',  icon: FONTE_CFG.duplicata.icon, ativoCls: 'border-blue-600 text-blue-700' },
+            { k: 'cartao',    label: 'Cartões',     icon: FONTE_CFG.cartao.icon,    ativoCls: 'border-blue-600 text-blue-700' },
+            { k: 'cheque',    label: 'Cheques',     icon: FONTE_CFG.cheque.icon,    ativoCls: 'border-teal-600 text-teal-700' },
           ].map(a => {
             const Icon = a.icon;
             const ativo = filtroFonte === a.k;
-            const corClasses = {
-              emerald: ativo ? 'border-emerald-600 text-emerald-700' : '',
-              indigo:  ativo ? 'border-blue-600 text-blue-700' : '',
-              violet:  ativo ? 'border-blue-600 text-blue-700' : '',
-              cyan:    ativo ? 'border-blue-600 text-blue-700' : '',
-              teal:    ativo ? 'border-teal-600 text-teal-700' : '',
-            }[a.cor];
-            const badgeClasses = {
-              emerald: ativo ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
-              indigo:  ativo ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
-              violet:  ativo ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
-              cyan:    ativo ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
-              teal:    ativo ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-200' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
-            }[a.cor];
             return (
               <button key={a.k} onClick={() => setFiltroFonte(a.k)}
-                className={`flex flex-col items-start gap-0.5 px-4 py-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap min-w-[140px] ${
-                  ativo ? corClasses : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60 dark:hover:bg-white/5'
+                className={`flex items-center gap-2 px-4 py-3 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  ativo ? a.ativoCls : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50/60 dark:hover:bg-white/5'
                 }`}>
-                <span className="flex items-center gap-2 w-full">
-                  <Icon className="h-4 w-4" />
-                  {a.label}
-                  <span className={`ml-auto text-[10.5px] px-1.5 py-0.5 rounded-full ${badgeClasses}`}>
-                    {a.qtd}
-                  </span>
-                </span>
-                <span className="font-mono tabular-nums text-[12px] font-semibold text-gray-800 dark:text-gray-100">
-                  {formatCurrency(a.valor)}
-                </span>
+                <Icon className="h-4 w-4" />
+                {a.label}
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* Resumo — acompanha a aba (fonte) selecionada */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <ResumoCard icon={DollarSign} iconBg="bg-emerald-50" iconColor="text-emerald-600"
+          label="Total em aberto" valor={formatCurrency(totais.total)} highlight />
+        <ResumoCard icon={AlertTriangle} iconBg="bg-red-50" iconColor="text-red-600"
+          label="Vencidos" valor={formatCurrency(totais.vencidos)} danger />
+        <ResumoCard icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600"
+          label="Próximos 7 dias" valor={formatCurrency(totais.proximos)} />
+        <ResumoCard icon={Calendar} iconBg="bg-blue-50" iconColor="text-blue-600"
+          label="A vencer" valor={formatCurrency(totais.futuros)} />
+      </div>
+
+      {/* Dashboard da Visão Geral (modelo autosystem) — só na aba "todos" */}
+      {filtroFonte === 'todos' && enriched.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <CardParticipacaoCategorias dados={participacaoCategorias} onClickCategoria={(key) => setFiltroFonte(key)} />
+            <GraficoProximos14Dias dados={proximos14dias} />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <CardTopClientes
+              titulo="Top 5 — Duplicatas vencidas"
+              clientes={topDuplicatasVencidas}
+              cor={CORES_FONTE.duplicata}
+              icone={FONTE_CFG.duplicata.icon}
+              corBgIcone="bg-indigo-50" corTextIcone="text-indigo-600"
+              onClickCliente={(nome) => { setFiltroFonte('duplicata'); setBusca(nome); }} />
+            <CardTopClientes
+              titulo="Top 5 — Títulos vencidos"
+              clientes={topTitulosVencidos}
+              cor={CORES_FONTE.titulo}
+              icone={FONTE_CFG.titulo.icon}
+              corBgIcone="bg-violet-50" corTextIcone="text-violet-600"
+              onClickCliente={(nome) => { setFiltroFonte('titulo'); setBusca(nome); }} />
+          </div>
+          {cartoesVencidosPorAdm.length > 0 && (
+            <TabelaCartoesPorAdministradora
+              contas={cartoesVencidosPorAdm}
+              onClickConta={(c) => { setFiltroFonte('cartao'); setBusca(c.nome); }} />
+          )}
+        </>
+      )}
 
       {/* Filtros: busca + status */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
@@ -733,7 +817,7 @@ export default function ClienteContasReceber() {
             <p className="text-red-700 mt-1">{error}</p>
           </div>
         </div>
-      ) : grupos.length === 0 ? (
+      ) : filtrados.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 mb-3">
             <CheckCircle2 className="h-6 w-6 text-emerald-600" />
@@ -749,9 +833,7 @@ export default function ClienteContasReceber() {
         <>
           <div className="flex items-center justify-between mb-2 px-1">
             <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">
-              {multiEmpresa
-                ? `${empresasComGrupos.length} ${empresasComGrupos.length === 1 ? 'empresa' : 'empresas'} • ${filtrados.length} ${filtrados.length === 1 ? 'lancamento' : 'lancamentos'}`
-                : `${grupos.length} ${grupos.length === 1 ? 'data' : 'datas'} • ${filtrados.length} ${filtrados.length === 1 ? 'lancamento' : 'lancamentos'}`}
+              {`${empresasComGrupos.length} ${empresasComGrupos.length === 1 ? 'empresa' : 'empresas'} • ${filtrados.length} ${filtrados.length === 1 ? 'lancamento' : 'lancamentos'}`}
             </p>
             <div className="flex items-center gap-2">
               <button onClick={expandirTodos} className="text-[11px] text-gray-500 hover:text-emerald-600 transition-colors">
@@ -763,218 +845,387 @@ export default function ClienteContasReceber() {
               </button>
             </div>
           </div>
-          {multiEmpresa ? (
-            <div className="space-y-3">
-              {empresasComGrupos.map(emp => {
-                const empAberta = empresasExpandidas.has(emp.empresaId);
-                return (
-                  <div key={emp.empresaId} className="bg-white rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
-                    <button
-                      onClick={() => toggleEmpresa(emp.empresaId)}
-                      className={`w-full flex items-center gap-3 px-5 py-3 transition-colors text-left ${
-                        empAberta
-                          ? 'bg-emerald-50/40 dark:bg-emerald-500/10 border-b border-emerald-100 dark:border-emerald-500/20'
-                          : 'hover:bg-gray-50/60 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      <motion.div animate={{ rotate: empAberta ? 90 : 0 }} transition={{ duration: 0.15 }}>
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
-                      </motion.div>
-                      <div className="h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 flex items-center justify-center flex-shrink-0">
-                        <Building2 className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 truncate">{emp.empresaNome}</p>
-                        <p className="text-[10.5px] text-gray-500">
-                          {emp.grupos.length} {emp.grupos.length === 1 ? 'data' : 'datas'} ·
-                          {' '}{emp.qtd} {emp.qtd === 1 ? 'lancamento' : 'lancamentos'}
-                          {emp.qtdVencidos > 0 && <span className="ml-1 text-red-600 dark:text-red-400">· {emp.qtdVencidos} vencido{emp.qtdVencidos === 1 ? '' : 's'}</span>}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Total</p>
-                        <p className="text-[14px] font-bold tabular-nums text-gray-900 dark:text-gray-100">{formatCurrency(emp.total)}</p>
-                      </div>
-                    </button>
-                    <AnimatePresence initial={false}>
-                      {empAberta && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                          className="overflow-hidden"
+          {/* Tree-table: empresa → data → cliente. Documento / Histórico / Valor em colunas. */}
+          <div className="bg-white dark:bg-white/[0.02] rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/70 dark:bg-white/5 border-b border-gray-100 dark:border-white/10 text-[10.5px] uppercase tracking-wider text-gray-500">
+                    <th className="text-left font-semibold px-4 py-2.5">Empresa / Data / Cliente</th>
+                    <th className="text-left font-semibold px-3 py-2.5 hidden sm:table-cell whitespace-nowrap">Documento</th>
+                    <th className="text-left font-semibold px-3 py-2.5 hidden md:table-cell">Histórico</th>
+                    <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {empresasComGrupos.map(emp => {
+                    const empAberta = empresasExpandidas.has(emp.empresaId);
+                    return (
+                      <Fragment key={emp.empresaId}>
+                        {/* Nível 1 — empresa */}
+                        <tr
+                          onClick={() => toggleEmpresa(emp.empresaId)}
+                          className="cursor-pointer border-b border-gray-100 dark:border-white/10 bg-gray-50/50 dark:bg-white/5 hover:bg-gray-100/60 dark:hover:bg-white/10"
                         >
-                          <div className="space-y-2 p-3 bg-gray-50/30 dark:bg-white/[0.02]">
-                            {emp.grupos.map((g, i) => {
-                              const dataKey = `${emp.empresaId}|${g.data || 'sem-data'}`;
-                              return (
-                                <DateGroup
-                                  key={dataKey}
-                                  grupo={g}
-                                  expanded={expandedDates.has(dataKey)}
-                                  onToggle={() => toggleDate(dataKey)}
-                                  delay={Math.min(i * 0.02, 0.2)}
-                                  multiEmpresa={false}
-                                />
-                              );
-                            })}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <ChevronRight className={`h-4 w-4 text-gray-400 flex-shrink-0 transition-transform ${empAberta ? 'rotate-90' : ''}`} />
+                              <Building2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                              <span className="font-semibold text-gray-900 dark:text-gray-100 truncate">{emp.empresaNome}</span>
+                              <span className="text-[10.5px] text-gray-400 whitespace-nowrap">
+                                {emp.qtd} lanç.
+                                {emp.qtdVencidos > 0 && <span className="text-red-500"> · {emp.qtdVencidos} venc.</span>}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="hidden sm:table-cell" />
+                          <td className="hidden md:table-cell" />
+                          <td className="px-4 py-2.5 text-right font-bold tabular-nums text-gray-900 dark:text-gray-100 whitespace-nowrap">{formatCurrency(emp.total)}</td>
+                        </tr>
+
+                        {empAberta && emp.grupos.map(g => {
+                          const dataKey = `${emp.empresaId}|${g.data || 'sem-data'}`;
+                          const dataAberta = expandedDates.has(dataKey);
+                          return (
+                            <Fragment key={dataKey}>
+                              {/* Nível 2 — data (vencimento) */}
+                              <tr
+                                onClick={() => toggleDate(dataKey)}
+                                className="cursor-pointer border-b border-gray-100/70 dark:border-white/5 hover:bg-gray-50/70 dark:hover:bg-white/5"
+                              >
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-2 pl-6">
+                                    <ChevronRight className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${dataAberta ? 'rotate-90' : ''}`} />
+                                    <Calendar className={`h-3.5 w-3.5 flex-shrink-0 ${g.vencido ? 'text-red-500' : 'text-gray-400'}`} />
+                                    <span className={`font-medium ${g.vencido ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                                      {g.data ? formatDataBR(g.data) : 'Sem data'}
+                                    </span>
+                                    <span className="text-[10.5px] text-gray-400 whitespace-nowrap">{g.itens.length} {g.itens.length === 1 ? 'lanç.' : 'lanç.'}</span>
+                                    {g.vencido && <span className="text-[10px] font-medium text-red-500">vencido</span>}
+                                  </div>
+                                </td>
+                                <td className="hidden sm:table-cell" />
+                                <td className="hidden md:table-cell" />
+                                <td className={`px-4 py-2 text-right font-medium tabular-nums whitespace-nowrap ${g.vencido ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>{formatCurrency(g.total)}</td>
+                              </tr>
+
+                              {/* Nível 3 — cliente (lançamento) */}
+                              {dataAberta && g.itens.map((t, i) => (
+                                <tr key={`${t.fonte}-${t.documento}-${i}`} className="border-b border-gray-50 dark:border-white/5 hover:bg-emerald-50/30 dark:hover:bg-emerald-500/5">
+                                  <td className="px-4 py-2">
+                                    <div className="flex items-center gap-2 pl-12">
+                                      <span
+                                        className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${DOT_FONTE[t.fonte] || 'bg-gray-300'}`}
+                                        title={FONTE_CFG[t.fonte]?.label}
+                                      />
+                                      <Users className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                                      <span className="text-gray-800 dark:text-gray-200 truncate">{t.clienteNome}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2 hidden sm:table-cell font-mono text-[12px] text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                    {t.documento ? (t.fonte === 'cartao' ? `NSU ${t.documento}` : t.documento) : '—'}
+                                  </td>
+                                  <td className="px-3 py-2 hidden md:table-cell text-gray-500 dark:text-gray-400 text-[12.5px] max-w-[280px] truncate" title={t.historico || ''}>
+                                    {t.historico || '—'}
+                                  </td>
+                                  <td className={`px-4 py-2 text-right tabular-nums whitespace-nowrap ${t.vencido ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-800 dark:text-gray-200'}`}>{formatCurrency(t.valor)}</td>
+                                </tr>
+                              ))}
+                            </Fragment>
+                          );
+                        })}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {grupos.map((g, i) => (
-                <DateGroup
-                  key={g.data || 'sem-data'}
-                  grupo={g}
-                  expanded={expandedDates.has(g.data || 'sem-data')}
-                  onToggle={() => toggleDate(g.data || 'sem-data')}
-                  delay={Math.min(i * 0.02, 0.2)}
-                  multiEmpresa={false}
-                />
-              ))}
-            </div>
-          )}
+          </div>
         </>
       )}
     </div>
   );
 }
 
-function ResumoCard({ icon: Icon, iconBg, iconColor, label, valor, sub, highlight }) {
+function ResumoCard({ icon: Icon, iconBg, iconColor, label, valor, sub, highlight, danger }) {
   return (
-    <div className={`bg-white rounded-xl border p-5 ${highlight ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white' : 'border-gray-100'}`}>
+    <div className={`bg-white rounded-xl border p-5 ${highlight ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white' : danger ? 'border-red-200' : 'border-gray-100'}`}>
       <div className="flex items-start gap-3">
         <div className={`rounded-lg ${iconBg} p-2.5 flex-shrink-0`}>
           <Icon className={`h-5 w-5 ${iconColor}`} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-          <p className="text-lg font-semibold text-gray-900 tracking-tight truncate">{valor}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>
+          <p className={`text-xs mb-0.5 ${danger ? 'text-red-600' : 'text-gray-500'}`}>{label}</p>
+          <p className={`text-lg font-semibold tracking-tight truncate ${danger ? 'text-red-700' : 'text-gray-900'}`}>{valor}</p>
+          {sub && <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>}
         </div>
       </div>
     </div>
   );
 }
 
-function DateGroup({ grupo, expanded, onToggle, delay, multiEmpresa }) {
-  const { data, itens, total, vencido, proximo, diasAteVenc } = grupo;
-
-  const statusChip = vencido
-    ? { bg: 'bg-red-50', color: 'text-red-700', ring: 'ring-red-200', label: diasAteVenc !== null ? `Vencido ha ${Math.abs(diasAteVenc)}d` : 'Vencido' }
-    : proximo
-    ? { bg: 'bg-amber-50', color: 'text-amber-700', ring: 'ring-amber-200', label: diasAteVenc === 0 ? 'Vence hoje' : `Vence em ${diasAteVenc}d` }
-    : { bg: 'bg-emerald-50', color: 'text-emerald-700', ring: 'ring-emerald-200', label: diasAteVenc !== null ? `Em ${diasAteVenc}d` : '—' };
-
-  const borderColor = vencido ? 'border-red-100' : proximo ? 'border-amber-100' : 'border-gray-100';
-  const barColor = vencido ? 'bg-red-500' : proximo ? 'bg-amber-500' : 'bg-emerald-500';
-
+// ─── Participação por categoria (rosca + legenda clicável) ──────
+function CardParticipacaoCategorias({ dados, onClickCategoria }) {
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  const totalQtd = dados.reduce((s, d) => s + d.qtd, 0);
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
-      className={`bg-white rounded-xl border ${borderColor} overflow-hidden`}
-    >
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/50 transition-colors text-left"
-      >
-        <div className={`h-10 w-1 rounded-full ${barColor} flex-shrink-0`} />
-        <div className="flex-shrink-0 min-w-[90px]">
-          <p className="text-sm font-semibold text-gray-900">{data ? formatDataBR(data) : 'Sem data'}</p>
-          <p className="text-[11px] text-gray-400">{data ? diaSemana(data) : '—'}</p>
+    <div className="bg-white dark:bg-white/[0.02] rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 flex-shrink-0">
+          <PieChartIcon className="h-4 w-4" />
         </div>
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${statusChip.bg} ${statusChip.color} ring-1 ${statusChip.ring} flex-shrink-0`}>
-          {statusChip.label}
-        </span>
-        <div className="flex-1" />
-        <div className="text-right flex-shrink-0">
-          <p className={`text-sm font-semibold ${vencido ? 'text-red-600' : 'text-gray-900'}`}>
-            {formatCurrency(total)}
-          </p>
-          <p className="text-[11px] text-gray-400">
-            {itens.length} {itens.length === 1 ? 'lancamento' : 'lancamentos'}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Participação por categoria</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {totalQtd} {totalQtd === 1 ? 'lançamento' : 'lançamentos'} · {formatCurrency(total)}
           </p>
         </div>
-        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-gray-100 divide-y divide-gray-50 bg-gray-50/30">
-              {itens.map((t, i) => (
-                <LancamentoRow key={`${t.fonte}-${t.documento}-${i}`} t={t} multiEmpresa={multiEmpresa} />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      </div>
+      {dados.length === 0 ? (
+        <div className="px-6 py-10 text-center text-sm text-gray-500">Sem dados</div>
+      ) : (
+        <div className="p-3 grid grid-cols-[1fr_auto] items-center gap-2" style={{ height: 240 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={dados} dataKey="valor" nameKey="label"
+                cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={2}
+                onClick={(d) => onClickCategoria?.(d.key)} style={{ cursor: 'pointer' }}>
+                {dados.map((d, i) => <Cell key={i} fill={d.cor} stroke="white" strokeWidth={2} />)}
+              </Pie>
+              <Tooltip content={<TooltipPie total={total} />} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="flex flex-col gap-1 pr-3 max-w-[180px]">
+            {dados.map(d => {
+              const pct = total > 0 ? (d.valor / total) * 100 : 0;
+              return (
+                <button key={d.key} onClick={() => onClickCategoria?.(d.key)}
+                  className="flex items-center gap-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 rounded px-1.5 py-0.5 transition-colors">
+                  <span className="h-2.5 w-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: d.cor }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-gray-700 dark:text-gray-300 truncate">{d.label}</p>
+                    <p className="text-[10px] text-gray-400 font-mono tabular-nums">{pct.toFixed(1)}% · {formatCurrency(d.valor)}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-function LancamentoRow({ t, multiEmpresa }) {
-  const cfg = FONTE_CFG[t.fonte];
+function TooltipPie({ active, payload, total }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const pct = total > 0 ? (d.valor / total) * 100 : 0;
   return (
-    <div className="flex items-center gap-4 pl-8 pr-5 py-2.5 hover:bg-white transition-colors">
-      <div className={`rounded-md ${cfg.iconBg} p-1.5 flex-shrink-0`}>
-        <cfg.icon className="h-3.5 w-3.5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-          <Users className="h-3 w-3 text-gray-400 flex-shrink-0" />
-          <p className="text-[13px] font-medium text-gray-900 truncate">{t.clienteNome}</p>
-          <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium ${cfg.chipBg} ${cfg.chipColor} ring-1 ${cfg.chipRing} flex-shrink-0`}>
-            {cfg.label}
-          </span>
-          {t.administradoraNome && (
-            <span className="text-[10px] text-blue-700 bg-blue-50 rounded px-1.5 py-0.5 flex-shrink-0">
-              {t.administradoraNome}
-            </span>
-          )}
-          {t.banco && (
-            <span className="text-[10px] text-teal-700 bg-teal-50 rounded px-1.5 py-0.5 flex-shrink-0">
-              {t.banco}
-            </span>
-          )}
-          {t.parcela && <span className="text-[10px] text-gray-400 flex-shrink-0">• parc {t.parcela}</span>}
+    <div className="rounded-lg bg-white border border-gray-200 shadow-md px-3 py-2 text-xs">
+      <p className="font-semibold text-gray-900">{d.label}</p>
+      <p className="text-gray-600 mt-0.5">{formatCurrency(d.valor)} · {d.qtd} {d.qtd === 1 ? 'lançamento' : 'lançamentos'}</p>
+      <p className="text-gray-400 text-[10.5px]">{pct.toFixed(1)}% do total</p>
+    </div>
+  );
+}
+
+// ─── A receber nos próximos 14 dias (barras por dia) ────────────
+function GraficoProximos14Dias({ dados }) {
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  const totalQtd = dados.reduce((s, d) => s + d.qtd, 0);
+  return (
+    <div className="bg-white dark:bg-white/[0.02] rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
+          <BarChart3 className="h-4 w-4" />
         </div>
-        <div className="flex items-center gap-3 text-[11px] text-gray-500 min-w-0">
-          {t.documento && (
-            <span className="inline-flex items-center gap-1 flex-shrink-0">
-              <FileText className="h-3 w-3" />
-              {t.fonte === 'cartao' ? `NSU ${t.documento}` : t.documento}
-            </span>
-          )}
-          {t.emissao && (
-            <span className="flex-shrink-0">Emissão: {formatDataBR(t.emissao)}</span>
-          )}
-          {t.historico && <span className="truncate text-gray-400">{t.historico}</span>}
-        </div>
-        {multiEmpresa && t.empresaNome && (
-          <p className="text-[10px] text-gray-400 truncate flex items-center gap-1 mt-0.5">
-            <Building2 className="h-2.5 w-2.5" /> {t.empresaNome}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">A receber nos próximos 14 dias</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {totalQtd} {totalQtd === 1 ? 'lançamento' : 'lançamentos'} · {formatCurrency(total)}
           </p>
-        )}
+        </div>
       </div>
-      <p className="text-[13px] font-semibold text-gray-900 flex-shrink-0">
-        {formatCurrency(t.valor)}
-      </p>
+      {totalQtd === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <Calendar className="h-7 w-7 text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Nenhum recebimento nos próximos 14 dias</p>
+        </div>
+      ) : (
+        <div className="p-3" style={{ height: 240 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={dados} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval={0} />
+              <YAxis tick={{ fontSize: 10.5, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={fmtCompacto} />
+              <Tooltip content={<TooltipDia />} cursor={{ fill: 'rgba(16, 185, 129, 0.06)' }} />
+              <Bar dataKey="valor" radius={[6, 6, 0, 0]}>
+                {dados.map((d, i) => <Cell key={i} fill={d.ehFimSemana ? '#cbd5e1' : '#10b981'} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TooltipDia({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="rounded-lg bg-white border border-gray-200 shadow-md px-3 py-2 text-xs">
+      <p className="font-semibold text-gray-900">{d.diaSemana}, {d.label}</p>
+      <p className="text-gray-600 mt-0.5">{formatCurrency(d.valor)}</p>
+      <p className="text-gray-400 text-[10.5px]">{d.qtd} {d.qtd === 1 ? 'lançamento' : 'lançamentos'}</p>
+    </div>
+  );
+}
+
+// ─── Top 5 clientes vencidos (barra de progresso) ───────────────
+function CardTopClientes({ titulo, clientes, cor, icone, corBgIcone, corTextIcone, onClickCliente }) {
+  const Icone = icone;
+  const total = clientes.reduce((s, c) => s + c.valor, 0);
+  const totalQtd = clientes.reduce((s, c) => s + c.qtd, 0);
+  const maior = clientes[0]?.valor || 1;
+  return (
+    <div className="bg-white dark:bg-white/[0.02] rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-2">
+        <div className={`h-8 w-8 rounded-lg ${corBgIcone} flex items-center justify-center ${corTextIcone} flex-shrink-0`}>
+          <Icone className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{titulo}</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {totalQtd} {totalQtd === 1 ? 'lançamento' : 'lançamentos'} · {formatCurrency(total)}
+          </p>
+        </div>
+      </div>
+      {clientes.length === 0 ? (
+        <div className="px-6 py-10 text-center">
+          <CheckCircle2 className="h-7 w-7 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Nenhum lançamento vencido</p>
+        </div>
+      ) : (
+        <div className="px-3 py-2 divide-y divide-gray-50 dark:divide-white/5">
+          {clientes.map((c, i) => {
+            const pct = maior > 0 ? (c.valor / maior) * 100 : 0;
+            return (
+              <button key={c.nome} onClick={() => onClickCliente?.(c.nome)}
+                className="w-full text-left py-2 px-2 hover:bg-gray-50/60 dark:hover:bg-white/5 rounded-lg transition-colors">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-gray-100 dark:bg-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300 flex-shrink-0">{i + 1}</span>
+                  <p className="text-[12.5px] font-medium text-gray-800 dark:text-gray-200 truncate flex-1" title={c.nome}>{c.nome}</p>
+                  <p className="text-[12px] font-mono tabular-nums font-semibold text-gray-900 dark:text-gray-100 flex-shrink-0">{formatCurrency(c.valor)}</p>
+                </div>
+                <div className="flex items-center gap-2 pl-7">
+                  <div className="flex-1 h-1.5 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: cor }} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-mono tabular-nums flex-shrink-0">{c.qtd} {c.qtd === 1 ? 'lanç.' : 'lanç.'}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Cartões vencidos por administradora ────────────────────────
+function TabelaCartoesPorAdministradora({ contas, onClickConta }) {
+  const total = contas.reduce((s, c) => s + c.valor, 0);
+  const totalQtd = contas.reduce((s, c) => s + c.qtd, 0);
+  const maior = contas[0]?.valor || 1;
+  const corCartoes = CORES_FONTE.cartao;
+  return (
+    <div className="bg-white dark:bg-white/[0.02] rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden mb-4">
+      <div className="px-4 sm:px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 flex-shrink-0">
+          <CreditCard className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Cartões vencidos por administradora</h3>
+          <p className="text-[10.5px] text-gray-400">
+            {contas.length} {contas.length === 1 ? 'administradora' : 'administradoras'} · {totalQtd} {totalQtd === 1 ? 'recebível' : 'recebíveis'} · {formatCurrency(total)}
+          </p>
+        </div>
+      </div>
+
+      {/* Mobile: cards */}
+      <ul className="md:hidden divide-y divide-gray-100 dark:divide-white/5">
+        {contas.map((c) => {
+          const pct = total > 0 ? (c.valor / total) * 100 : 0;
+          const pctRel = maior > 0 ? (c.valor / maior) * 100 : 0;
+          return (
+            <li key={c.nome}>
+              <button onClick={() => onClickConta?.(c)}
+                className="w-full text-left px-4 py-3 hover:bg-sky-50/30 active:bg-sky-50/50 transition-colors min-h-[64px]">
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium text-gray-900 dark:text-gray-100 truncate" title={c.nome}>{c.nome}</p>
+                    <p className="text-[10.5px] text-gray-400 font-mono">{c.qtd} {c.qtd === 1 ? 'recebível' : 'recebíveis'}</p>
+                  </div>
+                  <p className="text-[14px] font-bold text-gray-900 dark:text-gray-100 font-mono tabular-nums flex-shrink-0">{formatCurrency(c.valor)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pctRel}%`, backgroundColor: corCartoes }} />
+                  </div>
+                  <span className="text-[10.5px] text-gray-500 font-mono tabular-nums w-12 text-right">{pct.toFixed(1)}%</span>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Desktop: tabela */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200 dark:border-white/10">
+              <th className="px-4 py-2 bg-gray-100 dark:bg-white/5">Administradora</th>
+              <th className="px-3 py-2 bg-gray-100 dark:bg-white/5">Participação</th>
+              <th className="px-3 py-2 text-right w-20 bg-gray-100 dark:bg-white/5">Recebíveis</th>
+              <th className="px-3 py-2 text-right w-32 bg-gray-100 dark:bg-white/5">Valor vencido</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+            {contas.map((c) => {
+              const pct = total > 0 ? (c.valor / total) * 100 : 0;
+              const pctRel = maior > 0 ? (c.valor / maior) * 100 : 0;
+              return (
+                <tr key={c.nome} onClick={() => onClickConta?.(c)}
+                  className="hover:bg-sky-50/30 dark:hover:bg-white/5 cursor-pointer transition-colors">
+                  <td className="px-4 py-2">
+                    <p className="text-[12.5px] font-medium text-gray-900 dark:text-gray-100 truncate max-w-[420px]" title={c.nome}>{c.nome}</p>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden min-w-[80px]">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pctRel}%`, backgroundColor: corCartoes }} />
+                      </div>
+                      <span className="text-[10.5px] text-gray-500 font-mono tabular-nums w-12 text-right">{pct.toFixed(1)}%</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-700 dark:text-gray-300">{c.qtd}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(c.valor)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-gray-50/80 dark:bg-white/5 border-t-2 border-gray-200 dark:border-white/10">
+            <tr className="font-semibold">
+              <td className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">Total</td>
+              <td className="px-3 py-2"></td>
+              <td className="px-3 py-2 text-right font-mono tabular-nums text-[11px] text-gray-700 dark:text-gray-300">{totalQtd}</td>
+              <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900 dark:text-gray-100">{formatCurrency(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }
