@@ -565,9 +565,10 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
   const produtos = useMemo(() => agregarProdutosCombustivel(arvore), [arvore]);
 
   // Diário (sub-abas dia/tipo/semana) buscado SOB DEMANDA, só da categoria
-  // combustível — não vem mais no fetch principal.
+  // combustível — não vem mais no fetch principal. Mapa filtrado à categoria
+  // (payload pequeno).
   const { produtoCodigos, categorias } = useMemo(
-    () => montarMapaProdutoCategoria(produtosMap, gruposMap), [produtosMap, gruposMap]);
+    () => montarMapaProdutoCategoria(produtosMap, gruposMap, 'combustivel'), [produtosMap, gruposMap]);
   const precisaDia = subAba === 'dia' || subAba === 'tipo' || subAba === 'semana';
   const [diaRows, setDiaRows] = useState([]);
   const [loadingDia, setLoadingDia] = useState(false);
@@ -744,8 +745,9 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
   const grupos = useMemo(() => agregarGruposDaCategoria(arvore, categoriaKey), [arvore, categoriaKey]);
 
   // Diário (sub-abas dia/grupo) buscado SOB DEMANDA, só desta categoria.
+  // Mapa filtrado à categoria (payload pequeno).
   const { produtoCodigos, categorias } = useMemo(
-    () => montarMapaProdutoCategoria(produtosMap, gruposMap), [produtosMap, gruposMap]);
+    () => montarMapaProdutoCategoria(produtosMap, gruposMap, categoriaKey), [produtosMap, gruposMap, categoriaKey]);
   const precisaDia = subAba === 'dia' || subAba === 'grupo';
   const [diaRows, setDiaRows] = useState([]);
   const [loadingDia, setLoadingDia] = useState(false);

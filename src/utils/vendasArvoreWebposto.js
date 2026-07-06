@@ -1309,13 +1309,18 @@ function classificarCategoria(item, produtosMap, gruposMap) {
 // classificacao (classificarCategoria: outros->automotivos) que as trees
 // diarias e o sparkline usam — garante que o filtro server-side (RPCs que
 // recebem o mapa) bata exatamente com a classificacao do cliente.
-export function montarMapaProdutoCategoria(produtosMap, gruposMap) {
+// `categoriaFiltro` (opcional): quando informado, devolve só os produtos
+// daquela categoria — usado pelo diário pra enviar um mapa pequeno (ex.: só
+// combustíveis) em vez de todos os produtos da rede.
+export function montarMapaProdutoCategoria(produtosMap, gruposMap, categoriaFiltro = null) {
   const produtoCodigos = [];
   const categorias = [];
   if (!produtosMap) return { produtoCodigos, categorias };
   for (const codigo of produtosMap.keys()) {
+    const cat = classificarCategoria({ produtoCodigo: Number(codigo) }, produtosMap, gruposMap);
+    if (categoriaFiltro && cat !== categoriaFiltro) continue;
     produtoCodigos.push(Number(codigo));
-    categorias.push(classificarCategoria({ produtoCodigo: Number(codigo) }, produtosMap, gruposMap));
+    categorias.push(cat);
   }
   return { produtoCodigos, categorias };
 }
