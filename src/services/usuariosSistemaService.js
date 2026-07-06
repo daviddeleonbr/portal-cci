@@ -56,6 +56,7 @@ export const PERMISSOES_CLIENTE = [
   { key: 'suporte', label: 'Suporte', grupo: 'Atendimento' },
   { key: 'trocar_empresa', label: 'Alternar entre empresas da rede', grupo: 'Administração da Rede' },
   { key: 'gerenciar_usuarios', label: 'Gerenciar usuários da rede', grupo: 'Administração da Rede' },
+  { key: 'configuracoes', label: 'Configurações de rede', grupo: 'Administração da Rede' },
 ];
 
 export function permissoesPorTipo(tipo) {

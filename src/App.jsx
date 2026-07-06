@@ -238,7 +238,7 @@ export default function App() {
           <Route path="/cliente/webposto/comercial/operacao" element={<RequirePermissaoCliente permissao="comercial_operacao"><WpComercialOperacao /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial/produtividade" element={<RequirePermissaoCliente permissao="comercial_produtividade"><WpComercialProdutividade /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial/estoques" element={<RequirePermissaoCliente permissao="comercial_estoques"><WpEstoques /></RequirePermissaoCliente>} />
-          <Route path="/cliente/webposto/configuracoes" element={<WpConfiguracoes />} />
+          <Route path="/cliente/webposto/configuracoes" element={<RequirePermissaoCliente permissao="configuracoes"><WpConfiguracoes /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/relatorios-bi" element={<RequirePermissaoCliente permissao="relatorios_bi"><ClienteRelatoriosBi /></RequirePermissaoCliente>} />
 
           {/* Cliente Autosystem */}
@@ -261,7 +261,7 @@ export default function App() {
           <Route path="/cliente/autosystem/comercial/produtividade" element={<RequirePermissaoCliente permissao="comercial_produtividade"><AsComercialProdutividade /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/comercial/estoques" element={<RequirePermissaoCliente permissao="comercial_estoques"><AsEstoques /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/relatorios-bi" element={<RequirePermissaoCliente permissao="relatorios_bi"><ClienteRelatoriosBi /></RequirePermissaoCliente>} />
-          <Route path="/cliente/autosystem/configuracoes" element={<AsConfiguracoes />} />
+          <Route path="/cliente/autosystem/configuracoes" element={<RequirePermissaoCliente permissao="configuracoes"><AsConfiguracoes /></RequirePermissaoCliente>} />
         </Route>
 
         {/* Legacy redirects: /cliente/X → /cliente/webposto/X (URL antiga) */}

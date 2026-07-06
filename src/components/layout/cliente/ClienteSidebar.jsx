@@ -71,7 +71,7 @@ function buildNavigation(prefix, tipoCliente = 'webposto') {
       section: 'Administração da Rede',
       items: [
         { name: 'Usuários da Rede', href: `${prefix}/usuarios`, icon: UserCog, permissao: 'gerenciar_usuarios' },
-        { name: 'Configurações', href: `${prefix}/configuracoes`, icon: Settings },
+        { name: 'Configurações', href: `${prefix}/configuracoes`, icon: Settings, permissao: 'configuracoes' },
       ],
     },
   ];
