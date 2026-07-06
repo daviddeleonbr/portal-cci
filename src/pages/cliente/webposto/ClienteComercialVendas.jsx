@@ -20,7 +20,8 @@ import {
   construirArvoreWebpostoAgregado,
   buscarVendasComercialWebposto,
   construirArvoreDiaProdutoAgregado, construirArvoreDiaGrupoAgregado,
-  buscarDiaProdutoCategoriaWebposto, montarMapaProdutoCategoria,
+  buscarDiaProdutoCategoriaWebposto, buscarDiaTotaisCategoriaWebposto,
+  montarDiasBaseTotais, montarMapaProdutoCategoria,
   inverterArvoreParaProdutoDia, inverterArvoreParaGrupoDia,
   agregarHeatmapSemanal, calcularPareto, agregarAnaliseMargem,
   construirSerieEvolucaoCombustivel, listarProdutosCombustivelDaSerie,
@@ -569,11 +570,14 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
   // (payload pequeno).
   const { produtoCodigos, categorias } = useMemo(
     () => montarMapaProdutoCategoria(produtosMap, gruposMap, 'combustivel'), [produtosMap, gruposMap]);
-  const precisaDia = subAba === 'dia' || subAba === 'tipo' || subAba === 'semana';
+  // "tipo"/"semana" ainda precisam do detalhe COMPLETO do período (invertem por
+  // produto / montam heatmap). "dia" virou LAZY (mais abaixo): nível 1 = totais
+  // por dia; o detalhe de cada dia é buscado só ao expandir.
+  const precisaFull = subAba === 'tipo' || subAba === 'semana';
   const [diaRows, setDiaRows] = useState([]);
   const [loadingDia, setLoadingDia] = useState(false);
   useEffect(() => {
-    if (!precisaDia || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
+    if (!precisaFull || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
     let cancelado = false;
     (async () => {
       setLoadingDia(true);
@@ -590,7 +594,7 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
       }
     })();
     return () => { cancelado = true; };
-  }, [precisaDia, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [precisaFull, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const arvoreDia = useMemo(
     () => construirArvoreDiaProdutoAgregado({
@@ -601,10 +605,74 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
   );
   const arvoreProdutoDia = useMemo(() => inverterArvoreParaProdutoDia(arvoreDia), [arvoreDia]);
   const heatmap = useMemo(() => agregarHeatmapSemanal(arvoreDia), [arvoreDia]);
+
+  // ── Lazy "Realizado dia a dia" ──
+  // Nível 1: só os totais por dia (rápido). Nível 2 (produtos do dia) buscado ao expandir.
+  const [diasTotais, setDiasTotais] = useState([]);
+  const [loadingDiasTotais, setLoadingDiasTotais] = useState(false);
+  const [detalheDia, setDetalheDia] = useState(() => new Map());     // dia → produtos[]
+  const [carregandoDias, setCarregandoDias] = useState(() => new Set());
   const [expandidos, setExpandidos] = useState(new Set());
   const [expandidosProd, setExpandidosProd] = useState(new Set());
-  const toggle = (k) => setExpandidos(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next; });
   const toggleProd = (k) => setExpandidosProd(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next; });
+
+  // Muda o período/empresa/produtos → invalida os detalhes já buscados e colapsa.
+  useEffect(() => {
+    setDetalheDia(new Map());
+    setExpandidos(new Set());
+  }, [chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Nível 1: busca os totais por dia ao entrar na sub-aba "dia".
+  useEffect(() => {
+    if (subAba !== 'dia' || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
+    let cancelado = false;
+    (async () => {
+      setLoadingDiasTotais(true);
+      try {
+        const rows = await buscarDiaTotaisCategoriaWebposto({
+          chaveApiId, empresasCodigos, dataDe, dataAte,
+          produtoCodigos, categorias, categoria: 'combustivel',
+        });
+        if (!cancelado) setDiasTotais(rows);
+      } catch (err) {
+        if (!cancelado) { console.error('[dia totais combustivel]', err); setDiasTotais([]); }
+      } finally {
+        if (!cancelado) setLoadingDiasTotais(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [subAba, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arvoreDiaLazy = useMemo(
+    () => montarDiasBaseTotais(diasTotais).map(d => ({ ...d, produtos: detalheDia.get(d.dia) || [] })),
+    [diasTotais, detalheDia],
+  );
+
+  const carregarDetalheDia = useCallback(async (dia) => {
+    setCarregandoDias(prev => { const n = new Set(prev); n.add(dia); return n; });
+    try {
+      const rows = await buscarDiaProdutoCategoriaWebposto({
+        chaveApiId, empresasCodigos, dataDe: dia, dataAte: dia,
+        produtoCodigos, categorias, categoria: 'combustivel',
+      });
+      const arv = construirArvoreDiaProdutoAgregado({ diaProduto: rows, produtosMap, gruposMap, categoriaKey: 'combustivel' });
+      setDetalheDia(prev => { const n = new Map(prev); n.set(dia, arv[0]?.produtos || []); return n; });
+    } catch (err) {
+      console.error('[detalhe dia combustivel]', dia, err);
+      setDetalheDia(prev => { const n = new Map(prev); n.set(dia, []); return n; });
+    } finally {
+      setCarregandoDias(prev => { const n = new Set(prev); n.delete(dia); return n; });
+    }
+  }, [chaveApiId, empresasCodigos.join(','), produtoCodigos.length, produtosMap, gruposMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (k) => {
+    const abrindo = !expandidos.has(k);
+    setExpandidos(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next; });
+    if (abrindo && k.startsWith('dia:')) {
+      const dia = k.slice(4);
+      if (!detalheDia.has(dia) && !carregandoDias.has(dia)) carregarDetalheDia(dia);
+    }
+  };
 
   // Sub-aba "Últimos 12 meses": busca evolução mensal por produto.
   const [evolucao12mRows, setEvolucao12mRows] = useState([]);
@@ -692,10 +760,10 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
             );
           })}
         </div>
-        {subAba === 'dia'    && (loadingDia
+        {subAba === 'dia'    && (loadingDiasTotais
           ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>
-          : arvoreDia.length > 0
-          ? <TreeRealizadoDia arvore={arvoreDia} expandidos={expandidos} onToggle={toggle} />
+          : arvoreDiaLazy.length > 0
+          ? <TreeRealizadoDia arvore={arvoreDiaLazy} expandidos={expandidos} onToggle={toggle} carregandoDias={carregandoDias} />
           : <p className="p-8 text-center text-sm text-gray-400">Sem dados no período.</p>)}
         {subAba === 'tipo'   && (loadingDia
           ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>
@@ -749,11 +817,14 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
   // Mapa filtrado à categoria (payload pequeno).
   const { produtoCodigos, categorias } = useMemo(
     () => montarMapaProdutoCategoria(produtosMap, gruposMap, categoriaKey), [produtosMap, gruposMap, categoriaKey]);
-  const precisaDia = subAba === 'dia' || subAba === 'grupo';
+  // "grupo" ainda precisa do detalhe COMPLETO do período (inverte grupo→dia).
+  // "dia" virou LAZY (mais abaixo): nível 1 = totais por dia; grupos/produtos de
+  // cada dia buscados só ao expandir.
+  const precisaFull = subAba === 'grupo';
   const [diaRows, setDiaRows] = useState([]);
   const [loadingDia, setLoadingDia] = useState(false);
   useEffect(() => {
-    if (!precisaDia || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
+    if (!precisaFull || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
     let cancelado = false;
     (async () => {
       setLoadingDia(true);
@@ -770,7 +841,7 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
       }
     })();
     return () => { cancelado = true; };
-  }, [precisaDia, categoriaKey, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [precisaFull, categoriaKey, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const arvoreDia = useMemo(
     () => construirArvoreDiaGrupoAgregado({
@@ -780,10 +851,75 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
     [diaRows, produtosMap, gruposMap, categoriaKey],
   );
   const arvoreGrupoDia = useMemo(() => inverterArvoreParaGrupoDia(arvoreDia), [arvoreDia]);
+
+  // ── Lazy "Realizado dia a dia" ──
+  // Nível 1: totais por dia (rápido). Nível 2 (grupo→produto do dia) ao expandir.
+  const [diasTotais, setDiasTotais] = useState([]);
+  const [loadingDiasTotais, setLoadingDiasTotais] = useState(false);
+  const [detalheDia, setDetalheDia] = useState(() => new Map());     // dia → grupos[]
+  const [carregandoDias, setCarregandoDias] = useState(() => new Set());
   const [expandidos, setExpandidos] = useState(new Set());
   const [expandidosGrupo, setExpandidosGrupo] = useState(new Set());
-  const toggle = (k) => setExpandidos(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next; });
   const toggleGrupo = (k) => setExpandidosGrupo(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next; });
+
+  // Muda período/empresa/produtos/categoria → invalida detalhes já buscados e colapsa.
+  useEffect(() => {
+    setDetalheDia(new Map());
+    setExpandidos(new Set());
+  }, [categoriaKey, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Nível 1: busca os totais por dia ao entrar na sub-aba "dia".
+  useEffect(() => {
+    if (subAba !== 'dia' || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
+    let cancelado = false;
+    (async () => {
+      setLoadingDiasTotais(true);
+      try {
+        const rows = await buscarDiaTotaisCategoriaWebposto({
+          chaveApiId, empresasCodigos, dataDe, dataAte,
+          produtoCodigos, categorias, categoria: categoriaKey,
+        });
+        if (!cancelado) setDiasTotais(rows);
+      } catch (err) {
+        if (!cancelado) { console.error('[dia totais', categoriaKey, ']', err); setDiasTotais([]); }
+      } finally {
+        if (!cancelado) setLoadingDiasTotais(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [subAba, categoriaKey, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arvoreDiaLazy = useMemo(
+    () => montarDiasBaseTotais(diasTotais).map(d => ({ ...d, grupos: detalheDia.get(d.dia) || [] })),
+    [diasTotais, detalheDia],
+  );
+
+  const carregarDetalheDia = useCallback(async (dia) => {
+    setCarregandoDias(prev => { const n = new Set(prev); n.add(dia); return n; });
+    try {
+      const rows = await buscarDiaProdutoCategoriaWebposto({
+        chaveApiId, empresasCodigos, dataDe: dia, dataAte: dia,
+        produtoCodigos, categorias, categoria: categoriaKey,
+      });
+      const arv = construirArvoreDiaGrupoAgregado({ diaProduto: rows, produtosMap, gruposMap, categoriaKey });
+      setDetalheDia(prev => { const n = new Map(prev); n.set(dia, arv[0]?.grupos || []); return n; });
+    } catch (err) {
+      console.error('[detalhe dia', categoriaKey, ']', dia, err);
+      setDetalheDia(prev => { const n = new Map(prev); n.set(dia, []); return n; });
+    } finally {
+      setCarregandoDias(prev => { const n = new Set(prev); n.delete(dia); return n; });
+    }
+  }, [chaveApiId, empresasCodigos.join(','), produtoCodigos.length, categoriaKey, produtosMap, gruposMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (k) => {
+    const abrindo = !expandidos.has(k);
+    setExpandidos(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next; });
+    // TreeRealizadoAutoDia usa a chave de dia no formato "aD:YYYY-MM-DD".
+    if (abrindo && k.startsWith('aD:')) {
+      const dia = k.slice(3);
+      if (!detalheDia.has(dia) && !carregandoDias.has(dia)) carregarDetalheDia(dia);
+    }
+  };
 
   // Pareto
   const [paretoMeta, setParetoMeta] = useState(80);
@@ -946,10 +1082,10 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
             );
           })}
         </div>
-        {subAba === 'dia'   && (loadingDia
+        {subAba === 'dia'   && (loadingDiasTotais
           ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>
-          : arvoreDia.length > 0
-          ? <TreeRealizadoAutoDia arvore={arvoreDia} expandidos={expandidos} onToggle={toggle} cor={cor} />
+          : arvoreDiaLazy.length > 0
+          ? <TreeRealizadoAutoDia arvore={arvoreDiaLazy} expandidos={expandidos} onToggle={toggle} cor={cor} carregandoDias={carregandoDias} />
           : <p className="p-8 text-center text-sm text-gray-400">Sem dados no período.</p>)}
         {subAba === 'grupo' && (loadingDia
           ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>

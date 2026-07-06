@@ -807,7 +807,7 @@ function CelulaNumero({ valor, moeda = true, decimais = 0, sufixo = '', sub, neg
 
 // ─── TreeRealizadoDia (Combustíveis) ─────────────────────────
 
-export function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
+export function TreeRealizadoDia({ arvore, expandidos, onToggle, carregandoDias }) {
   const [linhaSelecionada, setLinhaSelecionada] = useState(null);
   const toggleLinha = (k) => setLinhaSelecionada(prev => prev === k ? null : k);
   function calcAux(s) {
@@ -859,7 +859,7 @@ export function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
                     <div className="flex items-center gap-2">
                       {aberto ? <ChevronDown className="h-3.5 w-3.5 text-amber-600" /> : <ChevronRight className="h-3.5 w-3.5 text-amber-600" />}
                       <span className="text-[13px] font-semibold text-gray-900">{formatDataBR(dNode.dia)}</span>
-                      <span className="text-[10px] text-gray-400">· {dNode.produtos.length} prod.</span>
+                      {dNode.produtos.length > 0 && <span className="text-[10px] text-gray-400">· {dNode.produtos.length} prod.</span>}
                     </div>
                   </td>
                   <td className="px-2.5 py-2.5 text-center text-[11px] font-medium text-gray-600 border-l-2 border-gray-300">
@@ -875,7 +875,14 @@ export function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
                   <CelulaNumero valor={aux.custoMed} divisor="leve" />
                   <CelulaNumero valor={aux.lucroL} divisor="leve" />
                 </tr>
-                {aberto && (() => {
+                {aberto && dNode.produtos.length === 0 && (
+                  <tr className="bg-white">
+                    <td colSpan={11} className="pl-10 pr-3 py-2.5 text-[11.5px] text-gray-400">
+                      {carregandoDias?.has(dNode.dia) ? 'Carregando produtos do dia…' : 'Sem produtos neste dia.'}
+                    </td>
+                  </tr>
+                )}
+                {aberto && dNode.produtos.length > 0 && (() => {
                   const maxP = maxProdutos(dNode.produtos);
                   return dNode.produtos.map((p, idx) => {
                     const auxP = calcAux({ qtd: p.qtd, valor: p.valor, custo: p.custo });
@@ -917,7 +924,7 @@ export function TreeRealizadoDia({ arvore, expandidos, onToggle }) {
 
 // ─── TreeRealizadoAutoDia (Automotivos / Conveniência) ───────
 
-export function TreeRealizadoAutoDia({ arvore, expandidos, onToggle, cor = 'blue' }) {
+export function TreeRealizadoAutoDia({ arvore, expandidos, onToggle, cor = 'blue', carregandoDias }) {
   const Pal = TREE_PALETAS_CATEGORIA[cor];
   const [linhaSelecionada, setLinhaSelecionada] = useState(null);
   const toggleLinha = (k) => setLinhaSelecionada(prev => prev === k ? null : k);
@@ -989,6 +996,13 @@ export function TreeRealizadoAutoDia({ arvore, expandidos, onToggle, cor = 'blue
                   </td>
                   <LinhaStats s={dNode.stats} />
                 </tr>
+                {dAberto && dNode.grupos.length === 0 && (
+                  <tr className="bg-white">
+                    <td colSpan={9} className="pl-10 pr-3 py-2.5 text-[11.5px] text-gray-400">
+                      {carregandoDias?.has(dNode.dia) ? 'Carregando grupos do dia…' : 'Sem dados neste dia.'}
+                    </td>
+                  </tr>
+                )}
                 {dAberto && dNode.grupos.map(gNode => {
                   const gKey = `${dKey}/g:${gNode.codigo ?? 'none'}`;
                   const gAberto = expandidos.has(gKey);

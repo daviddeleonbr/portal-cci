@@ -547,6 +547,28 @@ export async function buscarDiaProdutoCategoriaWebposto({
   return Array.isArray(data) ? data : [];
 }
 
+// Lazy do "Realizado dia a dia": traz SÓ os totais por dia da categoria (nível 1
+// da tree). ~30 linhas, rápido. O detalhe de cada dia (produtos) é buscado sob
+// demanda ao expandir, via buscarDiaProdutoCategoriaWebposto com dataDe=dataAte.
+export async function buscarDiaTotaisCategoriaWebposto({
+  chaveApiId, empresasCodigos, dataDe, dataAte, produtoCodigos, categorias, categoria,
+}) {
+  if (!chaveApiId || !empresasCodigos?.length || !dataDe || !dataAte || !produtoCodigos?.length || !categoria) {
+    return [];
+  }
+  const { data, error } = await supabase.rpc('cci_webposto_dia_totais_categoria', {
+    p_chave_api_id:     chaveApiId,
+    p_empresas_codigos: empresasCodigos.map(Number),
+    p_data_de:          dataDe,
+    p_data_ate:         dataAte,
+    p_produto_codigos:  produtoCodigos,
+    p_categorias:       categorias,
+    p_categoria:        categoria,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
 // Fallback: agrega vendas + items vindos da Quality API em rows no MESMO
 // shape que a RPC `cci_webposto_vendas_comercial` devolveria (campos
 // `empresa_codigo, produto_codigo, qtd_atual, fat_atual, custo_atual,
@@ -801,6 +823,25 @@ export function construirArvoreDiaGrupoAgregado({ diaProduto, produtosMap, grupo
         .map(g => ({ ...g, produtos: Array.from(g.produtos.values()).sort((a, b) => b.valor - a.valor) }))
         .sort((a, b) => b.stats.valor - a.stats.valor),
     }))
+    .sort((a, b) => a.dia.localeCompare(b.dia));
+}
+
+// Nível 1 do lazy "Realizado dia a dia": converte os totais por dia
+// (buscarDiaTotaisCategoriaWebposto) em nós de dia ordenados, com stats prontos.
+// Os filhos (produtos/grupos) ficam vazios até o dia ser expandido.
+export function montarDiasBaseTotais(diasTotais) {
+  return (diasTotais || [])
+    .map(r => ({
+      dia: String(r.data).slice(0, 10),
+      stats: {
+        qtd:    Number(r.quantidade)      || 0,
+        valor:  Number(r.total_venda)     || 0,
+        custo:  Number(r.total_custo)     || 0,
+        acresc: Number(r.total_acrescimo) || 0,
+        desc:   Number(r.total_desconto)  || 0,
+      },
+    }))
+    .filter(d => d.dia)
     .sort((a, b) => a.dia.localeCompare(b.dia));
 }
 
