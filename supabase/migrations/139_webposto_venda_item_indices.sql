@@ -18,6 +18,11 @@
 --   CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_webposto_venda_cancelada_s ...
 -- e entao o `db push` vira no-op (IF NOT EXISTS).
 
+-- Sem limite de tempo durante o build (o SQL Editor estoura por causa do
+-- gateway; via `db push` a conexao e direta e isto garante que o statement
+-- nao seja cortado numa tabela grande).
+SET statement_timeout = 0;
+
 CREATE INDEX IF NOT EXISTS idx_webposto_venda_item_resumo
   ON cci_webposto_venda_item (chave_api_id, empresa_codigo, data)
   INCLUDE (venda_codigo, produto_codigo, quantidade, total_venda, total_custo, total_acrescimo, total_desconto);
