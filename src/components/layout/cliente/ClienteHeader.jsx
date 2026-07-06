@@ -1,13 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, Moon, Sun, Building2 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import NotificacoesBell from '../../ui/NotificacoesBell';
 import { useTheme } from '../../../hooks/useTheme';
 
 export default function ClienteHeader({ onMenuClick }) {
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userRef = useRef(null);
   const session = useClienteSession();
   const cliente = session?.cliente;
   const clientesRede = session?.clientesRede || [];
@@ -17,16 +13,6 @@ export default function ClienteHeader({ onMenuClick }) {
   const escuro = tema === 'dark';
   const nomeCliente = cliente?.nome || 'Cliente';
   const cnpjCliente = cliente?.cnpj || '';
-  const regimeCliente = cliente?.regime_tributario || '';
-  const initials = nomeCliente.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (userRef.current && !userRef.current.contains(e.target)) setUserMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-md px-3 sm:px-6">
@@ -76,40 +62,6 @@ export default function ClienteHeader({ onMenuClick }) {
         </button>
 
         <NotificacoesBell usuarioId={usuario?.id} tema="cliente" />
-
-        {/* User menu */}
-        <div ref={userRef} className="relative">
-          <button
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-sm font-semibold shadow-sm hover:shadow-md transition-shadow"
-          >
-            {initials}
-          </button>
-
-          <AnimatePresence>
-            {userMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.12 }}
-                className="absolute right-0 top-full mt-2 w-64 bg-white rounded border border-gray-200/70 shadow-lg z-50 overflow-hidden"
-              >
-                <div className="px-4 py-3">
-                  <p className="text-sm font-semibold text-gray-900">{nomeCliente}</p>
-                  <p className="text-xs text-gray-500 truncate">{cnpjCliente}</p>
-                  {regimeCliente && (
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <span className="text-[10px] rounded px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-100">
-                        {regimeCliente}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
       </div>
     </header>
   );
