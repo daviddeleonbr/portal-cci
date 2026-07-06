@@ -10,7 +10,6 @@ import {
   LineChart as LineChartIcon,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
-import BarraProgressoTopo from '../../../components/ui/BarraProgressoTopo';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
@@ -47,8 +46,6 @@ import EmpresaMultiSelect from '../../../components/vendas/EmpresaMultiSelect';
 import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
 import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
 import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
-import BannerCarregando from '../../../components/vendas/BannerCarregando';
-import BarraProgressoFetch from '../../../components/ui/BarraProgressoFetch';
 import { lerCache as lerCacheV2, salvarCache as salvarCacheV2 } from '../../../services/webpostoCacheV3';
 import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
 import { useAtualizarDados } from '../../../hooks/useAtualizarDados';
@@ -115,10 +112,7 @@ export default function ClienteComercialVendas() {
   );
 
   const [loadingDados, setLoadingDados] = useState(false);
-  const [bgRefresh, setBgRefresh]       = useState(false);
   const [erro, setErro]                 = useState(null);
-  // Progresso do fetch
-  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
   // Cache v3 — chave determinística (pagina + chaveApiId)
   const chaveApiIdAtiva = empresasDisponiveis[0]?.chave_api_id || null;
   const cacheInicialVendas = useMemo(() => {
@@ -198,7 +192,6 @@ export default function ClienteComercialVendas() {
         setProdutosMap(cached.produtosMap);
         setGruposMap(cached.gruposMap);
         setLoadingDados(false);
-        setBgRefresh(false);
         setErro(null);
         return; // cache hit memória — sem fetch
       }
@@ -209,16 +202,12 @@ export default function ClienteComercialVendas() {
         if (persisted.produtosMap instanceof Map) setProdutosMap(persisted.produtosMap);
         if (persisted.gruposMap   instanceof Map) setGruposMap(persisted.gruposMap);
         setLoadingDados(false);
-        setBgRefresh(false);
         setErro(null);
         return; // cache hit localStorage — sem fetch
       }
     }
     if (!silencioso) setLoadingDados(true);
     setErro(null);
-    // 3 etapas: catálogos (produtos+grupos) + RPC unificada
-    if (!silencioso) setProgresso({ feitos: 0, total: 3 });
-    const tick = () => { if (!silencioso) setProgresso(p => ({ ...p, feitos: p.feitos + 1 })); };
 
     try {
       const precisaCatalogos = produtosMap.size === 0 || gruposMap.size === 0;
@@ -244,14 +233,14 @@ export default function ClienteComercialVendas() {
 
       // 3 fetches paralelos: catálogos (se precisa) + 1 RPC unificada
       const [prods, grps, agregado] = await Promise.all([
-        (precisaCatalogos ? qualityApi.buscarProdutos(apiKeyCatalogo).catch(() => []) : Promise.resolve(null)).finally(tick),
-        (precisaCatalogos ? qualityApi.buscarGrupos(apiKeyCatalogo).catch(() => [])   : Promise.resolve(null)).finally(tick),
+        (precisaCatalogos ? qualityApi.buscarProdutos(apiKeyCatalogo).catch(() => []) : Promise.resolve(null)),
+        (precisaCatalogos ? qualityApi.buscarGrupos(apiKeyCatalogo).catch(() => [])   : Promise.resolve(null)),
         buscarVendasComercialWebposto({
           chaveApiId: chaveApiIdRede,
           empresasCodigos,
           dataDe:  atualDe,
           dataAte: atualAte,
-        }).finally(tick),
+        }),
       ]);
 
       let pMap = produtosMap, gMap = gruposMap;
@@ -289,7 +278,6 @@ export default function ClienteComercialVendas() {
       setErro('Erro ao buscar vendas: ' + err.message);
     } finally {
       setLoadingDados(false);
-      setBgRefresh(false);
     }
   }, [empresasSel, dataDe, dataAteEfetivo, produtosMap, gruposMap, chaveApiSessao, session?.chaveApi?.id]);
 
@@ -419,12 +407,6 @@ export default function ClienteComercialVendas() {
 
   return (
     <div>
-      <BarraProgressoTopo loading={loadingDados || bgRefresh} />
-      {/* Modal envolvente durante o primeiro carregamento (a RPC pode
-          levar 20-25s pra períodos grandes com muitas empresas). Não
-          aparece em refresh silencioso (cache hit + revalidate) — esse
-          fica só com a BarraProgressoTopo. */}
-      <BarraProgressoFetch loading={loadingDados} feitos={progresso.feitos} total={progresso.total} label="Carregando vendas..." />
       <PageHeader title="Vendas"
         description={session?.chaveApi?.nome || 'Itens vendidos no período'}>
         <SeletorMesAno mes={mes} ano={ano} onChange={(m, a) => { setMes(m); setAno(a); }} />
