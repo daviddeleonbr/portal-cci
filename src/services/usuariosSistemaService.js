@@ -43,7 +43,14 @@ export const PERMISSOES_CLIENTE = [
   { key: 'relatorios_bi', label: 'Relatórios de BI (Power BI)', grupo: 'Relatórios' },
   { key: 'comercial_vendas', label: 'Comercial · Vendas', grupo: 'Comercial' },
   { key: 'comercial_operacao', label: 'Comercial · Operação', grupo: 'Comercial' },
-  { key: 'comercial_produtividade', label: 'Comercial · Produtividade', grupo: 'Comercial' },
+  { key: 'comercial_produtividade', label: 'Comercial · Produtividade', grupo: 'Comercial',
+    // Abas da página de Produtividade (controle por aba). `tipo` filtra por ERP:
+    // autosystem tem Rank; webposto tem Pista; Conveniência existe nos dois.
+    abas: [
+      { key: 'produtividade_rank',         label: 'Rank',         tipo: 'autosystem' },
+      { key: 'produtividade_pista',        label: 'Pista',        tipo: 'webposto' },
+      { key: 'produtividade_conveniencia', label: 'Conveniência' },
+    ] },
   { key: 'comercial_estoques', label: 'Comercial · Análise de Estoques', grupo: 'Comercial' },
   { key: 'compras',           label: 'Compras · Criar pedidos',         grupo: 'Comercial' },
   { key: 'compras_liberar',   label: 'Compras · Liberar pedidos',       grupo: 'Comercial' },
@@ -64,7 +71,8 @@ export function permissoesPorTipo(tipo) {
 }
 
 export function todasPermissoes(tipo) {
-  return permissoesPorTipo(tipo).map(p => p.key);
+  // Inclui as chaves de página E as chaves de aba (sub-permissões).
+  return permissoesPorTipo(tipo).flatMap(p => [p.key, ...(p.abas || []).map(a => a.key)]);
 }
 
 // ========== Hierarquia por permissões ==========

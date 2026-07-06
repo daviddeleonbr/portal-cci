@@ -12,6 +12,7 @@ import {
 import PageHeader from '../../../components/ui/PageHeader';
 import Toast from '../../../components/ui/Toast';
 import Modal from '../../../components/ui/Modal';
+import SeletorPermissoes from '../../../components/usuarios/SeletorPermissoes';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as usuariosService from '../../../services/usuariosSistemaService';
 
@@ -259,19 +260,7 @@ function ModalUsuarioRede({ open, data, empresas, onClose, onSave }) {
     });
   };
 
-  const togglePermissao = (key) => {
-    setForm(f => {
-      const s = new Set(f.permissoes || []);
-      if (s.has(key)) s.delete(key); else s.add(key);
-      return { ...f, permissoes: Array.from(s) };
-    });
-  };
-
-  const permsPorGrupo = usuariosService.PERMISSOES_CLIENTE.reduce((acc, p) => {
-    (acc[p.grupo] = acc[p.grupo] || []).push(p);
-    return acc;
-  }, {});
-  const temPerm = (k) => (form.permissoes || []).includes(k);
+  const setPermissoes = (arr) => setForm(f => ({ ...f, permissoes: arr }));
 
   const submit = async () => {
     if (!form.nome?.trim() || !form.email?.trim()) return;
@@ -368,28 +357,14 @@ function ModalUsuarioRede({ open, data, empresas, onClose, onSave }) {
 
         {/* Permissoes */}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1.5">
-            Permissões ({(form.permissoes || []).length}/{usuariosService.PERMISSOES_CLIENTE.length})
-          </label>
-          <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-3 space-y-3">
-            {Object.entries(permsPorGrupo).map(([grupo, perms]) => (
-              <div key={grupo}>
-                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{grupo}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {perms.map(p => (
-                    <label key={p.key}
-                      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-all ${
-                        temPerm(p.key) ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                      }`}>
-                      <input type="checkbox" checked={temPerm(p.key)}
-                        onChange={() => togglePermissao(p.key)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
-                      {p.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <label className="block text-xs font-medium text-gray-700 mb-1.5">Permissões</label>
+          <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-3">
+            <SeletorPermissoes
+              catalogo={usuariosService.PERMISSOES_CLIENTE}
+              value={form.permissoes || []}
+              onChange={setPermissoes}
+              tipoCliente="autosystem"
+            />
           </div>
         </div>
 

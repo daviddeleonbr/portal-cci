@@ -7,6 +7,7 @@ import {
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
+import SeletorPermissoes from '../components/usuarios/SeletorPermissoes';
 import * as usuariosService from '../services/usuariosSistemaService';
 import * as clientesService from '../services/clientesService';
 import * as mapeamentoService from '../services/mapeamentoService';
@@ -446,14 +447,6 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
     }));
   };
 
-  const togglePermissao = (key) => {
-    setForm(f => {
-      const atual = new Set(f.permissoes || []);
-      if (atual.has(key)) atual.delete(key); else atual.add(key);
-      return { ...f, permissoes: Array.from(atual) };
-    });
-  };
-
   const marcarTodas = () => {
     setForm(f => ({ ...f, permissoes: usuariosService.todasPermissoes(f.tipo) }));
   };
@@ -494,11 +487,6 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
   };
 
   const permsDisponiveis = usuariosService.permissoesPorTipo(form.tipo);
-  const permsPorGrupo = permsDisponiveis.reduce((acc, p) => {
-    (acc[p.grupo] = acc[p.grupo] || []).push(p);
-    return acc;
-  }, {});
-  const temPermissao = (key) => (form.permissoes || []).includes(key);
 
   return (
     <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Usuário' : 'Novo Usuário'} size="lg"
@@ -777,9 +765,7 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
         {step === 3 && (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-700">
-                Selecione as permissões ({(form.permissoes || []).length}/{permsDisponiveis.length})
-              </label>
+              <label className="text-xs font-semibold text-gray-700">Selecione as permissões</label>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={marcarTodas}
                   className="text-[11px] font-medium text-blue-600 hover:text-blue-800">Marcar todas</button>
@@ -788,27 +774,13 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
                   className="text-[11px] font-medium text-gray-500 hover:text-gray-800">Limpar</button>
               </div>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-3 space-y-3">
-              {Object.entries(permsPorGrupo).map(([grupo, perms]) => (
-                <div key={grupo}>
-                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{grupo}</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {perms.map(p => (
-                      <label key={p.key}
-                        className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-all ${
-                          temPermissao(p.key)
-                            ? 'border-blue-300 bg-blue-50 text-blue-900'
-                            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                        }`}>
-                        <input type="checkbox" checked={temPermissao(p.key)}
-                          onChange={() => togglePermissao(p.key)}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
-                        {p.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-3">
+              <SeletorPermissoes
+                catalogo={permsDisponiveis}
+                value={form.permissoes || []}
+                onChange={(arr) => setForm(f => ({ ...f, permissoes: arr }))}
+                tipoCliente={form.rede_tipo}
+              />
             </div>
           </div>
         )}
