@@ -42,8 +42,9 @@ const CAT_PALETA = {
   conveniencia: { bg: 'bg-emerald-50', text: 'text-emerald-700', icone: Store,   chartFill: '#86efac' },
 };
 
-// Abas: Pista (combustível + automotivos) e Conveniência.
+// Abas: Rank (ranking geral), Pista (combustível + automotivos) e Conveniência.
 const ABAS = [
+  { key: 'rank',         label: 'Rank',          icone: Trophy, borda: 'border-yellow-500',  texto: 'text-yellow-700'  },
   { key: 'pista',        label: 'Pista',         icone: Fuel,  borda: 'border-amber-600',   texto: 'text-amber-700'   },
   { key: 'conveniencia', label: 'Conveniência',  icone: Store, borda: 'border-emerald-600', texto: 'text-emerald-700' },
 ];
@@ -81,11 +82,15 @@ export default function ClienteComercialProdutividade() {
     return ultimo < ontem ? ultimo : ontem;   // mês passado: mês inteiro; mês atual: até ontem
   }, [ano, mes, apenasFechados]);
   const periodoDias = useMemo(() => diasEntre(dataDe, dataAte), [dataDe, dataAte]);
+  const diasMes = new Date(ano, mes, 0).getDate();
+  // Tendência = projeção linear do fechamento do mês. Só extrapola se o período
+  // ainda não cobre o mês inteiro (ex.: "apenas dias fechados", mês corrente).
+  const projetar = (val) => (periodoDias > 0 && periodoDias < diasMes ? (val * diasMes) / periodoDias : val);
   const [vendedores, setVendedores] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
-  const [aba, setAba] = useState('pista');
+  const [aba, setAba] = useState('rank');
 
   // Mapa de grupos por categoria + nomes (vem da classificação salva no Supabase)
   const [gruposPorCat, setGruposPorCat] = useState({
@@ -197,6 +202,12 @@ export default function ClienteComercialProdutividade() {
     if (jaAberto) return;
     if (detalhes.has(key) && !detalhes.get(key).erro) return; // já carregado
     setDetalhes(prev => new Map(prev).set(key, { loading: true }));
+    // Produtos classificados como aditivada/comum (p/ o mix mensal no detalhe).
+    const produtosAditivada = [], produtosComum = [];
+    mapaMix.forEach((tipo, cod) => {
+      if (tipo === 'aditivada') produtosAditivada.push(cod);
+      else if (tipo === 'comum') produtosComum.push(cod);
+    });
     try {
       const data = await autosystemService.buscarProdutividadeDetalheAutosystem(redeId, {
         empresa_codigo:  v.empresa,
@@ -206,6 +217,8 @@ export default function ClienteComercialProdutividade() {
         automotivos_data_de:  auto12m.de,
         automotivos_data_ate: auto12m.ate,
         grupos_automotivos: gruposPorCat.automotivos,
+        produtos_aditivada: produtosAditivada,
+        produtos_comum:     produtosComum,
       });
       setDetalhes(prev => new Map(prev).set(key, { ...data, loading: false }));
     } catch (err) {
@@ -395,7 +408,7 @@ export default function ClienteComercialProdutividade() {
   // KPIs (escopados pela aba). Pista também mostra litros + abastecimentos.
   const kpis = useMemo(() => {
     let totFat = 0, totLucro = 0, totVendas = 0, totLitros = 0, totAbast = 0;
-    let totFatAuto = 0, totLucroAuto = 0;
+    let totFatAuto = 0, totLucroAuto = 0, totVendasAuto = 0;
     let totAditiv = 0, totComum = 0;
     // Conta vendedores com atividade no escopo (fat > 0 ou vendas > 0).
     let comAtividade = 0;
@@ -408,8 +421,9 @@ export default function ClienteComercialProdutividade() {
       if (escopo === 'pista') {
         totLitros += s.qtdCombustivel;
         totAbast  += s.abastecimentos;
-        totFatAuto   += s.fatAutomotivos;
-        totLucroAuto += s.lucroAutomotivos;
+        totFatAuto    += s.fatAutomotivos;
+        totLucroAuto  += s.lucroAutomotivos;
+        totVendasAuto += s.vendasAutomotivos || 0;
         totAditiv += s.litrosAditivada || 0;
         totComum  += s.litrosComum     || 0;
       }
@@ -423,9 +437,51 @@ export default function ClienteComercialProdutividade() {
       faturamento: totFat, lucro: totLucro, margem,
       vendas: totVendas, litros: totLitros, abastecimentos: totAbast,
       fatAutomotivos: totFatAuto, margemAutomotivos: margemAuto,
+      vendasAutomotivos: totVendasAuto,
+      ticketAutomotivos: totFatAuto > 0 && totVendasAuto > 0 ? totFatAuto / totVendasAuto : 0,
       mix, litrosAditivada: totAditiv, litrosComum: totComum,
     };
   }, [vendedoresEnriquecidos, escopo]);
+
+  // Rankings da aba Rank (desc, só quem tem valor > 0). Baseados na Pista.
+  const rankings = useMemo(() => {
+    const mk = (getter) => vendedoresEnriquecidos
+      .map(v => ({
+        key: `${v.empresa}::${v.vendedor_codigo}`,
+        nome: v.vendedor_nome,
+        codigo: v.vendedor_codigo_real || '',
+        valor: getter(v),
+      }))
+      .filter(r => r.valor > 0)
+      .sort((a, b) => b.valor - a.valor);
+    return {
+      automotivos:  mk(v => v.pista.fatAutomotivos),
+      aditivada:    mk(v => v.pista.litrosAditivada),
+      atendimentos: mk(v => v.pista.abastecimentos),
+    };
+  }, [vendedoresEnriquecidos]);
+
+  // Funcionários que venderam combustível E automotivos (tabela-tree do Rank).
+  const funcsPistaAuto = useMemo(
+    () => vendedoresEnriquecidos
+      .filter(v => v.pista.fatAutomotivos > 0 && (v.pista.abastecimentos > 0 || v.pista.qtdCombustivel > 0))
+      .sort((a, b) => b.pista.fatAutomotivos - a.pista.fatAutomotivos),
+    [vendedoresEnriquecidos],
+  );
+  // Máximo por coluna (base das barras de dados da hierarquia principal).
+  const maxCol = useMemo(() => {
+    const m = { auto: 0, aditiv: 0, mix: 0, abast: 0, ticket: 0 };
+    funcsPistaAuto.forEach(v => {
+      const s = v.pista;
+      const ticket = s.vendasAutomotivos > 0 ? s.fatAutomotivos / s.vendasAutomotivos : 0;
+      m.auto   = Math.max(m.auto,   s.fatAutomotivos);
+      m.aditiv = Math.max(m.aditiv, s.litrosAditivada);
+      m.mix    = Math.max(m.mix,    s.mix || 0);
+      m.abast  = Math.max(m.abast,  s.abastecimentos);
+      m.ticket = Math.max(m.ticket, ticket);
+    });
+    return m;
+  }, [funcsPistaAuto]);
 
   if (empresasDisponiveis.length === 0) {
     return (
@@ -508,6 +564,107 @@ export default function ClienteComercialProdutividade() {
             </div>
           </div>
 
+          {aba === 'rank' && (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+                <Kpi icone={Package} cor="blue" label="Faturamento automotivos"
+                  valor={formatCurrency(kpis.fatAutomotivos)} />
+                <Kpi icone={Droplet} cor="violet" label="Litros de aditivada"
+                  valor={`${fmtNum(kpis.litrosAditivada, 0)} L`} />
+                <Kpi icone={Gauge} cor="violet" label="Mix de aditivada"
+                  valor={kpis.mix != null ? `${kpis.mix.toFixed(1)}%` : '—'} />
+                <Kpi icone={Coins} cor="blue" label="Abastecimentos"
+                  valor={fmtNum(kpis.abastecimentos)} />
+                <Kpi icone={Package} cor="emerald" label="Ticket médio automotivos"
+                  valor={formatCurrency(kpis.ticketAutomotivos)} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+                <TabelaRank titulo="Vendas de automotivos" icone={Package} cor="blue"
+                  itens={rankings.automotivos} fmt={(v) => formatCurrency(v)} />
+                <TabelaRank titulo="Venda de aditivada" icone={Droplet} cor="violet"
+                  itens={rankings.aditivada} fmt={(v) => `${fmtNum(v, 0)} L`} />
+                <TabelaRank titulo="Atendimentos" icone={Coins} cor="amber"
+                  itens={rankings.atendimentos} fmt={(v) => fmtNum(v)} />
+              </div>
+
+              {/* Tabela-tree: funcionários (combustível + automotivos) */}
+              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden mb-5">
+                <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2 bg-gradient-to-b from-white to-gray-50/40">
+                  <Users className="h-4 w-4 text-blue-500" />
+                  <h3 className="text-[13px] font-semibold text-gray-800">Funcionários · Combustíveis + Automotivos</h3>
+                  <span className="text-[11px] text-gray-400">· clique para expandir · tendência = projeção do mês</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[880px]">
+                    <thead className="bg-gray-50/80 border-b border-gray-200">
+                      <tr className="text-[9.5px] font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left">Funcionário</th>
+                        <th className="px-3 py-2 text-right border-l border-gray-200">Automotivos</th>
+                        <th className="px-3 py-2 text-right text-blue-500">Tend.</th>
+                        <th className="px-3 py-2 text-right border-l border-gray-200">Litros aditiv.</th>
+                        <th className="px-3 py-2 text-right text-blue-500">Tend.</th>
+                        <th className="px-3 py-2 text-right border-l border-gray-200">Mix</th>
+                        <th className="px-3 py-2 text-right border-l border-gray-200">Abast.</th>
+                        <th className="px-3 py-2 text-right text-blue-500">Tend.</th>
+                        <th className="px-3 py-2 text-right border-l border-gray-200">Ticket auto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {funcsPistaAuto.length === 0 ? (
+                        <tr><td colSpan={9} className="px-4 py-8 text-center text-[12px] text-gray-400">Nenhum funcionário com combustível + automotivos no período.</td></tr>
+                      ) : funcsPistaAuto.map(v => {
+                        const s = v.pista;
+                        const key = `${v.empresa}::${v.vendedor_codigo}`;
+                        const aberto = expandidos.has(key);
+                        const ticketAuto = s.vendasAutomotivos > 0 ? s.fatAutomotivos / s.vendasAutomotivos : 0;
+                        return (
+                          <React.Fragment key={key}>
+                            <tr className={`cursor-pointer transition-colors border-t border-gray-100 ${aberto ? 'bg-blue-50/60' : 'hover:bg-blue-50/30'}`}
+                              onClick={() => toggleVendedor(v)}>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-1.5">
+                                  {aberto ? <ChevronDown className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />}
+                                  <div className="min-w-0">
+                                    <p className="text-[12.5px] font-semibold text-gray-900 truncate max-w-[220px]">{v.vendedor_nome || <span className="italic text-gray-400">sem nome</span>}</p>
+                                    <p className="text-[9.5px] text-gray-400 font-mono">cód {v.vendedor_codigo_real || '—'}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <CelulaBarra valor={s.fatAutomotivos} max={maxCol.auto} cor="bg-blue-500/15" className="border-l border-gray-100">{formatCurrency(s.fatAutomotivos)}</CelulaBarra>
+                              <td className="px-3 py-2 text-right font-mono tabular-nums text-[12px] text-blue-700">{formatCurrency(projetar(s.fatAutomotivos))}</td>
+                              <CelulaBarra valor={s.litrosAditivada} max={maxCol.aditiv} cor="bg-violet-500/15" className="border-l border-gray-100">{fmtNum(s.litrosAditivada, 0)} L</CelulaBarra>
+                              <td className="px-3 py-2 text-right font-mono tabular-nums text-[12px] text-blue-700">{fmtNum(projetar(s.litrosAditivada), 0)} L</td>
+                              <CelulaBarra valor={s.mix || 0} max={maxCol.mix} cor="bg-indigo-500/15" className="border-l border-gray-100">{s.mix != null ? `${s.mix.toFixed(1)}%` : '—'}</CelulaBarra>
+                              <CelulaBarra valor={s.abastecimentos} max={maxCol.abast} cor="bg-amber-500/20" className="border-l border-gray-100">{fmtNum(s.abastecimentos)}</CelulaBarra>
+                              <td className="px-3 py-2 text-right font-mono tabular-nums text-[12px] text-blue-700">{fmtNum(projetar(s.abastecimentos))}</td>
+                              <CelulaBarra valor={ticketAuto} max={maxCol.ticket} cor="bg-emerald-500/15" className="border-l border-gray-100">{formatCurrency(ticketAuto)}</CelulaBarra>
+                            </tr>
+                            {aberto && (
+                              <tr>
+                                <td colSpan={9} className="bg-gray-50/50 border-t border-gray-100 px-3 py-3">
+                                  <DetalheVendedor
+                                    vendedor={v}
+                                    detalhe={detalhes.get(key)}
+                                    mapaCatGrupos={mapaCatGrupos}
+                                    mapaNomeGrupos={mapaNomeGrupos}
+                                    mapaMix={mapaMix}
+                                  />
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {aba !== 'rank' && (
+          <>
           {/* KPIs (variam por aba) */}
           <div className={`grid grid-cols-2 ${escopo === 'pista' ? 'lg:grid-cols-5' : 'lg:grid-cols-2'} gap-3 mb-5`}>
             <Kpi icone={Users} cor="violet" label="Vendedores ativos" valor={fmtNum(kpis.totalVendedores)} />
@@ -751,6 +908,8 @@ export default function ClienteComercialProdutividade() {
               </table>
             </div>
           </div>
+          </>
+          )}
         </>
       )}
     </div>
@@ -928,7 +1087,7 @@ function ScoreBadge({ score, rank }) {
 
 // Painel de detalhes do vendedor (linha expandida da tabela).
 // 3 painéis: Combustíveis vendidos | Grupos/Produtos (tree) | Mini-chart Automotivos 12m.
-function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos, mapaMix }) {
+function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos }) {
   if (!detalhe || detalhe.loading) {
     return (
       <div className="flex items-center justify-center gap-2 py-8 text-gray-500">
@@ -947,24 +1106,7 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos, map
   }
   const produtos = detalhe.produtos || [];
   const automotivosMensal = detalhe.automotivos_mensal || [];
-
-  // ─── Combustíveis (categoria = combustivel) ──────────────────
-  const combustiveis = produtos.filter(p => mapaCatGrupos.get(Number(p.grupo_codigo)) === 'combustivel');
-  const totalLitros = combustiveis.reduce((s, p) => s + (Number(p.quantidade) || 0), 0);
-  const combustiveisOrd = [...combustiveis].sort((a, b) => Number(b.quantidade) - Number(a.quantidade));
-
-  // ─── Mix de gasolina (aditivada vs comum) ───────────────────
-  // Mix = litros aditivada / (litros aditivada + litros comum)
-  let litrosAditivada = 0, litrosComum = 0;
-  combustiveis.forEach(p => {
-    const tipo = mapaMix?.get(Number(p.produto_codigo));
-    const qtd  = Number(p.quantidade) || 0;
-    if (tipo === 'aditivada') litrosAditivada += qtd;
-    else if (tipo === 'comum') litrosComum += qtd;
-  });
-  const baseMix = litrosAditivada + litrosComum;
-  const mixPct = baseMix > 0 ? (litrosAditivada / baseMix) * 100 : null;
-  const temClassif = baseMix > 0;
+  const mixMensal = detalhe.mix_mensal || [];
 
   // ─── Tree grupos → produtos (todos exceto combustível) ──────
   const arvore = (() => {
@@ -1022,69 +1164,59 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos, map
   })();
   const semAutomotivos = serieAuto.every(p => p.valor === 0);
 
+  // ─── Série mensal de Mix aditivada (12 buckets fixos) ────────
+  const serieMix = (() => {
+    const idx = new Map();
+    mixMensal.forEach(r => idx.set(String(r.ano_mes), r));
+    const out = [];
+    const hoje = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const m = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const ym = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
+      const row = idx.get(ym) || {};
+      const adit = Number(row.litros_aditivada) || 0;
+      const com  = Number(row.litros_comum) || 0;
+      const base = adit + com;
+      out.push({
+        rotulo: `${MESES_CURTO[m.getMonth()]}/${String(m.getFullYear()).slice(2)}`,
+        mix: base > 0 ? (adit / base) * 100 : 0,
+        temDado: base > 0,
+      });
+    }
+    return out;
+  })();
+  const semMix = serieMix.every(p => !p.temDado);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-      {/* Painel 1: Combustíveis */}
-      <div className="bg-white rounded-xl border border-amber-100 overflow-hidden">
-        <div className="px-3 py-2 bg-amber-50/60 border-b border-amber-100 flex items-center gap-2">
-          <Fuel className="h-3.5 w-3.5 text-amber-600" />
-          <h4 className="text-[11.5px] font-semibold text-amber-900">Combustíveis vendidos</h4>
-          <span className="ml-auto text-[10px] font-mono tabular-nums text-amber-700 font-bold">
-            {fmtNum(totalLitros, 0)} L
-          </span>
+      {/* Painel: Mix aditivada 12 meses */}
+      <div className="bg-white rounded-xl border border-blue-100 overflow-hidden">
+        <div className="px-3 py-2 bg-blue-50/60 border-b border-blue-100 flex items-center gap-2">
+          <LineChartIcon className="h-3.5 w-3.5 text-blue-600" />
+          <h4 className="text-[11.5px] font-semibold text-blue-900">Mix aditivada · 12 meses</h4>
         </div>
-        {/* Mix de gasolina */}
-        {temClassif ? (
-          <div className="px-3 py-2 border-b border-amber-50 bg-gradient-to-r from-blue-50/50 to-transparent">
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Mix aditivada</span>
-                <span className="text-[18px] font-bold text-blue-700 leading-none tabular-nums">{mixPct.toFixed(1)}%</span>
-              </div>
-              <span className="text-[10px] text-gray-500 tabular-nums">
-                {fmtNum(litrosAditivada, 0)} / {fmtNum(baseMix, 0)} L
-              </span>
-            </div>
-            <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden mt-1.5">
-              <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"
-                style={{ width: `${Math.max(2, mixPct)}%` }} />
-            </div>
-          </div>
-        ) : (
-          <div className="px-3 py-2 border-b border-amber-50 text-[10px] text-gray-400 italic">
-            Mix não calculável — classifique os produtos em <strong className="text-blue-600 not-italic">Configurações</strong>.
-          </div>
-        )}
-        <div className="p-3 max-h-[260px] overflow-y-auto">
-          {combustiveisOrd.length === 0 ? (
-            <p className="text-[11px] text-gray-400 italic text-center py-4">Sem vendas de combustível no período</p>
+        <div className="p-3">
+          {semMix ? (
+            <p className="text-[11px] text-gray-400 italic text-center py-10">Sem mix classificável nos últimos 12 meses</p>
           ) : (
-            <div className="space-y-2">
-              {combustiveisOrd.map(p => {
-                const litros = Number(p.quantidade) || 0;
-                const pct = totalLitros > 0 ? (litros / totalLitros) * 100 : 0;
-                return (
-                  <div key={p.produto_codigo}>
-                    <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                      <p className="text-[11.5px] text-gray-800 truncate flex-1">{p.produto_nome}</p>
-                      <p className="text-[11.5px] font-mono tabular-nums font-semibold text-gray-900 whitespace-nowrap">
-                        {fmtNum(litros, 0)} L
-                      </p>
-                    </div>
-                    <div className="h-1.5 w-full bg-amber-50 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-amber-300 to-amber-500 rounded-full"
-                        style={{ width: `${Math.max(2, pct)}%` }} />
-                    </div>
-                    <p className="text-[9.5px] text-gray-400 mt-0.5">{pct.toFixed(1)}% do total · {formatCurrency(Number(p.valor) || 0)}</p>
-                  </div>
-                );
-              })}
-            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={serieMix} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="rotulo" tick={{ fontSize: 9, fill: '#64748b' }} stroke="#e5e7eb" />
+                <YAxis domain={[0, 100]} tickFormatter={(v) => `${v.toFixed(0)}%`}
+                  tick={{ fontSize: 9, fill: '#94a3b8' }} stroke="#e5e7eb" />
+                <Tooltip
+                  formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Mix aditivada']}
+                  labelStyle={{ fontSize: 11, fontWeight: 600 }}
+                  contentStyle={{ fontSize: 11, borderRadius: 6, border: '1px solid #e5e7eb' }} />
+                <Bar dataKey="mix" fill="#93c5fd" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
       </div>
 
-      {/* Painel 2: Grupos / Produtos (tree) */}
+      {/* Painel: Grupos / Produtos (tree) */}
       <div className="bg-white rounded-xl border border-blue-100 overflow-hidden">
         <div className="px-3 py-2 bg-blue-50/60 border-b border-blue-100 flex items-center gap-2">
           <Boxes className="h-3.5 w-3.5 text-blue-600" />
@@ -1136,7 +1268,7 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos, map
 
 // Mini-tree Grupo → Produto usado no painel de detalhe.
 function TreeGrupos({ arvore }) {
-  const [abertos, setAbertos] = useState(() => new Set([arvore[0]?.codigo].filter(Boolean).map(String)));
+  const [abertos, setAbertos] = useState(() => new Set());
   const tog = (k) => setAbertos(prev => {
     const next = new Set(prev);
     if (next.has(k)) next.delete(k); else next.add(k);
@@ -1211,6 +1343,78 @@ function Kpi({ icone: Icone, cor, label, valor, sub, negativo }) {
           {sub && <p className="text-[10.5px] text-gray-400 mt-0.5">{sub}</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Célula numérica com barra de dados ao fundo (proporcional ao máx. da coluna).
+function CelulaBarra({ children, valor, max, cor, className = '' }) {
+  const pct = max > 0 && valor > 0 ? Math.max(3, Math.min(100, (valor / max) * 100)) : 0;
+  return (
+    <td className={`relative px-3 py-2 text-right font-mono tabular-nums text-[12px] text-gray-800 ${className}`}>
+      {pct > 0 && (
+        <div className="absolute inset-y-[4px] left-1.5 right-1.5 pointer-events-none">
+          <div className={`h-full rounded-sm ${cor}`} style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      <span className="relative">{children}</span>
+    </td>
+  );
+}
+
+// Tabela de ranking (aba Rank). Ordenada desc; 1º colocado em destaque (troféu
+// + linha dourada + valor em amber). Demais linhas com a posição (2º, 3º…).
+function TabelaRank({ titulo, icone, cor, itens, fmt }) {
+  const Icone = icone; // evita falso-positivo do eslint (renamed-destructure só usado em JSX)
+  const header = {
+    blue:   'text-blue-500',
+    violet: 'text-violet-500',
+    amber:  'text-amber-500',
+  }[cor] || 'text-blue-500';
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2 bg-gradient-to-b from-white to-gray-50/40">
+        <Icone className={`h-4 w-4 ${header}`} />
+        <h3 className="text-[13px] font-semibold text-gray-800">{titulo}</h3>
+      </div>
+      {itens.length === 0 ? (
+        <p className="px-4 py-8 text-center text-[12px] text-gray-400">Sem dados no período.</p>
+      ) : (
+        <div className="overflow-y-auto overflow-x-hidden" style={{ maxHeight: '18rem' }}>
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-7" />
+              <col />
+              <col className="w-[104px]" />
+            </colgroup>
+            <tbody>
+              {itens.map((r, i) => {
+                const primeiro = i === 0;
+                // 1º colocado fica "grudado" no topo ao rolar. Fundo opaco nas
+                // células (bg-amber-50) pra as linhas de baixo não vazarem.
+                const cel = primeiro ? 'bg-amber-50 border-b-2 border-amber-200' : '';
+                return (
+                  <tr key={r.key}
+                    className={primeiro ? 'sticky top-0 z-10' : 'border-t border-gray-50 hover:bg-gray-50/50'}>
+                    <td className={`pl-3 pr-0 py-2 align-middle ${cel}`}>
+                      {primeiro
+                        ? <Trophy className="h-4 w-4 text-amber-500" />
+                        : <span className="text-[11px] font-semibold text-gray-400 tabular-nums">{i + 1}º</span>}
+                    </td>
+                    <td className={`pl-1.5 pr-2 py-2 ${cel}`}>
+                      <p className={`text-[12.5px] truncate ${primeiro ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>{r.nome}</p>
+                      <p className="text-[9.5px] text-gray-400 font-mono">cód {r.codigo || '—'}</p>
+                    </td>
+                    <td className={`pl-1 pr-3 py-2 text-right font-mono tabular-nums whitespace-nowrap ${primeiro ? 'text-[13px] font-bold text-amber-700' : 'text-[12px] font-semibold text-gray-800'} ${cel}`}>
+                      {fmt(r.valor)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

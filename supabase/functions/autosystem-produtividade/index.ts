@@ -118,6 +118,7 @@ serve(async (req) => {
           b.empresa,
           b.vendedor                                                              as vendedor_codigo,
           convert_to(coalesce(pe.nome::text, ''), 'LATIN1')                       as vendedor_nome,
+          convert_to(coalesce(pe.codigo::text, ''), 'LATIN1')                     as vendedor_codigo_real,
 
           count(*)                                                                as vendas_count,
           count(distinct b.mlid)                                                   as transacoes_count,
@@ -151,7 +152,7 @@ serve(async (req) => {
           sum(case when b.produto = any($8::bigint[]) then b.quantidade else 0 end) as litros_comum
         from base b
         left join pessoa pe on pe.grid = b.vendedor
-        group by b.empresa, b.vendedor, pe.nome
+        group by b.empresa, b.vendedor, pe.nome, pe.codigo
         order by sum(b.valor) desc
       `, [empresasNum, data_de, data_ate, gCombustivel, gAutomotivos, gConveniencia, pAditivada, pComum], { encoding: 'SQL_ASCII' });
 

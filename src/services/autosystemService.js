@@ -824,6 +824,8 @@ export async function buscarProdutividadeDetalheAutosystem(redeId, filtros = {})
       automotivos_data_de:  filtros.automotivos_data_de  || null,
       automotivos_data_ate: filtros.automotivos_data_ate || null,
       grupos_automotivos: Array.isArray(filtros.grupos_automotivos) ? filtros.grupos_automotivos : [],
+      produtos_aditivada: Array.isArray(filtros.produtos_aditivada) ? filtros.produtos_aditivada : [],
+      produtos_comum:     Array.isArray(filtros.produtos_comum)     ? filtros.produtos_comum     : [],
     },
   });
   if (error) throw await _extrairErroFn(error, 'Falha ao buscar detalhe do vendedor');
@@ -831,6 +833,7 @@ export async function buscarProdutividadeDetalheAutosystem(redeId, filtros = {})
   return {
     produtos:           Array.isArray(data?.produtos)           ? data.produtos           : [],
     automotivos_mensal: Array.isArray(data?.automotivos_mensal) ? data.automotivos_mensal : [],
+    mix_mensal:         Array.isArray(data?.mix_mensal)         ? data.mix_mensal         : [],
   };
 }
 

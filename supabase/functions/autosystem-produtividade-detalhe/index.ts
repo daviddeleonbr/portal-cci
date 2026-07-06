@@ -46,6 +46,8 @@ serve(async (req) => {
     automotivos_data_de?: string;
     automotivos_data_ate?: string;
     grupos_automotivos?: (string | number)[];
+    produtos_aditivada?: (string | number)[];
+    produtos_comum?: (string | number)[];
   };
   try { body = await req.json(); } catch { return json({ error: 'Body JSON inválido' }, 400); }
 
@@ -56,6 +58,7 @@ serve(async (req) => {
     data_de, data_ate,
     automotivos_data_de, automotivos_data_ate,
     grupos_automotivos,
+    produtos_aditivada, produtos_comum,
   } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
   if (empresa_codigo == null) return json({ error: 'empresa_codigo é obrigatório' }, 400);
@@ -74,6 +77,8 @@ serve(async (req) => {
   const toBigArr = (arr?: (string | number)[]) =>
     Array.isArray(arr) ? arr.map(v => Number(v)).filter(n => Number.isFinite(n)) : [];
   const gAuto = toBigArr(grupos_automotivos);
+  const pAditiv = toBigArr(produtos_aditivada);
+  const pComum  = toBigArr(produtos_comum);
 
   const isBytea = (v: unknown): boolean => {
     if (v instanceof Uint8Array) return true;
@@ -150,7 +155,30 @@ serve(async (req) => {
       automotivos_mensal = usoRows;
     }
 
-    return json({ produtos, automotivos_mensal });
+    // Mix aditivada mensal (12 meses): litros aditivada vs comum por mês.
+    let mix_mensal: Record<string, unknown>[] = [];
+    if (automotivos_data_de && automotivos_data_ate && (pAditiv.length > 0 || pComum.length > 0)) {
+      mix_mensal = await executarQuery(rede, `
+          select
+            to_char(l.data, 'YYYY-MM')                                                           as ano_mes,
+            sum(case when l.produto = any($5::bigint[]) then coalesce(l.quantidade,0) else 0 end) as litros_aditivada,
+            sum(case when l.produto = any($6::bigint[]) then coalesce(l.quantidade,0) else 0 end) as litros_comum
+          from lancto l
+          where l.operacao = 'V'
+            and l.empresa  = $1::bigint
+            and l.vendedor = $2::bigint
+            and l.data between $3 and $4
+            and (l.produto = any($5::bigint[]) or l.produto = any($6::bigint[]))
+            and not exists (
+              select 1 from lancto d
+               where d.mlid = l.mlid and d.produto = l.produto and d.operacao = 'DC'
+            )
+          group by to_char(l.data, 'YYYY-MM')
+          order by to_char(l.data, 'YYYY-MM')
+        `, [empresaNum, vendedorNum, automotivos_data_de, automotivos_data_ate, pAditiv, pComum], { encoding: 'SQL_ASCII' });
+    }
+
+    return json({ produtos, automotivos_mensal, mix_mensal });
   } catch (err) {
     return json(
       {
