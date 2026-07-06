@@ -2673,14 +2673,14 @@ function BadgeComparacaoAA({ atual, anoAnterior, rotulo = 'AA' }) {
   const cmp = compararLucro(atual, anoAnterior);
   if (!cmp) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 text-gray-500 bg-gray-50 ring-gray-200">
+      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 text-gray-500 bg-gray-50 ring-gray-200">
         sem dados {rotulo}
       </span>
     );
   }
   const Icone = cmp.Icone;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${COMP_STYLE[cmp.tone]}`}>
+    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 ${COMP_STYLE[cmp.tone]}`}>
       <Icone className="h-2.5 w-2.5" />
       {cmp.tone === 'flat' ? '0,0%' : `${cmp.pct > 0 ? '+' : ''}${(cmp.pct * 100).toFixed(1)}%`}
       <span className="text-gray-400 font-normal">vs {rotulo}</span>
@@ -3893,22 +3893,9 @@ function KpiLucro({ cat, lucro, lucroProjecao, margem, lucroAnoAnterior, faturam
 }
 
 // Layout compartilhado entre KpiLucro (por categoria) e KpiLucroGlobal.
-// Estrutura: header (ícone + label/categoria) ▸ valor principal + chip de
-// variação ▸ sparkline de margem 12m ▸ stripe inferior (margem | proj. mês).
-function KpiLucroLayout({ icone, bgIcone, label, categoria, lucro, lucroProjecao, temProj, margem, lucroAnoAnterior, faturamento, faturamentoProjecao, qtd, qtdLabel, serieMargem, sparklineCor = '#3b82f6', ring }) {
-  // Tendência da margem: compara o último ponto da série com a média dos
-  // demais 11 meses pra dar contexto ao número de margem atual.
-  const tendenciaMargem = (() => {
-    if (!serieMargem || serieMargem.length < 3) return null;
-    const ultimo = serieMargem[serieMargem.length - 1].margemPct;
-    const anteriores = serieMargem.slice(0, -1).filter(p => p.margemPct > 0);
-    if (anteriores.length === 0) return null;
-    const media = anteriores.reduce((s, p) => s + p.margemPct, 0) / anteriores.length;
-    if (media === 0) return null;
-    const diff = ultimo - media;
-    return { diff, sentido: diff > 0.1 ? 'up' : diff < -0.1 ? 'down' : 'flat' };
-  })();
-
+// Estrutura: header (ícone + label/categoria + variação AA) ▸ valor principal
+// ▸ stripe inferior (margem | proj. mês).
+function KpiLucroLayout({ icone, bgIcone, label, categoria, lucro, lucroProjecao, temProj, margem, lucroAnoAnterior, qtd, qtdLabel, ring }) {
   return (
     <div className={`bg-white rounded-xl border border-gray-200/70 ${ring || ''} shadow-sm flex flex-col h-full overflow-hidden`}>
       {/* Header — ícone à esquerda, badge de variação à direita */}
@@ -3921,45 +3908,13 @@ function KpiLucroLayout({ icone, bgIcone, label, categoria, lucro, lucroProjecao
         <BadgeComparacaoAA atual={lucro} anoAnterior={lucroAnoAnterior} />
       </div>
 
-      {/* Valor principal + contexto de faturamento (realizado + proj) */}
+      {/* Valor principal */}
       <div className="px-3 pt-3 pb-1.5 flex-1 flex flex-col justify-center">
         <p className={`text-[22px] font-bold tracking-tight tabular-nums truncate leading-none ${lucro < 0 ? 'text-red-700' : 'text-gray-900'}`}
           title={formatCurrency(lucro)}>
           {formatCurrency(lucro)}
         </p>
-        {faturamento != null && faturamento > 0 && (
-          <div className="mt-3 space-y-0.5">
-            <p className="text-[10.5px] text-gray-500 leading-tight truncate" title={`Faturamento: ${formatCurrency(faturamento)}`}>
-              <span className="text-gray-400">Faturamento </span>
-              <span className="font-semibold text-gray-700 tabular-nums">{formatCurrency(faturamento)}</span>
-            </p>
-            {faturamentoProjecao != null && Math.abs(faturamentoProjecao - faturamento) > 0.01 && (
-              <p className="text-[10.5px] leading-tight truncate" title={`Projeção do faturamento: ${formatCurrency(faturamentoProjecao)}`}>
-                <span className="text-blue-500/80">Proj. mês </span>
-                <span className="font-semibold text-blue-700 tabular-nums">{formatCurrency(faturamentoProjecao)}</span>
-              </p>
-            )}
-          </div>
-        )}
       </div>
-
-      {/* Sparkline de margem dos últimos 12 meses */}
-      {serieMargem && serieMargem.length >= 2 && (
-        <div className="px-3 pb-1">
-          <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[8.5px] uppercase tracking-wider text-gray-400 font-semibold">Margem 12m</span>
-            {tendenciaMargem && tendenciaMargem.sentido !== 'flat' && (
-              <span className={`text-[9px] font-semibold tabular-nums inline-flex items-center gap-0.5 ${
-                tendenciaMargem.sentido === 'up' ? 'text-emerald-600' : 'text-red-600'
-              }`}>
-                {tendenciaMargem.sentido === 'up' ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
-                {tendenciaMargem.diff > 0 ? '+' : ''}{tendenciaMargem.diff.toFixed(1)}pp
-              </span>
-            )}
-          </div>
-          <Sparkline serie={serieMargem} cor={sparklineCor} altura={28} />
-        </div>
-      )}
 
       {/* Stripe inferior — 2 ou 3 colunas dependendo se tem qtd (litros etc.) */}
       <div className={`grid ${qtd != null ? 'grid-cols-3' : 'grid-cols-2'} divide-x divide-gray-100 border-t border-gray-100 bg-gray-50/40`}>
@@ -5871,19 +5826,15 @@ function KpiCombustivelDashboard({
   label, icone: Icone, cor = 'amber',
   valor, valorAA, valorProj,
   atual, anoAnterior, temProj, negativo,
-  serie, // array de números (séria 12m da métrica)
-  produtos, // array [{ nome, valor }] top 3 combustíveis na métrica
-  formatProduto, // (n) => string — pra formatar o valor de cada produto na stripe
 }) {
   const CORES = {
-    amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   ring: 'ring-amber-100',   spark: '#f59e0b' },
-    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', ring: 'ring-emerald-100', spark: '#10b981' },
-    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600',  ring: 'ring-violet-100',  spark: '#8b5cf6' },
-    rose:    { bg: 'bg-rose-50',    icon: 'text-rose-600',    ring: 'ring-rose-100',    spark: '#f43f5e' },
+    amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   ring: 'ring-amber-100' },
+    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', ring: 'ring-emerald-100' },
+    violet:  { bg: 'bg-violet-50',  icon: 'text-violet-600',  ring: 'ring-violet-100' },
+    rose:    { bg: 'bg-rose-50',    icon: 'text-rose-600',    ring: 'ring-rose-100' },
   };
   const C = CORES[cor] || CORES.amber;
   const temAA = anoAnterior !== undefined && anoAnterior !== null;
-  const serieSpark = (serie || []).map(v => ({ margemPct: Number(v) || 0 }));
 
   return (
     <div className="bg-white rounded-xl border border-gray-200/70 shadow-sm flex flex-col h-full overflow-hidden">
@@ -5919,14 +5870,6 @@ function KpiCombustivelDashboard({
           </div>
         )}
       </div>
-
-      {/* Sparkline 12m */}
-      {serieSpark.length >= 2 && (
-        <div className="px-3 pb-1.5">
-          <Sparkline serie={serieSpark} cor={C.spark} altura={26} />
-        </div>
-      )}
-
     </div>
   );
 }
