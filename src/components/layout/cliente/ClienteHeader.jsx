@@ -1,16 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, LogOut, Moon, Sun, Building2 } from 'lucide-react';
+import { Menu, Moon, Sun, Building2 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import NotificacoesBell from '../../ui/NotificacoesBell';
-import { logoutCliente } from '../../../lib/auth';
 import { useTheme } from '../../../hooks/useTheme';
 
 export default function ClienteHeader({ onMenuClick }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userRef = useRef(null);
-  const navigate = useNavigate();
   const session = useClienteSession();
   const cliente = session?.cliente;
   const clientesRede = session?.clientesRede || [];
@@ -22,11 +19,6 @@ export default function ClienteHeader({ onMenuClick }) {
   const cnpjCliente = cliente?.cnpj || '';
   const regimeCliente = cliente?.regime_tributario || '';
   const initials = nomeCliente.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-
-  const handleLogout = () => {
-    logoutCliente();
-    navigate('/cliente/login', { replace: true });
-  };
 
   useEffect(() => {
     const handler = (e) => {
@@ -103,7 +95,7 @@ export default function ClienteHeader({ onMenuClick }) {
                 transition={{ duration: 0.12 }}
                 className="absolute right-0 top-full mt-2 w-64 bg-white rounded border border-gray-200/70 shadow-lg z-50 overflow-hidden"
               >
-                <div className="px-4 py-3 border-b border-gray-100">
+                <div className="px-4 py-3">
                   <p className="text-sm font-semibold text-gray-900">{nomeCliente}</p>
                   <p className="text-xs text-gray-500 truncate">{cnpjCliente}</p>
                   {regimeCliente && (
@@ -114,11 +106,6 @@ export default function ClienteHeader({ onMenuClick }) {
                     </div>
                   )}
                 </div>
-                <button onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                  <LogOut className="h-4 w-4 text-gray-400" />
-                  <span>Sair</span>
-                </button>
               </motion.div>
             )}
           </AnimatePresence>
