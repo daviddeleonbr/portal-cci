@@ -381,31 +381,29 @@ export function KpiCombustivelDashboard({
   return (
     <div className="bg-white rounded-xl border border-gray-200/70 shadow-sm flex flex-col h-full overflow-hidden">
       <div className="flex items-center gap-2 px-3 pt-3 pb-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 leading-tight truncate flex-1">{label}</p>
         <div className={`h-7 w-7 rounded-md ${C.bg} ring-1 ${C.ring} flex items-center justify-center flex-shrink-0`}>
           <Icone className={`h-3.5 w-3.5 ${C.icon}`} />
         </div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 leading-tight truncate flex-1">{label}</p>
+        {temAA && <BadgeComparacaoAA atual={atual} anoAnterior={anoAnterior} />}
       </div>
       <div className="px-3 pt-2 pb-1.5 flex-1 flex flex-col justify-center">
         <p className={`text-[22px] font-bold tracking-tight tabular-nums truncate leading-none ${negativo ? 'text-red-700' : 'text-gray-900'}`} title={valor}>
           {valor}
         </p>
-        {temAA && (
-          <div className="mt-1.5"><BadgeComparacaoAA atual={atual} anoAnterior={anoAnterior} /></div>
-        )}
         {(temAA || temProj) && (
-          <div className="mt-3 space-y-0.5">
+          <div className="mt-3 grid grid-cols-2 gap-2">
             {temAA && (
-              <p className="text-[10.5px] text-gray-500 leading-tight truncate" title={`Ano anterior: ${valorAA}`}>
-                <span className="text-gray-400">Ano anterior </span>
-                <span className="font-semibold text-gray-700 tabular-nums">{valorAA}</span>
-              </p>
+              <div className="min-w-0">
+                <p className="text-[9px] uppercase tracking-wider text-gray-400 leading-tight">Ano anterior</p>
+                <p className="text-[11.5px] font-semibold text-gray-700 tabular-nums truncate leading-tight" title={valorAA}>{valorAA}</p>
+              </div>
             )}
             {temProj && (
-              <p className="text-[10.5px] leading-tight truncate" title={`Projeção do mês: ${valorProj}`}>
-                <span className="text-blue-500/80">Proj. mês </span>
-                <span className="font-semibold text-blue-700 tabular-nums">{valorProj}</span>
-              </p>
+              <div className="min-w-0">
+                <p className="text-[9px] uppercase tracking-wider text-blue-500/80 leading-tight">Proj. mês</p>
+                <p className="text-[11.5px] font-semibold text-blue-700 tabular-nums truncate leading-tight" title={valorProj}>{valorProj}</p>
+              </div>
             )}
           </div>
         )}
