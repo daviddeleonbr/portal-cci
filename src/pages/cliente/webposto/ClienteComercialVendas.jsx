@@ -611,7 +611,7 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
   const [loadingEvol, setLoadingEvol] = useState(false);
   const [produtoSel, setProdutoSel] = useState('__todos');
   useEffect(() => {
-    if (subAba !== 'doze' || !chaveApiId || empresasCodigos.length === 0) return;
+    if (subAba !== 'doze' || !chaveApiId || empresasCodigos.length === 0 || produtoCodigos.length === 0) return;
     let cancelado = false;
     setLoadingEvol(true);
     const hoje = new Date();
@@ -624,13 +624,14 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
       p_empresas_codigos: empresasCodigos.map(Number),
       p_data_de:          ymd(ini),
       p_data_ate:         ymd(fim),
+      p_produto_codigos:  produtoCodigos,
     }).then(({ data, error }) => {
       if (cancelado) return;
       if (error) console.error('[evolucao 12m]', error);
       setEvolucao12mRows(data || []);
     }).finally(() => { if (!cancelado) setLoadingEvol(false); });
     return () => { cancelado = true; };
-  }, [subAba, chaveApiId, empresasCodigos.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [subAba, chaveApiId, empresasCodigos.join(','), produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const produtosEvol = useMemo(
     () => listarProdutosCombustivelDaSerie({ rowsEvolucao: evolucao12mRows, produtosMap, gruposMap }),
@@ -810,7 +811,7 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
   const [tempoGruposSel, setTempoGruposSel] = useState(() => new Set());
   const [tempoProdutosSel, setTempoProdutosSel] = useState(() => new Set());
   useEffect(() => {
-    if (subAba !== 'tempo' || !chaveApiId || empresasCodigos.length === 0) return;
+    if (subAba !== 'tempo' || !chaveApiId || empresasCodigos.length === 0 || produtoCodigos.length === 0) return;
     let cancelado = false;
     setLoadingEvol(true);
     const hoje = new Date();
@@ -823,13 +824,14 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
       p_empresas_codigos: empresasCodigos.map(Number),
       p_data_de:          ymd(ini),
       p_data_ate:         ymd(fim),
+      p_produto_codigos:  produtoCodigos,
     }).then(({ data, error }) => {
       if (cancelado) return;
       if (error) console.error('[linha tempo]', error);
       setEvolucao12mRows(data || []);
     }).finally(() => { if (!cancelado) setLoadingEvol(false); });
     return () => { cancelado = true; };
-  }, [subAba, chaveApiId, empresasCodigos.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [subAba, chaveApiId, empresasCodigos.join(','), produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tempoGruposList = useMemo(
     () => listarGruposDaCategoria({ rowsEvolucao: evolucao12mRows, produtosMap, gruposMap, categoriaKey }),
