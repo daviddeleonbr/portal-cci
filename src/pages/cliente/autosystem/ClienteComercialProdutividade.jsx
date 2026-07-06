@@ -16,6 +16,7 @@ import { useClienteSession } from '../../../hooks/useAuth';
 import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
 import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
 import * as autosystemService from '../../../services/autosystemService';
+import * as usuariosService from '../../../services/usuariosSistemaService';
 import { formatCurrency } from '../../../utils/format';
 import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
 import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
@@ -42,11 +43,10 @@ const CAT_PALETA = {
   conveniencia: { bg: 'bg-emerald-50', text: 'text-emerald-700', icone: Store,   chartFill: '#86efac' },
 };
 
-// Abas: Rank (ranking geral), Pista (combustível + automotivos) e Conveniência.
+// Abas: Rank (ranking geral) e Conveniência. `perm` = permissão por-aba.
 const ABAS = [
-  { key: 'rank',         label: 'Rank',          icone: Trophy, borda: 'border-yellow-500',  texto: 'text-yellow-700'  },
-  { key: 'pista',        label: 'Pista',         icone: Fuel,  borda: 'border-amber-600',   texto: 'text-amber-700'   },
-  { key: 'conveniencia', label: 'Conveniência',  icone: Store, borda: 'border-emerald-600', texto: 'text-emerald-700' },
+  { key: 'rank',         label: 'Rank',          icone: Trophy, borda: 'border-yellow-500',  texto: 'text-yellow-700', perm: 'produtividade_rank' },
+  { key: 'conveniencia', label: 'Conveniência',  icone: Store, borda: 'border-emerald-600', texto: 'text-emerald-700', perm: 'produtividade_conveniencia' },
 ];
 
 export default function ClienteComercialProdutividade() {
@@ -90,7 +90,18 @@ export default function ClienteComercialProdutividade() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
-  const [aba, setAba] = useState('rank');
+  // Abas liberadas para o usuário (permissão por-aba, default-deny).
+  const abasPermitidas = useMemo(() => {
+    const perms = new Set(usuariosService.permissoesEfetivas(session?.usuario));
+    return ABAS.filter(a => perms.has(a.perm));
+  }, [session?.usuario]);
+  const [aba, setAba] = useState(() => abasPermitidas[0]?.key || null);
+  // Se a aba ativa não está mais liberada, cai na primeira permitida.
+  useEffect(() => {
+    if (abasPermitidas.length > 0 && !abasPermitidas.some(a => a.key === aba)) {
+      setAba(abasPermitidas[0].key);
+    }
+  }, [abasPermitidas, aba]);
 
   // Mapa de grupos por categoria + nomes (vem da classificação salva no Supabase)
   const [gruposPorCat, setGruposPorCat] = useState({
@@ -216,7 +227,8 @@ export default function ClienteComercialProdutividade() {
         data_ate: dataAte,
         automotivos_data_de:  auto12m.de,
         automotivos_data_ate: auto12m.ate,
-        grupos_automotivos: gruposPorCat.automotivos,
+        grupos_automotivos:  gruposPorCat.automotivos,
+        grupos_conveniencia: gruposPorCat.conveniencia,
         produtos_aditivada: produtosAditivada,
         produtos_comum:     produtosComum,
       });
@@ -277,6 +289,8 @@ export default function ClienteComercialProdutividade() {
         custo: custoConv,
         lucro: fatConv - custoConv,
         vendas: Number(v.vendas_conveniencia) || 0,
+        qtd:   Number(v.qtd_conveniencia) || 0,
+        atendimentos: Number(v.atendimentos_conveniencia) || 0,  // notas fiscais (mlid distintos)
       };
       conv.margem = conv.fat > 0 ? (conv.lucro / conv.fat) * 100 : 0;
       conv.ticket = conv.vendas > 0 ? conv.fat / conv.vendas : 0;
@@ -410,6 +424,7 @@ export default function ClienteComercialProdutividade() {
     let totFat = 0, totLucro = 0, totVendas = 0, totLitros = 0, totAbast = 0;
     let totFatAuto = 0, totLucroAuto = 0, totVendasAuto = 0;
     let totAditiv = 0, totComum = 0;
+    let totQtd = 0, totAtend = 0; // conveniência: quantidade total + atendimentos (notas)
     // Conta vendedores com atividade no escopo (fat > 0 ou vendas > 0).
     let comAtividade = 0;
     vendedoresEnriquecidos.forEach(v => {
@@ -417,6 +432,8 @@ export default function ClienteComercialProdutividade() {
       totFat   += s.fat;
       totLucro += s.lucro;
       totVendas += s.vendas;
+      totQtd   += s.qtd || 0;
+      totAtend += s.atendimentos || 0;
       if (s.fat > 0 || s.vendas > 0) comAtividade++;
       if (escopo === 'pista') {
         totLitros += s.qtdCombustivel;
@@ -439,6 +456,7 @@ export default function ClienteComercialProdutividade() {
       fatAutomotivos: totFatAuto, margemAutomotivos: margemAuto,
       vendasAutomotivos: totVendasAuto,
       ticketAutomotivos: totFatAuto > 0 && totVendasAuto > 0 ? totFatAuto / totVendasAuto : 0,
+      qtdConveniencia: totQtd, atendimentos: totAtend,
       mix, litrosAditivada: totAditiv, litrosComum: totComum,
     };
   }, [vendedoresEnriquecidos, escopo]);
@@ -540,10 +558,20 @@ export default function ClienteComercialProdutividade() {
         </div>
       ) : (
         <>
-          {/* Abas: Pista (combustível + automotivos) / Conveniência */}
+          {/* Seletor de abas — só as liberadas pro usuário (permissão por-aba) */}
+          {abasPermitidas.length === 0 && (
+            <div className="bg-white rounded-xl border border-gray-100 p-12 text-center mb-4">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 mb-3">
+                <Users className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Nenhuma aba liberada</p>
+              <p className="text-[13px] text-gray-500 mt-1">Peça ao administrador para liberar as abas de Produtividade.</p>
+            </div>
+          )}
+          {abasPermitidas.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 mb-4 overflow-hidden">
             <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto">
-              {ABAS.map(a => {
+              {abasPermitidas.map(a => {
                 const Icon = a.icone;
                 const ativo = aba === a.key;
                 return (
@@ -563,6 +591,7 @@ export default function ClienteComercialProdutividade() {
               })}
             </div>
           </div>
+          )}
 
           {aba === 'rank' && (
             <>
@@ -663,28 +692,18 @@ export default function ClienteComercialProdutividade() {
             </>
           )}
 
-          {aba !== 'rank' && (
+          {aba === 'conveniencia' && (
           <>
-          {/* KPIs (variam por aba) */}
-          <div className={`grid grid-cols-2 ${escopo === 'pista' ? 'lg:grid-cols-5' : 'lg:grid-cols-2'} gap-3 mb-5`}>
-            <Kpi icone={Users} cor="violet" label="Vendedores ativos" valor={fmtNum(kpis.totalVendedores)} />
-            {escopo === 'pista' ? (
-              <>
-                <Kpi icone={Droplet} cor="violet" label="Mix de aditivada"
-                  valor={kpis.mix != null ? `${kpis.mix.toFixed(1)}%` : '—'}
-                  sub={kpis.mix != null
-                    ? `${fmtNum(kpis.litrosAditivada, 0)} / ${fmtNum(kpis.litrosAditivada + kpis.litrosComum, 0)} L`
-                    : 'Classifique em Configurações'} />
-                <Kpi icone={Coins}   cor="blue"  label="Abastecimentos"     valor={fmtNum(kpis.abastecimentos)}
-                  sub={`${fmtNum(kpis.vendas)} vendas total`} />
-                <Kpi icone={Package} cor="blue"  label="Vendas de automotivos" valor={formatCurrency(kpis.fatAutomotivos)} />
-                <Kpi icone={Gauge}   cor="emerald" label="Margem automotivos"
-                  valor={`${kpis.margemAutomotivos.toFixed(1)}%`}
-                  negativo={kpis.margemAutomotivos < 0} />
-              </>
-            ) : (
-              <Kpi icone={Coins} cor="blue" label="Vendas (linhas)" valor={fmtNum(kpis.vendas)} />
-            )}
+          {/* KPIs — Conveniência */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            <Kpi icone={Store} cor="emerald" label="Faturamento conveniência"
+              valor={formatCurrency(kpis.faturamento)} />
+            <Kpi icone={Package} cor="blue" label="Atendimentos"
+              valor={fmtNum(kpis.atendimentos)} />
+            <Kpi icone={Boxes} cor="violet" label="Média de qtd/venda"
+              valor={kpis.atendimentos > 0 ? (kpis.qtdConveniencia / kpis.atendimentos).toFixed(1) : '—'} />
+            <Kpi icone={Coins} cor="amber" label="Ticket médio"
+              valor={formatCurrency(kpis.atendimentos > 0 ? kpis.faturamento / kpis.atendimentos : 0)} />
           </div>
 
           {/* Análise comparativa (só na aba Pista) */}
@@ -896,7 +915,7 @@ export default function ClienteComercialProdutividade() {
                                 detalhe={det}
                                 mapaCatGrupos={mapaCatGrupos}
                                 mapaNomeGrupos={mapaNomeGrupos}
-                                mapaMix={mapaMix}
+                                conveniencia={escopo === 'conv'}
                               />
                             </td>
                           </tr>
@@ -1087,7 +1106,7 @@ function ScoreBadge({ score, rank }) {
 
 // Painel de detalhes do vendedor (linha expandida da tabela).
 // 3 painéis: Combustíveis vendidos | Grupos/Produtos (tree) | Mini-chart Automotivos 12m.
-function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos }) {
+function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos, conveniencia = false }) {
   if (!detalhe || detalhe.loading) {
     return (
       <div className="flex items-center justify-center gap-2 py-8 text-gray-500">
@@ -1107,6 +1126,27 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos }) {
   const produtos = detalhe.produtos || [];
   const automotivosMensal = detalhe.automotivos_mensal || [];
   const mixMensal = detalhe.mix_mensal || [];
+  const convMensal = detalhe.conveniencia_mensal || [];
+
+  // Helper: monta 12 buckets fixos (mês atual e 11 anteriores) a partir de rows
+  // { ano_mes, ... }, extraindo o campo `campo`.
+  const serie12m = (rows, campo) => {
+    const idx = new Map();
+    (rows || []).forEach(r => idx.set(String(r.ano_mes), r));
+    const out = [];
+    const hoje = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const m = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const ym = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
+      const row = idx.get(ym) || {};
+      out.push({ rotulo: `${MESES_CURTO[m.getMonth()]}/${String(m.getFullYear()).slice(2)}`, valor: Number(row[campo]) || 0 });
+    }
+    return out;
+  };
+  const serieAtend = serie12m(convMensal, 'atendimentos');
+  const serieConv  = serie12m(convMensal, 'valor');
+  const semAtend = serieAtend.every(p => p.valor === 0);
+  const semConv  = serieConv.every(p => p.valor === 0);
 
   // ─── Tree grupos → produtos (todos exceto combustível) ──────
   const arvore = (() => {
@@ -1189,7 +1229,36 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      {/* Painel 1: Atendimentos 12m (conveniência) OU Mix aditivada 12m */}
+      {conveniencia && (
+      <div className="bg-white rounded-xl border border-blue-100 overflow-hidden">
+        <div className="px-3 py-2 bg-blue-50/60 border-b border-blue-100 flex items-center gap-2">
+          <LineChartIcon className="h-3.5 w-3.5 text-blue-600" />
+          <h4 className="text-[11.5px] font-semibold text-blue-900">Atendimentos · 12 meses</h4>
+        </div>
+        <div className="p-3">
+          {semAtend ? (
+            <p className="text-[11px] text-gray-400 italic text-center py-10">Sem atendimentos nos últimos 12 meses</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={serieAtend} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="rotulo" tick={{ fontSize: 9, fill: '#64748b' }} stroke="#e5e7eb" />
+                <YAxis allowDecimals={false} tickFormatter={(v) => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v.toFixed(0)}`}
+                  tick={{ fontSize: 9, fill: '#94a3b8' }} stroke="#e5e7eb" />
+                <Tooltip formatter={(value) => [fmtNum(value), 'Atendimentos']}
+                  labelStyle={{ fontSize: 11, fontWeight: 600 }}
+                  contentStyle={{ fontSize: 11, borderRadius: 6, border: '1px solid #e5e7eb' }} />
+                <Bar dataKey="valor" fill="#93c5fd" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+      )}
+
       {/* Painel: Mix aditivada 12 meses */}
+      {!conveniencia && (
       <div className="bg-white rounded-xl border border-blue-100 overflow-hidden">
         <div className="px-3 py-2 bg-blue-50/60 border-b border-blue-100 flex items-center gap-2">
           <LineChartIcon className="h-3.5 w-3.5 text-blue-600" />
@@ -1215,6 +1284,7 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos }) {
           )}
         </div>
       </div>
+      )}
 
       {/* Painel: Grupos / Produtos (tree) */}
       <div className="bg-white rounded-xl border border-blue-100 overflow-hidden">
@@ -1232,7 +1302,40 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos }) {
         </div>
       </div>
 
-      {/* Painel 3: Mini-gráfico Automotivos 12 meses */}
+      {/* Painel 3: Conveniência 12m (conveniência) OU Automotivos 12m */}
+      {conveniencia && (
+      <div className="bg-white rounded-xl border border-emerald-100 overflow-hidden">
+        <div className="px-3 py-2 bg-emerald-50/60 border-b border-emerald-100 flex items-center gap-2">
+          <LineChartIcon className="h-3.5 w-3.5 text-emerald-600" />
+          <h4 className="text-[11.5px] font-semibold text-emerald-900">Conveniência · 12 meses</h4>
+        </div>
+        <div className="p-3">
+          {semConv ? (
+            <p className="text-[11px] text-gray-400 italic text-center py-10">Sem vendas de conveniência nos últimos 12 meses</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={serieConv} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="rotulo" tick={{ fontSize: 9, fill: '#64748b' }} stroke="#e5e7eb" />
+                <YAxis tickFormatter={(v) => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v.toFixed(0)}`}
+                  tick={{ fontSize: 9, fill: '#94a3b8' }} stroke="#e5e7eb" />
+                <Tooltip formatter={(value) => [formatCurrency(value), 'Faturamento']}
+                  labelStyle={{ fontSize: 11, fontWeight: 600 }}
+                  contentStyle={{ fontSize: 11, borderRadius: 6, border: '1px solid #e5e7eb' }} />
+                <Bar dataKey="valor" fill="#86efac" radius={[3, 3, 0, 0]}>
+                  {serieConv.map((p, i) => (
+                    <Cell key={`c-${i}`} fill={i === 11 ? '#10b981' : '#86efac'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+      )}
+
+      {/* Painel: Automotivos 12 meses */}
+      {!conveniencia && (
       <div className="bg-white rounded-xl border border-emerald-100 overflow-hidden">
         <div className="px-3 py-2 bg-emerald-50/60 border-b border-emerald-100 flex items-center gap-2">
           <LineChartIcon className="h-3.5 w-3.5 text-emerald-600" />
@@ -1262,6 +1365,7 @@ function DetalheVendedor({ vendedor, detalhe, mapaCatGrupos, mapaNomeGrupos }) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

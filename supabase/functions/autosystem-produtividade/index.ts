@@ -143,6 +143,7 @@ serve(async (req) => {
 
           -- Conveniência
           count(*) filter (where b.produto_grupo = any($6::bigint[]))             as vendas_conveniencia,
+          count(distinct b.mlid) filter (where b.produto_grupo = any($6::bigint[])) as atendimentos_conveniencia,
           sum(case when b.produto_grupo = any($6::bigint[]) then b.quantidade else 0 end) as qtd_conveniencia,
           sum(case when b.produto_grupo = any($6::bigint[]) then b.valor      else 0 end) as fat_conveniencia,
           sum(case when b.produto_grupo = any($6::bigint[]) then b.valor_custo else 0 end) as custo_conveniencia,

@@ -823,17 +823,19 @@ export async function buscarProdutividadeDetalheAutosystem(redeId, filtros = {})
       data_ate: filtros.data_ate,
       automotivos_data_de:  filtros.automotivos_data_de  || null,
       automotivos_data_ate: filtros.automotivos_data_ate || null,
-      grupos_automotivos: Array.isArray(filtros.grupos_automotivos) ? filtros.grupos_automotivos : [],
-      produtos_aditivada: Array.isArray(filtros.produtos_aditivada) ? filtros.produtos_aditivada : [],
-      produtos_comum:     Array.isArray(filtros.produtos_comum)     ? filtros.produtos_comum     : [],
+      grupos_automotivos:  Array.isArray(filtros.grupos_automotivos)  ? filtros.grupos_automotivos  : [],
+      grupos_conveniencia: Array.isArray(filtros.grupos_conveniencia) ? filtros.grupos_conveniencia : [],
+      produtos_aditivada:  Array.isArray(filtros.produtos_aditivada)  ? filtros.produtos_aditivada  : [],
+      produtos_comum:      Array.isArray(filtros.produtos_comum)      ? filtros.produtos_comum      : [],
     },
   });
   if (error) throw await _extrairErroFn(error, 'Falha ao buscar detalhe do vendedor');
   if (data?.error) throw new Error(data.detail || data.error);
   return {
-    produtos:           Array.isArray(data?.produtos)           ? data.produtos           : [],
-    automotivos_mensal: Array.isArray(data?.automotivos_mensal) ? data.automotivos_mensal : [],
-    mix_mensal:         Array.isArray(data?.mix_mensal)         ? data.mix_mensal         : [],
+    produtos:            Array.isArray(data?.produtos)            ? data.produtos            : [],
+    automotivos_mensal:  Array.isArray(data?.automotivos_mensal)  ? data.automotivos_mensal  : [],
+    mix_mensal:          Array.isArray(data?.mix_mensal)          ? data.mix_mensal          : [],
+    conveniencia_mensal: Array.isArray(data?.conveniencia_mensal) ? data.conveniencia_mensal : [],
   };
 }
 

@@ -18,6 +18,7 @@ import { mascarar } from '../../../utils/demoMascarar';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as qualityApi from '../../../services/qualityApiService';
 import * as mapService from '../../../services/mapeamentoService';
+import * as usuariosService from '../../../services/usuariosSistemaService';
 import { classificarItem } from '../../../services/mapeamentoVendasService';
 import { formatCurrency } from '../../../utils/format';
 import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
@@ -46,8 +47,8 @@ function keyProdutividade(dataDe, dataAte, empresasSel) {
 }
 
 const ABAS = [
-  { key: 'pista',        label: 'Pista',         icone: Fuel,  borda: 'border-amber-600',   texto: 'text-amber-700'   },
-  { key: 'conveniencia', label: 'Conveniência',  icone: Store, borda: 'border-emerald-600', texto: 'text-emerald-700' },
+  { key: 'pista',        label: 'Pista',         icone: Fuel,  borda: 'border-amber-600',   texto: 'text-amber-700', perm: 'produtividade_pista'   },
+  { key: 'conveniencia', label: 'Conveniência',  icone: Store, borda: 'border-emerald-600', texto: 'text-emerald-700', perm: 'produtividade_conveniencia' },
 ];
 
 export default function ClienteComercialProdutividade() {
@@ -95,7 +96,17 @@ export default function ClienteComercialProdutividade() {
   // Progresso do fetch
   const [etapas, setEtapas] = useState([]);
   const [busca, setBusca] = useState('');
-  const [aba, setAba] = useState('pista');
+  // Abas liberadas para o usuário (permissão por-aba, default-deny).
+  const abasPermitidas = useMemo(() => {
+    const perms = new Set(usuariosService.permissoesEfetivas(session?.usuario));
+    return ABAS.filter(a => perms.has(a.perm));
+  }, [session?.usuario]);
+  const [aba, setAba] = useState(() => abasPermitidas[0]?.key || null);
+  useEffect(() => {
+    if (abasPermitidas.length > 0 && !abasPermitidas.some(a => a.key === aba)) {
+      setAba(abasPermitidas[0].key);
+    }
+  }, [abasPermitidas, aba]);
 
   const [mapaMix, setMapaMix] = useState(new Map()); // produto_codigo → 'aditivada' | 'comum'
 
@@ -633,12 +644,20 @@ export default function ClienteComercialProdutividade() {
           </div>
           <p className="text-sm font-medium text-gray-900">Nenhum vendedor encontrado no período</p>
         </div>
+      ) : abasPermitidas.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 mb-3">
+            <Users className="h-6 w-6" />
+          </div>
+          <p className="text-sm font-medium text-gray-900">Nenhuma aba liberada</p>
+          <p className="text-[13px] text-gray-500 mt-1">Peça ao administrador para liberar as abas de Produtividade.</p>
+        </div>
       ) : (
         <>
           {/* Abas */}
           <div className="bg-white rounded-xl border border-gray-100 mb-4 overflow-hidden">
             <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto">
-              {ABAS.map(a => {
+              {abasPermitidas.map(a => {
                 const Icon = a.icone;
                 const ativo = aba === a.key;
                 return (

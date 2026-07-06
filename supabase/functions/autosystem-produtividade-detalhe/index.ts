@@ -46,6 +46,7 @@ serve(async (req) => {
     automotivos_data_de?: string;
     automotivos_data_ate?: string;
     grupos_automotivos?: (string | number)[];
+    grupos_conveniencia?: (string | number)[];
     produtos_aditivada?: (string | number)[];
     produtos_comum?: (string | number)[];
   };
@@ -57,7 +58,7 @@ serve(async (req) => {
     vendedor_codigo,
     data_de, data_ate,
     automotivos_data_de, automotivos_data_ate,
-    grupos_automotivos,
+    grupos_automotivos, grupos_conveniencia,
     produtos_aditivada, produtos_comum,
   } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
@@ -77,6 +78,7 @@ serve(async (req) => {
   const toBigArr = (arr?: (string | number)[]) =>
     Array.isArray(arr) ? arr.map(v => Number(v)).filter(n => Number.isFinite(n)) : [];
   const gAuto = toBigArr(grupos_automotivos);
+  const gConv = toBigArr(grupos_conveniencia);
   const pAditiv = toBigArr(produtos_aditivada);
   const pComum  = toBigArr(produtos_comum);
 
@@ -178,7 +180,31 @@ serve(async (req) => {
         `, [empresaNum, vendedorNum, automotivos_data_de, automotivos_data_ate, pAditiv, pComum], { encoding: 'SQL_ASCII' });
     }
 
-    return json({ produtos, automotivos_mensal, mix_mensal });
+    // Conveniência mensal (12 meses): faturamento + atendimentos (notas = mlid distintos).
+    let conveniencia_mensal: Record<string, unknown>[] = [];
+    if (automotivos_data_de && automotivos_data_ate && gConv.length > 0) {
+      conveniencia_mensal = await executarQuery(rede, `
+          select
+            to_char(l.data, 'YYYY-MM')     as ano_mes,
+            sum(coalesce(l.valor, 0))      as valor,
+            count(distinct l.mlid)         as atendimentos
+          from lancto l
+          left join produto prod on prod.grid = l.produto
+          where l.operacao = 'V'
+            and l.empresa  = $1::bigint
+            and l.vendedor = $2::bigint
+            and l.data between $3 and $4
+            and prod.grupo = any($5::bigint[])
+            and not exists (
+              select 1 from lancto d
+               where d.mlid = l.mlid and d.produto = l.produto and d.operacao = 'DC'
+            )
+          group by to_char(l.data, 'YYYY-MM')
+          order by to_char(l.data, 'YYYY-MM')
+        `, [empresaNum, vendedorNum, automotivos_data_de, automotivos_data_ate, gConv], { encoding: 'SQL_ASCII' });
+    }
+
+    return json({ produtos, automotivos_mensal, mix_mensal, conveniencia_mensal });
   } catch (err) {
     return json(
       {
