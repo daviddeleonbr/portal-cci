@@ -23,7 +23,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { obterRede, executarQuery, withConexao, decodeRowText } from '../_shared/autosystem-query.ts';
+import { obterRede, executarQuery, withConexao, decodeRowText, autorizarAcesso, RedeNaoAutorizadaError, PermissaoNegadaError, EmpresaNaoAutorizadaError } from '../_shared/autosystem-query.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -102,7 +102,13 @@ serve(async (req) => {
   });
 
   try {
-    const rede = await obterRede(supabase, redeId, req);
+    // Autorização por-usuário: rede + permissão + empresa. `por_mes` alimenta o
+    // Dashboard (permissão `dashboard`) além da página de Vendas; os demais
+    // modos são só da página de Vendas (`comercial_vendas`). Admin passa direto.
+    const permsNecessarias = por_mes ? ['comercial_vendas', 'dashboard'] : ['comercial_vendas'];
+    await autorizarAcesso(supabase, req, redeId, { permissoes: permsNecessarias, empresasCodigos: empresaCodigos });
+
+    const rede = await obterRede(supabase, redeId);
 
     // `lancto.empresa`, `lancto.produto` e `produto.grid` são numéricos
     // (bigint). Envia o array de empresas como números e compara via bigint[].
@@ -395,6 +401,9 @@ serve(async (req) => {
     if (por_mes)         return json({ mensal: itens });
     return json({ vendas: itens });
   } catch (err) {
+    if (err instanceof RedeNaoAutorizadaError || err instanceof PermissaoNegadaError || err instanceof EmpresaNaoAutorizadaError) {
+      return json({ error: err.message }, 403);
+    }
     return json(
       {
         error: 'Falha ao consultar o servidor Autosystem',

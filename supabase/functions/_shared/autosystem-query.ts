@@ -58,6 +58,12 @@ export interface QueryOpts {
 export class RedeNaoAutorizadaError extends Error {
   constructor(msg = 'Rede não autorizada para este usuário.') { super(msg); this.name = 'RedeNaoAutorizadaError'; }
 }
+export class PermissaoNegadaError extends Error {
+  constructor(perm = '') { super(`Sem permissão para esta ação${perm ? ` (${perm})` : ''}.`); this.name = 'PermissaoNegadaError'; }
+}
+export class EmpresaNaoAutorizadaError extends Error {
+  constructor(codigo?: number | string) { super(`Empresa não autorizada para este usuário${codigo != null ? ` (código ${codigo})` : ''}.`); this.name = 'EmpresaNaoAutorizadaError'; }
+}
 
 function claimsDoToken(req: Request): Record<string, any> | null {
   const auth = req.headers.get('Authorization') || '';
@@ -76,6 +82,56 @@ export function autorizarRede(req: Request, redeId: string): void {
   const asRedeId = claims?.as_rede_id;
   if (!asRedeId || String(asRedeId) !== String(redeId)) {
     throw new RedeNaoAutorizadaError();
+  }
+}
+
+// Autorização por-usuário: rede + permissão (basta UMA das listadas) + empresa
+// (empresas_permitidas). Admin passa direto. `supabase` = client service_role,
+// usado só para mapear empresa_codigo -> clientes.id (a edge function não
+// propaga o JWT do usuário pro Postgres, então a checagem é feita aqui em TS).
+// empresas_permitidas ausente/vazio no claim = todas as empresas da rede.
+export async function autorizarAcesso(
+  supabase: any,
+  req: Request,
+  redeId: string,
+  opts: { permissoes?: string[]; empresasCodigos?: (number | string)[] } = {},
+): Promise<void> {
+  const claims = claimsDoToken(req);
+  if (claims?.cci_tipo === 'admin') return;
+
+  // 1) Rede
+  if (!claims?.as_rede_id || String(claims.as_rede_id) !== String(redeId)) {
+    throw new RedeNaoAutorizadaError();
+  }
+
+  // 2) Permissão por-feature (OR entre as permissoes passadas)
+  if (opts.permissoes && opts.permissoes.length > 0) {
+    const perms: string[] = Array.isArray(claims?.cci_permissoes) ? claims.cci_permissoes : [];
+    if (!opts.permissoes.some((p) => perms.includes(p))) {
+      throw new PermissaoNegadaError(opts.permissoes.join(' ou '));
+    }
+  }
+
+  // 3) Empresa (empresas_permitidas). Cada empresa_codigo pedido precisa mapear
+  // a um `clientes` (mesma rede) cujo id esteja na lista permitida do usuário.
+  const permitidas = claims?.empresas_permitidas;
+  const restrito = Array.isArray(permitidas) && permitidas.length > 0;
+  if (restrito && opts.empresasCodigos && opts.empresasCodigos.length > 0) {
+    const codigos = [...new Set(opts.empresasCodigos.map(Number).filter(Number.isFinite))];
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('id, empresa_codigo')
+      .eq('as_rede_id', redeId)
+      .in('empresa_codigo', codigos);
+    if (error) throw new Error('Falha ao validar empresas: ' + error.message);
+    const permitidasSet = new Set((permitidas as unknown[]).map(String));
+    const idPorCodigo = new Map<number, string>(
+      (data || []).map((r: any) => [Number(r.empresa_codigo), String(r.id)]),
+    );
+    for (const ec of codigos) {
+      const cid = idPorCodigo.get(ec);
+      if (!cid || !permitidasSet.has(cid)) throw new EmpresaNaoAutorizadaError(ec);
+    }
   }
 }
 
