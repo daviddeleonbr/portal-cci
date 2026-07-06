@@ -25,8 +25,11 @@ import Operacao       from '../../../pages/cliente/webposto/ClienteComercialOper
 import Produtividade  from '../../../pages/cliente/webposto/ClienteComercialProdutividade';
 
 const FLAG_SESSION = 'webposto-prefetched-v3';
-const DELAY_INICIAL_MS = 3000;
-const DURACAO_MAX_MS  = 45000;
+const DELAY_INICIAL_MS = 5000;
+// Uma página fantasma por vez, com intervalo entre elas — evita a rajada de
+// requisições concorrentes que estourava os streams HTTP/2 do Supabase
+// (ERR_HTTP2_SERVER_REFUSED_STREAM) e disparava a cascata de retry.
+const INTERVALO_PAGINA_MS = 9000;
 
 const TODAS_PAGINAS = [
   { nome: 'dashboard',      rota: '/cliente/webposto/dashboard',                  Componente: Dashboard },
@@ -48,12 +51,19 @@ const Fantasma = memo(function Fantasma({ nome, Componente }) {
   return <Componente />;
 });
 
+// Prefetch DESLIGADO temporariamente: montar páginas fantasma em background
+// gerava rajada de requisições concorrentes que estourava os streams HTTP/2 do
+// Supabase (ERR_HTTP2_SERVER_REFUSED_STREAM) e derrubava a página atual. Isolar
+// a causa. Reativar (versão sequencial) só depois de confirmar que resolveu.
+const PREFETCH_HABILITADO = false;
+
 export default function PrefetcherWebposto() {
   const session = useClienteSession();
   const location = useLocation();
   const [paginasAtivas, setPaginasAtivas] = useState([]);
 
   useEffect(() => {
+    if (!PREFETCH_HABILITADO) return;
     if (!session?.cliente) return;
     if (!location.pathname.startsWith('/cliente/webposto/')) return;
     const chaveApiId = session?.chaveApi?.id;
@@ -81,21 +91,36 @@ export default function PrefetcherWebposto() {
     }
 
     // eslint-disable-next-line no-console
-    console.log(`[prefetch] vai pré-carregar em ${DELAY_INICIAL_MS}ms:`, candidatas.map(c => c.nome));
+    console.log(`[prefetch] vai pré-carregar (1 por vez) em ${DELAY_INICIAL_MS}ms:`, candidatas.map(c => c.nome));
+    sessionStorage.setItem(FLAG_SESSION, chaveApiId);
 
-    const tInicio = setTimeout(() => {
-      setPaginasAtivas(candidatas);
-      sessionStorage.setItem(FLAG_SESSION, chaveApiId);
-
-      // Desmonta tudo após DURACAO_MAX_MS — cache já salvou até lá
-      setTimeout(() => {
+    // Renderiza UMA página fantasma por vez: monta a i-ésima, espera o
+    // intervalo (tempo de ela buscar + salvar cache), desmonta e passa pra
+    // próxima. Nunca há mais de 1 página fantasma disparando fetches ao mesmo
+    // tempo — sem rajada.
+    let cancelado = false;
+    let idx = 0;
+    const timers = [];
+    const passo = () => {
+      if (cancelado) return;
+      if (idx >= candidatas.length) {
         setPaginasAtivas([]);
         // eslint-disable-next-line no-console
-        console.log('[prefetch] ✓ concluído (desmontando fantasmas)');
-      }, DURACAO_MAX_MS);
-    }, DELAY_INICIAL_MS);
+        console.log('[prefetch] ✓ concluído');
+        return;
+      }
+      const pagina = candidatas[idx];
+      idx += 1;
+      setPaginasAtivas([pagina]);
+      timers.push(setTimeout(passo, INTERVALO_PAGINA_MS));
+    };
+    timers.push(setTimeout(passo, DELAY_INICIAL_MS));
 
-    return () => clearTimeout(tInicio);
+    return () => {
+      cancelado = true;
+      timers.forEach(clearTimeout);
+      setPaginasAtivas([]);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.cliente?.id, session?.chaveApi?.id]);
 

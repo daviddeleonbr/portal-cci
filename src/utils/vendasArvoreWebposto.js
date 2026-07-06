@@ -520,32 +520,42 @@ export async function buscarSeriesMargem12mWebposto({
   const pad  = (n) => String(n).padStart(2, '0');
   const ymd  = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-  // Janela de 12 meses (do 1º dia de 11 meses atrás até o último dia do mês atual).
-  const dataDe  = ymd(new Date(hoje.getFullYear(), hoje.getMonth() - 11, 1));
-  const dataAte = ymd(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0));
-
   // A classificação produto->categoria vive no catálogo do Quality (só no
-  // cliente). Montamos o mapa (código -> categoria já resolvida, com
-  // outros->automotivos) e enviamos ao banco, que agrega por mês+categoria.
-  // Antes: 12 chamadas trazendo 1 linha por produto/mês (milhões de linhas)
-  // + classificação/agregação no navegador. Agora: 1 chamada, ~48 linhas.
-  const produtoCodigos = [];
-  const categorias = [];
-  for (const codigo of produtosMap.keys()) {
-    const cat = _classificarItem({ produtoCodigo: Number(codigo) }, produtosMap, gruposMap);
-    produtoCodigos.push(Number(codigo));
-    categorias.push(cat === 'outros' ? 'automotivos' : cat);
-  }
+  // cliente). Montamos o mapa (código -> categoria já resolvida) e o banco
+  // agrega por mês+categoria (~4 linhas/mês).
+  const { produtoCodigos, categorias } = montarMapaProdutoCategoria(produtosMap, gruposMap);
+  const emp = empresasCodigos.map(Number);
 
-  const { data, error: errRpc } = await supabase.rpc('cci_webposto_lucro_bruto_categoria_mensal', {
-    p_chave_api_id:     chaveApiId,
-    p_empresas_codigos: empresasCodigos.map(Number),
-    p_data_de:          dataDe,
-    p_data_ate:         dataAte,
-    p_produto_codigos:  produtoCodigos,
-    p_categorias:       categorias,
-  });
-  if (errRpc) throw errRpc;
+  // PARTICIONAMENTO por mês (1 chamada/mês, no máx. 3 simultâneas). Uma única
+  // chamada de 12 meses varre ~1M linhas com anti-join e estoura o
+  // statement_timeout em rede movimentada — o 500 (57014) dispara retry do
+  // supabase-js, que satura os streams HTTP/2 (ERR_HTTP2_SERVER_REFUSED_STREAM)
+  // e derruba as outras chamadas (resumo). Por mês, cada varredura é leve.
+  const meses = [];
+  for (let i = 11; i >= 0; i--) {
+    const ini = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth() - i + 1, 0);
+    meses.push({ ini: ymd(ini), fim: ymd(fim) });
+  }
+  const MAX_PAR = 3;
+  let cursor = 0;
+  const data = [];
+  const consumir = async () => {
+    while (cursor < meses.length) {
+      const { ini, fim } = meses[cursor++];
+      const { data: chunk, error } = await supabase.rpc('cci_webposto_lucro_bruto_categoria_mensal', {
+        p_chave_api_id:     chaveApiId,
+        p_empresas_codigos: emp,
+        p_data_de:          ini,
+        p_data_ate:         fim,
+        p_produto_codigos:  produtoCodigos,
+        p_categorias:       categorias,
+      });
+      if (error) throw error;
+      if (Array.isArray(chunk)) data.push(...chunk);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(MAX_PAR, meses.length) }, () => consumir()));
 
   // Agrega por (ano_mes, categoria) — já vem pré-agregado do banco. Produtos
   // fora do catálogo caem em 'outros' (também tratado como automotivos).
@@ -634,8 +644,10 @@ export async function buscarVendasComercialWebposto({
   chaveApiId, empresasCodigos, dataDe, dataAte,
 }) {
   if (!chaveApiId || !empresasCodigos?.length || !dataDe || !dataAte) {
-    return { resumo: [], diaProduto: [], diasPeriodo: 1, diasMes: 30, periodoMA: null, periodoAA: null };
+    return { resumo: [], diasPeriodo: 1, diasMes: 30, periodoMA: null, periodoAA: null };
   }
+  // 1 chamada combinada (definer, rápida). Menos conexões concorrentes que as
+  // 3 paralelas de antes — reduz a pressão no pool/streams HTTP/2 do Supabase.
   const { data, error } = await supabase.rpc('cci_webposto_vendas_comercial', {
     p_chave_api_id:     chaveApiId,
     p_empresas_codigos: empresasCodigos.map(Number),
@@ -645,14 +657,37 @@ export async function buscarVendasComercialWebposto({
   if (error) throw error;
   const obj = data || {};
   return {
-    resumo:       Array.isArray(obj.resumo)      ? obj.resumo      : [],
-    diaProduto:   Array.isArray(obj.dia_produto) ? obj.dia_produto : [],
+    resumo:       Array.isArray(obj.resumo) ? obj.resumo : [],
     diasPeriodo:  Number(obj.dias_periodo) || 1,
     diasMes:      Number(obj.dias_mes)     || 30,
     periodoAtual: obj.periodo_atual || null,
     periodoMA:    obj.periodo_ma    || null,
     periodoAA:    obj.periodo_aa    || null,
   };
+}
+
+// Busca o dia x produto SO de uma categoria (sob demanda, ao abrir as sub-abas
+// diarias). Envia o mapa produto->categoria (mesmo padrao do sparkline) e o
+// banco filtra por p_categoria. Retorna rows no mesmo shape do antigo
+// `dia_produto`, entao os builders `construirArvoreDia*Agregado` funcionam sem
+// mudanca — so recebem o subconjunto ja escopado.
+export async function buscarDiaProdutoCategoriaWebposto({
+  chaveApiId, empresasCodigos, dataDe, dataAte, produtoCodigos, categorias, categoria,
+}) {
+  if (!chaveApiId || !empresasCodigos?.length || !dataDe || !dataAte || !produtoCodigos?.length || !categoria) {
+    return [];
+  }
+  const { data, error } = await supabase.rpc('cci_webposto_dia_produto_categoria', {
+    p_chave_api_id:     chaveApiId,
+    p_empresas_codigos: empresasCodigos.map(Number),
+    p_data_de:          dataDe,
+    p_data_ate:         dataAte,
+    p_produto_codigos:  produtoCodigos,
+    p_categorias:       categorias,
+    p_categoria:        categoria,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
 }
 
 // Fallback: agrega vendas + items vindos da Quality API em rows no MESMO
@@ -1440,6 +1475,21 @@ function classificarCategoria(item, produtosMap, gruposMap) {
   const k = _classificarItem(item, produtosMap || new Map(), gruposMap || new Map());
   // 'outros' cai em automotivos (consistente com o autosystem)
   return k === 'outros' ? 'automotivos' : k;
+}
+
+// Monta {produtoCodigos[], categorias[]} a partir do catalogo, usando a MESMA
+// classificacao (classificarCategoria: outros->automotivos) que as trees
+// diarias e o sparkline usam — garante que o filtro server-side (RPCs que
+// recebem o mapa) bata exatamente com a classificacao do cliente.
+export function montarMapaProdutoCategoria(produtosMap, gruposMap) {
+  const produtoCodigos = [];
+  const categorias = [];
+  if (!produtosMap) return { produtoCodigos, categorias };
+  for (const codigo of produtosMap.keys()) {
+    produtoCodigos.push(Number(codigo));
+    categorias.push(classificarCategoria({ produtoCodigo: Number(codigo) }, produtosMap, gruposMap));
+  }
+  return { produtoCodigos, categorias };
 }
 
 // ─── Evolução mensal (12m) e Mix aditivada — consultam Supabase ────

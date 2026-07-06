@@ -20,8 +20,8 @@ import {
   totalizarArvore, totalizarArvoreAA, totalizarArvoreMA,
   construirArvoreWebpostoAgregado,
   buscarVendasComercialWebposto,
-  buscarSeriesMargem12mWebposto,
   construirArvoreDiaProdutoAgregado, construirArvoreDiaGrupoAgregado,
+  buscarDiaProdutoCategoriaWebposto, montarMapaProdutoCategoria,
   inverterArvoreParaProdutoDia, inverterArvoreParaGrupoDia,
   agregarHeatmapSemanal, calcularPareto, agregarAnaliseMargem,
   construirSerieEvolucaoCombustivel, listarProdutosCombustivelDaSerie,
@@ -75,25 +75,6 @@ function diasNoIntervalo(de, ate) {
   const [y1, m1, d1] = String(de).split('-').map(Number);
   const [y2, m2, d2] = String(ate).split('-').map(Number);
   return Math.max(1, Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 86400000) + 1);
-}
-// Subtrai 1 mês mantendo dia (clamp se mês menor)
-function subtrairUmMes(iso) {
-  const [y, m, d] = String(iso).split('-').map(Number);
-  if (!y || !m || !d) return iso;
-  const ano = m === 1 ? y - 1 : y;
-  const mes = m === 1 ? 12 : m - 1;
-  const ultimo = new Date(ano, mes, 0).getDate();
-  return `${ano}-${pad(mes)}-${pad(Math.min(d, ultimo))}`;
-}
-function subtrairUmAno(iso) {
-  const [y, m, d] = String(iso).split('-').map(Number);
-  if (!y || !m || !d) return iso;
-  const tent = new Date(y - 1, m - 1, d);
-  if (tent.getMonth() !== m - 1) {
-    const ultimo = new Date(y - 1, m, 0).getDate();
-    return `${y - 1}-${pad(m)}-${pad(ultimo)}`;
-  }
-  return `${y - 1}-${pad(m)}-${pad(d)}`;
 }
 
 // ─── Cache em memória ────────────────────────────────────────
@@ -166,13 +147,6 @@ export default function ClienteComercialVendas() {
       return cacheInicialVendas?.gruposMap instanceof Map ? cacheInicialVendas.gruposMap : new Map();
     } catch { return new Map(); }
   });
-  const [seriesMargem, setSeriesMargem] = useState({
-    combustivel:  { margem: [], litros: [], lucro: [], lbPorL: [] },
-    automotivos:  { margem: [], fat: [],    lucro: [], ticket: [] },
-    conveniencia: { margem: [], fat: [],    lucro: [], ticket: [] },
-    global:       { margem: [], fat: [],    lucro: [] },
-  });
-  const [loadingSeries, setLoadingSeries] = useState(false);
   const [tab, setTab] = useState('geral');
 
   // Filtros — período por MÊS + ANO (mês fechado)
@@ -247,26 +221,24 @@ export default function ClienteComercialVendas() {
     const tick = () => { if (!silencioso) setProgresso(p => ({ ...p, feitos: p.feitos + 1 })); };
 
     try {
-      // Catálogos da Quality continuam vindo via apiKey (tem cache 1h)
-      const chavesApi = await mapService.listarChavesApi();
-      let apiKeyCatalogo = chaveApiSessao;
-      if (!apiKeyCatalogo || session?.chaveApi?.id !== empresasSel[0].chave_api_id) {
-        const ch = chavesApi.find(c => c.id === empresasSel[0].chave_api_id);
-        if (!ch) throw new Error(`Chave API não encontrada para "${empresasSel[0].fantasia || empresasSel[0].nome}"`);
-        apiKeyCatalogo = ch.chave;
-      }
-
-      // Janelas MA/AA mantêm o número de dias do recorte atual
-      const atualDe = dataDe;
-      const atualAte = dataAteEfetivo;
-      const maDe   = subtrairUmMes(atualDe);
-      const maAte  = subtrairUmMes(atualAte);
-      const aaDe   = subtrairUmAno(atualDe);
-      const aaAte  = subtrairUmAno(atualAte);
-
       const precisaCatalogos = produtosMap.size === 0 || gruposMap.size === 0;
       const chaveApiIdRede = empresasSel[0].chave_api_id;
       const empresasCodigos = empresasSel.map(e => Number(e.empresa_codigo)).filter(Number.isFinite);
+      const atualDe = dataDe;
+      const atualAte = dataAteEfetivo;
+
+      // apiKey do catálogo Quality só é resolvida quando precisamos (re)carregar
+      // os catálogos — evita 1 request a `chaves_api` em cada troca de período.
+      let apiKeyCatalogo = null;
+      if (precisaCatalogos) {
+        apiKeyCatalogo = chaveApiSessao;
+        if (!apiKeyCatalogo || session?.chaveApi?.id !== chaveApiIdRede) {
+          const chavesApi = await mapService.listarChavesApi();
+          const ch = chavesApi.find(c => c.id === chaveApiIdRede);
+          if (!ch) throw new Error(`Chave API não encontrada para "${empresasSel[0].fantasia || empresasSel[0].nome}"`);
+          apiKeyCatalogo = ch.chave;
+        }
+      }
 
       const inicio = performance.now();
 
@@ -294,7 +266,6 @@ export default function ClienteComercialVendas() {
 
       const dadosRawNew = {
         resumo:      agregado.resumo,       // 1 linha por (empresa, produto) com totais atual+MA+AA
-        diaProduto:  agregado.diaProduto,   // 1 linha por (dia, empresa, produto) só do período atual
         diasPeriodo: agregado.diasPeriodo,  // pra projeção
         diasMes:     agregado.diasMes,
         tempoMs: Math.round(performance.now() - inicio),
@@ -302,7 +273,6 @@ export default function ClienteComercialVendas() {
       // eslint-disable-next-line no-console
       console.info('[vendas RPC unificada]', {
         resumoRows: agregado.resumo.length,
-        diaProdutoRows: agregado.diaProduto.length,
         diasPeriodo: agregado.diasPeriodo,
         diasMes: agregado.diasMes,
         ms: dadosRawNew.tempoMs,
@@ -322,38 +292,6 @@ export default function ClienteComercialVendas() {
       setBgRefresh(false);
     }
   }, [empresasSel, dataDe, dataAteEfetivo, produtosMap, gruposMap, chaveApiSessao, session?.chaveApi?.id]);
-
-  // Séries 12m de margem (sparklines dos KPIs da Visão geral). Buscado
-  // em paralelo SEM bloquear a tela. Tem cache localStorage (24h) porque
-  // só muda após sync diário do cron — não precisa refetch a cada
-  // navegação.
-  useEffect(() => {
-    const chaveApiId = empresasSel[0]?.chave_api_id;
-    if (!chaveApiId || empresasSel.length === 0 || produtosMap.size === 0) return;
-    let cancelado = false;
-    const empIds = empresasSel.map(e => e.id);
-    // Tenta cache v3: hit = usa imediato sem refetch (séries só mudam após
-    // sync diário do cron). Inclui o dia atual na "chave" via prefixo.
-    const cacheSeries = lerCacheV2('series12m', chaveApiId);
-    const hoje = new Date().toISOString().slice(0, 10);
-    if (cacheSeries?.series && cacheSeries?.dia === hoje) {
-      setSeriesMargem(cacheSeries.series);
-      return;
-    }
-    setLoadingSeries(true);
-    buscarSeriesMargem12mWebposto({
-      chaveApiId,
-      empresasCodigos: empresasSel.map(e => Number(e.empresa_codigo)),
-      produtosMap, gruposMap,
-    }).then(s => {
-      if (cancelado) return;
-      setSeriesMargem(s);
-      salvarCacheV2('series12m', chaveApiId, { series: s, dia: hoje });
-    })
-      .catch(err => console.error('[series 12m]', err))
-      .finally(() => { if (!cancelado) setLoadingSeries(false); });
-    return () => { cancelado = true; };
-  }, [empresasSelIds, produtosMap, gruposMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Carregamento automático SÓ na primeira vez que as empresas ficam
   // disponíveis (entrada na página). Mudanças posteriores em filtros
@@ -449,6 +387,12 @@ export default function ClienteComercialVendas() {
   const totaisAtual = useMemo(() => totalizarArvore(arvore), [arvore]);
   const totaisMA    = useMemo(() => totalizarArvoreMA(arvore), [arvore]);
   const totaisAA    = useMemo(() => totalizarArvoreAA(arvore), [arvore]);
+
+  // Sparklines removidas: sem série → os cards não renderizam o mini-gráfico
+  // (nem o rótulo). Elimina de vez o fetch de 12 meses que sobrecarregava o
+  // banco (retry storm / ERR_CONNECTION_CLOSED).
+  const seriesMargem = null;
+  const loadingSeries = false;
 
   // Projeção: prefere os dias retornados pelo servidor (mais precisos
   // que o cálculo client), fallback pro cálculo local sobre filtros
@@ -552,21 +496,24 @@ export default function ClienteComercialVendas() {
               dadosRaw={dadosRaw} produtosMap={produtosMap} gruposMap={gruposMap}
               projetar={projetar} series={seriesMargem?.combustivel} seriesLoading={loadingSeries}
               chaveApiId={empresasSel[0]?.chave_api_id}
-              empresasCodigos={empresasSel.map(e => Number(e.empresa_codigo))} />
+              empresasCodigos={empresasSel.map(e => Number(e.empresa_codigo))}
+              dataDe={dataDeAplicada} dataAte={dataAteAplicada} />
           )}
           {tab === 'automotivos'  && (
             <AbaAutoConv categoriaKey="automotivos" arvore={arvore} totaisAtual={totaisAtual} totaisAA={totaisAA}
               dadosRaw={dadosRaw} produtosMap={produtosMap} gruposMap={gruposMap} projetar={projetar}
               cor="blue" series={seriesMargem?.automotivos} seriesLoading={loadingSeries}
               chaveApiId={empresasSel[0]?.chave_api_id}
-              empresasCodigos={empresasSel.map(e => Number(e.empresa_codigo))} />
+              empresasCodigos={empresasSel.map(e => Number(e.empresa_codigo))}
+              dataDe={dataDeAplicada} dataAte={dataAteAplicada} />
           )}
           {tab === 'conveniencia' && (
             <AbaAutoConv categoriaKey="conveniencia" arvore={arvore} totaisAtual={totaisAtual} totaisAA={totaisAA}
               dadosRaw={dadosRaw} produtosMap={produtosMap} gruposMap={gruposMap} projetar={projetar}
               cor="emerald" series={seriesMargem?.conveniencia} seriesLoading={loadingSeries}
               chaveApiId={empresasSel[0]?.chave_api_id}
-              empresasCodigos={empresasSel.map(e => Number(e.empresa_codigo))} />
+              empresasCodigos={empresasSel.map(e => Number(e.empresa_codigo))}
+              dataDe={dataDeAplicada} dataAte={dataAteAplicada} />
           )}
         </>
       )}
@@ -589,7 +536,6 @@ function AbaVisaoGeral({ arvore, totaisAtual, totaisAA, podeFiltrarEmpresa, proj
               lucro={d.lucro} lucroProjecao={projetar(d.lucro)}
               margem={margem}
               lucroAnoAnterior={aa.lucro}
-              faturamento={d.valor} faturamentoProjecao={projetar(d.valor)}
               qtd={d.qtd}
               serieMargem={seriesMargem?.[c.key]?.margem || null}
               seriesLoading={seriesLoading}
@@ -601,8 +547,6 @@ function AbaVisaoGeral({ arvore, totaisAtual, totaisAA, podeFiltrarEmpresa, proj
           lucroProjecao={projetar(totaisAtual.totalLucro)}
           margem={totaisAtual.totalValor > 0 ? totaisAtual.totalLucro / totaisAtual.totalValor : 0}
           lucroAnoAnterior={totaisAA.totalLucro}
-          faturamento={totaisAtual.totalValor}
-          faturamentoProjecao={projetar(totaisAtual.totalValor)}
           serieMargem={seriesMargem?.global?.margem || null}
           seriesLoading={seriesLoading}
         />
@@ -622,7 +566,7 @@ const SUB_ABAS_COMBUSTIVEL = [
   { key: 'doze',   label: 'Últimos 12 meses',        icone: LineChartIcon },
   { key: 'semana', label: 'Análise semanal',         icone: Calendar },
 ];
-function AbaCombustiveis({ arvore, totaisAtual, totaisAA, dadosRaw, produtosMap, gruposMap, projetar, series, seriesLoading, chaveApiId, empresasCodigos }) {
+function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap, projetar, series, seriesLoading, chaveApiId, empresasCodigos, dataDe, dataAte }) {
   const [subAba, setSubAba] = useState('dia');
   // Adapta cada série pro shape array de números que o KpiCombustivelDashboard espera
   const sLitros = (series?.litros || []).map(p => p.margemPct);
@@ -637,12 +581,40 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, dadosRaw, produtosMap,
   const luPorLAA = aa.qtd > 0 ? aa.lucro / aa.qtd : 0;
 
   const produtos = useMemo(() => agregarProdutosCombustivel(arvore), [arvore]);
+
+  // Diário (sub-abas dia/tipo/semana) buscado SOB DEMANDA, só da categoria
+  // combustível — não vem mais no fetch principal.
+  const { produtoCodigos, categorias } = useMemo(
+    () => montarMapaProdutoCategoria(produtosMap, gruposMap), [produtosMap, gruposMap]);
+  const precisaDia = subAba === 'dia' || subAba === 'tipo' || subAba === 'semana';
+  const [diaRows, setDiaRows] = useState([]);
+  const [loadingDia, setLoadingDia] = useState(false);
+  useEffect(() => {
+    if (!precisaDia || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
+    let cancelado = false;
+    (async () => {
+      setLoadingDia(true);
+      try {
+        const rows = await buscarDiaProdutoCategoriaWebposto({
+          chaveApiId, empresasCodigos, dataDe, dataAte,
+          produtoCodigos, categorias, categoria: 'combustivel',
+        });
+        if (!cancelado) setDiaRows(rows);
+      } catch (err) {
+        if (!cancelado) { console.error('[dia combustivel]', err); setDiaRows([]); }
+      } finally {
+        if (!cancelado) setLoadingDia(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [precisaDia, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const arvoreDia = useMemo(
     () => construirArvoreDiaProdutoAgregado({
-      diaProduto: dadosRaw?.diaProduto || [],
+      diaProduto: diaRows,
       produtosMap, gruposMap, categoriaKey: 'combustivel',
     }),
-    [dadosRaw, produtosMap, gruposMap],
+    [diaRows, produtosMap, gruposMap],
   );
   const arvoreProdutoDia = useMemo(() => inverterArvoreParaProdutoDia(arvoreDia), [arvoreDia]);
   const heatmap = useMemo(() => agregarHeatmapSemanal(arvoreDia), [arvoreDia]);
@@ -736,10 +708,14 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, dadosRaw, produtosMap,
             );
           })}
         </div>
-        {subAba === 'dia'    && (arvoreDia.length > 0
+        {subAba === 'dia'    && (loadingDia
+          ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>
+          : arvoreDia.length > 0
           ? <TreeRealizadoDia arvore={arvoreDia} expandidos={expandidos} onToggle={toggle} />
           : <p className="p-8 text-center text-sm text-gray-400">Sem dados no período.</p>)}
-        {subAba === 'tipo'   && (arvoreProdutoDia.length > 0
+        {subAba === 'tipo'   && (loadingDia
+          ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>
+          : arvoreProdutoDia.length > 0
           ? <TreeRealizadoPorCombustivel arvore={arvoreProdutoDia} expandidos={expandidosProd} onToggle={toggleProd} />
           : <p className="p-8 text-center text-sm text-gray-400">Sem dados no período.</p>)}
         {subAba === 'doze'   && (
@@ -751,7 +727,9 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, dadosRaw, produtosMap,
             onChangeProduto={setProdutoSel}
           />
         )}
-        {subAba === 'semana' && (heatmap.dados.length > 0
+        {subAba === 'semana' && (loadingDia
+          ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>
+          : heatmap.dados.length > 0
           ? <HeatmapSemanal dados={heatmap.dados} contagemDias={heatmap.contagemDias} />
           : <p className="p-8 text-center text-sm text-gray-400">Sem dados no período.</p>)}
       </div>
@@ -768,7 +746,7 @@ const SUB_ABAS_AUTOCONV = [
   { key: 'tempo',           label: 'Linha do tempo',        icone: LineChartIcon },
   { key: 'carrinho',        label: 'Carrinho de compras',   icone: ShoppingCart },
 ];
-function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, dadosRaw, produtosMap, gruposMap, projetar, cor = 'blue', series, seriesLoading, chaveApiId, empresasCodigos }) {
+function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap, gruposMap, projetar, cor = 'blue', series, seriesLoading, chaveApiId, empresasCodigos, dataDe, dataAte }) {
   const [subAba, setSubAba] = useState('dia');
   const sFat    = (series?.fat    || []).map(p => p.margemPct);
   const sLucro  = (series?.lucro  || []).map(p => p.margemPct);
@@ -782,12 +760,39 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, dadosRaw, pr
   const ticketAA = aa.itens > 0 ? aa.valor / aa.itens : 0;
 
   const grupos = useMemo(() => agregarGruposDaCategoria(arvore, categoriaKey), [arvore, categoriaKey]);
+
+  // Diário (sub-abas dia/grupo) buscado SOB DEMANDA, só desta categoria.
+  const { produtoCodigos, categorias } = useMemo(
+    () => montarMapaProdutoCategoria(produtosMap, gruposMap), [produtosMap, gruposMap]);
+  const precisaDia = subAba === 'dia' || subAba === 'grupo';
+  const [diaRows, setDiaRows] = useState([]);
+  const [loadingDia, setLoadingDia] = useState(false);
+  useEffect(() => {
+    if (!precisaDia || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
+    let cancelado = false;
+    (async () => {
+      setLoadingDia(true);
+      try {
+        const rows = await buscarDiaProdutoCategoriaWebposto({
+          chaveApiId, empresasCodigos, dataDe, dataAte,
+          produtoCodigos, categorias, categoria: categoriaKey,
+        });
+        if (!cancelado) setDiaRows(rows);
+      } catch (err) {
+        if (!cancelado) { console.error('[dia', categoriaKey, ']', err); setDiaRows([]); }
+      } finally {
+        if (!cancelado) setLoadingDia(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [precisaDia, categoriaKey, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const arvoreDia = useMemo(
     () => construirArvoreDiaGrupoAgregado({
-      diaProduto: dadosRaw?.diaProduto || [],
+      diaProduto: diaRows,
       produtosMap, gruposMap, categoriaKey,
     }),
-    [dadosRaw, produtosMap, gruposMap, categoriaKey],
+    [diaRows, produtosMap, gruposMap, categoriaKey],
   );
   const arvoreGrupoDia = useMemo(() => inverterArvoreParaGrupoDia(arvoreDia), [arvoreDia]);
   const [expandidos, setExpandidos] = useState(new Set());
@@ -955,10 +960,14 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, dadosRaw, pr
             );
           })}
         </div>
-        {subAba === 'dia'   && (arvoreDia.length > 0
+        {subAba === 'dia'   && (loadingDia
+          ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>
+          : arvoreDia.length > 0
           ? <TreeRealizadoAutoDia arvore={arvoreDia} expandidos={expandidos} onToggle={toggle} cor={cor} />
           : <p className="p-8 text-center text-sm text-gray-400">Sem dados no período.</p>)}
-        {subAba === 'grupo' && (arvoreGrupoDia.length > 0
+        {subAba === 'grupo' && (loadingDia
+          ? <p className="p-8 text-center text-sm text-gray-400">Carregando…</p>
+          : arvoreGrupoDia.length > 0
           ? <TreeRealizadoAutoGrupo arvore={arvoreGrupoDia} expandidos={expandidosGrupo} onToggle={toggleGrupo} cor={cor} />
           : <p className="p-8 text-center text-sm text-gray-400">Sem dados no período.</p>)}
         {subAba === 'pareto' && (

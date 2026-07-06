@@ -98,14 +98,14 @@ export function BadgeComparacaoAA({ atual, anoAnterior, rotulo = 'AA' }) {
   const cmp = compararLucro(atual, anoAnterior);
   if (!cmp) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 text-gray-500 bg-gray-50 ring-gray-200">
+      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 text-gray-500 bg-gray-50 ring-gray-200">
         sem dados {rotulo}
       </span>
     );
   }
   const Icone = cmp.Icone;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${COMP_STYLE[cmp.tone]}`}>
+    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 ${COMP_STYLE[cmp.tone]}`}>
       <Icone className="h-2.5 w-2.5" />
       {cmp.tone === 'flat' ? '0,0%' : `${cmp.pct > 0 ? '+' : ''}${(cmp.pct * 100).toFixed(1)}%`}
       <span className="text-gray-400 font-normal">vs {rotulo}</span>
@@ -232,20 +232,18 @@ function KpiLucroLayout({
   return (
     <div className={`bg-white rounded-xl border border-gray-200/70 ${ring || ''} shadow-sm flex flex-col h-full overflow-hidden`}>
       <div className="flex items-center gap-2 px-3 pt-3 pb-1">
+        <div className={`h-7 w-7 rounded-md ${bgIcone} flex items-center justify-center flex-shrink-0`}>{icone}</div>
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 leading-tight truncate">{label}</p>
           <p className="text-[10.5px] text-gray-700 leading-tight truncate font-medium">{categoria}</p>
         </div>
-        <div className={`h-7 w-7 rounded-md ${bgIcone} flex items-center justify-center flex-shrink-0`}>{icone}</div>
+        <BadgeComparacaoAA atual={lucro} anoAnterior={lucroAnoAnterior} />
       </div>
 
       <div className="px-3 pt-3 pb-1.5 flex-1 flex flex-col justify-center">
         <p className={`text-[22px] font-bold tracking-tight tabular-nums truncate leading-none ${lucro < 0 ? 'text-red-700' : 'text-gray-900'}`} title={formatCurrency(lucro)}>
           {formatCurrency(lucro)}
         </p>
-        <div className="mt-1">
-          <BadgeComparacaoAA atual={lucro} anoAnterior={lucroAnoAnterior} />
-        </div>
         {faturamento != null && faturamento > 0 && (
           <div className="mt-3 space-y-0.5">
             <p className="text-[10.5px] text-gray-500 leading-tight truncate" title={`Faturamento: ${formatCurrency(faturamento)}`}>
