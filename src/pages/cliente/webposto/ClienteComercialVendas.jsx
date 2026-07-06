@@ -639,7 +639,7 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
   const serieEvol = useMemo(
     () => construirSerieEvolucaoCombustivel({
       rowsEvolucao: evolucao12mRows, produtosMap, gruposMap,
-      produtoCodigoSelecionado: produtoSel === '__todos' ? null : produtoSel,
+      produtoSelecionado: produtoSel === '__todos' ? null : produtoSel,
     }),
     [evolucao12mRows, produtosMap, gruposMap, produtoSel],
   );

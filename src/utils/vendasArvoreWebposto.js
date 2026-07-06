@@ -1114,7 +1114,7 @@ export function agregarAnaliseMargem(arvore, categoriaKey) {
 // Recebe data da RPC `cci_webposto_evolucao_mensal_produto`. Filtra por
 // produtos da categoria combustível e agrupa por mês.
 export function construirSerieEvolucaoCombustivel({
-  rowsEvolucao, produtosMap, gruposMap, produtoCodigoSelecionado = null,
+  rowsEvolucao, produtosMap, gruposMap, produtoSelecionado = null,
 }) {
   // 12 meses retroativos alinhados
   const hoje = new Date();
@@ -1138,7 +1138,14 @@ export function construirSerieEvolucaoCombustivel({
   (rowsEvolucao || []).forEach(r => {
     const pCodigo = Number(r.produto_codigo);
     if (!produtosCombustivel.has(pCodigo)) return;
-    if (produtoCodigoSelecionado && pCodigo !== Number(produtoCodigoSelecionado)) return;
+    // Filtra por NOME (um combustível pode ter vários produto_codigo — por
+    // empresa e/ou re-cadastro ao longo dos meses). Somar por código deixava
+    // meses "sem dados" quando o código do produto mudava.
+    if (produtoSelecionado) {
+      const p = produtosMap?.get(pCodigo);
+      const nome = p?.nome || p?.descricao || `#${pCodigo}`;
+      if (nome !== produtoSelecionado) return;
+    }
     const ym = String(r.ano_mes);
     let cur = porMes.get(ym);
     if (!cur) { cur = { ano_mes: ym, fat: 0, custo: 0, qtd: 0 }; porMes.set(ym, cur); }
@@ -1283,18 +1290,20 @@ export async function buscarParesCarrinhoWebposto({
 
 // Lista de produtos combustível distintos (pra select da aba 12 meses)
 export function listarProdutosCombustivelDaSerie({ rowsEvolucao, produtosMap, gruposMap }) {
-  const set = new Set();
+  // Agrupa por NOME (um combustível pode ter vários produto_codigo — por
+  // empresa e/ou re-cadastro). O seletor usa o nome como valor, e a série soma
+  // todos os códigos daquele nome.
+  const nomes = new Set();
   (rowsEvolucao || []).forEach(r => {
     const pCodigo = Number(r.produto_codigo);
     const cat = _classificarItem({ produtoCodigo: pCodigo }, produtosMap, gruposMap);
     if (cat === 'combustivel' && (Number(r.valor) > 0 || Number(r.quantidade) > 0)) {
-      set.add(pCodigo);
+      const p = produtosMap?.get(pCodigo);
+      nomes.add(p?.nome || p?.descricao || `#${pCodigo}`);
     }
   });
-  return Array.from(set).map(codigo => {
-    const p = produtosMap?.get(codigo);
-    return { codigo, nome: p?.nome || p?.descricao || `#${codigo}` };
-  }).sort((a, b) => a.nome.localeCompare(b.nome));
+  return Array.from(nomes).sort((a, b) => a.localeCompare(b))
+    .map(nome => ({ codigo: nome, nome }));
 }
 
 // Helper local — versão simplificada de classificarItem que aceita item direto.
