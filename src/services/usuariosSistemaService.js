@@ -61,6 +61,8 @@ export const PERMISSOES_CLIENTE = [
   { key: 'notas_fiscais', label: 'Notas Fiscais (manifestação)', grupo: 'Operacional' },
   { key: 'outras_contas', label: 'Outras contas a pagar', grupo: 'Operacional' },
   { key: 'suporte', label: 'Suporte', grupo: 'Atendimento' },
+  { key: 'pendencias', label: 'Pendências', grupo: 'Atendimento' },
+  { key: 'melhorias', label: 'Melhorias do Sistema', grupo: 'Atendimento' },
   { key: 'trocar_empresa', label: 'Alternar entre empresas da rede', grupo: 'Administração da Rede' },
   { key: 'gerenciar_usuarios', label: 'Gerenciar usuários da rede', grupo: 'Administração da Rede' },
   { key: 'configuracoes', label: 'Configurações de rede', grupo: 'Administração da Rede' },

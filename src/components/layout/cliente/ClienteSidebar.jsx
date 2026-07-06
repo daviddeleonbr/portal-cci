@@ -62,9 +62,9 @@ function buildNavigation(prefix, tipoCliente = 'webposto') {
     {
       section: 'Atendimento',
       items: [
-        { name: 'Pendências', href: `${prefix}/pendencias`, icon: AlertTriangle, badgeKey: 'pendencias' },
+        { name: 'Pendências', href: `${prefix}/pendencias`, icon: AlertTriangle, badgeKey: 'pendencias', permissao: 'pendencias' },
         { name: 'Suporte', href: `${prefix}/suporte`, icon: HelpCircle, permissao: 'suporte' },
-        { name: 'Melhorias do Sistema', href: `${prefix}/melhorias`, icon: Lightbulb },
+        { name: 'Melhorias do Sistema', href: `${prefix}/melhorias`, icon: Lightbulb, permissao: 'melhorias' },
       ],
     },
     {
