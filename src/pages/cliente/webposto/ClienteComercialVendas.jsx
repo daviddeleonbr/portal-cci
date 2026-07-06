@@ -665,7 +665,7 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
           valor={`${(margem * 100).toFixed(2)}%`} valorAA={`${(margemAA * 100).toFixed(2)}%`}
           atual={margem} anoAnterior={margemAA}
           serie={sMargem} seriesLoading={seriesLoading} />
-        <KpiCombustivelDashboard label="Lucro bruto por litro" icone={Droplet} cor="rose"
+        <KpiCombustivelDashboard label="Lucro por litro" icone={Droplet} cor="rose"
           valor={formatCurrency(luPorL)} valorAA={formatCurrency(luPorLAA)}
           negativo={luPorL < 0}
           atual={luPorL} anoAnterior={luPorLAA}
