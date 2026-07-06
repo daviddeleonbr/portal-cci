@@ -488,149 +488,6 @@ export async function buscarCombustiveisOverviewWebposto({
   return { rows, diasPeriodo, diasMes };
 }
 
-// Busca evolução mensal por produto e monta séries 12m pra TODOS os
-// sparklines dos KPIs (margem, faturamento, lucro, quantidade, ticket).
-//
-// Shape do retorno:
-//   {
-//     combustivel:  { margem, litros, lucro, lbPorL },
-//     automotivos:  { margem, fat, lucro, ticket },
-//     conveniencia: { margem, fat, lucro, ticket },
-//     global:       { margem, fat, lucro }
-//   }
-// Cada série é um array de 12 OBJETOS [{ano_mes, margemPct: N}] que o
-// componente Sparkline já consome (ele sempre lê `margemPct` como Y).
-//
-// Para o Ticket médio (Auto/Conv), usamos `fat / quantidade` como
-// proxy — é "valor médio por item", próximo da forma de "ticket médio
-// por venda" pra sparklines (visualização de tendência). Pra valor
-// exato precisaríamos de qtd_vendas distintas (futura otimização).
-export async function buscarSeriesMargem12mWebposto({
-  chaveApiId, empresasCodigos, produtosMap, gruposMap,
-}) {
-  const seriesVazias = () => ({
-    combustivel:  { margem: [], litros: [], lucro: [], lbPorL: [] },
-    automotivos:  { margem: [], fat: [],    lucro: [], ticket: [] },
-    conveniencia: { margem: [], fat: [],    lucro: [], ticket: [] },
-    global:       { margem: [], fat: [],    lucro: [] },
-  });
-  if (!chaveApiId || !empresasCodigos?.length || !produtosMap?.size) return seriesVazias();
-
-  const hoje = new Date();
-  const pad  = (n) => String(n).padStart(2, '0');
-  const ymd  = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-  // A classificação produto->categoria vive no catálogo do Quality (só no
-  // cliente). Montamos o mapa (código -> categoria já resolvida) e o banco
-  // agrega por mês+categoria (~4 linhas/mês).
-  const { produtoCodigos, categorias } = montarMapaProdutoCategoria(produtosMap, gruposMap);
-  const emp = empresasCodigos.map(Number);
-
-  // PARTICIONAMENTO por mês (1 chamada/mês, no máx. 3 simultâneas). Uma única
-  // chamada de 12 meses varre ~1M linhas com anti-join e estoura o
-  // statement_timeout em rede movimentada — o 500 (57014) dispara retry do
-  // supabase-js, que satura os streams HTTP/2 (ERR_HTTP2_SERVER_REFUSED_STREAM)
-  // e derruba as outras chamadas (resumo). Por mês, cada varredura é leve.
-  const meses = [];
-  for (let i = 11; i >= 0; i--) {
-    const ini = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    const fim = new Date(hoje.getFullYear(), hoje.getMonth() - i + 1, 0);
-    meses.push({ ini: ymd(ini), fim: ymd(fim) });
-  }
-  const MAX_PAR = 3;
-  let cursor = 0;
-  const data = [];
-  const consumir = async () => {
-    while (cursor < meses.length) {
-      const { ini, fim } = meses[cursor++];
-      const { data: chunk, error } = await supabase.rpc('cci_webposto_lucro_bruto_categoria_mensal', {
-        p_chave_api_id:     chaveApiId,
-        p_empresas_codigos: emp,
-        p_data_de:          ini,
-        p_data_ate:         fim,
-        p_produto_codigos:  produtoCodigos,
-        p_categorias:       categorias,
-      });
-      if (error) throw error;
-      if (Array.isArray(chunk)) data.push(...chunk);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(MAX_PAR, meses.length) }, () => consumir()));
-
-  // Agrega por (ano_mes, categoria) — já vem pré-agregado do banco. Produtos
-  // fora do catálogo caem em 'outros' (também tratado como automotivos).
-  const porMesCat = new Map();
-  (data || []).forEach(r => {
-    const ym = String(r.ano_mes);
-    const fat   = Number(r.valor)       || 0;
-    const custo = Number(r.valor_custo) || 0;
-    const qtd   = Number(r.quantidade)  || 0;
-    let cur = porMesCat.get(ym);
-    if (!cur) {
-      cur = {
-        combustivel:  { fat: 0, custo: 0, qtd: 0 },
-        automotivos:  { fat: 0, custo: 0, qtd: 0 },
-        conveniencia: { fat: 0, custo: 0, qtd: 0 },
-        global:       { fat: 0, custo: 0, qtd: 0 },
-      };
-      porMesCat.set(ym, cur);
-    }
-    const ck = (r.categoria === 'combustivel' || r.categoria === 'conveniencia') ? r.categoria : 'automotivos';
-    cur[ck].fat += fat; cur[ck].custo += custo; cur[ck].qtd += qtd;
-    cur.global.fat += fat; cur.global.custo += custo; cur.global.qtd += qtd;
-  });
-
-  // Constrói 12 pontos alinhados (preenche zero pros meses sem dados)
-  const mesesAlinhados = [];
-  for (let i = 11; i >= 0; i--) {
-    const m = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    mesesAlinhados.push(`${m.getFullYear()}-${pad(m.getMonth() + 1)}`);
-  }
-  const pontosPorMes = mesesAlinhados.map(ym => ({
-    ano_mes: ym,
-    dados: porMesCat.get(ym) || {
-      combustivel:  { fat: 0, custo: 0, qtd: 0 },
-      automotivos:  { fat: 0, custo: 0, qtd: 0 },
-      conveniencia: { fat: 0, custo: 0, qtd: 0 },
-      global:       { fat: 0, custo: 0, qtd: 0 },
-    },
-  }));
-
-  // Helpers que extraem cada métrica como série [{ano_mes, margemPct: N}].
-  // O componente Sparkline lê sempre `margemPct` como valor Y (legado);
-  // por isso usamos esse nome de campo independentemente da métrica.
-  const serie = (extrator) => pontosPorMes.map(p => ({
-    ano_mes: p.ano_mes,
-    margemPct: Number(extrator(p.dados)) || 0,
-  }));
-
-  return {
-    combustivel: {
-      margem: serie(d => d.combustivel.fat > 0 ? ((d.combustivel.fat - d.combustivel.custo) / d.combustivel.fat) * 100 : 0),
-      litros: serie(d => d.combustivel.qtd),
-      lucro:  serie(d => d.combustivel.fat - d.combustivel.custo),
-      lbPorL: serie(d => d.combustivel.qtd > 0 ? (d.combustivel.fat - d.combustivel.custo) / d.combustivel.qtd : 0),
-    },
-    automotivos: {
-      margem: serie(d => d.automotivos.fat > 0 ? ((d.automotivos.fat - d.automotivos.custo) / d.automotivos.fat) * 100 : 0),
-      fat:    serie(d => d.automotivos.fat),
-      lucro:  serie(d => d.automotivos.fat - d.automotivos.custo),
-      ticket: serie(d => d.automotivos.qtd > 0 ? d.automotivos.fat / d.automotivos.qtd : 0),
-    },
-    conveniencia: {
-      margem: serie(d => d.conveniencia.fat > 0 ? ((d.conveniencia.fat - d.conveniencia.custo) / d.conveniencia.fat) * 100 : 0),
-      fat:    serie(d => d.conveniencia.fat),
-      lucro:  serie(d => d.conveniencia.fat - d.conveniencia.custo),
-      ticket: serie(d => d.conveniencia.qtd > 0 ? d.conveniencia.fat / d.conveniencia.qtd : 0),
-    },
-    global: {
-      margem: serie(d => d.global.fat > 0 ? ((d.global.fat - d.global.custo) / d.global.fat) * 100 : 0),
-      fat:    serie(d => d.global.fat),
-      lucro:  serie(d => d.global.fat - d.global.custo),
-    },
-  };
-}
-
 // RPC unificada da página Vendas (comercial). Substitui as 3 RPCs
 // anteriores (resumo_3periodos + dia_produto + combustiveis_overview)
 // por UMA chamada que devolve um JSONB com tudo que a tela precisa.
@@ -741,7 +598,6 @@ function dataMenos(iso, dias) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-function dataMais(iso, dias) { return dataMenos(iso, -dias); }
 function hojeIsoCmp() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');
@@ -874,34 +730,6 @@ export async function buscarKpisPeriodoHibridoWebposto({
     } catch { /* empresa isolada falhou — segue as outras */ }
   }));
   return totais;
-}
-
-// Chama as RPCs de resumo + dia-produto em paralelo. Retorna ambos os
-// resultados no shape que o front consome (rows agregadas).
-export async function buscarVendasAgregadoWebposto({
-  chaveApiId, empresasCodigos,
-  atualDe, atualAte, maDe, maAte, aaDe, aaAte,
-}) {
-  if (!chaveApiId || !empresasCodigos?.length) return { resumo: [], diaProduto: [] };
-  const empArr = empresasCodigos.map(Number);
-  const [resumoRes, diaRes] = await Promise.all([
-    supabase.rpc('cci_webposto_resumo_3periodos', {
-      p_chave_api_id:     chaveApiId,
-      p_empresas_codigos: empArr,
-      p_atual_de: atualDe, p_atual_ate: atualAte,
-      p_ma_de:    maDe,    p_ma_ate:    maAte,
-      p_aa_de:    aaDe,    p_aa_ate:    aaAte,
-    }),
-    supabase.rpc('cci_webposto_dia_produto', {
-      p_chave_api_id:     chaveApiId,
-      p_empresas_codigos: empArr,
-      p_data_de:          atualDe,
-      p_data_ate:         atualAte,
-    }),
-  ]);
-  if (resumoRes.error) throw resumoRes.error;
-  if (diaRes.error)    throw diaRes.error;
-  return { resumo: resumoRes.data || [], diaProduto: diaRes.data || [] };
 }
 
 // Constrói tree dia → produto (combustíveis) a partir do RPC dia_produto.
