@@ -27,15 +27,27 @@ function usuarioValido(u: { status?: string; tipo?: string } | null): boolean {
   return !!u && u.status !== "inativo" && (u.tipo === "cliente" || u.tipo === "admin");
 }
 
-function htmlEmailReset(link: string): string {
-  return `<!doctype html><html><body style="margin:0;background:#f1f5f9;padding:24px;font-family:Segoe UI,Roboto,Arial,sans-serif;color:#0f172a">
+function htmlEmailReset(link: string, logoUrl: string): string {
+  // Geist via Google Fonts (renderiza em clientes que suportam webfont — Apple
+  // Mail/iOS; Gmail/Outlook caem no stack de sistema). Estilos inline por e-mail.
+  const fonte = "'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  return `<!doctype html><html><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');</style>
+</head>
+<body style="margin:0;background:#f1f5f9;padding:24px;font-family:${fonte};color:#0f172a">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
     <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0">
-      <tr><td style="background:#0f766e;padding:20px 24px;color:#fff;font-size:16px;font-weight:700">Portal CCI · Redefinição de senha</td></tr>
-      <tr><td style="padding:24px">
-        <p style="margin:0 0 12px;font-size:14px;line-height:1.6">Recebemos um pedido para redefinir a senha da sua conta no Portal CCI.</p>
-        <p style="margin:0 0 20px;font-size:14px;line-height:1.6">Clique no botão abaixo para escolher uma nova senha. O link é válido por <strong>1 hora</strong>.</p>
-        <p style="margin:0 0 20px"><a href="${link}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:600">Redefinir senha</a></p>
+      <tr><td style="padding:22px 24px 14px;border-bottom:1px solid #f1f5f9">
+        <img src="${logoUrl}" alt="CCI" height="34" style="height:34px;width:auto;display:block;border:0;outline:none;text-decoration:none">
+      </td></tr>
+      <tr><td style="padding:24px;font-family:${fonte}">
+        <h1 style="margin:0 0 12px;font-size:17px;font-weight:600;color:#0f172a;font-family:${fonte}">Redefinição de senha</h1>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#334155">Recebemos um pedido para redefinir a senha da sua conta no Portal CCI.</p>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#334155">Clique no botão abaixo para escolher uma nova senha. O link é válido por <strong>1 hora</strong>.</p>
+        <p style="margin:0 0 20px"><a href="${link}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:600;font-family:${fonte}">Redefinir senha</a></p>
         <p style="margin:0 0 6px;font-size:12px;color:#64748b">Se o botão não funcionar, copie e cole este endereço no navegador:</p>
         <p style="margin:0 0 20px;font-size:12px;color:#0f766e;word-break:break-all">${link}</p>
         <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.6">Se você não solicitou esta redefinição, ignore este e-mail — sua senha continua a mesma.</p>
@@ -62,7 +74,7 @@ async function enviarEmailReset(email: string, token: string): Promise<boolean> 
         from,
         to: [email],
         subject: "Redefinição de senha — Portal CCI",
-        html: htmlEmailReset(link),
+        html: htmlEmailReset(link, `${base}/logo-cci-landing.png`),
         text: `Recebemos um pedido para redefinir sua senha no Portal CCI.\n\nAbra o link abaixo (válido por 1 hora):\n${link}\n\nSe você não solicitou, ignore este e-mail.`,
       }),
     });
