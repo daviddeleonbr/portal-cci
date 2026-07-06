@@ -299,7 +299,9 @@ function ModalEsqueceuSenha({ open, onClose, initialEmail = '' }) {
                   <div className="flex items-start gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3">
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
                     <div className="text-[12.5px] text-emerald-200 leading-relaxed">
-                      Se este e-mail estiver cadastrado, geramos um link de redefinição com validade de 1 hora.
+                      {resposta?.link
+                        ? 'Se este e-mail estiver cadastrado, geramos um link de redefinição (validade de 1 hora).'
+                        : 'Se este e-mail estiver cadastrado, enviamos um link de redefinição para o seu e-mail (validade de 1 hora). Verifique também a caixa de spam.'}
                     </div>
                   </div>
 
@@ -314,8 +316,7 @@ function ModalEsqueceuSenha({ open, onClose, initialEmail = '' }) {
                         {copiado ? <><CheckCircle2 className="h-3.5 w-3.5" /> Link copiado</> : <><Copy className="h-3.5 w-3.5" /> Copiar link</>}
                       </button>
                       <p className="text-[10.5px] text-amber-300/80 leading-relaxed">
-                        Em ambiente de produção este link seria enviado automaticamente por e-mail.
-                        Por enquanto, copie e abra a URL acima para redefinir a senha.
+                        O envio automático por e-mail não está ativo no momento — copie e abra a URL acima para redefinir a senha.
                       </p>
                     </div>
                   )}

@@ -24,14 +24,16 @@ async function chamar(action, payload = {}) {
   return data;
 }
 
-// Solicita reset. Retorna `{ ok, link, usuario_email, usuario_tipo, motivo }`.
-// A UI deve sempre exibir "se este email existir, enviamos um link".
+// Solicita reset. Retorna `{ ok, enviado, link?, usuario_email?, usuario_tipo?, motivo }`.
+// A UI sempre exibe "se este e-mail existir, enviamos um link". Quando o envio
+// por e-mail funciona, o backend NÃO devolve o token → `link` fica null (some da
+// tela). Se não há provedor/falhou, vem o token e montamos o link (fallback).
 export async function solicitarReset(email) {
   const data = await chamar('solicitar', { email });
   if (!data.ok) return { ok: false, motivo: data.motivo };
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const link = `${origin}/redefinir-senha?token=${data.token}`;
-  return { ok: true, link, usuario_email: data.usuario_email, usuario_tipo: data.usuario_tipo };
+  const link = data.token ? `${origin}/redefinir-senha?token=${data.token}` : null;
+  return { ok: true, enviado: !!data.enviado, link, usuario_email: data.usuario_email, usuario_tipo: data.usuario_tipo };
 }
 
 // Valida o token. Retorna `{ ok, usuario, token_id, motivo }`. Não consome.
