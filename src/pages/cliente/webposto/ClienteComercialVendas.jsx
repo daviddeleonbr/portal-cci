@@ -394,6 +394,39 @@ export default function ClienteComercialVendas() {
   }, [dataDeAplicada, dataAteAplicada, dadosRaw]);
   const projetar = useCallback((v) => Number(v) * projParams.fator, [projParams.fator]);
 
+  // Prefetch leve: aquece o cache do nível 1 (totais por dia) das 3 categorias,
+  // pra 1ª troca de aba/abertura do "dia a dia" ficar instantânea. Sequencial e
+  // só depois do carregamento principal — não compete com o fetch dos cards por
+  // streams HTTP/2 (evita a cascata de retry que já causou ERR_CONNECTION_CLOSED).
+  const empresasCodigosPrefetch = useMemo(
+    () => empresasSel.map(e => Number(e.empresa_codigo)),
+    [empresasSel],
+  );
+  useEffect(() => {
+    const chaveApiId = empresasSel[0]?.chave_api_id;
+    if (loadingDados || !chaveApiId || empresasCodigosPrefetch.length === 0
+        || !dataDeAplicada || !dataAteAplicada || produtosMap.size === 0) return;
+    let cancelado = false;
+    (async () => {
+      for (const categoria of ['combustivel', 'automotivos', 'conveniencia']) {
+        if (cancelado) return;
+        const ck = chaveDiaTotais(categoria, dataDeAplicada, dataAteAplicada, empresasCodigosPrefetch);
+        if (lerCacheV2(ck, chaveApiId)) continue;   // já aquecido
+        const { produtoCodigos, categorias } = montarMapaProdutoCategoria(produtosMap, gruposMap, categoria);
+        if (produtoCodigos.length === 0) continue;
+        try {
+          const rows = await buscarDiaTotaisCategoriaWebposto({
+            chaveApiId, empresasCodigos: empresasCodigosPrefetch,
+            dataDe: dataDeAplicada, dataAte: dataAteAplicada,
+            produtoCodigos, categorias, categoria,
+          });
+          if (!cancelado) salvarCacheV2(ck, chaveApiId, rows);
+        } catch { /* prefetch é best-effort */ }
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [loadingDados, empresasCodigosPrefetch, dataDeAplicada, dataAteAplicada, produtosMap, gruposMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Renderização ────────────────────────────────────────
   if (!cliente?.id) return <Navigate to="/cliente/webposto/dashboard" replace />;
 
@@ -542,6 +575,25 @@ function AbaVisaoGeral({ arvore, totaisAtual, totaisAA, podeFiltrarEmpresa, proj
   );
 }
 
+// ─── Cache (v3) do "Realizado dia a dia" lazy ────────────────
+// Nível 1 (totais por dia) e detalhe por dia são cacheados por
+// período+categoria+empresas. Torna revisita / troca de aba instantânea.
+const normEmpresas = (arr) => [...arr].map(Number).sort((a, b) => a - b).join('-');
+const chaveDiaTotais = (categoria, dataDe, dataAte, empresasCodigos) =>
+  `dia-totais:${categoria}:${dataDe}:${dataAte}:${normEmpresas(empresasCodigos)}`;
+const chaveDiaDetalhe = (categoria, dia, empresasCodigos) =>
+  `dia-det:${categoria}:${dia}:${normEmpresas(empresasCodigos)}`;
+
+// Um dia com mais de 2 dias de idade não muda mais (padrão DIAS_FRESCOS do sync).
+// Só esses entram no cache de detalhe; dias recentes são sempre buscados frescos.
+function diaImutavel(dia) {
+  const hoje = new Date();
+  hoje.setDate(hoje.getDate() - 2);
+  const p = (n) => String(n).padStart(2, '0');
+  const corte = `${hoje.getFullYear()}-${p(hoje.getMonth() + 1)}-${p(hoje.getDate())}`;
+  return dia < corte;   // comparação lexicográfica de YYYY-MM-DD
+}
+
 // ─── Aba: Combustíveis ───────────────────────────────────────
 const SUB_ABAS_COMBUSTIVEL = [
   { key: 'dia',    label: 'Realizado dia a dia',     icone: Droplet },
@@ -623,19 +675,23 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
   }, [chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Nível 1: busca os totais por dia ao entrar na sub-aba "dia".
+  // Stale-while-revalidate: mostra o cache na hora e revalida em background.
   useEffect(() => {
     if (subAba !== 'dia' || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
     let cancelado = false;
+    const ck = chaveDiaTotais('combustivel', dataDe, dataAte, empresasCodigos);
+    const cache = lerCacheV2(ck, chaveApiId);
+    if (cache) { setDiasTotais(cache); setLoadingDiasTotais(false); }
+    else setLoadingDiasTotais(true);
     (async () => {
-      setLoadingDiasTotais(true);
       try {
         const rows = await buscarDiaTotaisCategoriaWebposto({
           chaveApiId, empresasCodigos, dataDe, dataAte,
           produtoCodigos, categorias, categoria: 'combustivel',
         });
-        if (!cancelado) setDiasTotais(rows);
+        if (!cancelado) { setDiasTotais(rows); salvarCacheV2(ck, chaveApiId, rows); }
       } catch (err) {
-        if (!cancelado) { console.error('[dia totais combustivel]', err); setDiasTotais([]); }
+        if (!cancelado && !cache) { console.error('[dia totais combustivel]', err); setDiasTotais([]); }
       } finally {
         if (!cancelado) setLoadingDiasTotais(false);
       }
@@ -649,6 +705,12 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
   );
 
   const carregarDetalheDia = useCallback(async (dia) => {
+    // Detalhe de dias já fechados (>2 dias) vem do cache — instantâneo, sem spinner.
+    const ck = chaveDiaDetalhe('combustivel', dia, empresasCodigos);
+    if (diaImutavel(dia)) {
+      const cache = lerCacheV2(ck, chaveApiId);
+      if (cache) { setDetalheDia(prev => { const n = new Map(prev); n.set(dia, cache); return n; }); return; }
+    }
     setCarregandoDias(prev => { const n = new Set(prev); n.add(dia); return n; });
     try {
       const rows = await buscarDiaProdutoCategoriaWebposto({
@@ -656,7 +718,9 @@ function AbaCombustiveis({ arvore, totaisAtual, totaisAA, produtosMap, gruposMap
         produtoCodigos, categorias, categoria: 'combustivel',
       });
       const arv = construirArvoreDiaProdutoAgregado({ diaProduto: rows, produtosMap, gruposMap, categoriaKey: 'combustivel' });
-      setDetalheDia(prev => { const n = new Map(prev); n.set(dia, arv[0]?.produtos || []); return n; });
+      const produtos = arv[0]?.produtos || [];
+      setDetalheDia(prev => { const n = new Map(prev); n.set(dia, produtos); return n; });
+      if (diaImutavel(dia)) salvarCacheV2(ck, chaveApiId, produtos);
     } catch (err) {
       console.error('[detalhe dia combustivel]', dia, err);
       setDetalheDia(prev => { const n = new Map(prev); n.set(dia, []); return n; });
@@ -869,19 +933,23 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
   }, [categoriaKey, chaveApiId, empresasCodigos.join(','), dataDe, dataAte, produtoCodigos.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Nível 1: busca os totais por dia ao entrar na sub-aba "dia".
+  // Stale-while-revalidate: mostra o cache na hora e revalida em background.
   useEffect(() => {
     if (subAba !== 'dia' || !chaveApiId || empresasCodigos.length === 0 || !dataDe || !dataAte || produtoCodigos.length === 0) return;
     let cancelado = false;
+    const ck = chaveDiaTotais(categoriaKey, dataDe, dataAte, empresasCodigos);
+    const cache = lerCacheV2(ck, chaveApiId);
+    if (cache) { setDiasTotais(cache); setLoadingDiasTotais(false); }
+    else setLoadingDiasTotais(true);
     (async () => {
-      setLoadingDiasTotais(true);
       try {
         const rows = await buscarDiaTotaisCategoriaWebposto({
           chaveApiId, empresasCodigos, dataDe, dataAte,
           produtoCodigos, categorias, categoria: categoriaKey,
         });
-        if (!cancelado) setDiasTotais(rows);
+        if (!cancelado) { setDiasTotais(rows); salvarCacheV2(ck, chaveApiId, rows); }
       } catch (err) {
-        if (!cancelado) { console.error('[dia totais', categoriaKey, ']', err); setDiasTotais([]); }
+        if (!cancelado && !cache) { console.error('[dia totais', categoriaKey, ']', err); setDiasTotais([]); }
       } finally {
         if (!cancelado) setLoadingDiasTotais(false);
       }
@@ -895,6 +963,12 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
   );
 
   const carregarDetalheDia = useCallback(async (dia) => {
+    // Detalhe de dias já fechados (>2 dias) vem do cache — instantâneo, sem spinner.
+    const ck = chaveDiaDetalhe(categoriaKey, dia, empresasCodigos);
+    if (diaImutavel(dia)) {
+      const cache = lerCacheV2(ck, chaveApiId);
+      if (cache) { setDetalheDia(prev => { const n = new Map(prev); n.set(dia, cache); return n; }); return; }
+    }
     setCarregandoDias(prev => { const n = new Set(prev); n.add(dia); return n; });
     try {
       const rows = await buscarDiaProdutoCategoriaWebposto({
@@ -902,7 +976,9 @@ function AbaAutoConv({ categoriaKey, arvore, totaisAtual, totaisAA, produtosMap,
         produtoCodigos, categorias, categoria: categoriaKey,
       });
       const arv = construirArvoreDiaGrupoAgregado({ diaProduto: rows, produtosMap, gruposMap, categoriaKey });
-      setDetalheDia(prev => { const n = new Map(prev); n.set(dia, arv[0]?.grupos || []); return n; });
+      const gruposDia = arv[0]?.grupos || [];
+      setDetalheDia(prev => { const n = new Map(prev); n.set(dia, gruposDia); return n; });
+      if (diaImutavel(dia)) salvarCacheV2(ck, chaveApiId, gruposDia);
     } catch (err) {
       console.error('[detalhe dia', categoriaKey, ']', dia, err);
       setDetalheDia(prev => { const n = new Map(prev); n.set(dia, []); return n; });
