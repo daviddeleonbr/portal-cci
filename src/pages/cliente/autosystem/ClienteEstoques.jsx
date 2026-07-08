@@ -26,6 +26,7 @@ import {
   Tooltip, Cell, ComposedChart, Line, Legend,
 } from 'recharts';
 import PageHeader from '../../../components/ui/PageHeader';
+import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
 import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
@@ -770,9 +771,7 @@ export default function ClienteEstoques() {
 
       {/* ────────── TABELA ANALÍTICA ────────── */}
       {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 p-12 flex items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
-          <Loader2 className="h-5 w-5 animate-spin text-blue-600" /><span className="text-sm">Analisando estoques...</span>
-        </div>
+        <SkeletonComercial cards={4} linhas={8} comAbas={false} />
       ) : filtrados.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 p-12 text-center">
           <Boxes className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />

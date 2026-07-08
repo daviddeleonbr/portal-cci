@@ -7,6 +7,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import PageHeader from '../../../components/ui/PageHeader';
+import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
 import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
@@ -441,10 +442,7 @@ export default function ClienteComercialOperacao() {
       </PageHeader>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-          <span className="text-sm">Carregando bombas e bicos...</span>
-        </div>
+        <SkeletonComercial cards={4} linhas={6} comAbas={false} />
       ) : erro ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />

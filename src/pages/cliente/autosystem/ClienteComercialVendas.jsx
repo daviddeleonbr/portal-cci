@@ -94,6 +94,7 @@ const ABAS = [
   { key: 'conveniencia', label: 'Conveniências', labelCurto: 'Conveniência',icone: Store,      categoria: 'conveniencia'},
 ];
 import PageHeader from '../../../components/ui/PageHeader';
+import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
 import Modal from '../../../components/ui/Modal';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
@@ -2616,10 +2617,7 @@ export default function ClienteComercialVendas() {
       {/* Estados de carregamento / erro / vazio das vendas — alimentam KPIs,
           resumo por posto e gráficos da Visão geral. */}
       {loading ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-          <span className="text-sm">Carregando vendas...</span>
-        </div>
+        <SkeletonComercial cards={4} linhas={6} comAbas={false} />
       ) : erro ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -3529,10 +3527,7 @@ function GraficoEvolucao12m({ serie, loading }) {
         </div>
       </div>
       {loading ? (
-        <div className="h-72 flex items-center justify-center gap-2 text-sm text-gray-500">
-          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-          Carregando evolução...
-        </div>
+        <div className="h-72 rounded-lg bg-gray-200/70 animate-pulse" />
       ) : !temDados ? (
         <div className="h-72 flex items-center justify-center text-sm text-gray-500">
           Sem dados nos últimos 12 meses.
@@ -3588,10 +3583,7 @@ function GraficoLucroMargem12m({ serie, loading }) {
         <span className="text-[11px] text-gray-400">· R$ de lucro e % de margem</span>
       </div>
       {loading ? (
-        <div className="h-72 flex items-center justify-center gap-2 text-sm text-gray-500">
-          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-          Carregando evolução...
-        </div>
+        <div className="h-72 rounded-lg bg-gray-200/70 animate-pulse" />
       ) : !temDados ? (
         <div className="h-72 flex items-center justify-center text-sm text-gray-500">
           Sem dados nos últimos 12 meses.
@@ -4457,10 +4449,7 @@ function LinhaDoTempoAuto({
       </div>
 
       {loading ? (
-        <div className="h-72 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className={`h-5 w-5 animate-spin ${Pal.spinner}`} />
-          <span className="text-sm">Carregando linha do tempo...</span>
-        </div>
+        <div className="h-72 rounded-lg bg-gray-200/70 animate-pulse" />
       ) : !temDados ? (
         <div className="h-72 flex flex-col items-center justify-center text-center text-gray-500">
           <div className={`inline-flex h-12 w-12 items-center justify-center rounded-full ${Pal.emptyBg} mb-3`}>
@@ -5438,10 +5427,7 @@ function Evolucao12mCombustivel({ loading, serie, produtos, produtoSelecionado, 
       </div>
 
       {loading ? (
-        <div className="h-72 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-amber-600" />
-          <span className="text-sm">Carregando evolução...</span>
-        </div>
+        <div className="h-72 rounded-lg bg-gray-200/70 animate-pulse" />
       ) : !temDados ? (
         <div className="h-72 flex flex-col items-center justify-center text-center text-gray-500">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 mb-3">

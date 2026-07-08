@@ -11,6 +11,7 @@ import {
   PieChart, Pie,
 } from 'recharts';
 import { useClienteSession } from '../../../hooks/useAuth';
+import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
 import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil, vencimentoEfetivoIso } from '../../../utils/diasUteis';
@@ -923,10 +924,7 @@ export default function ClienteContasReceber() {
 
       {/* Tree */}
       {loading ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-12 flex items-center justify-center gap-3 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
-          <span className="text-sm">Carregando valores pendentes...</span>
-        </div>
+        <SkeletonComercial cards={4} linhas={8} comAbas={false} />
       ) : error && enriched.length === 0 ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-800 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
