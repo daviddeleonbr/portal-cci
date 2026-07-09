@@ -555,7 +555,7 @@ export default function ClienteEstoques() {
   return (
     <div>
       <PageHeader title="Análise de Estoques"
-        description={`${CATEGORIA_INFO[categoriaAba]?.label || ''} · janela ${meta.janelaDias || params.janelaDias} dias · ${fmtDataBR(meta.dataDe)} → ${fmtDataBR(meta.dataCorte)}`}>
+        description={`${CATEGORIA_INFO[categoriaAba]?.label || ''} · janela ${meta.janelaDias || params.janelaDias} dias · ${fmtDataBR(meta.dataDe)} → ${fmtDataBR(meta.dataCorte)}`} sticky>
         {empresasDisponiveis.length > 1 && (
           <EmpresaSeletorCompartilhado
             single

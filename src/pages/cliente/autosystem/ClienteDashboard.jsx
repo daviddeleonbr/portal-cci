@@ -350,7 +350,7 @@ export default function ClienteDashboard() {
 
   return (
     <div>
-      <PageHeader title="Visão Geral" description={asRede?.nome || 'Indicadores principais'}>
+      <PageHeader title="Visão Geral" description={asRede?.nome || 'Indicadores principais'} sticky>
         <span className="hidden sm:inline-flex text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
           Mês corrente
         </span>

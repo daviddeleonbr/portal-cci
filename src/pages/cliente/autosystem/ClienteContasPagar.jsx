@@ -504,7 +504,7 @@ export default function ClienteContasPagar() {
 
   return (
     <div>
-      <PageHeader title="Contas a Pagar" description="Títulos pendentes de pagamento">
+      <PageHeader title="Contas a Pagar" description="Títulos pendentes de pagamento" sticky>
         {/* Filtro de data */}
         <div className="hidden md:flex items-center gap-2">
           <span className={`text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap transition-colors ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-500'}`}>

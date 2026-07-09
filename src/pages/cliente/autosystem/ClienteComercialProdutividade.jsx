@@ -562,7 +562,7 @@ export default function ClienteComercialProdutividade() {
 
   return (
     <div>
-      <PageHeader title="Produtividade" description={asRede?.nome || 'Vendas por vendedor'}>
+      <PageHeader title="Produtividade" description={asRede?.nome || 'Vendas por vendedor'} sticky>
         <SeletorMesAno mes={mes} ano={ano} onChange={(m, a) => { setMes(m); setAno(a); }} />
         <label className="hidden md:inline-flex items-center gap-1.5 h-9 px-2 cursor-pointer select-none"
           title="Limita o período a ontem (exclui o dia corrente, ainda em aberto)">

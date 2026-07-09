@@ -95,9 +95,12 @@ export default function ClienteLayout() {
       >
         <ClienteHeader onMenuClick={() => setMobileOpen(true)} />
         <main className="p-4 sm:p-6 lg:p-8">
+          {/* Fade simples (sem transform) — um `transform` remanescente do
+              framer-motion viraria containing block e quebraria `position: sticky`
+              das barras de filtro fixas das páginas. */}
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
           >
             <Outlet />

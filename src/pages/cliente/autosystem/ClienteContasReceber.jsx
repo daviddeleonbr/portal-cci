@@ -665,8 +665,10 @@ export default function ClienteContasReceber() {
   return (
     <div>
       {/* Barra sticky de filtros — colada no topo do conteúdo, logo abaixo do ClienteHeader (h-16) */}
-      <div className="sticky top-16 z-20 -mt-6 lg:-mt-8 -mx-4 sm:-mx-6 lg:-mx-8 mb-4 bg-white/60 backdrop-blur-md backdrop-saturate-150 border-b border-gray-200/60">
-        <div className="flex flex-wrap items-center justify-end gap-2 px-4 sm:px-6 lg:px-8 py-2.5">
+      <div className="sticky top-16 z-20 -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 lg:-mx-8 lg:-mt-8 mb-6 sm:mb-8 border-b border-gray-200/50 bg-white/50 supports-[backdrop-filter]:bg-white/40 backdrop-blur-lg">
+        <div className="px-4 sm:px-6 lg:px-8 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+          <h1 className="text-base sm:text-lg font-semibold tracking-tight text-gray-900 truncate">Contas a Receber</h1>
+          <div className="flex flex-wrap items-center justify-end gap-2">
           {/* Desktop (md+): filtros inline */}
           <div className="hidden md:flex items-center gap-2">
             <span className={`text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap transition-colors ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-500'}`}>
@@ -727,6 +729,7 @@ export default function ClienteContasReceber() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Atualizar</span>
           </button>
+          </div>
         </div>
       </div>
 

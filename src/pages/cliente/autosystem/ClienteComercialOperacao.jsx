@@ -409,7 +409,7 @@ export default function ClienteComercialOperacao() {
 
   return (
     <div>
-      <PageHeader title="Operação" description={asRede?.nome || 'Bombas, bicos e aferições'}>
+      <PageHeader title="Operação" description={asRede?.nome || 'Bombas, bicos e aferições'} sticky>
         <div className="hidden md:flex items-center gap-2">
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Período</span>
           <div className="flex items-center gap-1 bg-gray-100/80 rounded-lg p-0.5">

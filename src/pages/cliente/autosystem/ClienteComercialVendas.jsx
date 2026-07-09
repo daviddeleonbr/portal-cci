@@ -1779,7 +1779,7 @@ export default function ClienteComercialVendas() {
 
   return (
     <div>
-      <PageHeader title="Vendas" description={asRede?.nome ? `${asRede.nome}` : 'Itens vendidos no período'}>
+      <PageHeader title="Vendas" description={asRede?.nome ? `${asRede.nome}` : 'Itens vendidos no período'} sticky>
         <SeletorMesAno mes={mes} ano={ano} onChange={(m, a) => { setMes(m); setAno(a); }} />
         <label className="hidden md:inline-flex items-center gap-1.5 h-9 px-2 cursor-pointer select-none"
           title="Limita o período a ontem (exclui o dia corrente, ainda em aberto)">
