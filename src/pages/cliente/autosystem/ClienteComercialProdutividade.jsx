@@ -4,7 +4,7 @@ import {
   Loader2, AlertCircle, RefreshCw, ChevronDown, ChevronRight,
   Users, Fuel, Package, Store,
   Search, Coins, Calendar, Boxes, LineChart as LineChartIcon, Droplet, Gauge,
-  Trophy, Medal, Award, Info,
+  Trophy, Medal, Award, Info, FileDown,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -21,6 +21,9 @@ import { formatCurrency } from '../../../utils/format';
 import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
 import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
 import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
+import { gerarPdfProdutividade } from '../../../utils/pdfProdutividade';
+
+const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function fmtNum(v, casas = 0) {
@@ -501,6 +504,50 @@ export default function ClienteComercialProdutividade() {
     return m;
   }, [funcsPistaAuto]);
 
+  // Carrega a logo (public/) como dataURL + dimensões p/ embutir no PDF.
+  // Mesma origem → canvas não fica "tainted". Falha silenciosa → PDF sem logo.
+  function carregarLogo(url) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          c.getContext('2d').drawImage(img, 0, 0);
+          resolve({ dataUrl: c.toDataURL('image/png'), w: img.naturalWidth, h: img.naturalHeight });
+        } catch { resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  }
+
+  // Exporta o relatório da aba ativa em PDF.
+  async function exportarPdf() {
+    if (!aba) return;
+    const dd = (iso) => { const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${y}`; };
+    const logo = await carregarLogo(`${import.meta.env.BASE_URL}logo-cci-landing.png`);
+    const doc = gerarPdfProdutividade({
+      aba,
+      contexto: {
+        rede:    asRede?.nome || '',
+        empresa: empresaAtual?.nome || (empresaAtual ? `Empresa ${empresaAtual.empresa_codigo}` : ''),
+        periodo: `${MESES_LONGO[mes - 1]}/${ano} (${dd(dataDe)}–${dd(dataAte)})`,
+      },
+      kpis,
+      rankings,
+      funcionarios: funcsPistaAuto,
+      vendedoresConv: vendedoresFiltrados,
+      projetar,
+      logo,
+    });
+    const slug = (asRede?.nome || 'rede').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase();
+    doc.save(`produtividade-${aba}-${slug}-${ano}${pad(mes)}.pdf`);
+  }
+
+  // Habilita o botão de PDF só quando há aba liberada + dados carregados.
+  const podeExportar = !loading && !erro && aba && vendedoresEnriquecidos.length > 0;
+
   if (empresasDisponiveis.length === 0) {
     return (
       <div>
@@ -536,6 +583,12 @@ export default function ClienteComercialProdutividade() {
           className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Atualizar
+        </button>
+        <button onClick={exportarPdf} disabled={!podeExportar}
+          title="Exportar resumo da aba atual em PDF (1 página)"
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+          <FileDown className="h-4 w-4" />
+          PDF
         </button>
       </PageHeader>
 
