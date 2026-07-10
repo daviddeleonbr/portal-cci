@@ -8,8 +8,11 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      // Auto-update silencioso: SW novo é baixado em background e ativa na próxima abertura.
-      registerType: 'autoUpdate',
+      // 'prompt': o SW novo NÃO ativa sozinho — avisamos o usuário (toast
+      // "Nova versão disponível") e ele aplica em 1 clique. Ver src/pwaUpdate.js
+      // + NovaVersaoToast. Necessário porque a SPA fica muito tempo na mesma
+      // page load e o autoUpdate exigia dois carregamentos (logout+login).
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
         name: 'CCI · Portal do Cliente',
