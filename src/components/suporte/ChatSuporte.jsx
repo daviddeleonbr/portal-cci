@@ -67,6 +67,7 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
   const [mensagens, setMensagens] = useState([]);
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [filtroMinhas, setFiltroMinhas] = useState(false); // cliente: só as que eu abri
   const [loadingLista, setLoadingLista] = useState(false);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [error, setError] = useState(null);
@@ -74,6 +75,15 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
   const [mobileShowChat, setMobileShowChat] = useState(false);
 
   const conversaSel = conversas.find(c => c.id === conversaSelId);
+  // Ref sempre com a lista atual — usado nos callbacks de realtime pra decidir
+  // se posso "marcar como lido" (só dono/admin) sem re-assinar o canal.
+  const conversasRef = useRef([]);
+  useEffect(() => { conversasRef.current = conversas; }, [conversas]);
+  // Sou dono/admin desta conversa? (quem pode interagir + marcar lido)
+  const souDonoOuAdmin = useCallback(
+    (conv) => isAdmin || (conv && conv.usuario_cliente_id === usuarioId),
+    [isAdmin, usuarioId],
+  );
 
   // ─── Carregar lista ─────────────────────────────────────
   const carregarLista = useCallback(async () => {
@@ -81,23 +91,25 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
     try {
       const lista = isAdmin
         ? await suporte.listarConversasAdmin({})
-        : await suporte.listarConversasCliente(usuarioId);
+        : await suporte.listarConversasRede({ asRedeId: contexto.asRedeId, chaveApiId: contexto.chaveApiId });
       setConversas(lista);
     } catch (err) { setError(err.message); }
     finally { setLoadingLista(false); }
-  }, [isAdmin, usuarioId]);
+  }, [isAdmin, contexto.asRedeId, contexto.chaveApiId]);
 
   useEffect(() => { carregarLista(); }, [carregarLista]);
 
   // Realtime na LISTA — sempre que algo muda em conversas/mensagens,
   // recarrega a sidebar (cheap, é uma query simples).
   useEffect(() => {
+    // Rede-wide também no cliente (ele vê os chamados da rede toda). O refetch
+    // é filtrado por RLS, então basta recarregar em qualquer mudança visível.
     const ch = suporte.escutarLista({
-      usuarioClienteId: isAdmin ? null : usuarioId,
+      usuarioClienteId: null,
       onChange: () => carregarLista(),
     });
     return () => suporte.desescutar(ch);
-  }, [isAdmin, usuarioId, carregarLista]);
+  }, [carregarLista]);
 
   // ─── Carregar mensagens da conversa ativa ────────────────
   const carregarMensagens = useCallback(async (cid) => {
@@ -106,10 +118,15 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
     try {
       const msgs = await suporte.listarMensagens(cid);
       setMensagens(msgs);
-      await suporte.marcarComoLido({ conversaId: cid, lado: isAdmin ? 'admin' : 'cliente' });
+      // Só marca lido se eu for dono/admin — em conversa de outro usuário (que
+      // eu só acompanho) não devo mexer nos contadores dele.
+      const conv = conversasRef.current.find(c => c.id === cid);
+      if (souDonoOuAdmin(conv)) {
+        await suporte.marcarComoLido({ conversaId: cid, lado: isAdmin ? 'admin' : 'cliente' });
+      }
     } catch (err) { setError(err.message); }
     finally { setLoadingMsgs(false); }
-  }, [isAdmin]);
+  }, [isAdmin, souDonoOuAdmin]);
 
   useEffect(() => { carregarMensagens(conversaSelId); }, [conversaSelId, carregarMensagens]);
 
@@ -121,8 +138,9 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
       conversaId: conversaSelId,
       onMensagem: (msg) => {
         setMensagens(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
-        // Marca como lida no lado oposto ao autor
-        if (msg.autor_tipo !== (isAdmin ? 'admin' : 'cliente')) {
+        // Marca como lida no lado oposto ao autor — só se eu for dono/admin.
+        const conv = conversasRef.current.find(c => c.id === conversaSelId);
+        if (souDonoOuAdmin(conv) && msg.autor_tipo !== (isAdmin ? 'admin' : 'cliente')) {
           suporte.marcarComoLido({ conversaId: conversaSelId, lado: isAdmin ? 'admin' : 'cliente' });
         }
       },
@@ -136,13 +154,15 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
       },
     });
     return () => suporte.desescutar(ch);
-  }, [conversaSelId, isAdmin]);
+  }, [conversaSelId, isAdmin, souDonoOuAdmin]);
 
   // ─── Filtragem da lista ──────────────────────────────────
   const conversasFiltradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return conversas.filter(c => {
       if (filtroStatus !== 'todos' && c.status !== filtroStatus) return false;
+      // Cliente: filtro "somente minhas" (as que eu abri).
+      if (!isAdmin && filtroMinhas && c.usuario_cliente_id !== usuarioId) return false;
       if (!q) return true;
       return (
         (c.assunto || '').toLowerCase().includes(q) ||
@@ -150,7 +170,7 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
         (c.cliente?.nome || '').toLowerCase().includes(q)
       );
     });
-  }, [conversas, busca, filtroStatus]);
+  }, [conversas, busca, filtroStatus, filtroMinhas, isAdmin, usuarioId]);
 
   const naoLidasTotal = conversas.reduce((s, c) =>
     s + (isAdmin ? c.nao_lidas_admin : c.nao_lidas_cliente), 0);
@@ -189,6 +209,22 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
             <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
               placeholder="Buscar..." className="w-full h-8 pl-7 pr-2 text-xs rounded-md border border-gray-200 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200" />
           </div>
+          {/* Cliente: escopo (todas da rede × só minhas) */}
+          {!isAdmin && (
+            <div className="flex items-center gap-1 bg-gray-100/70 rounded-lg p-0.5">
+              {[
+                { k: false, label: 'Toda a rede' },
+                { k: true,  label: 'Somente minhas' },
+              ].map(f => (
+                <button key={String(f.k)} onClick={() => setFiltroMinhas(f.k)}
+                  className={`flex-1 text-[10.5px] font-semibold px-2 py-1 rounded-md whitespace-nowrap transition-colors ${
+                    filtroMinhas === f.k ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                  }`}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Filtro de status (chips compactos) */}
           <div className="flex items-center gap-1 overflow-x-auto -mx-1 px-1">
             {[
@@ -241,7 +277,7 @@ export default function ChatSuporte({ modo, usuarioId, usuarioNome, contexto = {
                     <p className="text-[10.5px] text-gray-500 truncate">
                       {isAdmin
                         ? `${c.usuario?.nome || '—'} · ${c.as_rede?.nome || c.chaves_api?.nome || '—'}`
-                        : CATEGORIA_LABEL[c.categoria] || 'Geral'}
+                        : `${c.usuario_cliente_id === usuarioId ? 'Você' : (c.usuario?.nome || '—')} · ${CATEGORIA_LABEL[c.categoria] || 'Geral'}`}
                     </p>
                     {isAdmin && c.admin_atribuido_id && (
                       <p className={`text-[10px] truncate mt-0.5 ${
@@ -380,10 +416,13 @@ function ChatAtivo({ conversa, mensagens, loadingMsgs, isAdmin, usuarioId, usuar
   const atribuidaAOutroAdmin = isAdmin
     && conversa.admin_atribuido_id
     && conversa.admin_atribuido_id !== usuarioId;
-  const bloqueado = atribuidaAOutroAdmin;
+  // Cliente acompanhando conversa de OUTRO usuário da rede: só leitura.
+  const clienteNaoDono = !isAdmin && conversa.usuario_cliente_id !== usuarioId;
+  const bloqueado = atribuidaAOutroAdmin || clienteNaoDono;
   const nomeAdminAtribuido = conversa.admin?.nome
     || conversa.usuario_admin?.nome
     || 'outro admin';
+  const nomeDono = conversa.usuario?.nome || 'outro usuário';
 
   return (
     <>
@@ -469,12 +508,21 @@ function ChatAtivo({ conversa, mensagens, loadingMsgs, isAdmin, usuarioId, usuar
 
       {/* Composer */}
       <div className="border-t border-gray-100 bg-white p-3">
-        {bloqueado && (
+        {atribuidaAOutroAdmin && (
           <div className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-[11.5px] text-rose-800 flex items-start gap-2">
             <AlertTriangle className="h-3.5 w-3.5 text-rose-600 flex-shrink-0 mt-0.5" />
             <span>
               Este atendimento já está sendo conduzido por <strong>{nomeAdminAtribuido}</strong>.
               Apenas ele pode responder ou alterar o status. Você pode acompanhar a conversa, mas não pode interagir.
+            </span>
+          </div>
+        )}
+        {clienteNaoDono && (
+          <div className="px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-[11.5px] text-gray-700 flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-gray-500 flex-shrink-0 mt-0.5" />
+            <span>
+              Conversa iniciada por <strong>{nomeDono}</strong>. Você pode acompanhar, mas
+              só quem abriu o chamado pode responder.
             </span>
           </div>
         )}

@@ -48,6 +48,25 @@ export async function listarConversasCliente(usuarioId) {
   return data || [];
 }
 
+// Conversas de TODA a rede do cliente (o usuário vê todos os chamados da rede;
+// filtra "somente minhas" no front). O RLS já restringe à rede do usuário; o
+// `.eq` explícito é defensivo + usa o índice. Traz o autor pra exibir na lista.
+export async function listarConversasRede({ asRedeId, chaveApiId } = {}) {
+  if (!asRedeId && !chaveApiId) return [];
+  let q = supabase
+    .from('cci_suporte_conversa')
+    .select(`
+      *,
+      usuario:cci_usuarios_sistema!cci_suporte_conversa_usuario_cliente_id_fkey(id,nome,email)
+    `)
+    .order('ultima_mensagem_em', { ascending: false });
+  if (asRedeId)        q = q.eq('as_rede_id', asRedeId);
+  else if (chaveApiId) q = q.eq('chave_api_id', chaveApiId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
 // Conversas no ADMIN: aplica filtros opcionais (status, rede, atribuição).
 export async function listarConversasAdmin({ status, asRedeId, chaveApiId, adminAtribuidoId, busca } = {}) {
   let q = supabase
@@ -332,22 +351,16 @@ export async function atribuirAdmin({ conversaId, adminId }) {
   if (error) throw error;
 }
 
-// Zera contador do lado especificado e marca lidas as mensagens.
+// Zera contador do lado especificado e marca lidas as mensagens do outro lado.
+// Via RPC SECURITY DEFINER: marcar-lido mexe em mensagens de OUTRO autor, o que
+// não cabe na policy de update (autor-only). A RPC autoriza dono-da-conversa
+// (lado 'cliente') ou admin. Chame só quando o usuário é dono/admin.
 export async function marcarComoLido({ conversaId, lado }) {
   if (!conversaId || !['cliente', 'admin'].includes(lado)) return;
-  const campo = lado === 'cliente' ? 'nao_lidas_cliente' : 'nao_lidas_admin';
-  await supabase
-    .from('cci_suporte_conversa')
-    .update({ [campo]: 0 })
-    .eq('id', conversaId);
-  // Marca como lidas as mensagens que o OUTRO lado enviou.
-  const tipoOposto = lado === 'cliente' ? 'admin' : 'cliente';
-  await supabase
-    .from('cci_suporte_mensagem')
-    .update({ lida_em: new Date().toISOString() })
-    .eq('conversa_id', conversaId)
-    .eq('autor_tipo', tipoOposto)
-    .is('lida_em', null);
+  const { error } = await supabase.rpc('cci_suporte_marcar_lido', {
+    p_conversa_id: conversaId, p_lado: lado,
+  });
+  if (error) throw error;
 }
 
 // ─── Realtime helpers ────────────────────────────────────
