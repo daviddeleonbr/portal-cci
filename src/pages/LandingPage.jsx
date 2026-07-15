@@ -105,6 +105,12 @@ function Navbar() {
               <span className="absolute -bottom-1 left-0 right-0 h-px bg-blue-500 scale-x-0 group-hover:scale-x-100 origin-left transition-transform" />
             </a>
           ))}
+          {/* Visor360 — redireciona para o app externo (mesmo estilo dos demais) */}
+          <a href="https://visor360-as.cci.app.br"
+            className="text-[13px] text-slate-300 hover:text-white transition-colors relative group">
+            Visor360
+            <span className="absolute -bottom-1 left-0 right-0 h-px bg-blue-500 scale-x-0 group-hover:scale-x-100 origin-left transition-transform" />
+          </a>
         </nav>
 
         <div className="flex items-center gap-3">
