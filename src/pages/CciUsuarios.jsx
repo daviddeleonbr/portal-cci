@@ -3,6 +3,7 @@ import {
   Plus, Pencil, Trash2, Loader2, Search, Shield, Users, Mail,
   Check, Eye, EyeOff, KeyRound, UserCog, ChevronLeft, ChevronRight,
   IdCard, Lock as LockIcon, ShieldCheck, Network, Calendar,
+  SlidersHorizontal, RotateCcw, Building2,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
@@ -12,8 +13,31 @@ import * as usuariosService from '../services/usuariosSistemaService';
 import * as clientesService from '../services/clientesService';
 import * as mapeamentoService from '../services/mapeamentoService';
 import * as autosystemService from '../services/autosystemService';
+import { useAdminSession } from '../hooks/useAuth';
+
+// Pill do nível/tipo do usuário (N1/N2/N3 ou Cliente).
+function NivelPill({ usuario }) {
+  if (usuario.tipo !== 'admin') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10.5px] font-medium rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <UserCog className="h-3 w-3" /> Cliente
+      </span>
+    );
+  }
+  const n = usuariosService.nivelAdmin(usuario);
+  const cor = n === 3 ? 'bg-blue-50 text-blue-700 border-blue-200'
+            : n === 2 ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+            : 'bg-gray-100 text-gray-600 border-gray-200';
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2 py-0.5 border ${cor}`}>
+      <Shield className="h-3 w-3" /> Admin · N{n}
+    </span>
+  );
+}
 
 export default function CciUsuarios({ embedded = false }) {
+  const session = useAdminSession();
+  const ator = session?.usuario || null;
   const [usuarios, setUsuarios] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]); // lista de redes Webposto
@@ -24,7 +48,9 @@ export default function CciUsuarios({ embedded = false }) {
   // 'todas' | 'sem_rede' | 'wp:<id>' | 'as:<id>'
   const [filtroRede, setFiltroRede] = useState('todas');
   const [modal, setModal] = useState({ open: false, data: null });
+  const [modalPerms, setModalPerms] = useState({ open: false, data: null });
   const [confirm, setConfirm] = useState({ open: false });
+  const [resetInfo, setResetInfo] = useState({ open: false });
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
 
   const showToast = (type, message) => {
@@ -79,6 +105,24 @@ export default function CciUsuarios({ embedded = false }) {
     } catch (err) { showToast('error', err.message); }
   };
 
+  // Salva só permissões/empresas/nível (via modal de permissões).
+  const salvarPermissoes = async (u, patch) => {
+    try {
+      await usuariosService.atualizarUsuario(u.id, { tipo: u.tipo, ...patch });
+      showToast('success', 'Permissões atualizadas');
+      setModalPerms({ open: false, data: null });
+      await carregar();
+    } catch (err) { showToast('error', err.message); }
+  };
+
+  const resetarSenha = async (u) => {
+    try {
+      const senha = await usuariosService.resetarSenha(u.id);
+      setConfirm({ open: false });
+      setResetInfo({ open: true, nome: u.nome, senha });
+    } catch (err) { showToast('error', err.message); }
+  };
+
   // Conta quantas empresas cada rede (Webposto OU Autosystem) possui
   const empresasPorRede = useMemo(() => {
     const m = new Map();
@@ -116,6 +160,21 @@ export default function CciUsuarios({ embedded = false }) {
     clientes: usuarios.filter(u => u.tipo === 'cliente').length,
     inativos: usuarios.filter(u => u.status === 'inativo').length,
   }), [usuarios]);
+
+  const podeGerir = usuariosService.podeGerirUsuarios(ator);
+
+  // Nível 1 (ou sem nível) não tem acesso à gestão de usuários.
+  if (!podeGerir) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200/60 px-6 py-16 text-center">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 mb-3">
+          <LockIcon className="h-6 w-6" />
+        </div>
+        <p className="text-sm font-semibold text-gray-900">Acesso restrito</p>
+        <p className="text-[13px] text-gray-500 mt-1">A gestão de usuários é exclusiva de administradores nível 2 e 3.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -200,119 +259,58 @@ export default function CciUsuarios({ embedded = false }) {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200/60 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 border-b border-gray-100">
-                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="px-4 py-3">Usuário</th>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Rede Vinculada</th>
-                  <th className="px-4 py-3 text-center">Permissões</th>
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3">Cadastrado em</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filtrados.map(u => (
-                  <tr key={u.id} className="hover:bg-gray-50/60 group">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`h-9 w-9 rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0 bg-gradient-to-br ${
-                          u.tipo === 'admin' ? 'from-blue-500 to-blue-600' : 'from-emerald-500 to-teal-600'
-                        }`}>
-                          {u.nome.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{u.nome}</p>
-                          <p className="text-[11px] text-gray-500 flex items-center gap-1">
-                            <Mail className="h-3 w-3 text-gray-400" />{u.email}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {u.tipo === 'admin' ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200">
-                          <Shield className="h-3 w-3" /> Admin CCI
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <UserCog className="h-3 w-3" /> Cliente
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {u.chaves_api ? (
-                        <div className="flex items-center gap-2">
-                          <Network className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm text-gray-800 truncate max-w-[220px]">{u.chaves_api.nome}</p>
-                            <p className="text-[10px] text-gray-400">
-                              Webposto · {empresasPorRede.get(u.chaves_api.id) || 0} empresa(s)
-                            </p>
-                          </div>
-                        </div>
-                      ) : u.as_rede ? (
-                        <div className="flex items-center gap-2">
-                          <Network className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm text-gray-800 truncate max-w-[220px]">{u.as_rede.nome}</p>
-                            <p className="text-[10px] text-gray-400">
-                              Autosystem · {empresasPorRede.get(u.as_rede.id) || 0} empresa(s)
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200">
-                        {(u.permissoes || []).length} {(u.permissoes || []).length === 1 ? 'permissao' : 'permissoes'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {u.status === 'ativo' ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <Check className="h-3 w-3" /> Ativo
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-500">
-                          Inativo
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {u.created_at ? (
-                        <div className="flex items-center gap-1.5 text-[11px] text-gray-600">
-                          <Calendar className="h-3 w-3 text-gray-400" />
-                          {new Date(u.created_at).toLocaleDateString('pt-BR')}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setModal({ open: true, data: u })} title="Editar"
-                          className="rounded p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button onClick={() => setConfirm({ open: true, nome: u.nome, onConfirm: () => excluir(u.id) })}
-                          title="Excluir"
-                          className="rounded p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <ul className="space-y-2">
+          {filtrados.map(u => {
+            const podeGerir = usuariosService.podeGerirUsuario(ator, u);
+            const rede = u.chaves_api || u.as_rede;
+            const redeTipo = u.chaves_api ? 'Webposto' : u.as_rede ? 'Autosystem' : null;
+            const qtdEmp = rede ? (empresasPorRede.get(rede.id) || 0) : 0;
+            const nPerms = (u.permissoes || []).length;
+            const restrito = Array.isArray(u.empresas_permitidas) && u.empresas_permitidas.length > 0;
+            return (
+              <li key={u.id}
+                className="bg-white rounded-xl border border-gray-200/70 shadow-sm px-3.5 py-3 flex items-center gap-3 hover:border-gray-300 transition-colors">
+                <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0 bg-gradient-to-br ${
+                  u.tipo === 'admin' ? 'from-blue-500 to-blue-600' : 'from-emerald-500 to-teal-600'
+                }`}>
+                  {u.nome.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{u.nome}</p>
+                    <NivelPill usuario={u} />
+                    {u.status !== 'ativo' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-500">Inativo</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-mono flex items-center gap-1 truncate">
+                    <Mail className="h-3 w-3 text-gray-400 flex-shrink-0" />{u.email}
+                  </p>
+                  <p className="text-[10.5px] text-gray-400 truncate">
+                    {rede ? <><Network className="inline h-3 w-3 mr-0.5 -mt-0.5 text-gray-400" />{rede.nome} · {redeTipo} · {qtdEmp} empresa(s)</> : 'Admin CCI'}
+                    <span className="mx-1.5 text-gray-300">·</span>
+                    {nPerms} {nPerms === 1 ? 'permissão' : 'permissões'}
+                    {u.tipo === 'cliente' && <>{' · '}{restrito ? `${u.empresas_permitidas.length} empresa(s)` : 'todas as empresas'}</>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <IconeAcao title="Permissões" disabled={!podeGerir}
+                    onClick={() => setModalPerms({ open: true, data: u })}
+                    className="hover:text-blue-600 hover:bg-blue-50"><SlidersHorizontal className="h-4 w-4" /></IconeAcao>
+                  <IconeAcao title="Editar" disabled={!podeGerir}
+                    onClick={() => setModal({ open: true, data: u })}
+                    className="hover:text-blue-600 hover:bg-blue-50"><Pencil className="h-3.5 w-3.5" /></IconeAcao>
+                  <IconeAcao title="Resetar senha (123456)" disabled={!podeGerir}
+                    onClick={() => setConfirm({ open: true, tipo: 'reset', nome: u.nome, onConfirm: () => resetarSenha(u) })}
+                    className="hover:text-amber-600 hover:bg-amber-50"><RotateCcw className="h-3.5 w-3.5" /></IconeAcao>
+                  <IconeAcao title="Excluir" disabled={!podeGerir}
+                    onClick={() => setConfirm({ open: true, tipo: 'del', nome: u.nome, onConfirm: () => excluir(u.id) })}
+                    className="hover:text-red-500 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /></IconeAcao>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       <ModalUsuario open={modal.open} data={modal.data}
@@ -320,18 +318,206 @@ export default function CciUsuarios({ embedded = false }) {
         empresasPorRede={empresasPorRede} clientes={clientes}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
-      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuário" size="sm"
+      <ModalPermissoes open={modalPerms.open} usuario={modalPerms.data} ator={ator}
+        clientes={clientes}
+        onClose={() => setModalPerms({ open: false, data: null })}
+        onSave={salvarPermissoes} />
+
+      <Modal open={confirm.open} onClose={() => setConfirm({ open: false })}
+        title={confirm.tipo === 'reset' ? 'Resetar senha' : 'Excluir usuário'} size="sm"
         footer={(
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirm({ open: false })} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-            <button onClick={confirm.onConfirm} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">Excluir</button>
+            <button onClick={confirm.onConfirm}
+              className={`rounded-lg px-4 py-2.5 text-sm font-medium text-white ${confirm.tipo === 'reset' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-red-600 hover:bg-red-700'}`}>
+              {confirm.tipo === 'reset' ? 'Resetar' : 'Excluir'}
+            </button>
           </div>
         )}>
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">Excluir o usuário <strong>{confirm.nome}</strong>? O acesso sera removido imediatamente.</p>
-        </div>
+        <p className="text-sm text-gray-600">
+          {confirm.tipo === 'reset'
+            ? <>Resetar a senha de <strong>{confirm.nome}</strong> para <code className="font-mono bg-gray-100 px-1 rounded">123456</code>? O usuário poderá trocá-la no próximo acesso.</>
+            : <>Excluir o usuário <strong>{confirm.nome}</strong>? O acesso será removido imediatamente.</>}
+        </p>
+      </Modal>
+
+      <Modal open={resetInfo.open} onClose={() => setResetInfo({ open: false })} title="Senha redefinida" size="sm"
+        footer={(
+          <div className="flex justify-end">
+            <button onClick={() => setResetInfo({ open: false })} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">Entendi</button>
+          </div>
+        )}>
+        <p className="text-sm text-gray-600">
+          A senha de <strong>{resetInfo.nome}</strong> agora é <code className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-blue-700">{resetInfo.senha}</code>. Informe ao usuário — ele poderá trocá-la após o acesso.
+        </p>
       </Modal>
     </div>
+  );
+}
+
+// Botão de ícone de ação (desabilita quando o ator não pode gerir o alvo).
+function IconeAcao({ title, onClick, disabled, className = '', children }) {
+  return (
+    <button type="button" title={disabled ? 'Sem permissão para este usuário' : title}
+      onClick={onClick} disabled={disabled}
+      className={`rounded-lg p-2 text-gray-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${disabled ? '' : className}`}>
+      {children}
+    </button>
+  );
+}
+
+// Editor de permissões estilo cci_v360_as: modal compacto com abas segmentadas
+// (Permissões / Empresas / Nível) e chips de toggle.
+function ModalPermissoes({ open, usuario, ator, clientes, onClose, onSave }) {
+  const [aba, setAba] = useState('permissoes');
+  const [draft, setDraft] = useState({ permissoes: [], empresas_permitidas: null, nivel_admin: null });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open || !usuario) return;
+    setDraft({
+      permissoes: usuario.permissoes || [],
+      empresas_permitidas: usuario.empresas_permitidas || null,
+      nivel_admin: usuariosService.nivelAdmin(usuario),
+    });
+    setAba('permissoes');
+  }, [open, usuario]);
+
+  const ehCliente = usuario?.tipo === 'cliente';
+  const redeTipo = usuario?.as_rede_id ? 'autosystem' : 'webposto';
+  const podeNivel = !ehCliente && usuariosService.podeDefinirNivel(ator);
+  const catalogo = usuario ? usuariosService.permissoesPorTipo(usuario.tipo) : [];
+
+  const empresasDaRede = useMemo(() => {
+    if (!usuario || !ehCliente) return [];
+    return (clientes || []).filter(c =>
+      (usuario.chave_api_id && c.chave_api_id === usuario.chave_api_id) ||
+      (usuario.as_rede_id && c.as_rede_id === usuario.as_rede_id));
+  }, [clientes, usuario, ehCliente]);
+
+  const acessoTotal = !draft.empresas_permitidas || draft.empresas_permitidas.length === 0;
+  const empPermitida = (id) => acessoTotal || (draft.empresas_permitidas || []).includes(id);
+  const toggleEmp = (id) => setDraft(d => {
+    const atuais = Array.isArray(d.empresas_permitidas) ? [...d.empresas_permitidas] : empresasDaRede.map(e => e.id);
+    const i = atuais.indexOf(id);
+    if (i >= 0) atuais.splice(i, 1); else atuais.push(id);
+    return { ...d, empresas_permitidas: atuais.length === empresasDaRede.length ? null : atuais };
+  });
+
+  const abas = [
+    { id: 'permissoes', label: 'Permissões', icon: <ShieldCheck className="h-3.5 w-3.5" />, badge: (draft.permissoes || []).length || '—' },
+    ...(ehCliente ? [{ id: 'empresas', label: 'Empresas', icon: <Building2 className="h-3.5 w-3.5" />, badge: acessoTotal ? 'todas' : (draft.empresas_permitidas || []).length }] : []),
+    ...(podeNivel ? [{ id: 'nivel', label: 'Nível', icon: <Shield className="h-3.5 w-3.5" />, badge: `N${draft.nivel_admin || 1}` }] : []),
+  ];
+
+  const aplicar = async () => {
+    setSaving(true);
+    try {
+      const patch = { permissoes: draft.permissoes };
+      if (ehCliente) patch.empresas_permitidas = draft.empresas_permitidas;
+      if (podeNivel) patch.nivel_admin = draft.nivel_admin;
+      await onSave(usuario, patch);
+    } finally { setSaving(false); }
+  };
+
+  if (!usuario) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Permissões · ${usuario.nome}`} size="md"
+      footer={(
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+          <button onClick={aplicar} disabled={saving}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Aplicar
+          </button>
+        </div>
+      )}>
+      {/* Abas segmentadas */}
+      <div className="flex gap-1 rounded-lg bg-gray-100 p-1 mb-3">
+        {abas.map(a => (
+          <button key={a.id} type="button" onClick={() => setAba(a.id)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+              aba === a.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            {a.icon}<span>{a.label}</span>
+            {a.badge !== undefined && a.badge !== '' && (
+              <span className={`rounded px-1 text-[9px] font-semibold ${aba === a.id ? 'bg-blue-50 text-blue-600' : 'bg-gray-200 text-gray-500'}`}>{a.badge}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="min-h-[240px] max-h-[52vh] overflow-y-auto pr-1">
+        {aba === 'permissoes' && (
+          <>
+            <div className="flex justify-end gap-2 mb-2 text-[11px]">
+              <button type="button" onClick={() => setDraft(d => ({ ...d, permissoes: usuariosService.todasPermissoes(usuario.tipo) }))}
+                className="font-medium text-blue-600 hover:underline">Marcar todas</button>
+              <span className="text-gray-300">·</span>
+              <button type="button" onClick={() => setDraft(d => ({ ...d, permissoes: [] }))}
+                className="font-medium text-gray-500 hover:underline">Limpar</button>
+            </div>
+            <SeletorPermissoes catalogo={catalogo} value={draft.permissoes}
+              onChange={(arr) => setDraft(d => ({ ...d, permissoes: arr }))}
+              tipoCliente={ehCliente ? redeTipo : undefined} />
+          </>
+        )}
+
+        {aba === 'empresas' && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] text-gray-500">
+                {acessoTotal ? 'Acesso total (todas as empresas, incl. futuras)' : `${(draft.empresas_permitidas || []).length}/${empresasDaRede.length} empresas`}
+              </p>
+              <button type="button" onClick={() => setDraft(d => ({ ...d, empresas_permitidas: null }))}
+                className="text-[11px] font-medium text-blue-600 hover:underline">Acesso total</button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {empresasDaRede.map(emp => {
+                const on = empPermitida(emp.id);
+                return (
+                  <button key={emp.id} type="button" onClick={() => toggleEmp(emp.id)}
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                      on ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                    }`}>
+                    <span className={`flex h-3 w-3 items-center justify-center rounded-[3px] border ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300'}`}>
+                      {on && <Check className="h-2 w-2" strokeWidth={3.5} />}
+                    </span>
+                    {emp.nome}
+                  </button>
+                );
+              })}
+              {empresasDaRede.length === 0 && <p className="text-xs text-gray-400">Nenhuma empresa nesta rede.</p>}
+            </div>
+          </div>
+        )}
+
+        {aba === 'nivel' && (
+          <div className="space-y-2">
+            <p className="text-[11px] text-gray-500 mb-1">Só administradores nível 3 podem alterar o nível.</p>
+            {usuariosService.NIVEIS_ADMIN.map(n => {
+              const on = (draft.nivel_admin || 1) === n.v;
+              return (
+                <button key={n.v} type="button" onClick={() => setDraft(d => ({ ...d, nivel_admin: n.v }))}
+                  className={`w-full flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all ${
+                    on ? 'border-blue-400 bg-blue-50/60' : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}>
+                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${on ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                    <Shield className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{n.label}</p>
+                    <p className="text-[11px] text-gray-500">{n.desc}</p>
+                  </div>
+                  {on && <Check className="ml-auto h-4 w-4 text-blue-600" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

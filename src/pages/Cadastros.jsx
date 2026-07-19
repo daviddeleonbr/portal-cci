@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { Building2, Users, UserCog, Truck, Layers, ListChecks } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import { useAdminSession } from '../hooks/useAuth';
+import { nivelAdmin } from '../services/usuariosSistemaService';
 import Clientes from './Clientes';
 import Colaboradores from './Colaboradores';
 import CciUsuarios from './CciUsuarios';
@@ -29,7 +30,13 @@ const TABS = [
 export default function Cadastros() {
   const session = useAdminSession();
   const perms = useMemo(() => new Set(session?.usuario?.permissoes || []), [session?.usuario?.permissoes]);
-  const tabsVisiveis = useMemo(() => TABS.filter(t => !t.permissao || perms.has(t.permissao)), [perms]);
+  // A aba Usuários é gated por NÍVEL (N2+), não pela permissão 'usuarios' —
+  // um admin N1 não acessa a gestão de usuários mesmo que tenha a permissão.
+  const nivel = nivelAdmin(session?.usuario);
+  const tabsVisiveis = useMemo(
+    () => TABS.filter(t => t.key === 'usuarios' ? nivel >= 2 : (!t.permissao || perms.has(t.permissao))),
+    [perms, nivel],
+  );
 
   const [aba, setAba] = useState(() => {
     if (typeof window === 'undefined') return TABS[0].key;

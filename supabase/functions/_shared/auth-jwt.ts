@@ -84,6 +84,8 @@ export function montarClaims(usuario: Record<string, any>): Record<string, unkno
   if (chaveApiId) claims.chave_api_id = chaveApiId;
   if (asRedeId) claims.as_rede_id = asRedeId;
   if (Array.isArray(usuario.empresas_permitidas)) claims.empresas_permitidas = usuario.empresas_permitidas;
+  // Nível de admin (1..3) — governa quem pode gerir permissões de quem (RLS/RPC).
+  if (usuario.tipo === "admin" && usuario.nivel_admin != null) claims.cci_nivel_admin = usuario.nivel_admin;
   return claims;
 }
 

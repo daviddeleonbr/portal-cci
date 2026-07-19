@@ -2,7 +2,52 @@ import { supabase } from '../lib/supabase';
 
 // Colunas seguras (NUNCA inclui senha/senha_hash — o RLS revoga o SELECT
 // dessas colunas). Todo select da tabela usa esta lista.
-const COLS = 'id, nome, email, tipo, chave_api_id, as_rede_id, permissoes, status, is_master, empresas_permitidas, ultimo_acesso, observacoes, criado_por, created_at, updated_at';
+const COLS = 'id, nome, email, tipo, chave_api_id, as_rede_id, permissoes, status, is_master, nivel_admin, empresas_permitidas, ultimo_acesso, observacoes, criado_por, created_at, updated_at';
+
+// ========== Hierarquia de níveis de admin (1..3) ==========
+// N3 gere N2/N1/clientes (não N3); N2 gere N1/clientes; N1 não gere ninguém.
+// Só N3 define/altera o nível. Espelha a matriz do banco (cci_pode_gerir_usuario)
+// só para habilitar/ocultar controles na UI — o enforcement real é no DB.
+export const NIVEIS_ADMIN = [
+  { v: 1, label: 'Nível 1', desc: 'Sem acesso à gestão de usuários' },
+  { v: 2, label: 'Nível 2', desc: 'Gerencia N1 e clientes' },
+  { v: 3, label: 'Nível 3', desc: 'Gerencia N2, N1 e clientes' },
+];
+
+export function nivelAdmin(usuario) {
+  if (!usuario || usuario.tipo !== 'admin') return null;
+  return usuario.nivel_admin ?? (usuario.is_master ? 3 : 1);
+}
+
+// O ator (sessão) pode gerir a área de usuários? (N2+)
+export function podeGerirUsuarios(ator) {
+  return nivelAdmin(ator) >= 2;
+}
+
+// O ator pode definir/alterar níveis? (só N3)
+export function podeDefinirNivel(ator) {
+  return nivelAdmin(ator) === 3;
+}
+
+// O ator pode gerir (editar/excluir) este alvo? Espelha cci_pode_gerir_usuario.
+export function podeGerirUsuario(ator, alvo) {
+  if (!ator || !alvo) return false;
+  if (ator.tipo === 'admin') {
+    const n = nivelAdmin(ator);
+    if (n < 2) return false;
+    if (alvo.tipo === 'cliente') return true;
+    const na = nivelAdmin(alvo);           // alvo admin
+    if (na === 3) return false;            // ninguém gere N3 (nem self)
+    if (n === 3) return true;              // N3 gere N1/N2
+    if (n === 2) return na === 1;          // N2 só gere N1
+    return false;
+  }
+  // ator cliente-gerente: só clientes da própria rede
+  return alvo.tipo === 'cliente'
+    && ((ator.chave_api_id && alvo.chave_api_id === ator.chave_api_id)
+     || (ator.as_rede_id && alvo.as_rede_id === ator.as_rede_id))
+    && (ator.permissoes || []).includes('gerenciar_usuarios');
+}
 
 // ========== Catalogo de permissoes ==========
 // Usado pela UI pra renderizar os checkboxes. Cada chave deve
@@ -160,46 +205,22 @@ export async function criarUsuario(campos) {
   const senha = payload.senha;
   delete payload.senha;                 // nunca grava texto puro
   if (!senha) throw new Error('Informe uma senha inicial para o usuário.');
-  const { data, error } = await supabase
-    .from('cci_usuarios_sistema')
-    .insert(payload)
-    .select(COLS)
-    .single();
+  // Escrita só via RPC SECURITY DEFINER (valida a hierarquia no banco).
+  const { data: novoId, error } = await supabase.rpc('cci_gerir_criar_usuario', { p_dados: payload });
   if (error) throw error;
   // Define a senha já com HASH (server-side, via RPC autorizado).
-  const { error: errSenha } = await supabase.rpc('cci_admin_definir_senha', { p_usuario_id: data.id, p_senha: senha });
+  const { error: errSenha } = await supabase.rpc('cci_admin_definir_senha', { p_usuario_id: novoId, p_senha: senha });
   if (errSenha) throw new Error('Usuário criado, mas falha ao definir a senha: ' + errSenha.message);
-  return data;
+  return { id: novoId };
 }
 
 export async function atualizarUsuario(id, campos) {
   const payload = sanitizarPayload(campos);
-  // Senha nunca vai no update da tabela — vai pelo RPC com hash (abaixo).
   const senha = payload.senha;
   delete payload.senha;
 
-  // Pra cascata: lê o estado atual e calcula o que foi REMOVIDO.
-  // Só aplica em admins não-master (master é sempre tudo).
-  let permissoesRemovidas = [];
-  if (payload.tipo === 'admin' && Array.isArray(payload.permissoes)) {
-    const { data: atual } = await supabase
-      .from('cci_usuarios_sistema')
-      .select('permissoes, is_master')
-      .eq('id', id)
-      .single();
-    if (atual && !atual.is_master) {
-      const antigas = new Set(atual.permissoes || []);
-      const novas   = new Set(payload.permissoes);
-      permissoesRemovidas = [...antigas].filter(p => !novas.has(p));
-    }
-  }
-
-  const { data, error } = await supabase
-    .from('cci_usuarios_sistema')
-    .update(payload)
-    .eq('id', id)
-    .select(COLS)
-    .single();
+  // Escrita só via RPC SECURITY DEFINER (valida a matriz + só N3 muda nível).
+  const { error } = await supabase.rpc('cci_gerir_atualizar_usuario', { p_id: id, p_dados: payload });
   if (error) throw error;
 
   // Troca de senha (se informada) — com HASH server-side.
@@ -207,22 +228,20 @@ export async function atualizarUsuario(id, campos) {
     const { error: errSenha } = await supabase.rpc('cci_admin_definir_senha', { p_usuario_id: id, p_senha: senha });
     if (errSenha) throw new Error('Dados salvos, mas falha ao atualizar a senha: ' + errSenha.message);
   }
-
-  // Propaga remoção pros subordinados
-  if (permissoesRemovidas.length > 0) {
-    try { await cascataRevogarPermissoes(id, permissoesRemovidas); }
-    catch (err) { console.error('[usuariosSistema] cascata falhou:', err); }
-  }
-
-  return data;
+  return { id };
 }
 
 export async function excluirUsuario(id) {
-  const { error } = await supabase
-    .from('cci_usuarios_sistema')
-    .delete()
-    .eq('id', id);
+  const { error } = await supabase.rpc('cci_gerir_excluir_usuario', { p_id: id });
   if (error) throw error;
+}
+
+// Reseta a senha para um valor padrão (server-side, com hash). Autorização é
+// a mesma da edição (cci_admin_definir_senha valida). Retorna a senha definida.
+export async function resetarSenha(id, senha = '123456') {
+  const { error } = await supabase.rpc('cci_admin_definir_senha', { p_usuario_id: id, p_senha: senha });
+  if (error) throw error;
+  return senha;
 }
 
 function sanitizarPayload(campos) {
