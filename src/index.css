@@ -367,6 +367,11 @@ html.dark .disabled\:text-gray-300:disabled, html.dark .disabled\:text-gray-400:
 /* Placeholder um pouco mais claro p/ legibilidade */
 html.dark input::placeholder, html.dark textarea::placeholder { color: #7c8aa0 !important; }
 
+/* ─── Dropdown nativo do <select> (a lista de <option> do SO) ─── */
+html.dark select { color-scheme: dark; }
+html.dark option { background-color: #1e293b !important; color: #e2e8f0 !important; }
+html.dark optgroup { background-color: #0f172a !important; color: #94a3b8 !important; }
+
 /* ─── Recharts (grade / eixos / tooltip / pie) ─── */
 html.dark .recharts-default-tooltip { background-color: #1e293b !important; border-color: #334155 !important; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
 html.dark .recharts-default-tooltip .recharts-tooltip-label,
