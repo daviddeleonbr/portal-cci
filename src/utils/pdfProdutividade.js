@@ -444,17 +444,17 @@ export function gerarPdfProdutividade({ aba, contexto, kpis, rankings, funcionar
     const atend = kpis?.atendimentos || 0;
     y = desenharKpis(doc, y, [
       { label: 'Faturamento conveniência', valor: moedaBr(kpis?.faturamento), cor: 'emerald' },
-      { label: 'Atendimentos',             valor: numBr(atend),                cor: 'blue' },
-      { label: 'Média qtd/venda',          valor: atend > 0 ? (kpis.qtdConveniencia / atend).toFixed(1) : '—', cor: 'violet' },
-      { label: 'Ticket médio',             valor: moedaBr(atend > 0 ? kpis.faturamento / atend : 0), cor: 'amber' },
+      { label: 'Atendimentos',             valor: numBr(atend),                cor: 'emerald' },
+      { label: 'Média qtd/venda',          valor: atend > 0 ? (kpis.qtdConveniencia / atend).toFixed(1) : '—', cor: 'emerald' },
+      { label: 'Ticket médio',             valor: moedaBr(atend > 0 ? kpis.faturamento / atend : 0), cor: 'emerald' },
     ]);
     desenharConveniencia(doc, y, ctx, vendedoresConv, proj);
   } else {
     y = desenharKpis(doc, y, [
-      { label: 'Fat. automotivos',    valor: moedaBr(kpis?.fatAutomotivos), cor: 'blue' },
-      { label: 'Litros de aditivada', valor: `${numBr(kpis?.litrosAditivada, 0)} L`, cor: 'violet' },
-      { label: 'Mix de aditivada',    valor: kpis?.mix != null ? `${kpis.mix.toFixed(1)}%` : '—', cor: 'violet' },
-      { label: 'Abastecimentos',      valor: numBr(kpis?.abastecimentos), cor: 'blue' },
+      { label: 'Fat. automotivos',    valor: moedaBr(kpis?.fatAutomotivos), cor: 'emerald' },
+      { label: 'Litros de aditivada', valor: `${numBr(kpis?.litrosAditivada, 0)} L`, cor: 'emerald' },
+      { label: 'Mix de aditivada',    valor: kpis?.mix != null ? `${kpis.mix.toFixed(1)}%` : '—', cor: 'emerald' },
+      { label: 'Abastecimentos',      valor: numBr(kpis?.abastecimentos), cor: 'emerald' },
       { label: 'Ticket méd. auto.',   valor: moedaBr(kpis?.ticketAutomotivos), cor: 'emerald' },
     ]);
     y = desenharRankings(doc, y, ctx, [
