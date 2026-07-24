@@ -29,6 +29,19 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" />
 
     <title>CCI · Portal</title>
+
+    <!-- Anti-flash (FOUC): aplica a classe .dark ANTES do bundle carregar,
+         lendo o tema salvo (cci_theme) com fallback pro prefers-color-scheme.
+         Mantém em sincronia com src/hooks/useTheme.js (mesma chave). -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('cci_theme');
+          if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          if (t === 'dark') document.documentElement.classList.add('dark');
+        } catch (e) { /* noop */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

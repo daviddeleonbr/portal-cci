@@ -31,7 +31,7 @@ function temaInicial() {
   try {
     const salvo = localStorage.getItem(STORAGE_KEY);
     if (salvo === 'light' || salvo === 'dark') return salvo;
-  } catch (_) { /* ignore */ }
+  } catch { /* ignore */ }
   // Fallback: preferencia do SO
   if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
     return 'dark';
@@ -48,8 +48,27 @@ export function useTheme() {
 
   useEffect(() => {
     aplicarTema(tema);
-    try { localStorage.setItem(STORAGE_KEY, tema); } catch (_) { /* ignore */ }
+    try { localStorage.setItem(STORAGE_KEY, tema); } catch { /* ignore */ }
+    // Notifica outras instâncias do hook na MESMA aba (ex.: os dois headers
+    // admin/cliente têm instâncias separadas de useTheme).
+    window.dispatchEvent(new CustomEvent('cci:theme-change', { detail: tema }));
   }, [tema]);
+
+  // Sincroniza entre instâncias (mesma aba) e entre abas (evento storage).
+  useEffect(() => {
+    const onCustom = (e) => setTema(prev => (e.detail && e.detail !== prev ? e.detail : prev));
+    const onStorage = (e) => {
+      if (e.key === STORAGE_KEY && (e.newValue === 'light' || e.newValue === 'dark')) {
+        setTema(prev => (e.newValue !== prev ? e.newValue : prev));
+      }
+    };
+    window.addEventListener('cci:theme-change', onCustom);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('cci:theme-change', onCustom);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   const alternar = useCallback(() => {
     setTema(t => (t === 'dark' ? 'light' : 'dark'));
