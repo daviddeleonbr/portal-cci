@@ -186,8 +186,13 @@ html.dark .border-gray-50, html.dark .border-gray-100, html.dark .border-gray-15
 html.dark .border-gray-200, html.dark .border-gray-300 { border-color: #334155 !important; }
 html.dark .border-gray-200\/50, html.dark .border-gray-200\/60, html.dark .border-gray-200\/70 { border-color: rgba(51, 65, 85, 0.6) !important; }
 html.dark .border-gray-100\/60 { border-color: rgba(38, 50, 68, 0.6) !important; }
+/* Tailwind v4 aplica o divisor como border-bottom em `> :not(:last-child)`
+   (todas as linhas menos a ÚLTIMA). O seletor v3 `> * + *` deixava a 1ª linha
+   de fora → o bottom dela ficava com a cor clara original. */
+html.dark .divide-gray-50 > :not(:last-child), html.dark .divide-gray-100 > :not(:last-child),
 html.dark .divide-gray-50 > * + *, html.dark .divide-gray-100 > * + * { border-color: #263244 !important; }
-html.dark .divide-gray-200 > * + * { border-color: #334155 !important; }
+html.dark .divide-gray-200 > :not(:last-child), html.dark .divide-gray-200 > * + *,
+html.dark .divide-slate-100 > :not(:last-child), html.dark .divide-slate-200 > :not(:last-child) { border-color: #334155 !important; }
 
 html.dark .border-blue-100    { border-color: rgba(20, 184, 166, 0.3) !important; }
 html.dark .border-blue-200, html.dark .border-blue-200\/60 { border-color: rgba(20, 184, 166, 0.45) !important; }
