@@ -18,9 +18,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const CORES = {
-  cciViolet:    [89, 47, 224],
-  cciVioletEsc: [59, 27, 160],
-  violetBg:     [243, 240, 255],
+  brand:        [13, 148, 136],    // teal-600 — cor de destaque do projeto
+  brandEsc:     [15, 118, 110],    // teal-700
+  brandBg:      [240, 253, 250],   // teal-50 (fundo do cartão rede/empresa)
   cinzaEscuro:  [33, 37, 41],
   cinzaMedio:   [108, 117, 125],
   cinzaClaro:   [222, 226, 230],
@@ -28,7 +28,7 @@ const CORES = {
   zebra:        [250, 250, 252],
   ouroBg:       [254, 249, 195],   // top 1
   ouroTx:       [133, 100, 4],
-  tendTx:       [37, 99, 235],     // azul p/ colunas de tendência
+  tendTx:       [13, 148, 136],    // teal p/ colunas de tendência (igual ao app)
 };
 
 const KPI_COR = {
@@ -71,7 +71,7 @@ function truncar(doc, texto, larguraMax) {
 // ─── Cabeçalho profissional (repetido em cada página) ──────────
 function desenharCabecalho(doc, ctx) {
   // Faixa de acento superior (brand)
-  doc.setFillColor(...CORES.cciViolet);
+  doc.setFillColor(...CORES.brand);
   doc.rect(0, 0, PAG_W, 2.4, 'F');
 
   // Marca CCI: logo (logo-cci-landing) se disponível; senão, texto.
@@ -82,7 +82,7 @@ function desenharCabecalho(doc, ctx) {
   } else {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
-    doc.setTextColor(...CORES.cciVioletEsc);
+    doc.setTextColor(...CORES.brandEsc);
     doc.text('CCI', MARGEM.esq, 12);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
@@ -93,7 +93,7 @@ function desenharCabecalho(doc, ctx) {
   // Título do relatório à direita (em roxo, sobre o fundo branco)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.setTextColor(...CORES.cciVioletEsc);
+  doc.setTextColor(...CORES.brandEsc);
   doc.text(ctx.titulo, PAG_W - MARGEM.dir, 9.5, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
@@ -101,14 +101,14 @@ function desenharCabecalho(doc, ctx) {
   doc.text('Relatório de Produtividade', PAG_W - MARGEM.dir, 13.5, { align: 'right' });
 
   // Régua roxa separando marca do conteúdo
-  doc.setDrawColor(...CORES.cciViolet);
+  doc.setDrawColor(...CORES.brand);
   doc.setLineWidth(0.4);
   doc.line(MARGEM.esq, 16.5, PAG_W - MARGEM.dir, 16.5);
 
   // Cartão de destaque: REDE • EMPRESA
   const cardY = 19;
   const cardH = 13;
-  doc.setFillColor(...CORES.violetBg);
+  doc.setFillColor(...CORES.brandBg);
   doc.setDrawColor(...CORES.cinzaClaro);
   doc.setLineWidth(0.2);
   doc.roundedRect(MARGEM.esq, cardY, CONT_W, cardH, 1.6, 1.6, 'FD');
@@ -124,7 +124,7 @@ function desenharCabecalho(doc, ctx) {
     doc.text(rotulo, x + 3, cardY + 4.6);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.setTextColor(...CORES.cciVioletEsc);
+    doc.setTextColor(...CORES.brandEsc);
     doc.text(truncar(doc, valor || '—', larg - 6), x + 3, cardY + 10);
   };
   const larg = CONT_W * 0.5;
@@ -137,7 +137,7 @@ function desenharCabecalho(doc, ctx) {
   doc.setTextColor(...CORES.cinzaMedio);
   doc.text(`Período: ${ctx.periodo || '—'}`, MARGEM.esq, 36.5);
   doc.text(`Gerado em ${ctx.geradoEm}`, PAG_W - MARGEM.dir, 36.5, { align: 'right' });
-  doc.setDrawColor(...CORES.cciViolet);
+  doc.setDrawColor(...CORES.brand);
   doc.setLineWidth(0.4);
   doc.line(MARGEM.esq, 38, PAG_W - MARGEM.dir, 38);
 }
@@ -145,13 +145,13 @@ function desenharCabecalho(doc, ctx) {
 // ─── Rodapé (repetido em cada página) ──────────────────────────
 function desenharRodape(doc, ctx, pag, total) {
   const yl = FIM_UTIL + 6;
-  doc.setDrawColor(...CORES.cciViolet);
+  doc.setDrawColor(...CORES.brand);
   doc.setLineWidth(0.4);
   doc.line(MARGEM.esq, yl, PAG_W - MARGEM.dir, yl);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
-  doc.setTextColor(...CORES.cciVioletEsc);
+  doc.setTextColor(...CORES.brandEsc);
   doc.text('CCI', MARGEM.esq, yl + 4.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...CORES.cinzaMedio);
@@ -200,10 +200,10 @@ function desenharKpis(doc, y, cards) {
 function tituloSecao(doc, y, texto) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
-  doc.setTextColor(...CORES.cciVioletEsc);
+  doc.setTextColor(...CORES.brandEsc);
   doc.text(texto, MARGEM.esq, y);
   const w = doc.getTextWidth(texto);
-  doc.setDrawColor(...CORES.cciViolet);
+  doc.setDrawColor(...CORES.brand);
   doc.setLineWidth(0.5);
   doc.line(MARGEM.esq, y + 1.6, MARGEM.esq + w, y + 1.6);
   return y + 4;
@@ -213,7 +213,7 @@ function tituloSecao(doc, y, texto) {
 function desenharRankingColuna(doc, x, y, larg, titulo, itens, fmt, startIndex) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.8);
-  doc.setTextColor(...CORES.cciVioletEsc);
+  doc.setTextColor(...CORES.brandEsc);
   doc.text(truncar(doc, titulo, larg), x, y);
 
   const body = (itens || []).map((it, i) => [
@@ -311,6 +311,23 @@ function desenharFuncionarios(doc, y, ctx, funcionarios, projetar) {
   });
   if (body.length === 0) body.push(['', 'Nenhum funcionário no período', '', '', '', '', '', '', '', '']);
 
+  // Totais das colunas (mesmos do rodapé da tabela na tela).
+  let tAuto = 0, tAditiv = 0, tComum = 0, tAbast = 0, tVendas = 0;
+  (funcionarios || []).forEach(v => {
+    const s = v.pista;
+    tAuto += s.fatAutomotivos || 0; tAditiv += s.litrosAditivada || 0; tComum += s.litrosComum || 0;
+    tAbast += s.abastecimentos || 0; tVendas += s.vendasAutomotivos || 0;
+  });
+  const tMix = (tAditiv + tComum) > 0 ? (tAditiv / (tAditiv + tComum)) * 100 : null;
+  const tTicket = tVendas > 0 ? tAuto / tVendas : 0;
+  const foot = (funcionarios || []).length > 0 ? [[
+    '', `Totais · ${funcionarios.length} func.`,
+    moedaBr(tAuto), moedaBr(projetar(tAuto)),
+    `${numBr(tAditiv, 0)} L`, `${numBr(projetar(tAditiv), 0)} L`,
+    tMix != null ? `${tMix.toFixed(1)}%` : '—',
+    numBr(tAbast), numBr(projetar(tAbast)), moedaBr(tTicket),
+  ]] : undefined;
+
   // Larguras compactadas em Litros aditiv., suas tendências e Ticket p/ caber
   // a nova coluna de tendência de abastecimentos.
   const wName = CONT_W - 6.5 - 22 - 19 - 18 - 17 - 12 - 13 - 17 - 18;
@@ -320,11 +337,14 @@ function desenharFuncionarios(doc, y, ctx, funcionarios, projetar) {
     tableWidth: CONT_W,
     head: [['#', 'Funcionário', 'Automot.', 'Tend.', 'Litros adit.', 'Tend.', 'Mix', 'Abast.', 'Tend.', 'Ticket']],
     body,
+    foot,
+    showFoot: 'lastPage',
     styles: {
       font: 'helvetica', fontSize: 7, cellPadding: { top: 1.3, right: 1.6, bottom: 1.3, left: 1.6 },
       lineWidth: 0.1, lineColor: CORES.cinzaClaro, textColor: CORES.cinzaEscuro, valign: 'middle', overflow: 'ellipsize',
     },
-    headStyles: { fillColor: CORES.cciViolet, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.3 },
+    headStyles: { fillColor: CORES.brand, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.3 },
+    footStyles: { fillColor: CORES.brandBg, textColor: CORES.brandEsc, fontStyle: 'bold', fontSize: 6.6, lineWidth: 0.1, lineColor: CORES.cinzaClaro },
     alternateRowStyles: { fillColor: CORES.zebra },
     columnStyles: {
       0: { cellWidth: 6.5, halign: 'center', textColor: CORES.cinzaMedio },
@@ -373,7 +393,7 @@ function desenharConveniencia(doc, y, ctx, vendedores, projetar) {
       font: 'helvetica', fontSize: 7, cellPadding: { top: 1.3, right: 1.8, bottom: 1.3, left: 1.8 },
       lineWidth: 0.1, lineColor: CORES.cinzaClaro, textColor: CORES.cinzaEscuro, valign: 'middle', overflow: 'ellipsize',
     },
-    headStyles: { fillColor: CORES.cciViolet, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5 },
+    headStyles: { fillColor: CORES.brand, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5 },
     alternateRowStyles: { fillColor: CORES.zebra },
     columnStyles: {
       0: { cellWidth: 6.5, halign: 'center', textColor: CORES.cinzaMedio },

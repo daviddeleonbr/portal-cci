@@ -504,6 +504,22 @@ export default function ClienteComercialProdutividade() {
     return m;
   }, [funcsPistaAuto]);
 
+  // Totais das colunas da tabela de funcionários (rodapé + PDF).
+  const totaisFuncs = useMemo(() => {
+    let auto = 0, aditiv = 0, comum = 0, abast = 0, vendasAuto = 0;
+    funcsPistaAuto.forEach(v => {
+      const s = v.pista;
+      auto       += s.fatAutomotivos   || 0;
+      aditiv     += s.litrosAditivada  || 0;
+      comum      += s.litrosComum       || 0;
+      abast      += s.abastecimentos    || 0;
+      vendasAuto += s.vendasAutomotivos || 0;
+    });
+    const mix = (aditiv + comum) > 0 ? (aditiv / (aditiv + comum)) * 100 : null;
+    const ticket = vendasAuto > 0 ? auto / vendasAuto : 0;
+    return { auto, aditiv, abast, vendasAuto, mix, ticket, qtd: funcsPistaAuto.length };
+  }, [funcsPistaAuto]);
+
   // Carrega a logo (public/) como dataURL + dimensões p/ embutir no PDF.
   // Mesma origem → canvas não fica "tainted". Falha silenciosa → PDF sem logo.
   function carregarLogo(url) {
@@ -739,6 +755,21 @@ export default function ClienteComercialProdutividade() {
                         );
                       })}
                     </tbody>
+                    {funcsPistaAuto.length > 0 && (
+                      <tfoot className="bg-gray-50/80 border-t-2 border-gray-200">
+                        <tr className="text-[12px] font-semibold text-gray-800">
+                          <td className="px-3 py-2.5">Totais · {totaisFuncs.qtd} func.</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums border-l border-gray-200">{formatCurrency(totaisFuncs.auto)}</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-blue-700">{formatCurrency(projetar(totaisFuncs.auto))}</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums border-l border-gray-200">{fmtNum(totaisFuncs.aditiv, 0)} L</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-blue-700">{fmtNum(projetar(totaisFuncs.aditiv), 0)} L</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums border-l border-gray-200">{totaisFuncs.mix != null ? `${totaisFuncs.mix.toFixed(1)}%` : '—'}</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums border-l border-gray-200">{fmtNum(totaisFuncs.abast)}</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-blue-700">{fmtNum(projetar(totaisFuncs.abast))}</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums border-l border-gray-200">{formatCurrency(totaisFuncs.ticket)}</td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </div>
