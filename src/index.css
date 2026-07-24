@@ -148,7 +148,9 @@ html.dark body {
 }
 
 /* ─── Backgrounds ───────────────────────────────── */
-html.dark .bg-white { background-color: #1e293b !important; background-image: linear-gradient(180deg, #1e293b 0%, #172033 100%) !important; }
+/* Cards no dark ficam FLAT (sem degradê vertical). O gradiente vazava por trás
+   de linhas translúcidas (ex.: tabela DRE) criando tom desigual. */
+html.dark .bg-white { background-color: #1e293b !important; background-image: none !important; }
 /* variantes de bg-white com opacidade (bg-white/60, bg-white/80, etc.) */
 html.dark .bg-white\/40, html.dark .bg-white\/50, html.dark .bg-white\/60, html.dark .bg-white\/70, html.dark .bg-white\/80, html.dark .bg-white\/90, html.dark .bg-white\/95 {
   background-color: rgba(30, 41, 59, 0.85) !important;
@@ -273,7 +275,7 @@ html.dark .bg-white.rounded,
 html.dark .bg-white.rounded-md,
 html.dark .bg-white.rounded-lg {
   background-color: #1e293b !important;
-  background-image: linear-gradient(180deg, #1e293b 0%, #172033 100%) !important;
+  background-image: none !important;
 }
 
 /* ════════════════════════════════════════════════════════════
