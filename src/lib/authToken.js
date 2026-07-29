@@ -11,6 +11,8 @@
 // rota só passa a importar de fato quando as policies apertarem.
 // ============================================================
 
+import { setItemResiliente } from './storageSafe';
+
 const ADMIN_KEY = 'cci_session_admin';
 const CLIENTE_KEY = 'cci_session_cliente';
 const URL = import.meta.env.VITE_SUPABASE_URL;
@@ -31,7 +33,7 @@ function lerSessao(key) {
 
 function salvarSessao(key, session) {
   try {
-    localStorage.setItem(key, JSON.stringify(session));
+    setItemResiliente(key, JSON.stringify(session));
   } catch { /* noop */ }
 }
 

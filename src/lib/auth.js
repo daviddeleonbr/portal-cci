@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { setItemResiliente } from './storageSafe';
 
 // Chaves de sessao no localStorage (portais independentes)
 const ADMIN_KEY = 'cci_session_admin';
@@ -21,12 +22,12 @@ export function getClienteSession() {
 }
 
 function setAdminSession(session) {
-  localStorage.setItem(ADMIN_KEY, JSON.stringify(session));
+  setItemResiliente(ADMIN_KEY, JSON.stringify(session));
   emitSessionChange();
 }
 
 function setClienteSession(session) {
-  localStorage.setItem(CLIENTE_KEY, JSON.stringify(session));
+  setItemResiliente(CLIENTE_KEY, JSON.stringify(session));
   emitSessionChange();
 }
 
