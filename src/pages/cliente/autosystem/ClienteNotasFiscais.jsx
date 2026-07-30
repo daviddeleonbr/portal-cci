@@ -15,11 +15,21 @@ import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../../../utils/nfe';
 
-// situacao_nfe do resumo DFe: 1 = autorizada, 3 = denegada.
+// situacao_nfe do resumo DFe: 1 = Autorizada, 2 = Denegada, 3 = Cancelada.
 const SITUACAO = {
   1: { label: 'Autorizada', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  3: { label: 'Denegada',   cls: 'bg-red-50 text-red-700 border-red-200' },
+  2: { label: 'Denegada',   cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  3: { label: 'Cancelada',  cls: 'bg-red-50 text-red-700 border-red-200' },
 };
+// Situação da manifestação (nfe_evento) — só aparecem as não finalizadas.
+const MANIF = {
+  0:      { label: 'Sem operação',        cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  1:      { label: 'Em processamento',    cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  210210: { label: 'Ciência da operação', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+};
+function manif(ev) {
+  return MANIF[ev] || { label: ev == null ? '—' : `Cód ${ev}`, cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+}
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -165,14 +175,15 @@ export default function ClienteNotasFiscais() {
                     <th className="px-4 py-2.5 text-left">Emissão</th>
                     <th className="px-4 py-2.5 text-left">Emitente</th>
                     <th className="px-4 py-2.5 text-right border-l border-gray-100">Nº / Série</th>
-                    <th className="px-4 py-2.5 text-center border-l border-gray-100">Situação</th>
+                    <th className="px-4 py-2.5 text-center border-l border-gray-100">Situação NF</th>
+                    <th className="px-4 py-2.5 text-center border-l border-gray-100">Manifestação</th>
                     <th className="px-4 py-2.5 text-right border-l border-gray-100">Valor</th>
                     <th className="px-4 py-2.5 text-left border-l border-gray-100">Recebida SEFAZ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filtradas.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-10 text-center text-[12px] text-gray-400">
+                    <tr><td colSpan={7} className="px-4 py-10 text-center text-[12px] text-gray-400">
                       {notas.length === 0 ? 'Nenhuma nota pendente de manifestação nesta empresa.' : 'Nada corresponde à busca.'}
                     </td></tr>
                   ) : filtradas.map(n => {
@@ -192,6 +203,11 @@ export default function ClienteNotasFiscais() {
                           {sit
                             ? <span className={`inline-flex items-center text-[10.5px] rounded-full px-2 py-0.5 border ${sit.cls}`}>{sit.label}</span>
                             : <span className="text-[10.5px] text-gray-400">Cód {n.situacao_nfe}</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-center border-l border-gray-100">
+                          {(() => { const man = manif(n.nfe_evento); return (
+                            <span className={`inline-flex items-center text-[10.5px] rounded-full px-2 py-0.5 border ${man.cls}`}>{man.label}</span>
+                          ); })()}
                         </td>
                         <td className="px-4 py-2.5 text-right border-l border-gray-100 font-mono tabular-nums text-[12.5px] font-semibold text-gray-900">{formatCurrency(n.valor)}</td>
                         <td className="px-4 py-2.5 text-[11.5px] text-gray-500 border-l border-gray-100 whitespace-nowrap">{fmtData(n.data_rec_sefaz)}</td>

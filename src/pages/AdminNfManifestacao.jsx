@@ -18,11 +18,25 @@ import * as clientesService from '../services/clientesService';
 import { formatCurrency } from '../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
 
-// Situação da NF-e no resumo DFe do Autosystem: 1 = autorizada, 3 = denegada.
+// Situação da NF-e no resumo DFe do Autosystem: 1 = Autorizada, 2 = Denegada,
+// 3 = Cancelada (cSitNFe da Distribuição DFe).
 const SITUACAO_AS = {
   1: { label: 'Autorizada', bg: 'bg-emerald-50 dark:bg-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
-  3: { label: 'Denegada',   bg: 'bg-red-50 dark:bg-red-500/15',         text: 'text-red-700 dark:text-red-300',         dot: 'bg-red-500' },
+  2: { label: 'Denegada',   bg: 'bg-amber-50 dark:bg-amber-500/15',     text: 'text-amber-700 dark:text-amber-300',     dot: 'bg-amber-500' },
+  3: { label: 'Cancelada',  bg: 'bg-red-50 dark:bg-red-500/15',         text: 'text-red-700 dark:text-red-300',         dot: 'bg-red-500' },
 };
+// Situação da manifestação (nfe_evento). Só aparecem aqui as NÃO finalizadas.
+const MANIF_AS = {
+  0:      { label: 'Sem operação',          bg: 'bg-amber-50 dark:bg-amber-500/15', text: 'text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' },
+  1:      { label: 'Em processamento',      bg: 'bg-gray-100 dark:bg-white/10',     text: 'text-gray-600 dark:text-gray-300',   dot: 'bg-gray-400' },
+  210210: { label: 'Ciência da operação',   bg: 'bg-blue-50 dark:bg-blue-500/15',   text: 'text-blue-700 dark:text-blue-300',   dot: 'bg-blue-500' },
+  210200: { label: 'Confirmação da operação', bg: 'bg-emerald-50 dark:bg-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
+  210220: { label: 'Desconhecimento',       bg: 'bg-rose-50 dark:bg-rose-500/15',   text: 'text-rose-700 dark:text-rose-300',   dot: 'bg-rose-500' },
+  210240: { label: 'Operação não realizada', bg: 'bg-rose-50 dark:bg-rose-500/15',  text: 'text-rose-700 dark:text-rose-300',   dot: 'bg-rose-500' },
+};
+function manifAs(ev) {
+  return MANIF_AS[ev] || { label: ev == null ? '—' : `Cód ${ev}`, bg: 'bg-gray-100 dark:bg-white/10', text: 'text-gray-600 dark:text-gray-300', dot: 'bg-gray-400' };
+}
 function fmtDoc(v) {
   const d = String(v || '').replace(/\D/g, '');
   if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -415,6 +429,7 @@ function TabelaManifestacaoAs({ notas, totalValor }) {
               <th className="px-3 py-2.5">Emitente</th>
               <th className="px-3 py-2.5">Nº NF</th>
               <th className="px-3 py-2.5">Situação NFe</th>
+              <th className="px-3 py-2.5">Manifestação</th>
               <th className="px-3 py-2.5">Recebida SEFAZ</th>
               <th className="px-3 py-2.5 text-right">Valor</th>
             </tr>
@@ -445,6 +460,14 @@ function TabelaManifestacaoAs({ notas, totalValor }) {
                       {sit.label}
                     </span>
                   </td>
+                  <td className="px-3 py-3">
+                    {(() => { const man = manifAs(n.nfe_evento); return (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap ${man.bg} ${man.text}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${man.dot}`} />
+                        {man.label}
+                      </span>
+                    ); })()}
+                  </td>
                   <td className="px-3 py-3 font-mono tabular-nums text-[11.5px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtData(n.data_rec_sefaz)}</td>
                   <td className="px-3 py-3 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(n.valor)}</td>
                 </tr>
@@ -453,7 +476,7 @@ function TabelaManifestacaoAs({ notas, totalValor }) {
           </tbody>
           <tfoot className="bg-gray-50/60 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
             <tr className="font-semibold">
-              <td colSpan={6} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
+              <td colSpan={7} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
                 Total: {notas.length} {notas.length === 1 ? 'nota' : 'notas'}
               </td>
               <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900 dark:text-gray-100">{formatCurrency(totalValor)}</td>

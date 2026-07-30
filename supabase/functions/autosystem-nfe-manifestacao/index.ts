@@ -91,9 +91,13 @@ serve(async (req) => {
     });
     const rede = await obterRede(supabase, redeId);
 
+    // "A manifestar" = ainda NÃO finalizada. Exclui os eventos finais de
+    // manifestação (210200 Confirmação, 210220 Desconhecimento, 210240 Operação
+    // não realizada). Mantém 0 (Sem operação) e 210210 (Ciência da operação) —
+    // esta última ainda precisa de conclusão dentro do prazo.
     const params: unknown[] = [codigos];
     const conds: string[] = [
-      'm.nfe_evento = 0',                 // ainda a manifestar
+      'm.nfe_evento not in (210200, 210220, 210240)',
       'e.codigo = any($1::int[])',
     ];
     if (data_de) { params.push(data_de); conds.push(`r.data_emissao >= $${params.length}`); }
