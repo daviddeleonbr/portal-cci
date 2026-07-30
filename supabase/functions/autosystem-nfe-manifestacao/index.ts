@@ -112,8 +112,10 @@ serve(async (req) => {
     // manifestação (210200 Confirmação, 210220 Desconhecimento, 210240 Operação
     // não realizada). Mantém 0 (Sem operação) e 210210 (Ciência da operação) —
     // esta última ainda precisa de conclusão dentro do prazo.
+    // "A manifestar" = apenas SEM OPERAÇÃO (nfe_evento = 0). Ciência (210210) e
+    // eventos finais (210200/210220/210240) ficam de fora.
     const params: unknown[] = [];
-    const conds: string[] = ['m.nfe_evento not in (210200, 210220, 210240)'];
+    const conds: string[] = ['m.nfe_evento = 0'];
     if (temCodigos) { params.push(codigos); conds.push(`e.codigo = any($${params.length}::int[])`); }
     // Filtro de data tolerante a resumo ausente (não descarta a nota se não
     // houver data no resumo).
