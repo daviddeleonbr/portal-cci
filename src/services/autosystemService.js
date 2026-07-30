@@ -214,15 +214,14 @@ export async function buscarContasPagar(redeId, empresaCodigo, filtros = {}) {
 // Lista as NF-e recebidas que ainda não tiveram evento de manifestação
 // (nfe_evento = 0), por empresa. Somente CONSULTA. `empresaCodigos` = array
 // de códigos de empresa (empresa_codigo). Filtro opcional por data de emissão.
-export async function buscarNotasManifestarAutosystem(redeId, empresaCodigos, filtros = {}) {
+// empresaCodigos vazio = todas as empresas da rede (só admin pode; a edge
+// function valida). Cliente deve passar as empresas do seu escopo.
+export async function buscarNotasManifestarAutosystem(redeId, empresaCodigos = [], filtros = {}) {
   if (!redeId) throw new Error('rede_id é obrigatório');
-  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
-    throw new Error('Selecione ao menos uma empresa.');
-  }
   const { data, error } = await supabase.functions.invoke('autosystem-nfe-manifestacao', {
     body: {
       rede_id: redeId,
-      empresa_codigos: empresaCodigos,
+      empresa_codigos: Array.isArray(empresaCodigos) ? empresaCodigos : [],
       data_de: filtros.data_de || null,
       data_ate: filtros.data_ate || null,
     },

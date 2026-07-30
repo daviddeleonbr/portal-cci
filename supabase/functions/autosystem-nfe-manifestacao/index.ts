@@ -52,6 +52,18 @@ function json(body: unknown, status = 200) {
 
 const TEXT_COLUMNS = new Set(['emitente_nome', 'empresa_nome']);
 
+// Decodifica o JWT do header (só pra checar cci_tipo). A assinatura já foi
+// validada pelo gateway (verify_jwt on).
+function ehAdmin(req: Request): boolean {
+  const auth = req.headers.get('Authorization') || '';
+  const parts = auth.replace(/^Bearer\s+/i, '').split('.');
+  if (parts.length !== 3) return false;
+  try {
+    const c = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return c?.cci_tipo === 'admin';
+  } catch { return false; }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
@@ -70,11 +82,15 @@ serve(async (req) => {
 
   const { rede_id: redeId, empresa_codigos, data_de, data_ate } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
-  if (!Array.isArray(empresa_codigos) || empresa_codigos.length === 0) {
+  const codigos = Array.isArray(empresa_codigos)
+    ? [...new Set(empresa_codigos.map(Number).filter(Number.isFinite))] : [];
+  const temCodigos = codigos.length > 0;
+  // Sem empresa_codigos = "toda a rede" (o banco remoto é single-tenant da rede).
+  // Só ADMIN pode omitir; cliente precisa passar as empresas dele (senão veria
+  // empresas fora do seu escopo).
+  if (!temCodigos && !ehAdmin(req)) {
     return json({ error: 'Selecione ao menos uma empresa.' }, 400);
   }
-  const codigos = [...new Set(empresa_codigos.map(Number).filter(Number.isFinite))];
-  if (codigos.length === 0) return json({ error: 'empresa_codigos inválidos' }, 400);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -84,10 +100,11 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   try {
-    // Autoriza: rede + permissão 'notas_fiscais' + empresas permitidas.
+    // Autoriza: rede + permissão 'notas_fiscais' + empresas permitidas (quando
+    // informadas). Admin passa direto por autorizarAcesso.
     await autorizarAcesso(supabase, req, redeId, {
       permissoes: ['notas_fiscais'],
-      empresasCodigos: codigos,
+      empresasCodigos: temCodigos ? codigos : undefined,
     });
     const rede = await obterRede(supabase, redeId);
 
@@ -95,14 +112,16 @@ serve(async (req) => {
     // manifestação (210200 Confirmação, 210220 Desconhecimento, 210240 Operação
     // não realizada). Mantém 0 (Sem operação) e 210210 (Ciência da operação) —
     // esta última ainda precisa de conclusão dentro do prazo.
-    const params: unknown[] = [codigos];
-    const conds: string[] = [
-      'm.nfe_evento not in (210200, 210220, 210240)',
-      'e.codigo = any($1::int[])',
-    ];
-    if (data_de) { params.push(data_de); conds.push(`r.data_emissao >= $${params.length}`); }
-    if (data_ate) { params.push(data_ate); conds.push(`r.data_emissao <= $${params.length}`); }
+    const params: unknown[] = [];
+    const conds: string[] = ['m.nfe_evento not in (210200, 210220, 210240)'];
+    if (temCodigos) { params.push(codigos); conds.push(`e.codigo = any($${params.length}::int[])`); }
+    // Filtro de data tolerante a resumo ausente (não descarta a nota se não
+    // houver data no resumo).
+    if (data_de) { params.push(data_de); conds.push(`(r.data_emissao is null or r.data_emissao >= $${params.length})`); }
+    if (data_ate) { params.push(data_ate); conds.push(`(r.data_emissao is null or r.data_emissao <= $${params.length})`); }
 
+    // LEFT JOINs: a nota (nfe_manifestacao) aparece mesmo que nfe/nfe_resumo/
+    // empresa estejam ausentes nesse install — evita sumir tudo por join.
     const sql = `
       select
         m.grid                                              as manifestacao_grid,
@@ -118,11 +137,11 @@ serve(async (req) => {
         m.nfe_evento,
         m.ts_registro
       from nfe_manifestacao m
-      join nfe        n on n.grid = m.nfe
-      join nfe_resumo r on r.nfe  = m.nfe
-      join empresa    e on e.grid = r.empresa
+      left join nfe        n on n.grid = m.nfe
+      left join nfe_resumo r on r.nfe  = m.nfe
+      left join empresa    e on e.grid = r.empresa
       where ${conds.join(' and ')}
-      order by r.data_emissao desc, m.ts_registro desc
+      order by r.data_emissao desc nulls last, m.ts_registro desc
     `;
 
     const result = await executarQuery(rede, sql, params, { encoding: 'SQL_ASCII' });

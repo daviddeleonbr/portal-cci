@@ -14,7 +14,6 @@ import PageHeader from '../components/ui/PageHeader';
 import * as nfService from '../services/notaManifestacaoService';
 import * as mapService from '../services/mapeamentoService';
 import * as autosystemService from '../services/autosystemService';
-import * as clientesService from '../services/clientesService';
 import { formatCurrency } from '../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
 
@@ -102,7 +101,6 @@ export default function AdminNfManifestacao() {
   const [dataAte, setDataAte] = useState(hojeStr());
   const [redes, setRedes] = useState([]);            // Webposto [{ id, nome }]
   const [redesAs, setRedesAs] = useState([]);        // Autosystem [{ id, nome }]
-  const [clientes, setClientes] = useState([]);      // p/ resolver empresa_codigos da rede AS
   const [filtroRede, setFiltroRede] = useState('todas'); // 'todas' | 'wp:<id>' | 'as:<id>'
   const [notasAs, setNotasAs] = useState([]);        // notas a manifestar (Autosystem)
 
@@ -113,7 +111,6 @@ export default function AdminNfManifestacao() {
   useEffect(() => {
     mapService.listarChavesApi().then(setRedes).catch(() => setRedes([]));
     autosystemService.listarRedes().then(rs => setRedesAs((rs || []).filter(r => r.ativo !== false))).catch(() => setRedesAs([]));
-    clientesService.listarClientes().then(setClientes).catch(() => setClientes([]));
   }, []);
 
   const carregar = useCallback(async () => {
@@ -121,13 +118,12 @@ export default function AdminNfManifestacao() {
     try {
       if (filtroRede.startsWith('as:')) {
         const redeId = filtroRede.slice(3);
-        const codigos = clientes
-          .filter(c => c.as_rede_id === redeId && c.empresa_codigo != null && c.empresa_codigo !== '')
-          .map(c => Number(c.empresa_codigo)).filter(Number.isFinite);
-        if (codigos.length === 0) { setNotasAs([]); setNotas([]); return; }
-        const lista = await autosystemService.buscarNotasManifestarAutosystem(redeId, codigos, {
-          data_de: dataDe || null, data_ate: dataAte || null,
-        });
+        // Admin: toda a rede (o banco remoto é single-tenant) — passa [] p/ não
+        // depender do casamento de empresa_codigo. SEM filtro de data: a fila de
+        // "a manifestar" deve mostrar TODAS as pendentes (o prazo pode ser de
+        // meses; filtrar pelo mês corrente esconderia notas antigas ainda a
+        // manifestar).
+        const lista = await autosystemService.buscarNotasManifestarAutosystem(redeId, [], {});
         setNotasAs(lista);
         setNotas([]);
       } else {
@@ -141,7 +137,7 @@ export default function AdminNfManifestacao() {
     } catch (err) {
       setError(err.message || 'Falha ao carregar');
     } finally { setLoading(false); }
-  }, [dataDe, dataAte, filtroRede, clientes]);
+  }, [dataDe, dataAte, filtroRede]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
