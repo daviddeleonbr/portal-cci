@@ -13,8 +13,22 @@ import {
 import PageHeader from '../components/ui/PageHeader';
 import * as nfService from '../services/notaManifestacaoService';
 import * as mapService from '../services/mapeamentoService';
+import * as autosystemService from '../services/autosystemService';
+import * as clientesService from '../services/clientesService';
 import { formatCurrency } from '../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
+
+// Situação da NF-e no resumo DFe do Autosystem: 1 = autorizada, 3 = denegada.
+const SITUACAO_AS = {
+  1: { label: 'Autorizada', bg: 'bg-emerald-50 dark:bg-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
+  3: { label: 'Denegada',   bg: 'bg-red-50 dark:bg-red-500/15',         text: 'text-red-700 dark:text-red-300',         dot: 'bg-red-500' },
+};
+function fmtDoc(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  return v || '—';
+}
 
 function inicioMesAtual() {
   const d = new Date();
@@ -72,28 +86,48 @@ export default function AdminNfManifestacao() {
   const [filtroSituacao, setFiltroSituacao] = useState('todas'); // 'todas' | '0' | '1'
   const [dataDe, setDataDe] = useState(inicioMesAtual());
   const [dataAte, setDataAte] = useState(hojeStr());
-  const [redes, setRedes] = useState([]);            // [{ id, nome }]
-  const [filtroRede, setFiltroRede] = useState('todas');
+  const [redes, setRedes] = useState([]);            // Webposto [{ id, nome }]
+  const [redesAs, setRedesAs] = useState([]);        // Autosystem [{ id, nome }]
+  const [clientes, setClientes] = useState([]);      // p/ resolver empresa_codigos da rede AS
+  const [filtroRede, setFiltroRede] = useState('todas'); // 'todas' | 'wp:<id>' | 'as:<id>'
+  const [notasAs, setNotasAs] = useState([]);        // notas a manifestar (Autosystem)
 
-  // Carrega lista de redes (chaves_api) uma vez pra popular o select.
+  // Rede selecionada é Autosystem?
+  const modoAutosystem = filtroRede.startsWith('as:');
+
+  // Carrega redes (Webposto + Autosystem) + clientes uma vez pra popular selects.
   useEffect(() => {
-    mapService.listarChavesApi()
-      .then(setRedes)
-      .catch(() => setRedes([]));
+    mapService.listarChavesApi().then(setRedes).catch(() => setRedes([]));
+    autosystemService.listarRedes().then(rs => setRedesAs((rs || []).filter(r => r.ativo !== false))).catch(() => setRedesAs([]));
+    clientesService.listarClientes().then(setClientes).catch(() => setClientes([]));
   }, []);
 
   const carregar = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const lista = await nfService.listarParaAdmin({
-        dataDe, dataAte,
-        chaveApiId: filtroRede === 'todas' ? null : filtroRede,
-      });
-      setNotas(lista);
+      if (filtroRede.startsWith('as:')) {
+        const redeId = filtroRede.slice(3);
+        const codigos = clientes
+          .filter(c => c.as_rede_id === redeId && c.empresa_codigo != null && c.empresa_codigo !== '')
+          .map(c => Number(c.empresa_codigo)).filter(Number.isFinite);
+        if (codigos.length === 0) { setNotasAs([]); setNotas([]); return; }
+        const lista = await autosystemService.buscarNotasManifestarAutosystem(redeId, codigos, {
+          data_de: dataDe || null, data_ate: dataAte || null,
+        });
+        setNotasAs(lista);
+        setNotas([]);
+      } else {
+        const lista = await nfService.listarParaAdmin({
+          dataDe, dataAte,
+          chaveApiId: filtroRede === 'todas' ? null : (filtroRede.startsWith('wp:') ? filtroRede.slice(3) : filtroRede),
+        });
+        setNotas(lista);
+        setNotasAs([]);
+      }
     } catch (err) {
       setError(err.message || 'Falha ao carregar');
     } finally { setLoading(false); }
-  }, [dataDe, dataAte, filtroRede]);
+  }, [dataDe, dataAte, filtroRede, clientes]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -129,6 +163,20 @@ export default function AdminNfManifestacao() {
 
   const totalValor = filtradas.reduce((s, n) => s + Number(n.valor || 0), 0);
 
+  // Autosystem: filtra por busca (emitente / chave / nº / empresa).
+  const filtradasAs = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return notasAs;
+    return notasAs.filter(n =>
+      (n.emitente_nome || '').toLowerCase().includes(q) ||
+      (n.empresa_nome || '').toLowerCase().includes(q) ||
+      (n.chave || '').includes(q) ||
+      String(numeroNotaDaChave(n.chave) || '').includes(q) ||
+      (n.emitente_cnpj || '').includes(q),
+    );
+  }, [notasAs, busca]);
+  const totalValorAs = filtradasAs.reduce((s, n) => s + Number(n.valor || 0), 0);
+
   return (
     <div>
       <PageHeader title="Manifestação de Notas" description="Notas a manifestar — cobrança de clientes, validação e lançamento">
@@ -142,9 +190,18 @@ export default function AdminNfManifestacao() {
           <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
           <select value={filtroRede} onChange={e => setFiltroRede(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 min-w-[180px]">
-            <option value="todas">Todas as redes</option>
-            {redes.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
+            className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 min-w-[200px]">
+            <option value="todas">Todas as redes (Webposto)</option>
+            {redes.length > 0 && (
+              <optgroup label="Webposto">
+                {redes.map(r => <option key={`wp:${r.id}`} value={`wp:${r.id}`}>{r.nome}</option>)}
+              </optgroup>
+            )}
+            {redesAs.length > 0 && (
+              <optgroup label="Autosystem">
+                {redesAs.map(r => <option key={`as:${r.id}`} value={`as:${r.id}`}>{r.nome}</option>)}
+              </optgroup>
+            )}
           </select>
         </div>
         <button onClick={carregar} disabled={loading}
@@ -155,7 +212,8 @@ export default function AdminNfManifestacao() {
         </button>
       </PageHeader>
 
-      {/* Tabs */}
+      {/* Tabs — só no fluxo Webposto (Autosystem é lista direta de pendentes) */}
+      {!modoAutosystem && (
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 mb-4 overflow-hidden">
         <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto">
           {TABS.map(t => {
@@ -174,6 +232,7 @@ export default function AdminNfManifestacao() {
           })}
         </div>
       </div>
+      )}
 
       {/* Busca + filtro de situação NFe */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -183,7 +242,12 @@ export default function AdminNfManifestacao() {
             placeholder="Buscar por cliente, fornecedor, CNPJ ou chave..."
             className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
         </div>
-        {tab === 'cobrar' ? (
+        {modoAutosystem ? (
+          <div className="inline-flex items-center gap-1.5 h-[42px] px-3 rounded-lg bg-blue-50 dark:bg-blue-500/15 border border-blue-200 dark:border-blue-500/30 text-xs font-medium text-blue-800 dark:text-blue-300 sm:min-w-[220px]">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+            Notas a manifestar (Autosystem)
+          </div>
+        ) : tab === 'cobrar' ? (
           <div className="inline-flex items-center gap-1.5 h-[42px] px-3 rounded-lg bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-xs font-medium text-amber-800 dark:text-amber-300 sm:min-w-[220px]">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
             Apenas "Sem manifestação"
@@ -210,6 +274,8 @@ export default function AdminNfManifestacao() {
           <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           <span className="text-sm">Carregando...</span>
         </div>
+      ) : modoAutosystem ? (
+        <TabelaManifestacaoAs notas={filtradasAs} totalValor={totalValorAs} />
       ) : filtradas.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 p-12 text-center">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
@@ -322,6 +388,79 @@ export default function AdminNfManifestacao() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Tabela de "notas a manifestar" do Autosystem (consulta read-only).
+function TabelaManifestacaoAs({ notas, totalValor }) {
+  if (!notas || notas.length === 0) {
+    return (
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 p-12 text-center">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
+          <FileSpreadsheet className="h-6 w-6 text-blue-600" />
+        </div>
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Nenhuma nota pendente de manifestação nesta rede/período.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[1000px]">
+          <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
+            <tr className="text-left text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <th className="px-4 py-2.5">Empresa</th>
+              <th className="px-3 py-2.5">Emissão</th>
+              <th className="px-3 py-2.5">Emitente</th>
+              <th className="px-3 py-2.5">Nº NF</th>
+              <th className="px-3 py-2.5">Situação NFe</th>
+              <th className="px-3 py-2.5">Recebida SEFAZ</th>
+              <th className="px-3 py-2.5 text-right">Valor</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-white/10">
+            {notas.map(n => {
+              const num = numeroNotaDaChave(n.chave);
+              const ser = serieDaChave(n.chave);
+              const sit = SITUACAO_AS[n.situacao_nfe] || { label: n.situacao_nfe == null ? '—' : `Cód ${n.situacao_nfe}`, bg: 'bg-gray-100 dark:bg-white/10', text: 'text-gray-600 dark:text-gray-300', dot: 'bg-gray-400' };
+              return (
+                <tr key={n.manifestacao_grid} className="hover:bg-blue-50/30 dark:hover:bg-blue-500/[0.07] transition-colors">
+                  <td className="px-4 py-3">
+                    <p className="text-[12px] text-gray-800 dark:text-gray-200 truncate max-w-[180px]" title={n.empresa_nome}>{n.empresa_nome || '—'}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">cód {n.empresa_codigo}</p>
+                  </td>
+                  <td className="px-3 py-3 font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtData(n.data_emissao)}</td>
+                  <td className="px-3 py-3">
+                    <p className="text-[12.5px] font-medium text-gray-900 dark:text-gray-100 truncate max-w-[240px]" title={n.emitente_nome}>{n.emitente_nome || '—'}</p>
+                    <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-mono">{fmtDoc(n.emitente_cnpj)}</p>
+                  </td>
+                  <td className="px-3 py-3">
+                    <p className="font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{num != null ? formatNumeroNota(num) : '—'}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">{ser != null ? `série ${ser}` : '—'}</p>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap ${sit.bg} ${sit.text}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${sit.dot}`} />
+                      {sit.label}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 font-mono tabular-nums text-[11.5px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtData(n.data_rec_sefaz)}</td>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(n.valor)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-gray-50/60 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
+            <tr className="font-semibold">
+              <td colSpan={6} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
+                Total: {notas.length} {notas.length === 1 ? 'nota' : 'notas'}
+              </td>
+              <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900 dark:text-gray-100">{formatCurrency(totalValor)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }
