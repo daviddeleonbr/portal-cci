@@ -114,9 +114,14 @@ serve(async (req) => {
     // esta última ainda precisa de conclusão dentro do prazo.
     // "A manifestar" = apenas SEM OPERAÇÃO (nfe_evento = 0). Ciência (210210) e
     // eventos finais (210200/210220/210240) ficam de fora. Exclui também as
-    // NF-e Canceladas (situacao_nfe = 3) — mantém Autorizada/Denegada.
+    // NF-e Canceladas (situacao_nfe = 3) e as "Notas não visualizadas"
+    // (visualiza = false) — mantém Autorizada/Denegada e visualizadas.
     const params: unknown[] = [];
-    const conds: string[] = ['m.nfe_evento = 0', 'm.situacao_nfe is distinct from 3'];
+    const conds: string[] = [
+      'm.nfe_evento = 0',
+      'm.situacao_nfe is distinct from 3',
+      'm.visualiza is distinct from false',
+    ];
     if (temCodigos) { params.push(codigos); conds.push(`e.codigo = any($${params.length}::int[])`); }
     // Filtro de data tolerante a resumo ausente (não descarta a nota se não
     // houver data no resumo).
