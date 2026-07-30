@@ -38,6 +38,8 @@ export default function NotasFiscais() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
+  // Filtro por mês de emissão (YYYY-MM). Default = mês atual. Vazio = todos.
+  const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7));
   // Aba ativa — 'notas' (NFs emitidas, agendadas, canceladas) ou 'agendamento'
   // (feature futura: pré-preencher e agendar emissão automática para clientes).
   const [aba, setAba] = useState('notas');
@@ -311,9 +313,15 @@ export default function NotasFiscais() {
     }
   };
 
-  const contadorNotas = notas.length;
+  // Base do mês selecionado — escopa KPIs, contador e a lista (status/busca
+  // refinam por cima). Mês vazio = todas as notas.
+  const notasNoMes = mesFiltro
+    ? notas.filter(n => (n.data_emissao || '').slice(0, 7) === mesFiltro)
+    : notas;
 
-  const filtered = notas.filter(n => {
+  const contadorNotas = notasNoMes.length;
+
+  const filtered = notasNoMes.filter(n => {
     if (statusFilter !== 'todos' && n.status !== statusFilter) return false;
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
@@ -324,8 +332,8 @@ export default function NotasFiscais() {
     return true;
   });
 
-  const totalAutorizadas = notas.filter(n => n.status === 'AUTHORIZED').reduce((s, n) => s + Number(n.valor), 0);
-  const totalPendentes = notas.filter(n => ['PENDING', 'SCHEDULED', 'SYNCHRONIZED', 'PROCESSING'].includes(n.status)).reduce((s, n) => s + Number(n.valor), 0);
+  const totalAutorizadas = notasNoMes.filter(n => n.status === 'AUTHORIZED').reduce((s, n) => s + Number(n.valor), 0);
+  const totalPendentes = notasNoMes.filter(n => ['PENDING', 'SCHEDULED', 'SYNCHRONIZED', 'PROCESSING'].includes(n.status)).reduce((s, n) => s + Number(n.valor), 0);
 
   // ─── Empty state: no config ─────────────────────────────
   if (loadingConfig) {
@@ -423,7 +431,7 @@ export default function NotasFiscais() {
       {aba === 'notas' && <>
       {/* KPIs compactos — inline */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-4 px-4 py-2.5 bg-white rounded-lg border border-gray-200/60">
-        <KpiInline label="Emitidas"          value={notas.filter(n => n.status === 'AUTHORIZED').length} icon={CheckCircle2} color="emerald" />
+        <KpiInline label="Emitidas"          value={notasNoMes.filter(n => n.status === 'AUTHORIZED').length} icon={CheckCircle2} color="emerald" />
         <span className="h-5 w-px bg-gray-200" />
         <KpiInline label="Valor autorizado"  value={formatCurrency(totalAutorizadas)}                    icon={FileText}     color="blue" />
         <span className="h-5 w-px bg-gray-200" />
@@ -438,6 +446,18 @@ export default function NotasFiscais() {
             placeholder="Buscar por cliente, número ou descrição..."
             className="w-full h-10 rounded-lg border border-gray-200 bg-white pl-10 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <input type="month" value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)}
+            title="Filtrar por mês de emissão"
+            className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+          {mesFiltro && (
+            <button type="button" onClick={() => setMesFiltro('')}
+              title="Mostrar todos os meses"
+              className="h-10 px-3 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:bg-gray-50 whitespace-nowrap">
+              Todos
+            </button>
+          )}
         </div>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
           className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
