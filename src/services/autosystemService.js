@@ -210,6 +210,28 @@ export async function buscarContasPagar(redeId, empresaCodigo, filtros = {}) {
   return Array.isArray(data?.contas) ? data.contas : [];
 }
 
+// ─── Notas a manifestar (manifestação do destinatário / DFe) ──
+// Lista as NF-e recebidas que ainda não tiveram evento de manifestação
+// (nfe_evento = 0), por empresa. Somente CONSULTA. `empresaCodigos` = array
+// de códigos de empresa (empresa_codigo). Filtro opcional por data de emissão.
+export async function buscarNotasManifestarAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-nfe-manifestacao', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de: filtros.data_de || null,
+      data_ate: filtros.data_ate || null,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar notas a manifestar');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.notas) ? data.notas : [];
+}
+
 // ─── Contas (plano de contas Autosystem) ─────────────────────
 // Lê todas as contas via Edge Function. O front classifica e persiste em
 // as_rede_conta_categoria (forma de recebimento).

@@ -93,6 +93,7 @@ import AsBPO from './pages/cliente/autosystem/ClienteBPO';
 import AsDocumentos from './pages/cliente/autosystem/ClienteDocumentos';
 import AsContasPagar from './pages/cliente/autosystem/ClienteContasPagar';
 import AsContasReceber from './pages/cliente/autosystem/ClienteContasReceber';
+import AsNotasFiscais from './pages/cliente/autosystem/ClienteNotasFiscais';
 import AsSuporte from './pages/cliente/autosystem/ClienteSuporte';
 import AsSangrias from './pages/cliente/autosystem/ClienteSangrias';
 import AsUsuarios from './pages/cliente/autosystem/ClienteUsuarios';
@@ -251,6 +252,7 @@ export default function App() {
           <Route path="/cliente/autosystem/financeiro" element={<Navigate to="/cliente/autosystem/financeiro/contas-pagar" replace />} />
           <Route path="/cliente/autosystem/financeiro/contas-pagar" element={<RequirePermissaoCliente permissao="financeiro"><AsContasPagar /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/financeiro/contas-receber" element={<RequirePermissaoCliente permissao="financeiro"><AsContasReceber /></RequirePermissaoCliente>} />
+          <Route path="/cliente/autosystem/financeiro/notas-fiscais" element={<RequirePermissaoCliente permissao="notas_fiscais"><AsNotasFiscais /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/sangrias" element={<RequirePermissaoCliente permissao="sangrias"><AsSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/suporte" element={<RequirePermissaoCliente permissao="suporte"><AsSuporte /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/melhorias" element={<RequirePermissaoCliente permissao="melhorias"><ClienteMelhorias /></RequirePermissaoCliente>} />
