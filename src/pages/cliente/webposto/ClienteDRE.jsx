@@ -45,6 +45,9 @@ export default function ClienteDRE() {
       nomeRede:       session?.chaveApi?.nome || cliente?.nome,
       chaveApiId:     cliente.chave_api_id,
       empresaCodigos: empresasSel.map(e => Number(e.empresa_codigo)),
+      // Objetos completos das empresas → habilita a aba "Por Empresa"
+      // (colunasEmpresa/resultadoPorEmpresa dependem de redeContexto.empresas).
+      empresas:       empresasSel,
     };
   }, [empresasSel, cliente, session?.chaveApi?.nome]);
 
