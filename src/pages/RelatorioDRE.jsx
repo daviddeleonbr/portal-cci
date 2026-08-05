@@ -1921,25 +1921,25 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                     {mostrarTotal && <col style={{ width: 110 }} />}
                     {mostrarTotal && <col style={{ width: 45 }} />}
                   </colgroup>
-                  <thead className="bg-gray-50/80">
+                  <thead className="bg-gray-100">
                     <tr className="text-gray-500">
-                      <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 top-0 z-30 bg-gray-50 print:static print:bg-transparent">Conta</th>
+                      <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 top-0 z-30 bg-gray-100 print:static print:bg-transparent">Conta</th>
                       {colunasEmpresa.map(c => (
                         <>
                           <th key={`${c.key}-h`}
                             title={c._isRede
                               ? 'Lançamentos da rede sem empresa específica (matriz, despesas centralizadas, rateios). Inclui pra fechar o total com o DRE sintético.'
                               : (c._empresa ? labelEmpresa(c._empresa) : c.label)}
-                            className={`text-right px-2 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap truncate max-w-[90px] sticky top-0 z-20 print:static ${c._isRede ? 'bg-blue-50 text-blue-700' : 'bg-gray-50'}`}>
+                            className={`text-right px-2 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap truncate max-w-[90px] sticky top-0 z-20 print:static ${c._isRede ? 'bg-gray-200 text-blue-700' : 'bg-gray-100'}`}>
                             {c.label}
                           </th>
-                          <th key={`${c.key}-hav`} className={`text-right px-1 py-2.5 font-medium text-[9px] tracking-wider whitespace-nowrap sticky top-0 z-20 print:static ${c._isRede ? 'bg-blue-50 text-blue-400' : 'bg-gray-50 text-gray-400'}`}>AV%</th>
+                          <th key={`${c.key}-hav`} className={`text-right px-1 py-2.5 font-medium text-[9px] tracking-wider whitespace-nowrap sticky top-0 z-20 print:static ${c._isRede ? 'bg-gray-200 text-blue-400' : 'bg-gray-100 text-gray-400'}`}>AV%</th>
                         </>
                       ))}
                       {mostrarTotal && (
                         <>
-                          <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">Total (R$)</th>
-                          <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">AV%</th>
+                          <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-200 whitespace-nowrap sticky top-0 z-20 print:static">Total (R$)</th>
+                          <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-200 whitespace-nowrap sticky top-0 z-20 print:static">AV%</th>
                         </>
                       )}
                     </tr>
@@ -2069,20 +2069,20 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   {mostrarTotal && <col style={{ width: 55 }} />}
                   {mostrarTotal && showAH && <col style={{ width: 75 }} />}
                 </colgroup>
-                <thead className="bg-gray-50/80">
+                <thead className="bg-gray-100">
                   <tr className="text-gray-500">
-                    <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 top-0 z-30 bg-gray-50 print:static print:bg-transparent">Conta</th>
+                    <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 top-0 z-30 bg-gray-100 print:static print:bg-transparent">Conta</th>
                     {meses.map(m => (
                       <>
-                        <th key={`${m.key}-v`} className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky top-0 z-20 bg-gray-50 print:static">{m.label} (R$)</th>
-                        <th key={`${m.key}-av`} className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 whitespace-nowrap sticky top-0 z-20 bg-gray-50 print:static">AV%</th>
+                        <th key={`${m.key}-v`} className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky top-0 z-20 bg-gray-100 print:static">{m.label} (R$)</th>
+                        <th key={`${m.key}-av`} className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 whitespace-nowrap sticky top-0 z-20 bg-gray-100 print:static">AV%</th>
                       </>
                     ))}
                     {mostrarTotal && (
                       <>
-                        <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">Total (R$)</th>
-                        <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">AV%</th>
-                        {showAH && <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">AH%</th>}
+                        <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-200 whitespace-nowrap sticky top-0 z-20 print:static">Total (R$)</th>
+                        <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-200 whitespace-nowrap sticky top-0 z-20 print:static">AV%</th>
+                        {showAH && <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-200 whitespace-nowrap sticky top-0 z-20 print:static">AH%</th>}
                       </>
                     )}
                   </tr>
