@@ -74,13 +74,14 @@ export default function ClienteDRE() {
   // Quando a rede só tem 1 empresa, mantém comportamento single (não mostra
   // multi-select, passa clienteIdOverride direto).
   if (empresasDisponiveis.length <= 1) {
-    return <RelatorioDRE clienteIdOverride={cliente.id} backHref="/cliente/webposto/dashboard" />;
+    return <RelatorioDRE clienteIdOverride={cliente.id} backHref="/cliente/webposto/dashboard" modoCliente />;
   }
 
   return (
     <RelatorioDRE
       redeContexto={redeContexto}
       backHref="/cliente/webposto/dashboard"
+      modoCliente
       seletorEmpresas={
         <EmpresaMultiSelect
           clientesRede={empresasDisponiveis}

@@ -46,7 +46,7 @@ function formatDuracao(ms) {
 // redeContexto (opcional): { nomeRede, chaveApiId, empresaCodigos: number[] }
 // Quando passado, a DRE agrega as empresas da rede usando o mesmo mapeamento
 // (mapeamento_empresa_contas e sempre por chave_api_id).
-export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto, seletorEmpresas } = {}) {
+export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto, seletorEmpresas, modoCliente = false } = {}) {
   const { labelEmpresa, labelCnpj } = useAnonimizador();
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
@@ -2108,8 +2108,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         )}
       </AnimatePresence>
 
-      {/* ─── Contas não mapeadas (admin only — esta página é exclusiva do admin) ─── */}
-      {!loading && contasNaoMapeadas.length > 0 && (
+      {/* ─── Contas não mapeadas (SÓ admin — diagnóstico interno, nunca no cliente) ─── */}
+      {!loading && !modoCliente && contasNaoMapeadas.length > 0 && (
         <SecaoContasNaoMapeadas
           contas={contasNaoMapeadas}
           meses={meses}

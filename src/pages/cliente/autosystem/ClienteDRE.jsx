@@ -86,6 +86,7 @@ export default function ClienteDRE() {
     <RelatorioDRE
       redeContexto={redeContexto}
       backHref="/cliente/autosystem/dashboard"
+      modoCliente
       seletorEmpresas={empresas.length > 1 ? (
         <EmpresaSeletorCompartilhado
           single
