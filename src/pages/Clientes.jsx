@@ -339,8 +339,8 @@ export default function Clientes({ embedded = false }) {
                           <div className="flex items-center justify-end gap-1">
                             {rede.chaveApiId && (
                               <button onClick={() => setModalRedeHub({ open: true, tipo: 'webposto', rede })}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[12px] font-medium text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors" title="Editar rede">
-                                <Settings2 className="h-3.5 w-3.5" /> Editar rede
+                                className="rounded-md p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Editar rede">
+                                <Settings2 className="h-3.5 w-3.5" />
                               </button>
                             )}
                           </div>
@@ -604,8 +604,8 @@ function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio
                   <td className="px-6 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => onEditar(rede)} title="Editar rede"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 py-1.5 text-[12px] font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:text-blue-600 transition-colors">
-                        <Settings2 className="h-3.5 w-3.5" /> Editar rede
+                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
+                        <Settings2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </td>
