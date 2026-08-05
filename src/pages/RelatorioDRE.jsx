@@ -1908,7 +1908,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[72vh] print:overflow-visible print:max-h-none">
                 <table className="w-full text-[12px] [&_th]:border-l [&_th]:border-gray-100/60 [&_td]:border-l [&_td]:border-gray-100/60 dark:[&_th]:border-white/[0.06] dark:[&_td]:border-white/[0.06] [&_th:first-child]:border-l-0 [&_td:first-child]:border-l-0" style={{ tableLayout: 'fixed', minWidth: 420 + colunasEmpresa.length * 130 + 140 }}>
                   <colgroup>
                     <col style={{ width: 420 }} />
@@ -1923,23 +1923,23 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   </colgroup>
                   <thead className="bg-gray-50/80">
                     <tr className="text-gray-500">
-                      <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 z-20 bg-gray-50 print:static print:bg-transparent">Conta</th>
+                      <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 top-0 z-30 bg-gray-50 print:static print:bg-transparent">Conta</th>
                       {colunasEmpresa.map(c => (
                         <>
                           <th key={`${c.key}-h`}
                             title={c._isRede
                               ? 'Lançamentos da rede sem empresa específica (matriz, despesas centralizadas, rateios). Inclui pra fechar o total com o DRE sintético.'
                               : (c._empresa ? labelEmpresa(c._empresa) : c.label)}
-                            className={`text-right px-2 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap truncate max-w-[90px] ${c._isRede ? 'bg-blue-50/60 text-blue-700' : ''}`}>
+                            className={`text-right px-2 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap truncate max-w-[90px] sticky top-0 z-20 print:static ${c._isRede ? 'bg-blue-50 text-blue-700' : 'bg-gray-50'}`}>
                             {c.label}
                           </th>
-                          <th key={`${c.key}-hav`} className={`text-right px-1 py-2.5 font-medium text-[9px] tracking-wider whitespace-nowrap ${c._isRede ? 'bg-blue-50/60 text-blue-400' : 'text-gray-400'}`}>AV%</th>
+                          <th key={`${c.key}-hav`} className={`text-right px-1 py-2.5 font-medium text-[9px] tracking-wider whitespace-nowrap sticky top-0 z-20 print:static ${c._isRede ? 'bg-blue-50 text-blue-400' : 'bg-gray-50 text-gray-400'}`}>AV%</th>
                         </>
                       ))}
                       {mostrarTotal && (
                         <>
-                          <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100/50 whitespace-nowrap">Total (R$)</th>
-                          <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-blue-100/50 whitespace-nowrap">AV%</th>
+                          <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">Total (R$)</th>
+                          <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">AV%</th>
                         </>
                       )}
                     </tr>
@@ -2055,7 +2055,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[72vh] print:overflow-visible print:max-h-none">
               <table className="w-full text-[12px] [&_th]:border-l [&_th]:border-gray-100/60 [&_td]:border-l [&_td]:border-gray-100/60 dark:[&_th]:border-white/[0.06] dark:[&_td]:border-white/[0.06] [&_th:first-child]:border-l-0 [&_td:first-child]:border-l-0" style={{ tableLayout: 'fixed', minWidth: 490 + meses.length * 175 + 175 }}>
                 <colgroup>
                   <col style={{ width: showAH ? 410 : 490 }} />
@@ -2071,18 +2071,18 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                 </colgroup>
                 <thead className="bg-gray-50/80">
                   <tr className="text-gray-500">
-                    <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 z-20 bg-gray-50 print:static print:bg-transparent">Conta</th>
+                    <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky left-0 top-0 z-30 bg-gray-50 print:static print:bg-transparent">Conta</th>
                     {meses.map(m => (
                       <>
-                        <th key={`${m.key}-v`} className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">{m.label} (R$)</th>
-                        <th key={`${m.key}-av`} className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 whitespace-nowrap">AV%</th>
+                        <th key={`${m.key}-v`} className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky top-0 z-20 bg-gray-50 print:static">{m.label} (R$)</th>
+                        <th key={`${m.key}-av`} className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 whitespace-nowrap sticky top-0 z-20 bg-gray-50 print:static">AV%</th>
                       </>
                     ))}
                     {mostrarTotal && (
                       <>
-                        <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100/50 whitespace-nowrap">Total (R$)</th>
-                        <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-blue-100/50 whitespace-nowrap">AV%</th>
-                        {showAH && <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100/50 whitespace-nowrap">AH%</th>}
+                        <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">Total (R$)</th>
+                        <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">AV%</th>
+                        {showAH && <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100 whitespace-nowrap sticky top-0 z-20 print:static">AH%</th>}
                       </>
                     )}
                   </tr>
