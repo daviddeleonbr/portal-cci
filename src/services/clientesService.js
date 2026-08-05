@@ -72,3 +72,35 @@ export async function salvarApelidoEmpresa(clienteId, apelido) {
   });
   if (error) throw error;
 }
+
+// ─── Máscaras permitidas por empresa (cliente_mascara_dre / _fluxo) ───
+// Empresa sem nenhuma máscara marcada = todas liberadas.
+export async function listarMascarasDoCliente(clienteId) {
+  const [dre, fluxo] = await Promise.all([
+    supabase.from('cliente_mascara_dre').select('mascara_id').eq('cliente_id', clienteId),
+    supabase.from('cliente_mascara_fluxo').select('mascara_id').eq('cliente_id', clienteId),
+  ]);
+  if (dre.error) throw dre.error;
+  if (fluxo.error) throw fluxo.error;
+  return {
+    dre:   (dre.data   || []).map(r => r.mascara_id),
+    fluxo: (fluxo.data || []).map(r => r.mascara_id),
+  };
+}
+
+async function _definirMascarasCliente(tabela, clienteId, mascaraIds) {
+  const { error: delErr } = await supabase.from(tabela).delete().eq('cliente_id', clienteId);
+  if (delErr) throw delErr;
+  const rows = [...new Set(mascaraIds || [])].map(id => ({ cliente_id: clienteId, mascara_id: id }));
+  if (rows.length > 0) {
+    const { error } = await supabase.from(tabela).insert(rows);
+    if (error) throw error;
+  }
+}
+// Replace-all. Lista vazia = todas as máscaras liberadas para a empresa.
+export async function definirMascarasClienteDre(clienteId, mascaraIds) {
+  return _definirMascarasCliente('cliente_mascara_dre', clienteId, mascaraIds);
+}
+export async function definirMascarasClienteFluxo(clienteId, mascaraIds) {
+  return _definirMascarasCliente('cliente_mascara_fluxo', clienteId, mascaraIds);
+}

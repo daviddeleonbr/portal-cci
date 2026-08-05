@@ -2,23 +2,24 @@ import { supabase } from '../lib/supabase';
 
 // ===================== MASCARAS =====================
 
-// Lista máscaras. Sem filtro (admin) → todas, com a allowlist de redes embutida
-// (`mascara_dre_rede`). Passando { asRedeId } ou { chaveApiId } (relatórios) →
-// só as máscaras SEM restrição (allowlist vazia = todas) OU que liberam a rede.
-export async function listarMascaras({ asRedeId, chaveApiId } = {}) {
+// Lista máscaras. Sem filtro (admin) → todas, com as empresas permitidas
+// embutidas (`cliente_mascara_dre`). Passando { clienteIds } (relatórios) → só
+// as máscaras SEM restrição (nenhuma empresa marcada = todas) OU marcadas para
+// alguma das empresas informadas.
+export async function listarMascaras({ clienteIds } = {}) {
   const { data, error } = await supabase
     .from('mascaras_dre')
-    .select('*, grupos_dre(count), mascara_dre_rede(chave_api_id, as_rede_id)')
+    .select('*, grupos_dre(count), cliente_mascara_dre(cliente_id)')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
   let rows = data || [];
-  if (asRedeId || chaveApiId) {
+  if (Array.isArray(clienteIds) && clienteIds.length > 0) {
+    const set = new Set(clienteIds);
     rows = rows.filter(m => {
-      const allow = m.mascara_dre_rede || [];
-      if (allow.length === 0) return true; // sem restrição = disponível a todas
-      return allow.some(r =>
-        (asRedeId && r.as_rede_id === asRedeId) || (chaveApiId && r.chave_api_id === chaveApiId));
+      const assign = m.cliente_mascara_dre || [];
+      if (assign.length === 0) return true; // sem restrição = disponível a todas
+      return assign.some(a => set.has(a.cliente_id));
     });
   }
   return rows;
@@ -53,28 +54,6 @@ export async function duplicarMascara(id) {
   return nova;
 }
 
-// ── Allowlist de redes por máscara (mascara_dre_rede) ──
-export async function listarRedesDaMascara(mascaraId) {
-  const { data, error } = await supabase
-    .from('mascara_dre_rede')
-    .select('chave_api_id, as_rede_id')
-    .eq('mascara_id', mascaraId);
-  if (error) throw error;
-  return data || [];
-}
-
-// Replace-all. redes = [{ chave_api_id } | { as_rede_id }]. Vazio = todas.
-export async function definirRedesDaMascara(mascaraId, redes) {
-  const { error: delErr } = await supabase.from('mascara_dre_rede').delete().eq('mascara_id', mascaraId);
-  if (delErr) throw delErr;
-  const rows = (redes || [])
-    .filter(r => r.chave_api_id || r.as_rede_id)
-    .map(r => ({ mascara_id: mascaraId, chave_api_id: r.chave_api_id || null, as_rede_id: r.as_rede_id || null }));
-  if (rows.length > 0) {
-    const { error } = await supabase.from('mascara_dre_rede').insert(rows);
-    if (error) throw error;
-  }
-}
 
 export async function buscarMascara(id) {
   const { data, error } = await supabase

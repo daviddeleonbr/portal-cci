@@ -9,6 +9,7 @@ import {
 import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
+import SeletorMascarasCliente from '../components/clientes/SeletorMascarasCliente';
 import Toast from '../components/ui/Toast';
 import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import * as clientesService from '../services/clientesService';
@@ -1900,6 +1901,11 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
               disabled={togglingFlag !== null}
               onToggle={() => toggleRelatorioFlag('exibir_fluxo_caixa')}
             />
+
+            <div className="pt-3 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-900 mb-2">Máscaras permitidas</p>
+              <SeletorMascarasCliente clienteId={cliente.id} showToast={showToast} />
+            </div>
           </div>
 
         </div>
@@ -1917,6 +1923,12 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
         onSubmit={handleSave}
         submitLabel="Salvar alteracoes"
       />
+      {cliente?.id && (
+        <div className="mt-4 rounded-xl border border-gray-200 p-4">
+          <p className="text-xs font-semibold text-gray-900 mb-2">Máscaras permitidas</p>
+          <SeletorMascarasCliente clienteId={cliente.id} showToast={showToast} />
+        </div>
+      )}
     </Modal>
   );
 }

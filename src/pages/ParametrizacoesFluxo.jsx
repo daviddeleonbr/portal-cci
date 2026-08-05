@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Pencil, Trash2, ChevronRight,
   Layers, Loader2, AlertCircle,
-  FileSpreadsheet, Copy, Network,
+  FileSpreadsheet, Copy,
   ArrowLeft, Equal, FolderOpen, GripVertical,
   ArrowDownCircle, ArrowUpCircle,
   Sparkles, FileBarChart, Star,
@@ -20,7 +20,6 @@ import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
 import * as fluxoService from '../services/mascaraFluxoCaixaService';
-import ModalRedesMascara from '../components/parametros/ModalRedesMascara';
 
 // ─── Tipos de linha no Fluxo de Caixa ─────────────────────
 const TIPO_LINHA = {
@@ -108,7 +107,6 @@ export default function ParametrizacoesFluxo() {
 
   const [modalMascara, setModalMascara] = useState({ open: false, data: null });
   const [modalConfirm, setModalConfirm] = useState({ open: false, message: '', onConfirm: null });
-  const [modalRedes, setModalRedes] = useState(null);
 
   const showToast = (type, message) => {
     setToast({ show: true, type, message });
@@ -254,7 +252,6 @@ export default function ParametrizacoesFluxo() {
           onEdit={(m) => setModalMascara({ open: true, data: m })}
           onSetPadrao={definirPadrao}
           onDuplicar={duplicar}
-          onRedes={(m) => setModalRedes(m)}
           onDelete={(m) => setModalConfirm({ open: true, message: `Excluir máscara "${m.nome}"?`, onConfirm: () => { deletarMascara(m.id); setModalConfirm({ open: false }); } })}
         />
       ) : (
@@ -274,14 +271,6 @@ export default function ParametrizacoesFluxo() {
 
       <ModalConfirm open={modalConfirm.open} message={modalConfirm.message}
         onClose={() => setModalConfirm({ open: false })} onConfirm={modalConfirm.onConfirm} />
-
-      {modalRedes && (
-        <ModalRedesMascara mascara={modalRedes}
-          listarRedes={fluxoService.listarRedesDaMascara}
-          definirRedes={fluxoService.definirRedesDaMascara}
-          onClose={() => setModalRedes(null)}
-          onSaved={() => showToast('success', 'Redes da máscara atualizadas')} />
-      )}
     </div>
   );
 }
@@ -745,7 +734,7 @@ function AddChildDropdown({ onAdd }) {
 // ═══════════════════════════════════════════════════════════
 // Mascaras List
 // ═══════════════════════════════════════════════════════════
-function MascarasList({ mascaras, loading, onSelect, onEdit, onDelete, onSetPadrao, onDuplicar, onRedes }) {
+function MascarasList({ mascaras, loading, onSelect, onEdit, onDelete, onSetPadrao, onDuplicar }) {
   if (loading) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -791,9 +780,6 @@ function MascarasList({ mascaras, loading, onSelect, onEdit, onDelete, onSetPadr
                 title={m.padrao ? 'Máscara padrão' : 'Definir como padrão'}
                 className={`rounded-lg p-1.5 transition-colors ${m.padrao ? 'text-amber-500' : 'text-gray-300 opacity-0 group-hover:opacity-100 hover:text-amber-500 hover:bg-amber-50'}`}>
                 <Star className={`h-3.5 w-3.5 ${m.padrao ? 'fill-amber-400' : ''}`} />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); onRedes?.(m); }} title="Redes que podem usar" className="rounded-lg p-1.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-blue-600 hover:bg-blue-50 transition-colors">
-                <Network className="h-3.5 w-3.5" />
               </button>
               <button onClick={(e) => { e.stopPropagation(); onDuplicar?.(m); }} title="Duplicar máscara" className="rounded-lg p-1.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-blue-600 hover:bg-blue-50 transition-colors">
                 <Copy className="h-3.5 w-3.5" />
