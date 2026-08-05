@@ -4,12 +4,12 @@ import {
   Search, Plus, Building2, Mail, Phone, MapPin, Users as UsersIcon,
   Loader2, AlertCircle, Pencil, Trash2, ChevronRight, ChevronDown,
   Check, Zap, ArrowLeft, RefreshCw, Key, Network, Landmark, Wallet, Coins, Boxes,
-  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock, CreditCard, X,
+  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock, CreditCard, X, Settings2,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
-import SeletorMascarasRede from '../components/clientes/SeletorMascarasRede';
+import ModalEditarRedeHub from '../components/clientes/ModalEditarRedeHub';
 import Toast from '../components/ui/Toast';
 import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import * as clientesService from '../services/clientesService';
@@ -60,6 +60,7 @@ export default function Clientes({ embedded = false }) {
   const [modalGruposAS, setModalGruposAS] = useState({ open: false, rede: null });
   const [modalContasAS, setModalContasAS] = useState({ open: false, rede: null });
   const [modalContasReceberAS, setModalContasReceberAS] = useState({ open: false, rede: null });
+  const [modalRedeHub, setModalRedeHub] = useState({ open: false, tipo: null, rede: null }); // hub "Editar rede"
 
   const showToast = (type, message) => {
     setToast({ show: true, type, message });
@@ -337,20 +338,10 @@ export default function Clientes({ embedded = false }) {
                         <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             {rede.chaveApiId && (
-                              <>
-                                <button onClick={() => setModalWizard({ open: true, preRede: rede, editandoRede: null })}
-                                  className="rounded-md p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Vincular empresas">
-                                  <Link2 className="h-3.5 w-3.5" />
-                                </button>
-                                <button onClick={() => setModalContas({ open: true, cliente: rede.empresas[0] })}
-                                  className="rounded-md p-1.5 text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Classificar contas bancárias">
-                                  <Landmark className="h-3.5 w-3.5" />
-                                </button>
-                                <button onClick={() => setModalAdmin({ open: true, cliente: rede.empresas[0] })}
-                                  className="rounded-md p-1.5 text-gray-500 hover:text-violet-600 hover:bg-violet-50 transition-colors" title="Administradoras (cartões frota)">
-                                  <CreditCard className="h-3.5 w-3.5" />
-                                </button>
-                              </>
+                              <button onClick={() => setModalRedeHub({ open: true, tipo: 'webposto', rede })}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[12px] font-medium text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors" title="Editar rede">
+                                <Settings2 className="h-3.5 w-3.5" /> Editar rede
+                              </button>
                             )}
                           </div>
                         </td>
@@ -420,16 +411,7 @@ export default function Clientes({ embedded = false }) {
         togglesAtivos={togglesAtivosAS}
         onToggleRelatorio={handleToggleRelatorioAS}
         onNova={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
-        onEditar={(rede) => setModalWizard({ open: true, preRede: null, editandoRede: rede })}
-        onImportar={(rede) => setModalEmpresasAS({ open: true, rede })}
-        onClassificarGrupos={(rede) => setModalGruposAS({ open: true, rede })}
-        onClassificarContas={(rede) => setModalContasAS({ open: true, rede })}
-        onClassificarContasReceber={(rede) => setModalContasReceberAS({ open: true, rede })}
-        onExcluir={(rede) => setModalConfirm({
-          open: true,
-          message: `Excluir a rede "${rede.nome}"? Esta ação não pode ser desfeita.`,
-          onConfirm: () => { handleExcluirRedeAS(rede); setModalConfirm({ open: false }); },
-        })}
+        onEditar={(rede) => setModalRedeHub({ open: true, tipo: 'autosystem', rede })}
       />
 
       {/* Modals */}
@@ -506,6 +488,29 @@ export default function Clientes({ embedded = false }) {
         onClose={() => setModalContasReceberAS({ open: false, rede: null })}
         showToast={showToast}
       />
+
+      <ModalEditarRedeHub
+        open={modalRedeHub.open}
+        tipo={modalRedeHub.tipo}
+        rede={modalRedeHub.rede}
+        onClose={() => setModalRedeHub({ open: false, tipo: null, rede: null })}
+        showToast={showToast}
+        // Webposto
+        onVincularEmpresas={() => setModalWizard({ open: true, preRede: modalRedeHub.rede, editandoRede: null })}
+        onContasBancarias={() => setModalContas({ open: true, cliente: modalRedeHub.rede?.empresas?.[0] })}
+        onAdministradoras={() => setModalAdmin({ open: true, cliente: modalRedeHub.rede?.empresas?.[0] })}
+        // Autosystem
+        onParametrizarRede={() => setModalWizard({ open: true, preRede: null, editandoRede: modalRedeHub.rede })}
+        onImportarEmpresas={() => setModalEmpresasAS({ open: true, rede: modalRedeHub.rede })}
+        onGrupos={() => setModalGruposAS({ open: true, rede: modalRedeHub.rede })}
+        onContasAS={() => setModalContasAS({ open: true, rede: modalRedeHub.rede })}
+        onContasReceberAS={() => setModalContasReceberAS({ open: true, rede: modalRedeHub.rede })}
+        onExcluirRede={() => setModalConfirm({
+          open: true,
+          message: `Excluir a rede "${modalRedeHub.rede?.nome}"? Esta ação não pode ser desfeita.`,
+          onConfirm: () => { handleExcluirRedeAS(modalRedeHub.rede); setModalConfirm({ open: false }); setModalRedeHub({ open: false, tipo: null, rede: null }); },
+        })}
+      />
     </div>
   );
 }
@@ -513,7 +518,7 @@ export default function Clientes({ embedded = false }) {
 // ═══════════════════════════════════════════════════════════
 // Seção: Redes Autosystem (listagem + ações)
 // ═══════════════════════════════════════════════════════════
-function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio, onNova, onEditar, onImportar, onClassificarGrupos, onClassificarContas, onClassificarContasReceber, onExcluir }) {
+function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio, onNova, onEditar }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       className="bg-white dark:bg-slate-900/40 rounded-xl border border-gray-200/60 dark:border-white/10 overflow-hidden shadow-sm mt-6">
@@ -598,29 +603,9 @@ function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio
                   </td>
                   <td className="px-6 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => onImportar(rede)} title="Importar empresas"
-                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors">
-                        <Database className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => onClassificarGrupos(rede)} title="Classificar grupos de produto"
-                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors">
-                        <Boxes className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => onClassificarContas(rede)} title="Classificar contas (formas de recebimento)"
-                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
-                        <Wallet className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => onClassificarContasReceber(rede)} title="Classificar contas a receber (cartões, cheques, notas, faturas)"
-                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
-                        <CreditCard className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => onEditar(rede)} title="Editar credenciais"
-                        className="rounded-md p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => onExcluir(rede)} title="Excluir rede"
-                        className="rounded-md p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
-                        <Trash2 className="h-3.5 w-3.5" />
+                      <button onClick={() => onEditar(rede)} title="Editar rede"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 py-1.5 text-[12px] font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:text-blue-600 transition-colors">
+                        <Settings2 className="h-3.5 w-3.5" /> Editar rede
                       </button>
                     </div>
                   </td>
@@ -1902,10 +1887,6 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
               onToggle={() => toggleRelatorioFlag('exibir_fluxo_caixa')}
             />
 
-            <div className="pt-3 border-t border-gray-100">
-              <p className="text-xs font-semibold text-gray-900 mb-2">Máscaras permitidas (rede)</p>
-              <SeletorMascarasRede rede={{ chaveApiId: cliente.chave_api_id, asRedeId: cliente.as_rede_id }} showToast={showToast} />
-            </div>
           </div>
 
         </div>
@@ -1923,12 +1904,6 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
         onSubmit={handleSave}
         submitLabel="Salvar alteracoes"
       />
-      {cliente?.id && (
-        <div className="mt-4 rounded-xl border border-gray-200 p-4">
-          <p className="text-xs font-semibold text-gray-900 mb-2">Máscaras permitidas (rede)</p>
-          <SeletorMascarasRede rede={{ chaveApiId: cliente.chave_api_id, asRedeId: cliente.as_rede_id }} showToast={showToast} />
-        </div>
-      )}
     </Modal>
   );
 }
