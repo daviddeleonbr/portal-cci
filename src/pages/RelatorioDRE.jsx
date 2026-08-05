@@ -165,15 +165,20 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             _empresas: redeContexto.empresas || [],
             _nomeRede: redeContexto.nomeRede,
           };
-          const masks = await dreService.listarMascaras();
+          // Só as máscaras liberadas pra esta rede (allowlist; vazia = todas).
+          const masks = await dreService.listarMascaras({
+            asRedeId: redeContexto.asRedeId || null,
+            chaveApiId: redeContexto.chaveApiId || null,
+          });
           setCliente(virtualCliente);
           setMascaras(masks || []);
           if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
         } else {
-          const [c, masks] = await Promise.all([
-            clientesService.buscarCliente(clienteId),
-            dreService.listarMascaras(),
-          ]);
+          const c = await clientesService.buscarCliente(clienteId);
+          const masks = await dreService.listarMascaras({
+            asRedeId: c?.as_rede_id || null,
+            chaveApiId: c?.chave_api_id || null,
+          });
           setCliente(c);
           setMascaras(masks || []);
           if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);

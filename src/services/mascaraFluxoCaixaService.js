@@ -120,14 +120,75 @@ export const MODELOS_PADRAO = {
 
 // ===================== MASCARAS =====================
 
-export async function listarMascaras() {
+// Lista máscaras. Sem filtro (admin) → todas, com a allowlist de redes embutida
+// (`mascara_fluxo_rede`). Passando { asRedeId } ou { chaveApiId } (relatórios) →
+// só as máscaras SEM restrição OU que liberam a rede.
+export async function listarMascaras({ asRedeId, chaveApiId } = {}) {
   const { data, error } = await supabase
     .from('mascaras_fluxo_caixa')
-    .select('*, grupos_fluxo_caixa(count)')
+    .select('*, grupos_fluxo_caixa(count), mascara_fluxo_rede(chave_api_id, as_rede_id)')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data;
+  let rows = data || [];
+  if (asRedeId || chaveApiId) {
+    rows = rows.filter(m => {
+      const allow = m.mascara_fluxo_rede || [];
+      if (allow.length === 0) return true;
+      return allow.some(r =>
+        (asRedeId && r.as_rede_id === asRedeId) || (chaveApiId && r.chave_api_id === chaveApiId));
+    });
+  }
+  return rows;
+}
+
+// Duplica uma máscara: copia a linha (nome + " (cópia)", padrao=false) e TODOS
+// os grupos, remapeando parent_id. Mapeamentos NÃO são copiados.
+export async function duplicarMascara(id) {
+  const orig = await buscarMascara(id);
+  const nova = await criarMascara({ nome: `${orig.nome} (cópia)`, descricao: orig.descricao || null });
+  const grupos = await listarGrupos(id);
+
+  const idMap = new Map();
+  const pendentes = [...grupos];
+  let guard = 0;
+  while (pendentes.length && guard < 100000) {
+    guard++;
+    const g = pendentes.find(x => !x.parent_id || idMap.has(x.parent_id));
+    if (!g) break;
+    const novoGrupo = await criarGrupo({
+      mascara_id: nova.id,
+      nome: g.nome, tipo: g.tipo, sinal: g.sinal, ordem: g.ordem,
+      parent_id: g.parent_id ? idMap.get(g.parent_id) : null,
+      formula: g.formula || null,
+    });
+    idMap.set(g.id, novoGrupo.id);
+    pendentes.splice(pendentes.indexOf(g), 1);
+  }
+  return nova;
+}
+
+// ── Allowlist de redes por máscara (mascara_fluxo_rede) ──
+export async function listarRedesDaMascara(mascaraId) {
+  const { data, error } = await supabase
+    .from('mascara_fluxo_rede')
+    .select('chave_api_id, as_rede_id')
+    .eq('mascara_id', mascaraId);
+  if (error) throw error;
+  return data || [];
+}
+
+// Replace-all. redes = [{ chave_api_id } | { as_rede_id }]. Vazio = todas.
+export async function definirRedesDaMascara(mascaraId, redes) {
+  const { error: delErr } = await supabase.from('mascara_fluxo_rede').delete().eq('mascara_id', mascaraId);
+  if (delErr) throw delErr;
+  const rows = (redes || [])
+    .filter(r => r.chave_api_id || r.as_rede_id)
+    .map(r => ({ mascara_id: mascaraId, chave_api_id: r.chave_api_id || null, as_rede_id: r.as_rede_id || null }));
+  if (rows.length > 0) {
+    const { error } = await supabase.from('mascara_fluxo_rede').insert(rows);
+    if (error) throw error;
+  }
 }
 
 export async function buscarMascara(id) {
