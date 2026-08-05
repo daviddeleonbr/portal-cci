@@ -457,6 +457,12 @@ export async function buscarFluxoCaixaAutosystem(redeId, empresaCodigos, filtros
       data_de: filtros.data_de,
       data_ate: filtros.data_ate,
       contas_caixa_banco: caixa.map(c => String(c)),
+      // Subconjunto selecionado (opcional): quando presente, o fluxo é calculado
+      // em relação a essas contas — transferências vindas de contas fora da
+      // seleção contam como entrada/saída real (bate com o extrato da conta).
+      contas_selecionadas: Array.isArray(filtros.contas_selecionadas)
+        ? filtros.contas_selecionadas.map(c => String(c))
+        : [],
     },
   });
   if (error) throw await _extrairErroFn(error, 'Falha ao buscar fluxo de caixa');
@@ -766,6 +772,27 @@ export async function listarProdutosCatalogo(redeId, { busca = '' } = {}) {
     body: { rede_id: redeId, busca: busca || null },
   });
   if (error) throw await _extrairErroFn(error, 'Falha ao buscar catálogo de produtos');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.produtos) ? data.produtos : [];
+}
+
+// ─── Busca de produto para manifestação de NF (código de barras / termo) ─────
+// Usado no modal de complemento da nota (portal cliente Autosystem) — o
+// equivalente ao scan de catálogo Quality do Webposto. Busca na tabela
+// `produto` (+ `produto_codigo_barra`) do banco remoto. Passe `codigoBarra`
+// para leitura de scanner OU `termo` para busca por descrição/código.
+//   produtos: [{ grid, codigo, nome, preco_custo, codigo_barra }]
+export async function buscarProdutoAutosystem(redeId, { codigoBarra, termo } = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!codigoBarra && !termo) return [];
+  const { data, error } = await supabase.functions.invoke('autosystem-produto-busca', {
+    body: {
+      rede_id: redeId,
+      codigo_barra: codigoBarra || null,
+      termo: termo || null,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar produto');
   if (data?.error) throw new Error(data.detail || data.error);
   return Array.isArray(data?.produtos) ? data.produtos : [];
 }

@@ -253,6 +253,8 @@ export default function App() {
           <Route path="/cliente/autosystem/financeiro/contas-pagar" element={<RequirePermissaoCliente permissao="financeiro"><AsContasPagar /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/financeiro/contas-receber" element={<RequirePermissaoCliente permissao="financeiro"><AsContasReceber /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/financeiro/notas-fiscais" element={<RequirePermissaoCliente permissao="notas_fiscais"><AsNotasFiscais /></RequirePermissaoCliente>} />
+          {/* Detalhe reaproveita o componente do Webposto — é tipo-aware (session.tipoCliente) */}
+          <Route path="/cliente/autosystem/financeiro/notas-fiscais/:id" element={<RequirePermissaoCliente permissao="notas_fiscais"><WpNotaFiscalDetalhe /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/sangrias" element={<RequirePermissaoCliente permissao="sangrias"><AsSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/suporte" element={<RequirePermissaoCliente permissao="suporte"><AsSuporte /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/melhorias" element={<RequirePermissaoCliente permissao="melhorias"><ClienteMelhorias /></RequirePermissaoCliente>} />

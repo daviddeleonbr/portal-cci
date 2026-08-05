@@ -6,42 +6,17 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FileSpreadsheet, Loader2, AlertCircle, Search, RefreshCw,
-  ChevronRight, Building2, Paperclip, Package, Briefcase,
+  Loader2, AlertCircle, Search, RefreshCw,
+  ChevronRight, ChevronDown, Building2, Paperclip,
   CalendarRange, Network,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import * as nfService from '../services/notaManifestacaoService';
 import * as mapService from '../services/mapeamentoService';
 import * as autosystemService from '../services/autosystemService';
+import * as clientesService from '../services/clientesService';
 import { formatCurrency } from '../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
-
-// Situação da NF-e no resumo DFe do Autosystem: 1 = Autorizada, 2 = Denegada,
-// 3 = Cancelada (cSitNFe da Distribuição DFe).
-const SITUACAO_AS = {
-  1: { label: 'Autorizada', bg: 'bg-emerald-50 dark:bg-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
-  2: { label: 'Denegada',   bg: 'bg-amber-50 dark:bg-amber-500/15',     text: 'text-amber-700 dark:text-amber-300',     dot: 'bg-amber-500' },
-  3: { label: 'Cancelada',  bg: 'bg-red-50 dark:bg-red-500/15',         text: 'text-red-700 dark:text-red-300',         dot: 'bg-red-500' },
-};
-// Situação da manifestação (nfe_evento). Só aparecem aqui as NÃO finalizadas.
-const MANIF_AS = {
-  0:      { label: 'Sem operação',          bg: 'bg-amber-50 dark:bg-amber-500/15', text: 'text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' },
-  1:      { label: 'Em processamento',      bg: 'bg-gray-100 dark:bg-white/10',     text: 'text-gray-600 dark:text-gray-300',   dot: 'bg-gray-400' },
-  210210: { label: 'Ciência da operação',   bg: 'bg-blue-50 dark:bg-blue-500/15',   text: 'text-blue-700 dark:text-blue-300',   dot: 'bg-blue-500' },
-  210200: { label: 'Confirmação da operação', bg: 'bg-emerald-50 dark:bg-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
-  210220: { label: 'Desconhecimento',       bg: 'bg-rose-50 dark:bg-rose-500/15',   text: 'text-rose-700 dark:text-rose-300',   dot: 'bg-rose-500' },
-  210240: { label: 'Operação não realizada', bg: 'bg-rose-50 dark:bg-rose-500/15',  text: 'text-rose-700 dark:text-rose-300',   dot: 'bg-rose-500' },
-};
-function manifAs(ev) {
-  return MANIF_AS[ev] || { label: ev == null ? '—' : `Cód ${ev}`, bg: 'bg-gray-100 dark:bg-white/10', text: 'text-gray-600 dark:text-gray-300', dot: 'bg-gray-400' };
-}
-function fmtDoc(v) {
-  const d = String(v || '').replace(/\D/g, '');
-  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-  return v || '—';
-}
 
 function inicioMesAtual() {
   const d = new Date();
@@ -101,39 +76,59 @@ export default function AdminNfManifestacao() {
   const [dataAte, setDataAte] = useState(hojeStr());
   const [redes, setRedes] = useState([]);            // Webposto [{ id, nome }]
   const [redesAs, setRedesAs] = useState([]);        // Autosystem [{ id, nome }]
-  const [filtroRede, setFiltroRede] = useState('todas'); // 'todas' | 'wp:<id>' | 'as:<id>'
-  const [notasAs, setNotasAs] = useState([]);        // notas a manifestar (Autosystem)
+  const [filtroRede, setFiltroRede] = useState('');  // '' (obrigatório escolher) | 'wp:<id>' | 'as:<id>'
+  const [empresasRede, setEmpresasRede] = useState([]); // empresas (clientes) da rede escolhida
+  const [expandidos, setExpandidos] = useState(() => new Set()); // ids de empresa ABERTOS (padrão: tudo recolhido)
 
-  // Rede selecionada é Autosystem?
-  const modoAutosystem = filtroRede.startsWith('as:');
+  const toggleEmpresa = (id) => setExpandidos(prev => {
+    const s = new Set(prev);
+    if (s.has(id)) s.delete(id); else s.add(id);
+    return s;
+  });
 
-  // Carrega redes (Webposto + Autosystem) + clientes uma vez pra popular selects.
+  // Carrega redes (Webposto + Autosystem) uma vez pra popular o select.
   useEffect(() => {
     mapService.listarChavesApi().then(setRedes).catch(() => setRedes([]));
     autosystemService.listarRedes().then(rs => setRedesAs((rs || []).filter(r => r.ativo !== false))).catch(() => setRedesAs([]));
   }, []);
 
   const carregar = useCallback(async () => {
+    // Rede é obrigatória — sem seleção não carrega nada.
+    if (!filtroRede) { setNotas([]); setEmpresasRede([]); return; }
     setLoading(true); setError(null);
     try {
-      if (filtroRede.startsWith('as:')) {
-        const redeId = filtroRede.slice(3);
-        // Admin: toda a rede (o banco remoto é single-tenant) — passa [] p/ não
-        // depender do casamento de empresa_codigo. SEM filtro de data: a fila de
-        // "a manifestar" deve mostrar TODAS as pendentes (o prazo pode ser de
-        // meses; filtrar pelo mês corrente esconderia notas antigas ainda a
-        // manifestar).
-        const lista = await autosystemService.buscarNotasManifestarAutosystem(redeId, [], {});
-        setNotasAs(lista);
-        setNotas([]);
-      } else {
-        const lista = await nfService.listarParaAdmin({
-          dataDe, dataAte,
-          chaveApiId: filtroRede === 'todas' ? null : (filtroRede.startsWith('wp:') ? filtroRede.slice(3) : filtroRede),
+      const ehAs = filtroRede.startsWith('as:');
+      const redeId = filtroRede.slice(3);
+
+      // Empresas (clientes) da rede escolhida — nós da árvore.
+      const todos = await clientesService.listarClientes().catch(() => []);
+      const col = ehAs ? 'as_rede_id' : 'chave_api_id';
+      const empresas = (todos || [])
+        .filter(c => c[col] === redeId)
+        .map(c => ({ id: c.id, nome: c.nome, cnpj: c.cnpj, empresa_codigo: c.empresa_codigo }));
+      setEmpresasRede(empresas);
+
+      // Autosystem: a CCI puxa as notas "a manifestar" direto do ERP e as
+      // materializa em nf_manifestacao (não depende do cliente sincronizar).
+      // Busca a rede inteira (banco remoto single-tenant) e atribui cada nota
+      // à empresa dona; empresa única cai no fallback.
+      if (ehAs) {
+        await nfService.sincronizarComAutosystem({
+          asRedeId: redeId,
+          empresas: empresas.map(e => ({ id: e.id, empresa_codigo: e.empresa_codigo, cnpj: e.cnpj })),
         });
-        setNotas(lista);
-        setNotasAs([]);
       }
+
+      // Webposto e Autosystem compartilham o mesmo pipeline nf_manifestacao.
+      // Autosystem NÃO filtra por data: a fila "a manifestar" pode abranger
+      // meses (o prazo é longo) — filtrar pelo mês esconderia notas antigas.
+      const lista = await nfService.listarParaAdmin({
+        dataDe: ehAs ? null : dataDe,
+        dataAte: ehAs ? null : dataAte,
+        chaveApiId: ehAs ? null : redeId,
+        asRedeId:   ehAs ? redeId : null,
+      });
+      setNotas(lista);
     } catch (err) {
       setError(err.message || 'Falha ao carregar');
     } finally { setLoading(false); }
@@ -173,19 +168,30 @@ export default function AdminNfManifestacao() {
 
   const totalValor = filtradas.reduce((s, n) => s + Number(n.valor || 0), 0);
 
-  // Autosystem: filtra por busca (emitente / chave / nº / empresa).
-  const filtradasAs = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    if (!q) return notasAs;
-    return notasAs.filter(n =>
-      (n.emitente_nome || '').toLowerCase().includes(q) ||
-      (n.empresa_nome || '').toLowerCase().includes(q) ||
-      (n.chave || '').includes(q) ||
-      String(numeroNotaDaChave(n.chave) || '').includes(q) ||
-      (n.emitente_cnpj || '').includes(q),
-    );
-  }, [notasAs, busca]);
-  const totalValorAs = filtradasAs.reduce((s, n) => s + Number(n.valor || 0), 0);
+  // Árvore: agrupa as notas filtradas por empresa (cliente). Semeia com TODAS
+  // as empresas da rede pra que cada uma apareça como nó, mesmo sem notas na
+  // aba atual. Notas de empresa fora da lista (defensivo) ganham nó próprio.
+  const grupos = useMemo(() => {
+    const porEmpresa = new Map();
+    for (const e of empresasRede) porEmpresa.set(e.id, { empresa: e, notas: [] });
+    for (const n of filtradas) {
+      const key = n.cliente?.id || n.cliente_id;
+      if (!porEmpresa.has(key)) {
+        porEmpresa.set(key, { empresa: { id: key, nome: n.cliente?.nome, cnpj: n.cliente?.cnpj }, notas: [] });
+      }
+      porEmpresa.get(key).notas.push(n);
+    }
+    return [...porEmpresa.values()]
+      .map(g => ({ ...g, total: g.notas.reduce((s, n) => s + Number(n.valor || 0), 0) }))
+      .sort((a, b) => (a.empresa.nome || '').localeCompare(b.empresa.nome || ''));
+  }, [empresasRede, filtradas]);
+
+  const tsLabel = tab === 'cobrar' ? 'Sincronizada em'
+    : tab === 'enviada' ? 'Enviada em'
+    : tab === 'lancada' ? 'Lançada em' : 'Devolvida em';
+  const tsDaNota = (n) => tab === 'cobrar' ? n.created_at
+    : tab === 'enviada' ? n.enviada_em
+    : tab === 'lancada' ? n.lancada_em : n.devolvida_em;
 
   return (
     <div>
@@ -200,8 +206,10 @@ export default function AdminNfManifestacao() {
           <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
           <select value={filtroRede} onChange={e => setFiltroRede(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 min-w-[200px]">
-            <option value="todas">Todas as redes (Webposto)</option>
+            className={`h-9 rounded-lg border bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 min-w-[200px] ${
+              filtroRede ? 'border-gray-200 dark:border-white/10 focus:border-blue-400' : 'border-amber-300 dark:border-amber-500/40 focus:border-amber-400'
+            }`}>
+            <option value="">Selecione uma rede…</option>
             {redes.length > 0 && (
               <optgroup label="Webposto">
                 {redes.map(r => <option key={`wp:${r.id}`} value={`wp:${r.id}`}>{r.nome}</option>)}
@@ -222,8 +230,7 @@ export default function AdminNfManifestacao() {
         </button>
       </PageHeader>
 
-      {/* Tabs — só no fluxo Webposto (Autosystem é lista direta de pendentes) */}
-      {!modoAutosystem && (
+      {/* Tabs do fluxo nf_manifestacao (Webposto e Autosystem) */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 mb-4 overflow-hidden">
         <div className="flex items-center gap-1 px-2 border-b border-gray-100 overflow-x-auto">
           {TABS.map(t => {
@@ -242,7 +249,6 @@ export default function AdminNfManifestacao() {
           })}
         </div>
       </div>
-      )}
 
       {/* Busca + filtro de situação NFe */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -252,12 +258,7 @@ export default function AdminNfManifestacao() {
             placeholder="Buscar por cliente, fornecedor, CNPJ ou chave..."
             className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
         </div>
-        {modoAutosystem ? (
-          <div className="inline-flex items-center gap-1.5 h-[42px] px-3 rounded-lg bg-blue-50 dark:bg-blue-500/15 border border-blue-200 dark:border-blue-500/30 text-xs font-medium text-blue-800 dark:text-blue-300 sm:min-w-[220px]">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-            Notas a manifestar (Autosystem)
-          </div>
-        ) : tab === 'cobrar' ? (
+        {tab === 'cobrar' ? (
           <div className="inline-flex items-center gap-1.5 h-[42px] px-3 rounded-lg bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-xs font-medium text-amber-800 dark:text-amber-300 sm:min-w-[220px]">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
             Apenas "Sem manifestação"
@@ -279,40 +280,28 @@ export default function AdminNfManifestacao() {
         </div>
       )}
 
-      {loading ? (
+      {!filtroRede ? (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-amber-200 dark:border-amber-500/30 p-12 text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 dark:bg-amber-500/15 mb-3">
+            <Network className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Selecione uma rede</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Escolha uma rede no seletor acima para ver as empresas e suas notas.
+          </p>
+        </div>
+      ) : loading ? (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 p-12 flex items-center justify-center gap-3 text-gray-500">
           <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
           <span className="text-sm">Carregando...</span>
         </div>
-      ) : modoAutosystem ? (
-        <TabelaManifestacaoAs notas={filtradasAs} totalValor={totalValorAs} />
-      ) : filtradas.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 p-12 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
-            <FileSpreadsheet className="h-6 w-6 text-blue-600" />
-          </div>
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-            {tab === 'cobrar' ? 'Nenhuma nota aguardando cliente preencher 🎉' : 'Nenhuma nota nesta categoria.'}
-          </p>
-          {tab === 'cobrar' && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Os clientes já enviaram tudo do período. Ajuste o filtro para ver outros intervalos.
-            </p>
-          )}
-        </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1100px]">
+            <table className="w-full text-sm min-w-[1000px]">
               <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  <th className="px-4 py-2.5">{
-                    tab === 'cobrar'    ? 'Sincronizada em'
-                    : tab === 'enviada' ? 'Enviada em'
-                    : tab === 'lancada' ? 'Lançada em'
-                                        : 'Devolvida em'
-                  }</th>
-                  <th className="px-3 py-2.5">Cliente</th>
+                  <th className="px-4 py-2.5">{tsLabel}</th>
                   <th className="px-3 py-2.5">Fornecedor</th>
                   <th className="px-3 py-2.5">Nº NF</th>
                   <th className="px-3 py-2.5">Emissão</th>
@@ -323,74 +312,93 @@ export default function AdminNfManifestacao() {
                   <th className="px-2 py-2.5" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/10">
-                {filtradas.map(n => {
-                  const ts = tab === 'cobrar'    ? n.created_at
-                          : tab === 'enviada'  ? n.enviada_em
-                          : tab === 'lancada'  ? n.lancada_em
-                                                : n.devolvida_em;
-                  return (
-                    <tr key={n.id}
-                      onClick={() => navigate(`/admin/fiscal/manifestacao/${n.id}`)}
-                      className="hover:bg-blue-50/30 dark:hover:bg-blue-500/[0.07] cursor-pointer transition-colors">
-                      <td className="px-4 py-3 font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300 dark:text-gray-600 whitespace-nowrap">{fmtDataHora(ts)}</td>
-                      <td className="px-3 py-3">
-                        <p className="text-[12.5px] font-medium text-gray-900 dark:text-gray-100 truncate max-w-[180px]" title={n.cliente?.nome}>{n.cliente?.nome || '—'}</p>
-                        <p className="text-[10.5px] text-gray-400 dark:text-gray-500 dark:text-gray-500 font-mono">{n.cliente?.cnpj || '—'}</p>
-                      </td>
-                      <td className="px-3 py-3">
-                        <p className="text-[12.5px] text-gray-800 dark:text-gray-200 truncate max-w-[200px]" title={n.razao_social_fornecedor}>{n.razao_social_fornecedor || '—'}</p>
-                        <p className="text-[10.5px] text-gray-400 dark:text-gray-500 dark:text-gray-500 font-mono">{n.cnpj_fornecedor || '—'}</p>
-                      </td>
-                      <td className="px-3 py-3">
-                        {(() => {
-                          const num = numeroNotaDaChave(n.chave_documento);
-                          const ser = serieDaChave(n.chave_documento);
-                          return (
-                            <>
-                              <p className="font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
-                                {num != null ? formatNumeroNota(num) : '—'}
-                              </p>
-                              <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
-                                {ser != null ? `série ${ser}` : '—'}
-                              </p>
-                            </>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 py-3 font-mono tabular-nums text-[12px] text-gray-700">{fmtData(n.data_emissao)}</td>
-                      <td className="px-3 py-3">
-                        {(() => {
-                          const sit = pillSituacao(n.situacao_manifestacao);
-                          return (
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap ${sit.bg} ${sit.text}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${sit.dot}`} />
-                              {sit.label}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 py-3 text-center font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300">{n.qtdProdutos}</td>
-                      <td className="px-3 py-3 text-center text-[11px] text-gray-700 dark:text-gray-300 dark:text-gray-600">
-                        <span className="inline-flex items-center gap-1">
-                          <Paperclip className="h-3 w-3 text-gray-400" />
-                          NF {n.qtdNotaFiscal} · Bol {n.qtdBoleto}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(n.valor)}</td>
-                      <td className="px-2 py-3">
-                        <ChevronRight className="h-4 w-4 text-gray-300 dark:text-gray-600" />
+              {grupos.map(g => {
+                const expandido = expandidos.has(g.empresa.id);
+                return (
+                  <tbody key={g.empresa.id} className="divide-y divide-gray-100 dark:divide-white/10 border-b border-gray-100 dark:border-white/10">
+                    {/* Nó da empresa (branch da árvore) */}
+                    <tr onClick={() => toggleEmpresa(g.empresa.id)}
+                      className="bg-gray-50/70 dark:bg-white/[0.04] hover:bg-gray-100/70 dark:hover:bg-white/[0.06] cursor-pointer transition-colors">
+                      <td colSpan={9} className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          {expandido ? <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />}
+                          <Building2 className="h-4 w-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
+                          <span className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 truncate max-w-[280px]" title={g.empresa.nome}>{g.empresa.nome || '—'}</span>
+                          {g.empresa.cnpj && <span className="text-[10.5px] text-gray-400 dark:text-gray-500 font-mono hidden sm:inline">{g.empresa.cnpj}</span>}
+                          <span className="ml-auto flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400">
+                            <span>{g.notas.length} {g.notas.length === 1 ? 'nota' : 'notas'}</span>
+                            <span className="font-mono tabular-nums font-semibold text-gray-700 dark:text-gray-300">{formatCurrency(g.total)}</span>
+                          </span>
+                        </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
+
+                    {/* Folhas: as notas da empresa */}
+                    {expandido && (g.notas.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="px-3 py-3 pl-12 text-[12px] text-gray-400 dark:text-gray-500 italic">
+                          Nenhuma nota nesta categoria.
+                        </td>
+                      </tr>
+                    ) : g.notas.map(n => (
+                      <tr key={n.id}
+                        onClick={() => navigate(`/admin/fiscal/manifestacao/${n.id}`)}
+                        className="hover:bg-blue-50/30 dark:hover:bg-blue-500/[0.07] cursor-pointer transition-colors">
+                        <td className="px-4 py-3 pl-12 font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtDataHora(tsDaNota(n))}</td>
+                        <td className="px-3 py-3">
+                          <p className="text-[12.5px] text-gray-800 dark:text-gray-200 truncate max-w-[220px]" title={n.razao_social_fornecedor}>{n.razao_social_fornecedor || '—'}</p>
+                          <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-mono">{n.cnpj_fornecedor || '—'}</p>
+                        </td>
+                        <td className="px-3 py-3">
+                          {(() => {
+                            const num = numeroNotaDaChave(n.chave_documento);
+                            const ser = serieDaChave(n.chave_documento);
+                            return (
+                              <>
+                                <p className="font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">
+                                  {num != null ? formatNumeroNota(num) : '—'}
+                                </p>
+                                <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
+                                  {ser != null ? `série ${ser}` : '—'}
+                                </p>
+                              </>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-3 py-3 font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300">{fmtData(n.data_emissao)}</td>
+                        <td className="px-3 py-3">
+                          {(() => {
+                            const sit = pillSituacao(n.situacao_manifestacao);
+                            return (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap ${sit.bg} ${sit.text}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${sit.dot}`} />
+                                {sit.label}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-3 py-3 text-center font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300">{n.qtdProdutos}</td>
+                        <td className="px-3 py-3 text-center text-[11px] text-gray-700 dark:text-gray-300">
+                          <span className="inline-flex items-center gap-1">
+                            <Paperclip className="h-3 w-3 text-gray-400" />
+                            NF {n.qtdNotaFiscal} · Bol {n.qtdBoleto}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(n.valor)}</td>
+                        <td className="px-2 py-3">
+                          <ChevronRight className="h-4 w-4 text-gray-300 dark:text-gray-600" />
+                        </td>
+                      </tr>
+                    )))}
+                  </tbody>
+                );
+              })}
               <tfoot className="bg-gray-50/60 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
                 <tr className="font-semibold">
-                  <td colSpan={8} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
-                    Total: {filtradas.length} {filtradas.length === 1 ? 'nota' : 'notas'}
+                  <td colSpan={7} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
+                    {grupos.length} {grupos.length === 1 ? 'empresa' : 'empresas'} · {filtradas.length} {filtradas.length === 1 ? 'nota' : 'notas'}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900">{formatCurrency(totalValor)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900 dark:text-gray-100">{formatCurrency(totalValor)}</td>
                   <td />
                 </tr>
               </tfoot>
@@ -398,88 +406,6 @@ export default function AdminNfManifestacao() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// Tabela de "notas a manifestar" do Autosystem (consulta read-only).
-function TabelaManifestacaoAs({ notas, totalValor }) {
-  if (!notas || notas.length === 0) {
-    return (
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 p-12 text-center">
-        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 mb-3">
-          <FileSpreadsheet className="h-6 w-6 text-blue-600" />
-        </div>
-        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Nenhuma nota pendente de manifestação nesta rede/período.</p>
-      </div>
-    );
-  }
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[1000px]">
-          <thead className="bg-gray-50/80 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
-            <tr className="text-left text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              <th className="px-4 py-2.5">Empresa</th>
-              <th className="px-3 py-2.5">Emissão</th>
-              <th className="px-3 py-2.5">Emitente</th>
-              <th className="px-3 py-2.5">Nº NF</th>
-              <th className="px-3 py-2.5">Situação NFe</th>
-              <th className="px-3 py-2.5">Manifestação</th>
-              <th className="px-3 py-2.5">Recebida SEFAZ</th>
-              <th className="px-3 py-2.5 text-right">Valor</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-white/10">
-            {notas.map(n => {
-              const num = numeroNotaDaChave(n.chave);
-              const ser = serieDaChave(n.chave);
-              const sit = SITUACAO_AS[n.situacao_nfe] || { label: n.situacao_nfe == null ? '—' : `Cód ${n.situacao_nfe}`, bg: 'bg-gray-100 dark:bg-white/10', text: 'text-gray-600 dark:text-gray-300', dot: 'bg-gray-400' };
-              return (
-                <tr key={n.manifestacao_grid} className="hover:bg-blue-50/30 dark:hover:bg-blue-500/[0.07] transition-colors">
-                  <td className="px-4 py-3">
-                    <p className="text-[12px] text-gray-800 dark:text-gray-200 truncate max-w-[180px]" title={n.empresa_nome}>{n.empresa_nome || '—'}</p>
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">cód {n.empresa_codigo}</p>
-                  </td>
-                  <td className="px-3 py-3 font-mono tabular-nums text-[12px] text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtData(n.data_emissao)}</td>
-                  <td className="px-3 py-3">
-                    <p className="text-[12.5px] font-medium text-gray-900 dark:text-gray-100 truncate max-w-[240px]" title={n.emitente_nome}>{n.emitente_nome || '—'}</p>
-                    <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-mono">{fmtDoc(n.emitente_cnpj)}</p>
-                  </td>
-                  <td className="px-3 py-3">
-                    <p className="font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{num != null ? formatNumeroNota(num) : '—'}</p>
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">{ser != null ? `série ${ser}` : '—'}</p>
-                  </td>
-                  <td className="px-3 py-3">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap ${sit.bg} ${sit.text}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${sit.dot}`} />
-                      {sit.label}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3">
-                    {(() => { const man = manifAs(n.nfe_evento); return (
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap ${man.bg} ${man.text}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${man.dot}`} />
-                        {man.label}
-                      </span>
-                    ); })()}
-                  </td>
-                  <td className="px-3 py-3 font-mono tabular-nums text-[11.5px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtData(n.data_rec_sefaz)}</td>
-                  <td className="px-3 py-3 text-right font-mono tabular-nums text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(n.valor)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot className="bg-gray-50/60 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
-            <tr className="font-semibold">
-              <td colSpan={7} className="px-4 py-2 text-[11.5px] text-gray-700 dark:text-gray-300">
-                Total: {notas.length} {notas.length === 1 ? 'nota' : 'notas'}
-              </td>
-              <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900 dark:text-gray-100">{formatCurrency(totalValor)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
     </div>
   );
 }

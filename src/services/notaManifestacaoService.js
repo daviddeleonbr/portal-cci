@@ -15,6 +15,7 @@
 
 import { supabase } from '../lib/supabase';
 import * as qualityApi from './qualityApiService';
+import { buscarNotasManifestarAutosystem } from './autosystemService';
 
 const BUCKET = 'nfs-manifestacao';
 const TIPOS_ARQUIVO = ['nota_fiscal', 'boleto', 'foto_produto', 'foto_codigo_barras'];
@@ -54,11 +55,11 @@ export async function listarPorCliente(clienteId, { status } = {}) {
 // array (ex: ['pendente','em_preenchimento'] pra fila de cobrança).
 // `chaveApiId` filtra por rede do cliente. `dataDe`/`dataAte` filtram por
 // data_emissao da NF (formato YYYY-MM-DD).
-export async function listarParaAdmin({ status, chaveApiId, dataDe, dataAte } = {}) {
+export async function listarParaAdmin({ status, chaveApiId, asRedeId, dataDe, dataAte } = {}) {
   let q = supabase
     .from('nf_manifestacao')
     .select(`*,
-      cliente:clientes(id, nome, cnpj, chave_api_id),
+      cliente:clientes(id, nome, cnpj, chave_api_id, as_rede_id),
       produtos:nf_manifestacao_produto(count),
       arquivos:nf_manifestacao_arquivo(id, tipo)`)
     .order('enviada_em', { ascending: false, nullsFirst: false });
@@ -75,7 +76,9 @@ export async function listarParaAdmin({ status, chaveApiId, dataDe, dataAte } = 
 
   let rows = (data || []).map(enriquecerContagens);
   // Filtro de rede aplicado no JS (relação aninhada — Postgrest exige outro padrão).
+  // Webposto = chave_api_id; Autosystem = as_rede_id.
   if (chaveApiId) rows = rows.filter(r => r.cliente?.chave_api_id === chaveApiId);
+  if (asRedeId)   rows = rows.filter(r => r.cliente?.as_rede_id === asRedeId);
   return rows;
 }
 
@@ -177,6 +180,122 @@ export async function sincronizarComQuality({
     if (error) throw error;
   }
   return { criadas: novas.length, total: remotas.length };
+}
+
+// ─── Sincronização com Autosystem ────────────────────────────
+
+// Espelha `sincronizarComQuality`, mas a fonte é o banco remoto Autosystem
+// (via Edge Function autosystem-nfe-manifestacao). Traz as "notas a manifestar"
+// (Sem operação · não cancelada · visualizada — o filtro vive na edge) e cria
+// registros novos em `nf_manifestacao` (status pendente), deduplicando por
+// chave_documento dentro de cada cliente. Notas já existentes NÃO são
+// sobrescritas (preservam o trabalho do cliente).
+//
+// IMPORTANTE: busca a REDE INTEIRA (empresa_codigos = []). O banco remoto é
+// consolidado da rede. Cada nota é atribuída à empresa dona casando, nesta
+// ordem: (1) CNPJ da empresa do ERP × `clientes.cnpj` do portal — a ponte mais
+// confiável, pois os `empresa_codigo` do portal costumam não bater com os do
+// ERP; (2) `empresa_codigo`; (3) numa rede de empresa ÚNICA, cai tudo nela.
+// Numa rede com várias empresas, notas que não casam com nenhuma empresa são
+// IGNORADAS — nunca "despejadas" numa empresa arbitrária.
+//
+// `empresas` = [{ id, empresa_codigo, cnpj }] das empresas da rede (clientesRede).
+export async function sincronizarComAutosystem({
+  asRedeId, empresas = [],
+} = {}) {
+  if (!asRedeId) throw new Error('asRedeId é obrigatório');
+
+  const remotas = await buscarNotasManifestarAutosystem(asRedeId, [], {});
+  if (!Array.isArray(remotas) || remotas.length === 0) {
+    return { criadas: 0, total: 0, ignoradas: 0 };
+  }
+
+  // Diagnóstico: distribuição das notas por EMPRESA REAL do ERP (código + nome
+  // como vêm do Autosystem). Confira no DevTools → Console pra saber a qual
+  // empresa as notas de fato pertencem (independente do cadastro do portal).
+  const distrib = {};
+  for (const r of remotas) {
+    const k = `${r.empresa_codigo ?? '—'} · ${r.empresa_nome || '(sem nome)'}`;
+    if (!distrib[k]) distrib[k] = { qtd: 0, valor: 0 };
+    distrib[k].qtd += 1;
+    distrib[k].valor += Number(r.valor || 0);
+  }
+  // eslint-disable-next-line no-console
+  console.log('[sincronizarComAutosystem] notas a manifestar por empresa (ERP):', distrib);
+
+  // Só dígitos (compara CNPJ independente de formatação).
+  const soDigitos = (v) => String(v || '').replace(/\D/g, '');
+
+  // Mapas de resolução: CNPJ (preferido) e empresa_codigo → cliente_id.
+  const mapaCnpj = new Map();
+  const mapaCodigo = new Map();
+  for (const e of empresas) {
+    const cnpj = soDigitos(e?.cnpj);
+    if (cnpj) mapaCnpj.set(cnpj, e.id);
+    if (e?.empresa_codigo != null && e.empresa_codigo !== '') {
+      mapaCodigo.set(String(e.empresa_codigo), e.id);
+    }
+  }
+  // Fallback SÓ para rede de empresa única (não há ambiguidade de destino).
+  const fallback = empresas.length === 1 ? empresas[0].id : null;
+
+  // Resolve cliente_id por nota, deduplicando por chave dentro de cada cliente
+  // (o resultado remoto pode repetir a mesma chave por conta dos LEFT JOINs).
+  const porCliente = new Map(); // clienteId -> Map(chave -> nota)
+  let ignoradas = 0;
+  for (const r of remotas) {
+    if (!r.chave) { ignoradas++; continue; }
+    const clienteId = mapaCnpj.get(soDigitos(r.empresa_cnpj))
+      ?? mapaCodigo.get(String(r.empresa_codigo))
+      ?? fallback;
+    if (!clienteId) { ignoradas++; continue; }
+    if (!porCliente.has(clienteId)) porCliente.set(clienteId, new Map());
+    const m = porCliente.get(clienteId);
+    if (!m.has(r.chave)) m.set(r.chave, r); // 1ª ocorrência por chave
+  }
+
+  let criadas = 0;
+  for (const [clienteId, mapaNotas] of porCliente) {
+    const notasCliente = [...mapaNotas.values()];
+    const chaves = notasCliente.map(r => r.chave);
+    const { data: existentes, error: errEx } = await supabase
+      .from('nf_manifestacao')
+      .select('chave_documento')
+      .eq('cliente_id', clienteId)
+      .in('chave_documento', chaves);
+    if (errEx) throw errEx;
+    const setExistentes = new Set((existentes || []).map(e => e.chave_documento));
+
+    const novas = notasCliente
+      .filter(r => !setExistentes.has(r.chave))
+      .map(r => ({
+        cliente_id: clienteId,
+        empresa_codigo: r.empresa_codigo ?? null,
+        chave_documento: r.chave,
+        cnpj_fornecedor: r.emitente_cnpj || null,
+        razao_social_fornecedor: r.emitente_nome || null,
+        data_emissao: r.data_emissao || null,
+        valor: r.valor ?? null,
+        // Notas do Autosystem são, por definição do filtro da edge
+        // (nfe_evento=0 "Sem operação"), ainda NÃO manifestadas → 0 = "Sem
+        // manifestação". Coloca-as na aba "Para cobrar" do admin (que filtra
+        // situacao_manifestacao === 0), igual ao Webposto.
+        situacao_manifestacao: 0,
+        status_portal: 'pendente',
+        // Colunas exclusivas da Quality ficam nulas no Autosystem.
+      }));
+
+    if (novas.length > 0) {
+      // upsert idempotente: ignora conflitos em (cliente_id, chave_documento)
+      // — imune a corrida e a chaves repetidas eventuais.
+      const { error } = await supabase
+        .from('nf_manifestacao')
+        .upsert(novas, { onConflict: 'cliente_id,chave_documento', ignoreDuplicates: true });
+      if (error) throw error;
+      criadas += novas.length;
+    }
+  }
+  return { criadas, total: remotas.length, ignoradas };
 }
 
 // ─── Edição da nota e produtos ───────────────────────────────

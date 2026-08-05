@@ -64,6 +64,7 @@ serve(async (req) => {
     data_de?: string;
     data_ate?: string;
     contas_caixa_banco?: string[];
+    contas_selecionadas?: string[];
   };
   try {
     body = await req.json();
@@ -71,7 +72,7 @@ serve(async (req) => {
     return json({ error: 'Body JSON inválido' }, 400);
   }
 
-  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_caixa_banco } = body;
+  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_caixa_banco, contas_selecionadas } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
   if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
     return json({ error: 'empresa_codigos deve ser um array não-vazio' }, 400);
@@ -99,6 +100,14 @@ serve(async (req) => {
 
     const codigosCaixa = (contas_caixa_banco || []).map(c => String(c));
     const empresasNum = (empresaCodigos || []).map(e => Number(e)).filter(n => Number.isFinite(n));
+    // Conjunto de REFERÊNCIA do fluxo: quando o usuário seleciona um subconjunto
+    // de contas, o "caixa" do cálculo passa a ser SÓ essas contas — assim uma
+    // transferência de uma conta NÃO selecionada para uma selecionada conta como
+    // entrada real (bate com o extrato). Sem seleção → todas as contas caixa/banco
+    // (comportamento consolidado idêntico ao anterior).
+    const refSet = Array.isArray(contas_selecionadas) && contas_selecionadas.length > 0
+      ? contas_selecionadas.map(c => String(c))
+      : codigosCaixa;
 
     // Filtra: (caixa em debit XOR credit). Exclui transferências internas
     // (caixa em ambos os lados). Sinal: +1 quando caixa em debit (caixa
@@ -116,17 +125,17 @@ serve(async (req) => {
     const sql = `
       with fluxo as (
         select m.*,
-          case when m.conta_debitar  = any($4::text[]) then 'debito' else 'credito' end as lado_caixa,
-          case when m.conta_debitar  = any($4::text[]) then  1 else -1 end             as sinal,
-          case when m.conta_debitar  = any($4::text[]) then m.conta_creditar
+          case when m.conta_debitar  = any($5::text[]) then 'debito' else 'credito' end as lado_caixa,
+          case when m.conta_debitar  = any($5::text[]) then  1 else -1 end             as sinal,
+          case when m.conta_debitar  = any($5::text[]) then m.conta_creditar
                                                        else m.conta_debitar end        as contraparte_codigo
         from movto m
         where m.empresa = any($1::bigint[])
           and m.data between $2 and $3
           and (
-            (m.conta_debitar  = any($4::text[]) and not (m.conta_creditar = any($4::text[])))
+            (m.conta_debitar  = any($5::text[]) and not (m.conta_creditar = any($5::text[])))
             or
-            (m.conta_creditar = any($4::text[]) and not (m.conta_debitar  = any($4::text[])))
+            (m.conta_creditar = any($5::text[]) and not (m.conta_debitar  = any($5::text[])))
           )
       ),
       -- Provisão match 1: empresa + documento + pessoa
@@ -195,7 +204,10 @@ serve(async (req) => {
         end                                                   as contraparte_nome,
         pv.despesa_codigo                                     as contraparte_resolvida_codigo,
         convert_to(coalesce(cresolv.nome, ''), 'LATIN1')      as contraparte_resolvida_nome,
-        (pv.despesa_codigo is not null)                       as via_provisao
+        (pv.despesa_codigo is not null)                       as via_provisao,
+        -- true = a contraparte também é conta caixa/banco → transferência entre
+        -- contas (só sobrevive quando a outra ponta está FORA da seleção).
+        (f.contraparte_codigo = any($4::text[]))              as contraparte_eh_caixa
       from fluxo f
       left join conta         cd on cd.codigo = f.conta_debitar
       left join conta         cc on cc.codigo = f.conta_creditar
@@ -206,7 +218,7 @@ serve(async (req) => {
       order by f.data, f.grid
     `;
 
-    const result = await executarQuery(rede, sql, [empresasNum, data_de, data_ate, codigosCaixa], { encoding: 'SQL_ASCII' });
+    const result = await executarQuery(rede, sql, [empresasNum, data_de, data_ate, codigosCaixa, refSet], { encoding: 'SQL_ASCII' });
 
     const linhas = result.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
 
@@ -230,7 +242,7 @@ serve(async (req) => {
         and (m.conta_debitar = any($3::text[]) or m.conta_creditar = any($3::text[]))
       group by m.empresa
     `;
-    const saldosResult = await executarQuery(rede, sqlSaldos, [empresasNum, data_de, codigosCaixa], { encoding: 'SQL_ASCII' });
+    const saldosResult = await executarQuery(rede, sqlSaldos, [empresasNum, data_de, refSet], { encoding: 'SQL_ASCII' });
     const saldosIniciaisPorEmpresa: Record<string, number> = {};
     saldosResult.forEach(r => {
       const ec = Number(r.empresa);

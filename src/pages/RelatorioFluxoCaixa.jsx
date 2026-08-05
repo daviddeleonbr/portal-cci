@@ -21,6 +21,14 @@ const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Se
 // (ou com plano nao mapeado) no fluxo. Nao colide com codigos reais.
 const SEM_PLANO_PREFIX = '__sem_plano__';
 
+// Rótulo/código do grupo sintético de transferências entre contas próprias.
+// Só aparece quando o usuário filtra um subconjunto de contas (Autosystem):
+// transferências vindas de contas fora da seleção contam como entrada/saída
+// real e vão pra ESTE grupo, que É somado na Variação de Caixa (diferente de
+// "Sem classificação", que fica de fora).
+const TRANSFER_TIPO_DOC = 'Transferências entre contas';
+const TRANSFER_CODE = `${SEM_PLANO_PREFIX}${TRANSFER_TIPO_DOC}`;
+
 function rangeMes(ano, mes) {
   const mm = String(mes).padStart(2, '0');
   const ultimoDia = new Date(ano, mes, 0).getDate();
@@ -335,7 +343,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             const out = await autosystemService.buscarFluxoCaixaAutosystem(
               cliente.as_rede_id,
               empresaCodigos,
-              { data_de: r.dataInicial, data_ate: r.dataFinal, contas_caixa_banco: contasCaixaBanco },
+              {
+                data_de: r.dataInicial, data_ate: r.dataFinal,
+                contas_caixa_banco: contasCaixaBanco,
+                // Subconjunto selecionado no filtro de contas → cálculo relativo
+                // a essas contas (transferências de fora contam de verdade).
+                contas_selecionadas: [...filtroContas],
+              },
             );
             lancs = out.lancamentos || [];
             saldosIniciais = out.saldosIniciais || {};
@@ -374,7 +388,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             const isPonte211 = /^2\.1\.1/.test(cpBruto);
             const naoClassificada = isPonte211 && !cpResolv;
             if (naoClassificada) naoClassificadas211++;
-            const planoEfetivo = cpResolv || cpBruto;
+            // Transferência entre contas próprias (a contraparte também é
+            // caixa/banco). Sobrevive só quando cruza a fronteira da seleção →
+            // vai pro grupo "Transferências entre contas" (contado na variação).
+            const ehTransferencia = !!l.contraparte_eh_caixa;
+            const planoEfetivo = ehTransferencia ? null : (cpResolv || cpBruto);
             return {
               codigo: l.lancamento_id != null ? `as-${l.lancamento_id}` : undefined,
               movimentoContaCodigo: l.lancamento_id ?? null,
@@ -388,12 +406,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               valor: Math.abs(Number(l.valor || 0)),
               dataMovimento: String(l.data ?? '').slice(0, 10),
               descricao: [
+                ehTransferencia ? `↔ ${l.contraparte_nome || ('conta ' + cpBruto)}` : '',
                 naoClassificada ? '[2.1.1 sem provisão]' : '',
                 l.documento ? `Nº ${l.documento}` : '',
                 l.pessoa_nome || '',
                 l.obs || '',
               ].filter(Boolean).join(' · '),
-              tipoDocumentoOrigem: 'AUTOSYSTEM',
+              tipoDocumentoOrigem: ehTransferencia ? TRANSFER_TIPO_DOC : 'AUTOSYSTEM',
               empresaCodigo: l.empresa,
             };
           });
@@ -521,7 +540,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     } finally {
       setLoadingDados(false);
     }
-  }, [cliente, meses]);
+  }, [cliente, meses, filtroContas]);
 
   const handleMontarFluxo = useCallback(() => {
     setReportSolicitado(true);
@@ -529,6 +548,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     setReportReady(false);
     carregarDados();
   }, [carregarDados]);
+
+  // Autosystem: o filtro de contas afeta o CÁLCULO (transferências de contas
+  // fora da seleção contam como entrada/saída real), então re-busca ao mudar a
+  // seleção — mas só depois do 1º "Montar Fluxo" e só no Autosystem (Webposto
+  // filtra no cliente, sem custo de rede).
+  useEffect(() => {
+    if (!reportSolicitado) return;
+    if (!cliente || cliente.usa_webposto || !cliente.as_rede_id) return;
+    carregarDados();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroContas]);
 
   // ─── Report ready orchestration ───────────────────────────
   useEffect(() => {
@@ -573,6 +603,18 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Respeita o toggle de tipos (tiposContaAtivos) - conta de tipo nao selecionado
   // nao entra nem no dropdown nem nos calculos.
   const contasDisponiveis = useMemo(() => {
+    // Fonte ESTÁVEL = contas classificadas como caixa/banco (config), pra que o
+    // dropdown não colapse quando o fetch é filtrado por seleção (Autosystem).
+    // Fallback (redes sem classificação carregada): deriva dos movimentos.
+    if (contasClassificadas.length > 0) {
+      return contasClassificadas
+        .filter(c => c.ativo !== false && (c.tipo === 'bancaria' || c.tipo === 'caixa') && tiposContaAtivos.has(c.tipo))
+        .map(c => {
+          const cod = String(c.conta_codigo);
+          return { codigo: cod, nome: descricaoPorConta.get(cod) || `Conta #${cod}` };
+        })
+        .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    }
     const set = new Map();
     Object.values(dadosPorMes).forEach(dados => {
       (dados.movimentos || []).forEach(m => {
@@ -589,7 +631,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return Array.from(set.entries())
       .map(([codigo, nome]) => ({ codigo, nome }))
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-  }, [dadosPorMes, tipoPorConta, descricaoPorConta, tiposContaAtivos]);
+  }, [contasClassificadas, dadosPorMes, tipoPorConta, descricaoPorConta, tiposContaAtivos]);
 
   // ─── Indexar movimentos por conta + mes ───────────────────
   // Crédito = +valor (entrou caixa). Débito = -valor (saiu caixa).
@@ -806,6 +848,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const contas = [];
     Object.entries(totaisPorConta).forEach(([codigo, valoresPorMesAll]) => {
       if (mappedCodes.has(codigo)) return; // ja entrou em algum grupo
+      if (codigo === TRANSFER_CODE) return; // vai pro grupo "Transferências", não aqui
 
       const semPlano = codigo.startsWith(SEM_PLANO_PREFIX);
       const tipoDoc = semPlano ? codigo.substring(SEM_PLANO_PREFIX.length) : null;
@@ -859,13 +902,51 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     };
   }, [totaisPorConta, lancamentosPorConta, mapeamentos, meses]);
 
+  // ─── Grupo sintético "Transferências entre contas" ─────────
+  // Movimentos cuja contraparte também é caixa/banco (transferências que
+  // cruzaram a fronteira da seleção). Diferente de "Sem classificação", ESTE
+  // grupo É somado na Variação de Caixa — é o que faz o total bater com o
+  // extrato quando se filtra uma conta.
+  const transferenciasNode = useMemo(() => {
+    const valoresPorMesAll = totaisPorConta[TRANSFER_CODE];
+    if (!valoresPorMesAll) return null;
+    const valoresPorMes = {};
+    let totalPeriodo = 0;
+    meses.forEach(mes => { const v = valoresPorMesAll[mes.key] || 0; valoresPorMes[mes.key] = v; totalPeriodo += v; });
+    const temValor = Math.abs(totalPeriodo) > 0.005 || meses.some(m => Math.abs(valoresPorMes[m.key]) > 0.005);
+    if (!temValor) return null;
+    const lancs = (lancamentosPorConta[TRANSFER_CODE] || [])
+      .slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    return {
+      id: '__transferencias__',
+      nome: TRANSFER_TIPO_DOC,
+      tipo: 'grupo',
+      contas: [{ id: 'tr-contas', codigo: TRANSFER_CODE, descricao: 'Entre contas próprias', valoresPorMes, totalPeriodo, lancamentos: lancs }],
+      children: [],
+      valoresPorMes,
+      totalPeriodo,
+      isTransferencias: true,
+    };
+  }, [totaisPorConta, lancamentosPorConta, meses]);
+
   // ─── Acumulado para subtotais/resultados ───────────────────
   const fluxoComCalculos = useMemo(() => {
     const acumPorMes = {};
     let acumTotal = 0;
     meses.forEach(m => { acumPorMes[m.key] = 0; });
 
-    return fluxoTree.map(node => {
+    // Insere o grupo de transferências imediatamente ANTES da linha de resultado
+    // final (Variação de Caixa), pra que ela some as transferências no total.
+    let nodes = fluxoTree;
+    if (transferenciasNode) {
+      nodes = [...fluxoTree];
+      let idx = -1;
+      for (let i = nodes.length - 1; i >= 0; i--) { if (nodes[i].tipo === 'resultado') { idx = i; break; } }
+      if (idx === -1) nodes.push(transferenciasNode);
+      else nodes.splice(idx, 0, transferenciasNode);
+    }
+
+    return nodes.map(node => {
       if (node.tipo === 'subtotal' || node.tipo === 'resultado') {
         return {
           ...node,
@@ -878,12 +959,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       acumTotal += node.totalPeriodo;
       return node;
     });
-  }, [fluxoTree, meses]);
+  }, [fluxoTree, transferenciasNode, meses]);
 
   const totalGeral = useMemo(() =>
     fluxoComCalculos.find(n => n.tipo === 'resultado')?.totalPeriodo
-    ?? fluxoTree.reduce((s, n) => s + n.totalPeriodo, 0)
-  , [fluxoComCalculos, fluxoTree]);
+    ?? (fluxoTree.reduce((s, n) => s + n.totalPeriodo, 0) + (transferenciasNode?.totalPeriodo || 0))
+  , [fluxoComCalculos, fluxoTree, transferenciasNode]);
 
   // ─── Resultado por empresa (apenas em modo rede) ─────────
   // Soma a variacao de caixa (entradas − saidas) por empresa, respeitando os
@@ -1109,11 +1190,40 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       .map(buildNode);
   }, [modoRede, grupos, mapeamentos, colunasEmpresa, totaisPorContaEmpresa, lancamentosPorContaEmpresa]);
 
+  // Grupo "Transferências entre contas" para a aba Por Empresa (colunas=empresas).
+  const transferenciasNodeEmpresa = useMemo(() => {
+    if (!modoRede || colunasEmpresa.length === 0) return null;
+    const valoresPorColAll = totaisPorContaEmpresa[TRANSFER_CODE];
+    if (!valoresPorColAll) return null;
+    const valoresPorMes = {};
+    let totalPeriodo = 0;
+    colunasEmpresa.forEach(col => { const v = valoresPorColAll[col.key] || 0; valoresPorMes[col.key] = v; totalPeriodo += v; });
+    const temValor = Math.abs(totalPeriodo) > 0.005 || colunasEmpresa.some(c => Math.abs(valoresPorMes[c.key]) > 0.005);
+    if (!temValor) return null;
+    const lancs = (lancamentosPorContaEmpresa[TRANSFER_CODE] || [])
+      .slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    return {
+      id: '__transferencias_emp__', nome: TRANSFER_TIPO_DOC, tipo: 'grupo',
+      contas: [{ id: 'tr-contas-emp', codigo: TRANSFER_CODE, descricao: 'Entre contas próprias', valoresPorMes, totalPeriodo, lancamentos: lancs }],
+      children: [], valoresPorMes, totalPeriodo, isTransferencias: true,
+    };
+  }, [modoRede, colunasEmpresa, totaisPorContaEmpresa, lancamentosPorContaEmpresa]);
+
   const fluxoComCalculosEmpresa = useMemo(() => {
     const acum = {};
     let acumTotal = 0;
     colunasEmpresa.forEach(c => { acum[c.key] = 0; });
-    return fluxoTreeEmpresa.map(node => {
+
+    let nodes = fluxoTreeEmpresa;
+    if (transferenciasNodeEmpresa) {
+      nodes = [...fluxoTreeEmpresa];
+      let idx = -1;
+      for (let i = nodes.length - 1; i >= 0; i--) { if (nodes[i].tipo === 'resultado') { idx = i; break; } }
+      if (idx === -1) nodes.push(transferenciasNodeEmpresa);
+      else nodes.splice(idx, 0, transferenciasNodeEmpresa);
+    }
+
+    return nodes.map(node => {
       if (node.tipo === 'subtotal' || node.tipo === 'resultado') {
         return {
           ...node,
@@ -1126,12 +1236,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       acumTotal += node.totalPeriodo;
       return node;
     });
-  }, [fluxoTreeEmpresa, colunasEmpresa]);
+  }, [fluxoTreeEmpresa, transferenciasNodeEmpresa, colunasEmpresa]);
 
   const totalGeralEmpresa = useMemo(() =>
     fluxoComCalculosEmpresa.find(n => n.tipo === 'resultado')?.totalPeriodo
-    ?? fluxoTreeEmpresa.reduce((s, n) => s + n.totalPeriodo, 0)
-  , [fluxoComCalculosEmpresa, fluxoTreeEmpresa]);
+    ?? (fluxoTreeEmpresa.reduce((s, n) => s + n.totalPeriodo, 0) + (transferenciasNodeEmpresa?.totalPeriodo || 0))
+  , [fluxoComCalculosEmpresa, fluxoTreeEmpresa, transferenciasNodeEmpresa]);
 
   const toggleGrupo = (id) => {
     setExpandedGrupos(prev => {

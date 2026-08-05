@@ -1906,7 +1906,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]" style={{ tableLayout: 'fixed', minWidth: 420 + colunasEmpresa.length * 130 + 140 }}>
+                <table className="w-full text-[12px] [&_th]:border-l [&_th]:border-gray-100/60 [&_td]:border-l [&_td]:border-gray-100/60 dark:[&_th]:border-white/[0.06] dark:[&_td]:border-white/[0.06] [&_th:first-child]:border-l-0 [&_td:first-child]:border-l-0" style={{ tableLayout: 'fixed', minWidth: 420 + colunasEmpresa.length * 130 + 140 }}>
                   <colgroup>
                     <col style={{ width: 420 }} />
                     {colunasEmpresa.map(c => (
@@ -1935,8 +1935,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                       ))}
                       {mostrarTotal && (
                         <>
-                          <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
-                          <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-100/60 whitespace-nowrap">AV%</th>
+                          <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100/50 whitespace-nowrap">Total (R$)</th>
+                          <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-blue-100/50 whitespace-nowrap">AV%</th>
                         </>
                       )}
                     </tr>
@@ -2053,7 +2053,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-[12px]" style={{ tableLayout: 'fixed', minWidth: 490 + meses.length * 175 + 175 }}>
+              <table className="w-full text-[12px] [&_th]:border-l [&_th]:border-gray-100/60 [&_td]:border-l [&_td]:border-gray-100/60 dark:[&_th]:border-white/[0.06] dark:[&_td]:border-white/[0.06] [&_th:first-child]:border-l-0 [&_td:first-child]:border-l-0" style={{ tableLayout: 'fixed', minWidth: 490 + meses.length * 175 + 175 }}>
                 <colgroup>
                   <col style={{ width: showAH ? 410 : 490 }} />
                   {meses.map(m => (
@@ -2077,9 +2077,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                     ))}
                     {mostrarTotal && (
                       <>
-                        <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
-                        <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-gray-100/60 whitespace-nowrap">AV%</th>
-                        {showAH && <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">AH%</th>}
+                        <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100/50 whitespace-nowrap">Total (R$)</th>
+                        <th className="text-right px-2 py-2.5 font-medium text-[9px] tracking-wider text-gray-400 bg-blue-100/50 whitespace-nowrap">AV%</th>
+                        {showAH && <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-blue-100/50 whitespace-nowrap">AH%</th>}
                       </>
                     )}
                   </tr>
@@ -2368,29 +2368,18 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
     return null;
   }
 
-  // Resultado verde/vermelho conforme positivo/negativo
-  const resultadoPositivo = node.totalPeriodo >= 0;
-  const rowBg = isResultado
-    ? (resultadoPositivo ? 'bg-emerald-50' : 'bg-rose-50')
-    : isCalc
-      ? 'bg-slate-50'
-      : depth === 0 ? 'bg-gray-50/60' : '';
-  // Sticky precisa de fundo OPACO (sem alpha) pra cobrir o conteúdo que
-  // passa atrás durante scroll horizontal. `rowBg` pode ter sufixo /60 etc.
-  // — converto pra opaco direto. No print, desativa sticky.
+  // Apenas DUAS cores de linha: TOTAIS (subtotais/resultados) destacados; todo
+  // o resto neutro. Sem cor por nível de hierarquia nem verde/vermelho por linha.
+  const rowBg = isCalc ? 'bg-slate-100' : '';
+  // Sticky (1ª coluna) precisa de fundo OPACO pra cobrir o conteúdo no scroll
+  // horizontal. No print, desativa sticky.
   const isSelected = linhaSelecionada === node.id;
-  const stickyColBg = isSelected
-    ? 'bg-amber-100'
-    : isResultado
-      ? (resultadoPositivo ? 'bg-emerald-50' : 'bg-rose-50')
-      : isCalc
-        ? 'bg-slate-50'
-        : depth === 0 ? 'bg-gray-100' : 'bg-white';
+  const stickyColBg = isSelected ? 'bg-amber-100' : (isCalc ? 'bg-slate-100' : 'bg-white');
   const stickyColClass = `sticky left-0 z-10 ${stickyColBg} print:static print:bg-transparent`;
 
-  // Destaque amarelo na linha inteira quando selecionada (sobrepõe rowBg/hover).
+  // Destaque amarelo quando selecionada; hover IGUAL para todas as linhas.
   const rowBgFinal = isSelected ? 'bg-amber-100' : rowBg;
-  const hoverFinal = isSelected ? '' : (!isCalc ? 'hover:bg-blue-50/30' : '');
+  const hoverFinal = isSelected ? '' : 'hover:bg-blue-50/40';
 
   return (
     <>
@@ -2410,11 +2399,10 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
             ) : (
               <div className="w-3 flex-shrink-0" />
             )}
-            <span title={node.nome} className={`truncate min-w-0 ${
-              depth === 0 ? 'text-[12px] font-bold text-gray-900 uppercase tracking-wide'
-                : isResultado ? `text-[12px] font-bold uppercase ${resultadoPositivo ? 'text-emerald-800' : 'text-rose-800'}`
-                  : isCalc ? 'text-[12px] font-semibold text-gray-700 uppercase'
-                    : 'text-[12px] font-semibold text-gray-800 uppercase'
+            <span title={node.nome} className={`truncate min-w-0 text-[12px] uppercase ${
+              (isCalc || depth === 0)
+                ? 'font-bold text-gray-900 tracking-wide'
+                : 'font-semibold text-gray-800'
             }`}>
               {node.nome}
             </span>
@@ -2440,17 +2428,17 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
         })}
         {mostrarTotal && (
           <>
-            <td className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap bg-gray-50/40 font-semibold ${
+            <td className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap bg-blue-50/60 font-semibold ${
               isResultado ? `font-bold ${node.totalPeriodo > 0 ? 'text-emerald-700' : node.totalPeriodo < 0 ? 'text-rose-700' : 'text-gray-400'}`
                 : node.totalPeriodo > 0 ? 'text-emerald-700' : node.totalPeriodo < 0 ? 'text-rose-700' : 'text-gray-400'
             }`}>
               {formatCurrencyCompact(node.totalPeriodo)}
             </td>
-            <td className="text-right px-2 py-2 font-mono tabular-nums text-[10px] text-gray-400 bg-gray-50/40 whitespace-nowrap">
+            <td className="text-right px-2 py-2 font-mono tabular-nums text-[10px] text-gray-400 bg-blue-50/60 whitespace-nowrap">
               {!isCalc && baseAV.total > 0 ? `${(node.totalPeriodo / baseAV.total * 100).toFixed(1)}%` : ''}
             </td>
             {showAH && (
-              <td className="text-right px-3 py-2 font-mono tabular-nums text-[11px] bg-gray-50/40 whitespace-nowrap">
+              <td className="text-right px-3 py-2 font-mono tabular-nums text-[11px] bg-blue-50/60 whitespace-nowrap">
                 {!isCalc && Math.abs(node.totalAnt) > 0.01 ? (
                   <AHBadge atual={node.totalPeriodo} anterior={node.totalAnt} />
                 ) : ''}
@@ -2488,7 +2476,7 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
           <>
             <tr key={conta.id} onClick={handleSelectLinha(conta.id)}
               className={`conta-row border-b border-gray-50 cursor-pointer transition-colors ${
-                linhaSelecionada === conta.id ? 'bg-amber-100' : 'hover:bg-blue-50/30'
+                linhaSelecionada === conta.id ? 'bg-amber-100' : 'hover:bg-blue-50/40'
               }`}>
               <td className={`px-4 py-1.5 overflow-hidden sticky left-0 z-10 print:static print:bg-transparent ${
                 linhaSelecionada === conta.id ? 'bg-amber-100' : 'bg-white'
@@ -2530,16 +2518,16 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
               })}
               {mostrarTotal && (
                 <>
-                  <td className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11px] bg-gray-50/40 whitespace-nowrap ${
+                  <td className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11px] bg-blue-50/60 whitespace-nowrap ${
                     conta.totalPeriodo >= 0 ? 'text-gray-700' : 'text-red-600'
                   }`}>
                     {formatCurrencyCompact(conta.totalPeriodo)}
                   </td>
-                  <td className="text-right px-2 py-1.5 font-mono tabular-nums text-[10px] text-gray-400 bg-gray-50/40 whitespace-nowrap">
+                  <td className="text-right px-2 py-1.5 font-mono tabular-nums text-[10px] text-gray-400 bg-blue-50/60 whitespace-nowrap">
                     {baseAV.total > 0 && conta.totalPeriodo !== 0 ? `${(conta.totalPeriodo / baseAV.total * 100).toFixed(1)}%` : ''}
                   </td>
                   {showAH && (
-                    <td className="text-right px-3 py-1.5 font-mono tabular-nums text-[10px] bg-gray-50/40 whitespace-nowrap">
+                    <td className="text-right px-3 py-1.5 font-mono tabular-nums text-[10px] bg-blue-50/60 whitespace-nowrap">
                       {Math.abs(conta.totalAnt) > 0.01 ? (
                         <AHBadge atual={conta.totalPeriodo} anterior={conta.totalAnt} small />
                       ) : ''}
@@ -2556,10 +2544,10 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
               return (
                 <tr key={`l-${l.id}`} onClick={handleSelectLinha(`l-${l.id}`)}
                   className={`lanc-row border-b border-gray-50 cursor-pointer transition-colors ${
-                    linhaSelecionada === `l-${l.id}` ? 'bg-amber-100' : 'bg-gray-50/30 hover:bg-blue-50/30'
+                    linhaSelecionada === `l-${l.id}` ? 'bg-amber-100' : 'hover:bg-blue-50/40'
                   }`}>
                   <td className={`px-4 py-1 overflow-hidden sticky left-0 z-10 print:static print:bg-transparent ${
-                    linhaSelecionada === `l-${l.id}` ? 'bg-amber-100' : 'bg-gray-50'
+                    linhaSelecionada === `l-${l.id}` ? 'bg-amber-100' : 'bg-white'
                   }`} style={{ paddingLeft: 12 + indent + 24 + 24 }}>
                     <div className="flex items-center gap-2.5 text-[10.5px] min-w-0">
                       <span className="font-mono text-gray-400 w-14 flex-shrink-0">{formatDataBR(l.data)}</span>
@@ -2583,11 +2571,11 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
                   ))}
                   {mostrarTotal && (
                     <>
-                      <td className={`${valorClasses} bg-gray-100/40`}>
+                      <td className={`${valorClasses} bg-blue-50/60`}>
                         {formatCurrencyCompact(valorComSinal)}
                       </td>
-                      <td className="px-2 py-1 bg-gray-100/40"></td>
-                      {showAH && <td className="px-3 py-1 bg-gray-100/40"></td>}
+                      <td className="px-2 py-1 bg-blue-50/60"></td>
+                      {showAH && <td className="px-3 py-1 bg-blue-50/60"></td>}
                     </>
                   )}
                 </tr>

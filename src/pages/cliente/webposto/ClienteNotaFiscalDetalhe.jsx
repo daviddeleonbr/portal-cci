@@ -16,6 +16,7 @@ import Toast from '../../../components/ui/Toast';
 import * as nfService from '../../../services/notaManifestacaoService';
 import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
+import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../../../utils/nfe';
 
@@ -38,7 +39,17 @@ export default function ClienteNotaFiscalDetalhe() {
   const navigate = useNavigate();
   const session = useClienteSession();
   const cliente = session?.cliente;
-  const clientesRede = session?.clientesRede || [];
+  // Memoizado: entra nas deps de `carregar` — sem isso um novo array a cada
+  // render recriaria o callback e dispararia recarga em loop.
+  const clientesRede = useMemo(() => session?.clientesRede || [], [session?.clientesRede]);
+
+  // Este componente é compartilhado pelos dois portais (Webposto e Autosystem).
+  // `origem` governa a fonte do catálogo de produtos (scan), os caminhos de
+  // rota e os rótulos "Webposto/Autosystem".
+  const origem = session?.tipoCliente === 'autosystem' ? 'autosystem' : 'webposto';
+  const asRedeId = session?.asRede?.id;
+  const sistemaLabel = origem === 'autosystem' ? 'Autosystem' : 'Webposto';
+  const basePath = `/cliente/${origem}/financeiro/notas-fiscais`;
 
   const [nota, setNota] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -59,13 +70,16 @@ export default function ClienteNotaFiscalDetalhe() {
     try {
       const n = await nfService.obter(id);
       if (!n) throw new Error('Nota não encontrada');
-      if (n.cliente_id !== cliente?.id) throw new Error('Você não tem acesso a esta nota');
+      // A nota pertence a uma das empresas da rede do usuário (Webposto: 1;
+      // Autosystem: a empresa ativa que sincronizou). Valida por clientesRede.
+      const pertence = clientesRede.some(c => c.id === n.cliente_id) || n.cliente_id === cliente?.id;
+      if (!pertence) throw new Error('Você não tem acesso a esta nota');
       setNota(n);
       setProdutosLocal(n.produtos || []);
     } catch (err) {
       setError(err.message || 'Falha ao carregar nota');
     } finally { setLoading(false); }
-  }, [id, cliente?.id]);
+  }, [id, cliente?.id, clientesRede]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -122,7 +136,7 @@ export default function ClienteNotaFiscalDetalhe() {
   const uploadArquivo = async (file, tipo) => {
     if (!file || !nota) return;
     try {
-      await nfService.adicionarArquivo({ nfId: nota.id, clienteId: cliente.id, tipo, file });
+      await nfService.adicionarArquivo({ nfId: nota.id, clienteId: nota.cliente_id, tipo, file });
       setToast({ tipo: 'success', mensagem: `${tipo === 'nota_fiscal' ? 'Nota' : 'Boleto'} anexado` });
       if (nota.status_portal === 'pendente') {
         await nfService.atualizar(nota.id, { status_portal: 'em_preenchimento' });
@@ -160,7 +174,7 @@ export default function ClienteNotaFiscalDetalhe() {
     try {
       await nfService.enviarParaCci(nota.id);
       setToast({ tipo: 'success', mensagem: 'Nota enviada para CCI!' });
-      setTimeout(() => navigate('/cliente/webposto/financeiro/notas-fiscais'), 800);
+      setTimeout(() => navigate(basePath), 800);
     } catch (err) {
       setToast({ tipo: 'error', mensagem: err.message });
     } finally { setEnviando(false); }
@@ -177,7 +191,7 @@ export default function ClienteNotaFiscalDetalhe() {
   if (error || !nota) {
     return (
       <div>
-        <Link to="/cliente/webposto/financeiro/notas-fiscais" className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 mb-4">
+        <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 mb-4">
           <ArrowLeft className="h-4 w-4" /> Voltar
         </Link>
         <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl p-6 text-sm text-red-800 dark:text-red-300 flex items-start gap-3">
@@ -230,7 +244,7 @@ export default function ClienteNotaFiscalDetalhe() {
   return (
     <div className="space-y-4">
       {/* Voltar */}
-      <Link to="/cliente/webposto/financeiro/notas-fiscais"
+      <Link to={basePath}
         className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800">
         <ArrowLeft className="h-4 w-4" /> Voltar para lista
       </Link>
@@ -297,7 +311,7 @@ export default function ClienteNotaFiscalDetalhe() {
           {!readonly && (
             <div className="ml-auto flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setModalScan(true)}
-                title="Estoque (revenda) — buscar no catálogo do Webposto"
+                title={`Estoque (revenda) — buscar no catálogo do ${sistemaLabel}`}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-blue-700">
                 <ScanLine className="h-3.5 w-3.5" /> Escanear / buscar
               </button>
@@ -307,7 +321,7 @@ export default function ClienteNotaFiscalDetalhe() {
                 <Briefcase className="h-3.5 w-3.5" /> Uso e consumo
               </button>
               <button onClick={() => setModalNovoProduto(true)}
-                title="Produto que ainda não está cadastrado no Webposto"
+                title={`Produto que ainda não está cadastrado no ${sistemaLabel}`}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-500/20">
                 <PackagePlus className="h-3.5 w-3.5" /> Novo produto
               </button>
@@ -319,7 +333,7 @@ export default function ClienteNotaFiscalDetalhe() {
           <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
             Nenhum produto adicionado.
             {!readonly && <span className="block text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-              <strong>Estoque</strong> (revenda): use "Escanear / buscar" ou "Novo produto" se ainda não está no Webposto.
+              <strong>Estoque</strong> (revenda): use "Escanear / buscar" ou "Novo produto" se ainda não está no {sistemaLabel}.
               <br /><strong>Uso e consumo</strong> (interno): use o botão correspondente.
             </span>}
           </div>
@@ -328,7 +342,7 @@ export default function ClienteNotaFiscalDetalhe() {
             {/* Mobile: cards */}
             <div className="md:hidden divide-y divide-gray-100 dark:divide-white/10">
               {produtosLocal.map((p, idx) => (
-                <ProdutoCard key={p.id} produto={p} readonly={readonly}
+                <ProdutoCard key={p.id} produto={p} readonly={readonly} sistemaLabel={sistemaLabel}
                   onEdit={(campos) => editarProdutoLocal(idx, campos)}
                   onCommit={(campos) => commitProduto(idx, campos)}
                   onRemove={() => removerProduto(idx)} />
@@ -480,6 +494,8 @@ export default function ClienteNotaFiscalDetalhe() {
       {modalScan && (
         <ModalScanProduto
           cliente={cliente}
+          origem={origem}
+          redeId={asRedeId}
           onClose={() => setModalScan(false)}
           onAdicionar={async (dados) => {
             // Default scan = estoque. Bonificação vem do checkbox do modal.
@@ -504,12 +520,13 @@ export default function ClienteNotaFiscalDetalhe() {
 
       {modalNovoProduto && (
         <ModalNovoProduto
+          sistemaLabel={sistemaLabel}
           onClose={() => setModalNovoProduto(false)}
           onAdicionar={async (dados) => {
             try {
               await nfService.adicionarProdutoNovo({
                 nfId: nota.id,
-                clienteId: cliente.id,
+                clienteId: nota.cliente_id,
                 ...dados,
                 ordem: produtosLocal.length,
               });
@@ -518,7 +535,7 @@ export default function ClienteNotaFiscalDetalhe() {
               }
               await carregar();
               setModalNovoProduto(false);
-              setToast({ tipo: 'success', mensagem: 'Produto novo adicionado à nota — CCI cadastrará no Webposto' });
+              setToast({ tipo: 'success', mensagem: `Produto novo adicionado à nota — CCI cadastrará no ${sistemaLabel}` });
             } catch (err) {
               setToast({ tipo: 'error', mensagem: err.message });
             }
@@ -637,7 +654,7 @@ function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
 }
 
 // ─── Produto: card (mobile) ──────────────────────────────────
-function ProdutoCard({ produto, readonly, onEdit, onCommit, onRemove }) {
+function ProdutoCard({ produto, readonly, sistemaLabel = 'Webposto', onEdit, onCommit, onRemove }) {
   const subtotal = Number(produto.quantidade || 0) * Number(produto.valor_unitario || 0);
   return (
     <div className={`p-3 space-y-2 ${produto.produto_novo ? 'bg-amber-50/40 dark:bg-amber-500/[0.06]' : ''}`}>
@@ -646,7 +663,7 @@ function ProdutoCard({ produto, readonly, onEdit, onCommit, onRemove }) {
           onMudarDestinacao={(novo) => onCommit({ tipo_destinacao: novo })}
           onToggleBonificacao={() => onCommit({ bonificacao: !produto.bonificacao })} />
         {produto.produto_novo && (
-          <span className="text-[10px] text-amber-700 dark:text-amber-300/80">CCI cadastrará no Webposto</span>
+          <span className="text-[10px] text-amber-700 dark:text-amber-300/80">CCI cadastrará no {sistemaLabel}</span>
         )}
       </div>
       <div className="flex items-start gap-2">
@@ -965,7 +982,7 @@ function ModalUsoConsumo({ onClose, onAdicionar }) {
 // ─── Modal de cadastro de produto NOVO (não existe no Webposto) ──
 // Cliente preenche descrição, qtd, valor unit e anexa 2 fotos (produto +
 // código de barras). CCI usa as fotos pra cadastrar antes de lançar.
-function ModalNovoProduto({ onClose, onAdicionar }) {
+function ModalNovoProduto({ sistemaLabel = 'Webposto', onClose, onAdicionar }) {
   const [descricao, setDescricao] = useState('');
   const [codigoBarras, setCodigoBarras] = useState('');
   const [quantidade, setQuantidade] = useState('1');
@@ -1012,7 +1029,7 @@ function ModalNovoProduto({ onClose, onAdicionar }) {
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Adicionar produto novo à nota</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Esse produto ainda não está cadastrado no Webposto. Envie as informações e fotos — a CCI usa para cadastrar antes de lançar a nota.
+              Esse produto ainda não está cadastrado no {sistemaLabel}. Envie as informações e fotos — a CCI usa para cadastrar antes de lançar a nota.
             </p>
           </div>
           <button onClick={onClose} disabled={salvando}
@@ -1236,10 +1253,13 @@ function CameraScanner({ onDetectado, onErro }) {
   );
 }
 
-function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
+function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdicionar, onErro }) {
+  const ehAutosystem = origem === 'autosystem';
+  const sistemaLabel = ehAutosystem ? 'Autosystem' : 'Webposto';
   const [codigo, setCodigo] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [produto, setProduto] = useState(null);  // produto encontrado
+  const [resultados, setResultados] = useState([]); // múltiplos (busca por descrição)
   const [naoEncontrado, setNaoEncontrado] = useState(false);
   const [valorUnit, setValorUnit] = useState('');
   const [quantidade, setQuantidade] = useState('1');
@@ -1266,29 +1286,50 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
+  // Seleciona um produto do resultado (auto quando 1 match, ou clique na lista).
+  // Normaliza o valor sugerido a partir dos campos de cada fonte.
+  const selecionarProduto = (p) => {
+    setProduto(p);
+    setResultados([]);
+    setNaoEncontrado(false);
+    const v = ehAutosystem
+      ? (p.preco_custo ?? '')
+      : (p.precoCusto ?? p.custoMedio ?? p.precoVenda ?? '');
+    setValorUnit(v !== '' && v != null ? String(v) : '');
+  };
+
   const buscar = async (codigoArg) => {
     const cb = String(codigoArg ?? codigo).trim();
     if (!cb) return;
-    if (!cliente?.chave_api_id) {
-      onErro?.('Integração Webposto não configurada');
-      return;
-    }
     setBuscando(true);
     setProduto(null);
+    setResultados([]);
     setNaoEncontrado(false);
     try {
+      if (ehAutosystem) {
+        if (!redeId) throw new Error('Rede Autosystem não configurada');
+        // Código só de dígitos (>= 6) → busca por código de barras; caso
+        // contrário busca por descrição/código (retorna lista pra escolher).
+        const ehCodBarra = /^\d{6,}$/.test(cb);
+        const lista = await autosystemService.buscarProdutoAutosystem(
+          redeId, ehCodBarra ? { codigoBarra: cb } : { termo: cb },
+        );
+        if (!lista || lista.length === 0) setNaoEncontrado(true);
+        else if (lista.length === 1) selecionarProduto(lista[0]);
+        else setResultados(lista);
+        return;
+      }
+      // Webposto: catálogo Quality por código de barras.
+      if (!cliente?.chave_api_id) {
+        onErro?.('Integração Webposto não configurada');
+        return;
+      }
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
       if (!chave?.chave) throw new Error('Chave API não encontrada');
       const p = await qualityApi.buscarProdutoPorCodigoBarras(chave.chave, cb);
-      if (!p) {
-        setNaoEncontrado(true);
-      } else {
-        setProduto(p);
-        // Pré-popula valor sugerido (se a API retornar)
-        const v = p.precoCusto ?? p.custoMedio ?? p.precoVenda ?? '';
-        setValorUnit(v !== '' && v != null ? String(v) : '');
-      }
+      if (!p) setNaoEncontrado(true);
+      else selecionarProduto(p);
     } catch (err) {
       onErro?.('Erro ao buscar: ' + (err.message || err));
     } finally { setBuscando(false); }
@@ -1297,7 +1338,7 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
   const confirmar = async () => {
     if (!produto && !naoEncontrado) return;
     await onAdicionar({
-      codigo_barras: codigo.trim(),
+      codigo_barras: produto?.codigo_barra || codigo.trim(),
       codigo_interno: produto?.codigo != null ? String(produto.codigo) : '',
       descricao: produto?.nome || '',
       quantidade: Number(quantidade) || 1,
@@ -1307,7 +1348,7 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
   };
 
   const limparEResearch = () => {
-    setProduto(null); setNaoEncontrado(false); setCodigo(''); setValorUnit(''); setQuantidade('1'); setBonificacao(false);
+    setProduto(null); setResultados([]); setNaoEncontrado(false); setCodigo(''); setValorUnit(''); setQuantidade('1'); setBonificacao(false);
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
@@ -1367,11 +1408,13 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
                 <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
               </div>
             )}
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Código de barras</label>
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+              {ehAutosystem ? 'Código de barras ou descrição' : 'Código de barras'}
+            </label>
             <form onSubmit={e => { e.preventDefault(); buscar(); }} className="flex gap-2">
               <input ref={inputRef} type="text" value={codigo}
-                onChange={e => { setCodigo(e.target.value); setProduto(null); setNaoEncontrado(false); }}
-                placeholder="Escaneie ou digite o código..."
+                onChange={e => { setCodigo(e.target.value); setProduto(null); setResultados([]); setNaoEncontrado(false); }}
+                placeholder={ehAutosystem ? 'Escaneie o código ou digite a descrição...' : 'Escaneie ou digite o código...'}
                 className="flex-1 h-11 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-base font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
               <button type="submit" disabled={!codigo.trim() || buscando}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-4 h-11 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
@@ -1392,7 +1435,31 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
 
           {buscando && (
             <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-8">
-              <Loader2 className="h-4 w-4 animate-spin" /> Buscando no catálogo Webposto...
+              <Loader2 className="h-4 w-4 animate-spin" /> Buscando no catálogo {sistemaLabel}...
+            </div>
+          )}
+
+          {/* Múltiplos resultados (busca por descrição) — escolher um */}
+          {resultados.length > 1 && !produto && (
+            <div className="mb-3 rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden">
+              <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
+                {resultados.length} produtos — escolha um
+              </p>
+              <ul className="max-h-56 overflow-y-auto divide-y divide-gray-100 dark:divide-white/10">
+                {resultados.map((p) => (
+                  <li key={p.grid ?? `${p.codigo}-${p.codigo_barra}`}>
+                    <button type="button" onClick={() => selecionarProduto(p)}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50/50 dark:hover:bg-blue-500/10 transition-colors">
+                      <p className="text-[12.5px] font-medium text-gray-900 dark:text-gray-100 truncate">{p.nome || '—'}</p>
+                      <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-mono">
+                        Cód {p.codigo ?? '—'}
+                        {p.codigo_barra && <span> · {p.codigo_barra}</span>}
+                        {p.preco_custo != null && <span> · custo {formatCurrency(p.preco_custo)}</span>}
+                      </p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -1400,7 +1467,7 @@ function ModalScanProduto({ cliente, onClose, onAdicionar, onErro }) {
             <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3 mb-3">
               <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">Produto não encontrado no catálogo</p>
               <p className="text-xs text-amber-700 dark:text-amber-300/80">
-                O código <span className="font-mono">{codigo}</span> não está cadastrado no Webposto.
+                O código <span className="font-mono">{codigo}</span> não está cadastrado no {sistemaLabel}.
                 Você pode adicionar mesmo assim (preencha descrição na tabela) ou tentar outro código.
               </p>
             </div>

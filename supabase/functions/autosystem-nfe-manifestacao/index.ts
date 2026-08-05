@@ -52,18 +52,6 @@ function json(body: unknown, status = 200) {
 
 const TEXT_COLUMNS = new Set(['emitente_nome', 'empresa_nome']);
 
-// Decodifica o JWT do header (só pra checar cci_tipo). A assinatura já foi
-// validada pelo gateway (verify_jwt on).
-function ehAdmin(req: Request): boolean {
-  const auth = req.headers.get('Authorization') || '';
-  const parts = auth.replace(/^Bearer\s+/i, '').split('.');
-  if (parts.length !== 3) return false;
-  try {
-    const c = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return c?.cci_tipo === 'admin';
-  } catch { return false; }
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
@@ -85,12 +73,11 @@ serve(async (req) => {
   const codigos = Array.isArray(empresa_codigos)
     ? [...new Set(empresa_codigos.map(Number).filter(Number.isFinite))] : [];
   const temCodigos = codigos.length > 0;
-  // Sem empresa_codigos = "toda a rede" (o banco remoto é single-tenant da rede).
-  // Só ADMIN pode omitir; cliente precisa passar as empresas dele (senão veria
-  // empresas fora do seu escopo).
-  if (!temCodigos && !ehAdmin(req)) {
-    return json({ error: 'Selecione ao menos uma empresa.' }, 400);
-  }
+  // Sem empresa_codigos = "toda a rede". O banco remoto Autosystem é
+  // single-tenant da rede (a fronteira de tenant é a própria rede, garantida
+  // por autorizarAcesso). Os empresa_codigo do portal nem sempre casam com os
+  // do ERP, então o cliente também pode omitir e receber a rede inteira — o
+  // front atribui cada nota à empresa dona na hora de sincronizar.
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -135,6 +122,7 @@ serve(async (req) => {
         m.grid                                              as manifestacao_grid,
         e.codigo                                            as empresa_codigo,
         convert_to(coalesce(e.nome::text, ''),  'LATIN1')   as empresa_nome,
+        e.cpf                                               as empresa_cnpj,
         n.chave_acesso                                      as chave,
         convert_to(coalesce(r.emitente_nome, ''), 'LATIN1') as emitente_nome,
         r.emitente_cpf                                      as emitente_cnpj,
