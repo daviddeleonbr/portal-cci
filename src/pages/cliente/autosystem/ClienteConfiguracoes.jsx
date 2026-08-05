@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Loader2, AlertCircle, Fuel, Search, Save, Droplet, CheckCircle2, Tags,
+  Loader2, AlertCircle, Fuel, Search, Save, Droplet, CheckCircle2, Tags, Tag,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as autosystemService from '../../../services/autosystemService';
+import AbaApelidos from '../../../components/cliente/AbaApelidos';
 
 function fmtNum(v, casas = 0) {
   if (v == null || !Number.isFinite(Number(v))) return '0';
@@ -36,6 +37,7 @@ const CAT_CLASSES = {
 const ABAS = [
   { key: 'gasolina', label: 'Classificação de gasolina', icon: Droplet, descricao: 'Aditivada / Comum por produto' },
   { key: 'grupos',   label: 'Classificação de grupos',   icon: Tags,    descricao: 'Combustível / Automotivos / Conveniência' },
+  { key: 'apelidos', label: 'Apelidos das empresas',     icon: Tag,     descricao: 'Nome curto por empresa' },
 ];
 
 export default function ClienteConfiguracoes() {
@@ -86,6 +88,7 @@ export default function ClienteConfiguracoes() {
 
       {aba === 'gasolina' && <AbaMixGasolina redeId={redeId} />}
       {aba === 'grupos'   && <AbaClassificacaoGrupos redeId={redeId} />}
+      {aba === 'apelidos' && <AbaApelidos />}
     </div>
   );
 }
