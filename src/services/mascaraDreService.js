@@ -2,24 +2,24 @@ import { supabase } from '../lib/supabase';
 
 // ===================== MASCARAS =====================
 
-// Lista máscaras. Sem filtro (admin) → todas, com as empresas permitidas
-// embutidas (`cliente_mascara_dre`). Passando { clienteIds } (relatórios) → só
-// as máscaras SEM restrição (nenhuma empresa marcada = todas) OU marcadas para
-// alguma das empresas informadas.
-export async function listarMascaras({ clienteIds } = {}) {
+// Lista máscaras. Sem filtro (admin) → todas, com a allowlist de redes embutida
+// (`mascara_dre_rede`). Passando { asRedeId } ou { chaveApiId } (relatórios) →
+// só as máscaras SEM restrição (nenhuma rede marcada = todas) OU liberadas para
+// a rede informada.
+export async function listarMascaras({ asRedeId, chaveApiId } = {}) {
   const { data, error } = await supabase
     .from('mascaras_dre')
-    .select('*, grupos_dre(count), cliente_mascara_dre(cliente_id)')
+    .select('*, grupos_dre(count), mascara_dre_rede(chave_api_id, as_rede_id)')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
   let rows = data || [];
-  if (Array.isArray(clienteIds) && clienteIds.length > 0) {
-    const set = new Set(clienteIds);
+  if (asRedeId || chaveApiId) {
     rows = rows.filter(m => {
-      const assign = m.cliente_mascara_dre || [];
-      if (assign.length === 0) return true; // sem restrição = disponível a todas
-      return assign.some(a => set.has(a.cliente_id));
+      const allow = m.mascara_dre_rede || [];
+      if (allow.length === 0) return true; // sem restrição = disponível a todas
+      return allow.some(r =>
+        (asRedeId && r.as_rede_id === asRedeId) || (chaveApiId && r.chave_api_id === chaveApiId));
     });
   }
   return rows;

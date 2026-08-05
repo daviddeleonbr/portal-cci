@@ -148,9 +148,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             _empresas: redeContexto.empresas || [],
             _nomeRede: redeContexto.nomeRede,
           };
-          // Só as máscaras liberadas às empresas desta rede (vazia = todas).
-          const clienteIds = (redeContexto.empresas || []).map(e => e.id).filter(Boolean);
-          const masks = await fluxoService.listarMascaras({ clienteIds });
+          // Só as máscaras liberadas pra esta rede (vazia = todas).
+          const masks = await fluxoService.listarMascaras({
+            asRedeId: redeContexto.asRedeId || null,
+            chaveApiId: redeContexto.chaveApiId || null,
+          });
           setCliente(virtualCliente);
           setMascaras(masks || []);
           if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
@@ -184,7 +186,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           } catch (_) { setContasClassificadas([]); setContasMeta([]); }
         } else {
           const c = await clientesService.buscarCliente(clienteId);
-          const masks = await fluxoService.listarMascaras({ clienteIds: c?.id ? [c.id] : [] });
+          const masks = await fluxoService.listarMascaras({
+            asRedeId: c?.as_rede_id || null,
+            chaveApiId: c?.chave_api_id || null,
+          });
           setCliente(c);
           setMascaras(masks || []);
           if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);

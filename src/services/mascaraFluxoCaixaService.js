@@ -120,23 +120,23 @@ export const MODELOS_PADRAO = {
 
 // ===================== MASCARAS =====================
 
-// Lista máscaras. Sem filtro (admin) → todas, com as empresas permitidas
-// embutidas (`cliente_mascara_fluxo`). Passando { clienteIds } (relatórios) →
-// só as máscaras SEM restrição OU marcadas para alguma das empresas.
-export async function listarMascaras({ clienteIds } = {}) {
+// Lista máscaras. Sem filtro (admin) → todas, com a allowlist de redes embutida
+// (`mascara_fluxo_rede`). Passando { asRedeId } ou { chaveApiId } (relatórios) →
+// só as máscaras SEM restrição OU liberadas para a rede informada.
+export async function listarMascaras({ asRedeId, chaveApiId } = {}) {
   const { data, error } = await supabase
     .from('mascaras_fluxo_caixa')
-    .select('*, grupos_fluxo_caixa(count), cliente_mascara_fluxo(cliente_id)')
+    .select('*, grupos_fluxo_caixa(count), mascara_fluxo_rede(chave_api_id, as_rede_id)')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
   let rows = data || [];
-  if (Array.isArray(clienteIds) && clienteIds.length > 0) {
-    const set = new Set(clienteIds);
+  if (asRedeId || chaveApiId) {
     rows = rows.filter(m => {
-      const assign = m.cliente_mascara_fluxo || [];
-      if (assign.length === 0) return true;
-      return assign.some(a => set.has(a.cliente_id));
+      const allow = m.mascara_fluxo_rede || [];
+      if (allow.length === 0) return true;
+      return allow.some(r =>
+        (asRedeId && r.as_rede_id === asRedeId) || (chaveApiId && r.chave_api_id === chaveApiId));
     });
   }
   return rows;

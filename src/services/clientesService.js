@@ -73,12 +73,20 @@ export async function salvarApelidoEmpresa(clienteId, apelido) {
   if (error) throw error;
 }
 
-// ─── Máscaras permitidas por empresa (cliente_mascara_dre / _fluxo) ───
-// Empresa sem nenhuma máscara marcada = todas liberadas.
-export async function listarMascarasDoCliente(clienteId) {
+// ─── Máscaras permitidas por REDE (mascara_dre_rede / mascara_fluxo_rede) ───
+// Aplica-se a todas as empresas da rede (Webposto = chave_api_id, Autosystem =
+// as_rede_id). Rede sem nenhuma máscara marcada = todas liberadas.
+function _colRede({ chaveApiId, asRedeId }) {
+  if (chaveApiId) return ['chave_api_id', chaveApiId];
+  if (asRedeId)   return ['as_rede_id', asRedeId];
+  throw new Error('Informe chaveApiId ou asRedeId');
+}
+
+export async function listarMascarasDaRede(rede) {
+  const [col, val] = _colRede(rede);
   const [dre, fluxo] = await Promise.all([
-    supabase.from('cliente_mascara_dre').select('mascara_id').eq('cliente_id', clienteId),
-    supabase.from('cliente_mascara_fluxo').select('mascara_id').eq('cliente_id', clienteId),
+    supabase.from('mascara_dre_rede').select('mascara_id').eq(col, val),
+    supabase.from('mascara_fluxo_rede').select('mascara_id').eq(col, val),
   ]);
   if (dre.error) throw dre.error;
   if (fluxo.error) throw fluxo.error;
@@ -88,19 +96,20 @@ export async function listarMascarasDoCliente(clienteId) {
   };
 }
 
-async function _definirMascarasCliente(tabela, clienteId, mascaraIds) {
-  const { error: delErr } = await supabase.from(tabela).delete().eq('cliente_id', clienteId);
+async function _definirMascarasRede(tabela, rede, mascaraIds) {
+  const [col, val] = _colRede(rede);
+  const { error: delErr } = await supabase.from(tabela).delete().eq(col, val);
   if (delErr) throw delErr;
-  const rows = [...new Set(mascaraIds || [])].map(id => ({ cliente_id: clienteId, mascara_id: id }));
+  const rows = [...new Set(mascaraIds || [])].map(id => ({ mascara_id: id, [col]: val }));
   if (rows.length > 0) {
     const { error } = await supabase.from(tabela).insert(rows);
     if (error) throw error;
   }
 }
-// Replace-all. Lista vazia = todas as máscaras liberadas para a empresa.
-export async function definirMascarasClienteDre(clienteId, mascaraIds) {
-  return _definirMascarasCliente('cliente_mascara_dre', clienteId, mascaraIds);
+// Replace-all. Lista vazia = todas as máscaras liberadas para a rede.
+export async function definirMascarasRedeDre(rede, mascaraIds) {
+  return _definirMascarasRede('mascara_dre_rede', rede, mascaraIds);
 }
-export async function definirMascarasClienteFluxo(clienteId, mascaraIds) {
-  return _definirMascarasCliente('cliente_mascara_fluxo', clienteId, mascaraIds);
+export async function definirMascarasRedeFluxo(rede, mascaraIds) {
+  return _definirMascarasRede('mascara_fluxo_rede', rede, mascaraIds);
 }

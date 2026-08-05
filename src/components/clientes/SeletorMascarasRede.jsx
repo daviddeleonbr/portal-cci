@@ -1,13 +1,17 @@
-// Seleção de máscaras (DRE + Fluxo) permitidas a UMA empresa (cliente).
-// Persiste na hora ao marcar/desmarcar (mesmo padrão dos toggles de relatório
-// do modal). Nenhuma marcada = todas liberadas.
+// Seleção de máscaras (DRE + Fluxo) permitidas a uma REDE — aplica-se a todas
+// as empresas da rede (Webposto = chaveApiId, Autosystem = asRedeId). Persiste
+// na hora ao marcar/desmarcar. Nenhuma marcada = todas liberadas.
 import { useState, useEffect } from 'react';
 import { Loader2, Layers, Wallet, Check } from 'lucide-react';
 import * as dreService from '../../services/mascaraDreService';
 import * as fluxoService from '../../services/mascaraFluxoCaixaService';
 import * as clientesService from '../../services/clientesService';
 
-export default function SeletorMascarasCliente({ clienteId, showToast }) {
+export default function SeletorMascarasRede({ rede, showToast }) {
+  const chave = rede?.chaveApiId || null;
+  const asRede = rede?.asRedeId || null;
+  const temRede = !!(chave || asRede);
+
   const [dreMascaras, setDreMascaras] = useState([]);
   const [fluxoMascaras, setFluxoMascaras] = useState([]);
   const [selDre, setSelDre] = useState(() => new Set());
@@ -16,7 +20,7 @@ export default function SeletorMascarasCliente({ clienteId, showToast }) {
   const [salvando, setSalvando] = useState(null); // 'dre' | 'fluxo' | null
 
   useEffect(() => {
-    if (!clienteId) return;
+    if (!temRede) { setCarregando(false); return; }
     let vivo = true;
     (async () => {
       setCarregando(true);
@@ -24,7 +28,7 @@ export default function SeletorMascarasCliente({ clienteId, showToast }) {
         const [dre, fluxo, atuais] = await Promise.all([
           dreService.listarMascaras().catch(() => []),
           fluxoService.listarMascaras().catch(() => []),
-          clientesService.listarMascarasDoCliente(clienteId).catch(() => ({ dre: [], fluxo: [] })),
+          clientesService.listarMascarasDaRede({ chaveApiId: chave, asRedeId: asRede }).catch(() => ({ dre: [], fluxo: [] })),
         ]);
         if (!vivo) return;
         setDreMascaras(dre || []);
@@ -36,15 +40,16 @@ export default function SeletorMascarasCliente({ clienteId, showToast }) {
       }
     })();
     return () => { vivo = false; };
-  }, [clienteId]);
+  }, [chave, asRede, temRede]);
 
   const persistir = async (tipo, novoSet) => {
     setSalvando(tipo);
     try {
       const ids = [...novoSet];
-      if (tipo === 'dre') await clientesService.definirMascarasClienteDre(clienteId, ids);
-      else await clientesService.definirMascarasClienteFluxo(clienteId, ids);
-      showToast?.('success', 'Máscaras da empresa atualizadas');
+      const alvo = { chaveApiId: chave, asRedeId: asRede };
+      if (tipo === 'dre') await clientesService.definirMascarasRedeDre(alvo, ids);
+      else await clientesService.definirMascarasRedeFluxo(alvo, ids);
+      showToast?.('success', 'Máscaras da rede atualizadas');
     } catch (e) {
       showToast?.('error', e.message || 'Falha ao salvar máscaras');
     } finally {
@@ -93,6 +98,9 @@ export default function SeletorMascarasCliente({ clienteId, showToast }) {
     </div>
   );
 
+  if (!temRede) {
+    return <p className="text-[11.5px] text-gray-400">Empresa sem rede vinculada — sem máscaras a configurar.</p>;
+  }
   if (carregando) {
     return (
       <div className="flex items-center gap-2 text-[12px] text-gray-500 py-2">
@@ -104,7 +112,7 @@ export default function SeletorMascarasCliente({ clienteId, showToast }) {
   return (
     <div className="space-y-3">
       <p className="text-[11px] text-gray-400">
-        Marque as máscaras permitidas a esta empresa. <strong>Nenhuma marcada = todas liberadas.</strong>
+        Marque as máscaras permitidas. Aplica-se a <strong>toda a rede</strong>. <strong>Nenhuma marcada = todas liberadas.</strong>
       </p>
       <Secao tipo="dre"   titulo="DRE"             Icone={Layers} mascaras={dreMascaras}   sel={selDre} />
       <Secao tipo="fluxo" titulo="Fluxo de Caixa"  Icone={Wallet} mascaras={fluxoMascaras} sel={selFluxo} />
