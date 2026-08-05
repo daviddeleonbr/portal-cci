@@ -1,7 +1,8 @@
-import { Menu, Moon, Sun, Building2 } from 'lucide-react';
+import { Menu, Moon, Sun, Building2, Tag } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import NotificacoesBell from '../../ui/NotificacoesBell';
 import { useTheme } from '../../../hooks/useTheme';
+import { useUsarApelido, toggleUsarApelido } from '../../../lib/apelidoPref';
 
 export default function ClienteHeader({ onMenuClick }) {
   const session = useClienteSession();
@@ -11,6 +12,9 @@ export default function ClienteHeader({ onMenuClick }) {
   const tipoCliente = session?.tipoCliente || 'webposto';
   const { tema, alternar } = useTheme();
   const escuro = tema === 'dark';
+  const usarApelido = useUsarApelido();
+  // Só mostra o toggle quando há ao menos um apelido cadastrado na rede.
+  const temApelidos = clientesRede.some(c => c.apelido && String(c.apelido).trim());
   const nomeCliente = cliente?.nome || 'Cliente';
   const cnpjCliente = cliente?.cnpj || '';
 
@@ -54,6 +58,18 @@ export default function ClienteHeader({ onMenuClick }) {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        {/* Toggle global: Razão social ↔ Apelido (só quando há apelidos) */}
+        {temApelidos && (
+          <button onClick={toggleUsarApelido}
+            title={usarApelido ? 'Exibindo apelidos — clique para razão social' : 'Exibindo razão social — clique para apelidos'}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-semibold transition-colors ${
+              usarApelido ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+            }`}>
+            <Tag className="h-4 w-4" />
+            <span className="hidden sm:inline">{usarApelido ? 'Apelido' : 'Razão social'}</span>
+          </button>
+        )}
+
         {/* Theme toggle */}
         <button onClick={alternar}
           title={escuro ? 'Mudar para tema claro' : 'Mudar para tema escuro'}

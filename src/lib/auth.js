@@ -269,6 +269,20 @@ export function trocarEmpresaAtiva(empresaId) {
   return nova;
 }
 
+// Atualiza campos de UMA empresa na sessao em memoria (ex.: apelido recem
+// salvo) sem exigir re-login. Emite cci:session-change para reatividade.
+export function atualizarEmpresaNaSessao(empresaId, patch) {
+  const session = getClienteSession();
+  if (!session) return;
+  const clientesRede = (session.clientesRede || []).map(c =>
+    c.id === empresaId ? { ...c, ...patch } : c,
+  );
+  const cliente = session.cliente?.id === empresaId
+    ? { ...session.cliente, ...patch }
+    : session.cliente;
+  setClienteSession({ ...session, clientesRede, cliente });
+}
+
 // ==================== Permissoes ====================
 
 export function hasPermissaoAdmin(chave) {

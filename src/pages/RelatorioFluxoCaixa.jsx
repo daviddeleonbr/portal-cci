@@ -14,6 +14,8 @@ import * as contasBancariasService from '../services/clienteContasBancariasServi
 import * as autosystemService from '../services/autosystemService';
 import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
+import { nomeEmpresa } from '../utils/nomeEmpresa';
+import { useUsarApelido } from '../lib/apelidoPref';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -57,6 +59,7 @@ function formatDuracao(ms) {
 // mapeados" — útil pra consultoria, ruído pro cliente final).
 export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeContexto, modoCliente = false, seletorEmpresas } = {}) {
   const { labelEmpresa, labelCnpj } = useAnonimizador();
+  const usarApelido = useUsarApelido();
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
   const navigate = useNavigate();
@@ -1032,7 +1035,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       .filter(emp => Number.isFinite(Number(emp.empresa_codigo)))
       .map(emp => {
         const ec = Number(emp.empresa_codigo);
-        const nome = emp.fantasia || emp.razao_social || emp.nome || `#${ec}`;
+        const nome = nomeEmpresa(emp, usarApelido) || `#${ec}`;
         return {
           key: String(ec),
           label: nome.length > 18 ? nome.substring(0, 18) + '…' : nome,
@@ -1040,7 +1043,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           _empresa: emp,
         };
       });
-  }, [modoRede, cliente]);
+  }, [modoRede, cliente, usarApelido]);
 
   const mesEmpresa = useMemo(
     () => meses.find(m => m.key === mesEmpresaKey) || null,

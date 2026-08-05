@@ -4,10 +4,13 @@
 // empresa (ou sem permissão), fica estático (mostra o nome da rede à direita).
 import { useState, useRef, useEffect } from 'react';
 import { Building2, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { nomeEmpresa } from '../../utils/nomeEmpresa';
+import { useUsarApelido } from '../../lib/apelidoPref';
 
 export default function CardEmpresaAtiva({ empresa, empresas = [], onTrocar, redeNome }) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef(null);
+  const usarApelido = useUsarApelido();
   const podeTrocar = typeof onTrocar === 'function' && (empresas?.length || 0) > 1;
 
   useEffect(() => {
@@ -27,7 +30,7 @@ export default function CardEmpresaAtiva({ empresa, empresas = [], onTrocar, red
           Empresa selecionada
           {podeTrocar && <span className="ml-1 normal-case font-normal text-blue-500">· toque para trocar</span>}
         </p>
-        <p className="text-sm font-semibold text-gray-900 truncate">{empresa?.nome || '—'}</p>
+        <p className="text-sm font-semibold text-gray-900 truncate">{nomeEmpresa(empresa, usarApelido)}</p>
         <div className="flex items-center gap-3 mt-0.5">
           {empresa?.cnpj && <p className="text-[11px] text-gray-500 font-mono">{empresa.cnpj}</p>}
           {empresa?.empresa_codigo != null && empresa?.empresa_codigo !== '' && (
@@ -77,7 +80,7 @@ export default function CardEmpresaAtiva({ empresa, empresas = [], onTrocar, red
                       <Building2 className="h-3.5 w-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-[12.5px] truncate ${ativa ? 'text-blue-900 font-semibold' : 'text-gray-800'}`}>{emp.nome}</p>
+                      <p className={`text-[12.5px] truncate ${ativa ? 'text-blue-900 font-semibold' : 'text-gray-800'}`}>{nomeEmpresa(emp, usarApelido)}</p>
                       <div className="flex items-center gap-2">
                         {emp.cnpj && <p className="text-[10px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
                         {emp.empresa_codigo != null && emp.empresa_codigo !== '' && (

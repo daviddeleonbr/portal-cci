@@ -3,6 +3,8 @@
 // + useSyncExternalStore para reatividade.
 
 import { useSyncExternalStore } from 'react';
+import { nomeEmpresa } from '../utils/nomeEmpresa';
+import { useUsarApelido } from '../lib/apelidoPref';
 
 const STORAGE_KEY = 'cci_modo_demo';
 
@@ -61,10 +63,12 @@ function mascararCnpj(cnpj, ativo) {
 // Hook principal: retorna helpers ja bindados ao estado atual
 export function useAnonimizador() {
   const ativo = useSyncExternalStore(subscribe, getAtivo, () => false);
+  // Fora do modo demo, o nome exibido respeita o toggle Razão social ↔ Apelido.
+  const usarApelido = useUsarApelido();
   return {
     ativo,
     setAtivo,
-    labelEmpresa: (cliente) => mascararEmpresa(cliente, ativo),
+    labelEmpresa: (cliente) => ativo ? mascararEmpresa(cliente, true) : nomeEmpresa(cliente, usarApelido),
     labelRede: (redeOuNome, id) => mascararRede(redeOuNome, id, ativo),
     labelCnpj: (cnpj) => mascararCnpj(cnpj, ativo),
     // Versao que aceita um objeto cliente completo e retorna string de identificacao:

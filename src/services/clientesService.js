@@ -60,3 +60,15 @@ export async function excluirCliente(id) {
   const { error } = await supabase.from('clientes').delete().eq('id', id);
   if (error) throw error;
 }
+
+// Apelido (nome curto) por empresa — self-service do cliente. Grava via RPC
+// SECURITY DEFINER (a escrita direta em `clientes` é admin-only por RLS).
+// Passe '' para limpar o apelido.
+export async function salvarApelidoEmpresa(clienteId, apelido) {
+  if (!clienteId) throw new Error('clienteId é obrigatório');
+  const { error } = await supabase.rpc('cliente_apelido_salvar', {
+    p_cliente_id: clienteId,
+    p_apelido: apelido ?? '',
+  });
+  if (error) throw error;
+}

@@ -17,6 +17,8 @@ import * as vendasAutosystemMapService from '../services/mapeamentoVendasAutosys
 import * as autosystemService from '../services/autosystemService';
 import * as qualityApi from '../services/qualityApiService';
 import { formatCurrency } from '../utils/format';
+import { nomeEmpresa } from '../utils/nomeEmpresa';
+import { useUsarApelido } from '../lib/apelidoPref';
 import { useAnonimizador } from '../services/anonimizarService';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -52,6 +54,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const clienteId = clienteIdOverride || params.clienteId;
   const navigate = useNavigate();
   const modoRede = !!redeContexto;
+  const usarApelido = useUsarApelido();
   const backTarget = backHref || (modoRede ? '/admin/relatorios-cliente' : `/admin/relatorios-cliente/${clienteId}`);
 
   const [cliente, setCliente] = useState(null);
@@ -1227,7 +1230,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       .filter(emp => Number.isFinite(Number(emp.empresa_codigo)))
       .map(emp => {
         const ec = Number(emp.empresa_codigo);
-        const nome = emp.fantasia || emp.razao_social || emp.nome || `#${ec}`;
+        const nome = nomeEmpresa(emp, usarApelido) || `#${ec}`;
         return {
           key: String(ec),
           label: nome.length > 18 ? nome.substring(0, 18) + '…' : nome,
@@ -1235,7 +1238,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           _empresa: emp,
         };
       });
-  }, [modoRede, cliente]);
+  }, [modoRede, cliente, usarApelido]);
 
   // Mes de referencia da aba Por Empresa (objeto completo)
   const mesEmpresa = useMemo(

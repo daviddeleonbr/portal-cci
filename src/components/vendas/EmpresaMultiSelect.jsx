@@ -9,10 +9,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Building2 } from 'lucide-react';
+import { nomeEmpresa } from '../../utils/nomeEmpresa';
+import { useUsarApelido } from '../../lib/apelidoPref';
 
 export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleTodas, single = false }) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef(null);
+  const usarApelido = useUsarApelido();
 
   useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
@@ -28,7 +31,7 @@ export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggl
     : todasMarcadas
     ? `Todas (${clientesRede.length})`
     : selecionadas.size === 1
-    ? clientesRede.find(c => selecionadas.has(c.id))?.fantasia || clientesRede.find(c => selecionadas.has(c.id))?.nome || '1 selecionada'
+    ? nomeEmpresa(clientesRede.find(c => selecionadas.has(c.id)), usarApelido)
     : `${selecionadas.size} empresas`;
 
   return (
@@ -72,7 +75,7 @@ export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggl
                       onChange={() => { onToggle(emp.id); if (single) setAberto(false); }}
                       className={`h-3.5 w-3.5 ${single ? '' : 'rounded'} border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11.5px] text-gray-800 truncate">{emp.fantasia || emp.nome}</p>
+                      <p className="text-[11.5px] text-gray-800 truncate">{nomeEmpresa(emp, usarApelido)}</p>
                       {emp.cnpj && <p className="text-[9.5px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
                     </div>
                   </label>
