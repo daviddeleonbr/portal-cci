@@ -6,8 +6,47 @@ import { useState } from 'react';
 import {
   X, Building2, Link2, Landmark, CreditCard, Layers, Network,
   Database, Boxes, Wallet, Trash2, ExternalLink, Settings2,
+  BarChart3, TrendingUp, Loader2,
 } from 'lucide-react';
 import SeletorMascarasRede from './SeletorMascarasRede';
+
+// Aba "Relatórios" (Autosystem) — toggles DRE/Fluxo por rede. Estado local
+// inicializado da rede (montada com key={rede.id}, sem efeito de sync).
+function RelatoriosTabAS({ rede, onToggleRelatorio, togglesAtivos }) {
+  const [flags, setFlags] = useState({ exibir_dre: !!rede.exibir_dre, exibir_fluxo_caixa: !!rede.exibir_fluxo_caixa });
+  const toggleFlag = (campo) => {
+    setFlags(f => ({ ...f, [campo]: !f[campo] }));
+    onToggleRelatorio?.(rede, campo);
+  };
+  const itens = [
+    { campo: 'exibir_dre', Icone: BarChart3, label: 'DRE', desc: 'Demonstração do resultado do exercício' },
+    { campo: 'exibir_fluxo_caixa', Icone: TrendingUp, label: 'Fluxo de Caixa', desc: 'Entradas e saídas por período' },
+  ];
+  return (
+    <div className="space-y-2">
+      <p className="text-[12px] text-gray-500 mb-1">Controle o que a rede pode visualizar no portal do cliente.</p>
+      {itens.map(({ campo, Icone, label, desc }) => {
+        const on = flags[campo];
+        const loading = togglesAtivos?.has(`${rede.id}:${campo}`);
+        return (
+          <div key={campo} className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
+            <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0"><Icone className="h-4 w-4" /></div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900">{label}</p>
+              <p className="text-[11px] text-gray-500">{desc}</p>
+            </div>
+            <button onClick={() => toggleFlag(campo)} disabled={loading}
+              className={`relative h-6 w-11 rounded-full transition-colors flex-shrink-0 ${on ? 'bg-blue-600' : 'bg-gray-300'} disabled:opacity-60`}>
+              {loading
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin text-white absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                : <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // Painel padrão para uma parametrização que abre em modal próprio.
 function PainelAbrir({ Icone, titulo, descricao, botao, onAbrir, danger }) {
@@ -38,6 +77,7 @@ export default function ModalEditarRedeHub({
   onVincularEmpresas, onContasBancarias, onAdministradoras,
   // Autosystem
   onParametrizarRede, onImportarEmpresas, onGrupos, onContasAS, onContasReceberAS, onExcluirRede,
+  onToggleRelatorio, togglesAtivos,
 }) {
   const webposto = tipo === 'webposto';
   const abas = webposto
@@ -53,6 +93,7 @@ export default function ModalEditarRedeHub({
         { key: 'grupos',    label: 'Grupos de produto',   icon: Boxes },
         { key: 'contas',    label: 'Contas / recebimento', icon: Wallet },
         { key: 'receber',   label: 'Contas a receber',    icon: CreditCard },
+        { key: 'relatorios', label: 'Relatórios',         icon: BarChart3 },
         { key: 'mascaras',  label: 'Máscaras',            icon: Layers },
       ];
   const [aba, setAba] = useState(abas[0].key);
@@ -145,6 +186,9 @@ export default function ModalEditarRedeHub({
             <PainelAbrir Icone={CreditCard} titulo="Contas a receber"
               descricao="Prefixos por categoria (cartões, cheques, notas, faturas)."
               botao="Classificar contas a receber" onAbrir={onContasReceberAS} />
+          )}
+          {!webposto && aba === 'relatorios' && (
+            <RelatoriosTabAS key={rede.id} rede={rede} onToggleRelatorio={onToggleRelatorio} togglesAtivos={togglesAtivos} />
           )}
         </div>
 

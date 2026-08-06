@@ -173,6 +173,19 @@ export default function Clientes({ embedded = false }) {
       }
       map.get(key).empresas.push(c);
     });
+    // Inclui também as redes Autosystem SEM empresas (não vêm dos clientes).
+    // Respeita a busca por nome da rede.
+    const q = (searchTerm || '').toLowerCase();
+    (redesAutosystem || []).forEach(r => {
+      const key = `as:${r.id}`;
+      if (map.has(key)) return;
+      if (q && !(r.nome || '').toLowerCase().includes(q)) return;
+      map.set(key, {
+        id: key, tipoIntegracao: 'autosystem',
+        chaveApi: null, chaveApiId: null,
+        asRede: r, asRedeId: r.id, empresas: [],
+      });
+    });
     return Array.from(map.values()).sort((a, b) => {
       if (a.id === '_sem_rede') return 1;
       if (b.id === '_sem_rede') return -1;
@@ -180,7 +193,7 @@ export default function Clientes({ embedded = false }) {
       const nomeB = b.chaveApi?.nome || b.asRede?.nome || '';
       return nomeA.localeCompare(nomeB);
     });
-  }, [filtered, redesAutosystem]);
+  }, [filtered, redesAutosystem, searchTerm]);
 
   const toggleRede = (redeId) => {
     setExpandedRedes(prev => {
@@ -337,8 +350,10 @@ export default function Clientes({ embedded = false }) {
                         </td>
                         <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
-                            {rede.chaveApiId && (
-                              <button onClick={() => setModalRedeHub({ open: true, tipo: 'webposto', rede })}
+                            {(rede.chaveApiId || rede.asRedeId) && (
+                              <button onClick={() => setModalRedeHub(rede.chaveApiId
+                                ? { open: true, tipo: 'webposto', rede }
+                                : { open: true, tipo: 'autosystem', rede: rede.asRede })}
                                 className="rounded-md p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Editar rede">
                                 <Settings2 className="h-3.5 w-3.5" />
                               </button>
@@ -403,16 +418,6 @@ export default function Clientes({ embedded = false }) {
           </div>
         )}
       </motion.div>
-
-      {/* Redes Autosystem */}
-      <SecaoRedesAutosystem
-        redes={redesAutosystem}
-        loading={loading}
-        togglesAtivos={togglesAtivosAS}
-        onToggleRelatorio={handleToggleRelatorioAS}
-        onNova={() => setModalWizard({ open: true, preRede: null, editandoRede: null })}
-        onEditar={(rede) => setModalRedeHub({ open: true, tipo: 'autosystem', rede })}
-      />
 
       {/* Modals */}
       <WizardNovoCliente
@@ -510,6 +515,8 @@ export default function Clientes({ embedded = false }) {
           message: `Excluir a rede "${modalRedeHub.rede?.nome}"? Esta ação não pode ser desfeita.`,
           onConfirm: () => { handleExcluirRedeAS(modalRedeHub.rede); setModalConfirm({ open: false }); setModalRedeHub({ open: false, tipo: null, rede: null }); },
         })}
+        onToggleRelatorio={handleToggleRelatorioAS}
+        togglesAtivos={togglesAtivosAS}
       />
     </div>
   );
