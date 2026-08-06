@@ -2391,7 +2391,7 @@ export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, i
         ) : (
           <div className="rounded-xl border border-gray-200 overflow-hidden max-h-[50vh] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0">
+              <thead className="bg-gray-100 border-b border-gray-100 sticky top-0 z-10">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="px-3 py-2">Administradora</th>
                   <th className="px-3 py-2 text-center">Frota</th>
