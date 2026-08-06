@@ -211,14 +211,19 @@ export default function Clientes({ embedded = false }) {
   // (o hub renderiza apenas paineis[aba]). onClose = no-op (é painel, não modal).
   const hubRede = modalRedeHub.rede;
   const hubEmp0 = hubRede?.empresas?.[0];
+  const hubEmpresasVinculadas = hubRede?.chaveApiId
+    ? clientes.filter(c => c.chave_api_id === hubRede.chaveApiId).map(c => c.empresa_codigo).filter(v => v != null)
+    : [];
   const paineisRedeHub = !modalRedeHub.open
     ? null
     : modalRedeHub.tipo === 'webposto'
       ? {
-          contas: <ModalContasBancarias inline open cliente={hubEmp0} onClose={() => {}} showToast={showToast} />,
-          admin:  <ModalAdministradorasFrota inline open cliente={hubEmp0} onClose={() => {}} showToast={showToast} />,
+          empresas: <WizardNovoCliente inline open preRede={hubRede} empresasJaVinculadas={hubEmpresasVinculadas} onClose={() => {}} onSaved={carregar} showToast={showToast} />,
+          contas:  <ModalContasBancarias inline open cliente={hubEmp0} onClose={() => {}} showToast={showToast} />,
+          admin:   <ModalAdministradorasFrota inline open cliente={hubEmp0} onClose={() => {}} showToast={showToast} />,
         }
       : {
+          rede:     <WizardNovoCliente inline open editandoRede={hubRede} onClose={() => {}} onSaved={carregar} showToast={showToast} />,
           empresas: <ModalEmpresasAutosystem inline open rede={hubRede} clientesExistentes={clientes} onClose={() => {}} onSaved={carregar} showToast={showToast} />,
           contas:   <ModalContasCategoriaAutosystem inline open rede={hubRede} onClose={() => {}} showToast={showToast} />,
         };
@@ -517,9 +522,6 @@ export default function Clientes({ embedded = false }) {
         onClose={() => setModalRedeHub({ open: false, tipo: null, rede: null })}
         showToast={showToast}
         paineis={paineisRedeHub}
-        // Wizards (multi-step): abrem em modal próprio
-        onVincularEmpresas={() => setModalWizard({ open: true, preRede: modalRedeHub.rede, editandoRede: null })}
-        onParametrizarRede={() => setModalWizard({ open: true, preRede: null, editandoRede: modalRedeHub.rede })}
         onExcluirRede={() => setModalConfirm({
           open: true,
           message: `Excluir a rede "${modalRedeHub.rede?.nome}"? Esta ação não pode ser desfeita.`,
@@ -662,7 +664,7 @@ function KpiCard({ label, value, icon: Icon, color }) {
 // ═══════════════════════════════════════════════════════════
 // Wizard: Novo Cliente (Manual ou Webposto)
 // ═══════════════════════════════════════════════════════════
-function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, editandoRede = null, empresasJaVinculadas = [] }) {
+export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, editandoRede = null, empresasJaVinculadas = [], inline = false }) {
   const [step, setStep] = useState('choice');  // choice | webposto-key | webposto-select | form
   const [method, setMethod] = useState(null);
 
@@ -930,7 +932,7 @@ function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, 
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={titleFor(step, !!editandoRede)} size={step === 'webposto-select' ? 'lg' : 'md'}
+    <Modal open={open} onClose={onClose} inline={inline} title={titleFor(step, !!editandoRede)} size={step === 'webposto-select' ? 'lg' : 'md'}
       footer={
         step === 'webposto-key' ? (
           <div className="flex justify-end gap-3">

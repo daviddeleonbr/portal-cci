@@ -73,10 +73,8 @@ function PainelAbrir({ Icone, titulo, descricao, botao, onAbrir, danger }) {
 
 export default function ModalEditarRedeHub({
   open, tipo, rede, onClose, showToast,
-  // Wizards (multi-step) — abrem em modal próprio
-  onVincularEmpresas, onParametrizarRede, onExcluirRede,
-  onToggleRelatorio, togglesAtivos,
-  // Painéis inline (sub-modais em modo inline) por aba, montados pelo pai
+  onExcluirRede, onToggleRelatorio, togglesAtivos,
+  // Painéis inline (sub-modais/wizard em modo inline) por aba, montados pelo pai
   paineis,
 }) {
   const webposto = tipo === 'webposto';
@@ -144,16 +142,8 @@ export default function ModalEditarRedeHub({
             </div>
           ) : aba === 'relatorios' ? (
             <RelatoriosTabAS key={rede.id} rede={rede} onToggleRelatorio={onToggleRelatorio} togglesAtivos={togglesAtivos} />
-          ) : webposto && aba === 'empresas' ? (
-            <PainelAbrir Icone={Building2} titulo="Empresas da rede"
-              descricao="Vincule/importe as empresas do Webposto para esta rede."
-              botao="Vincular empresas" onAbrir={onVincularEmpresas} />
-          ) : !webposto && aba === 'rede' ? (
-            <PainelAbrir Icone={Settings2} titulo="Parametrização da rede"
-              descricao="Nome, slug e credenciais de conexão (TCP/HTTPS) do Autosystem."
-              botao="Editar parametrização" onAbrir={onParametrizarRede} />
           ) : (
-            /* Configs pesadas: painel inline montado pelo pai (só o da aba ativa) */
+            /* Config inline montada pelo pai — só a aba ativa monta */
             paineis?.[aba] || <p className="text-sm text-gray-400">Sem conteúdo.</p>
           )}
         </div>
