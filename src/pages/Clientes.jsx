@@ -2209,9 +2209,9 @@ export function ModalContasBancarias({ open, cliente, onClose, showToast, inline
             <p className="text-[11px] text-gray-400 mt-1">Clique em "Sincronizar com Quality" para puxar as contas disponíveis.</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className={`rounded-xl border border-gray-200 ${inline ? 'max-h-[48vh] overflow-y-auto' : 'overflow-hidden'}`}>
             <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 border-b border-gray-100">
+              <thead className={`border-b border-gray-100 ${inline ? 'bg-gray-100 sticky top-0 z-10' : 'bg-gray-50/80'}`}>
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="px-3 py-2">Conta</th>
                   <th className="px-3 py-2">Tipo</th>
