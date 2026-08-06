@@ -2,7 +2,7 @@
 // rede. As parametrizações pesadas (que já têm modal próprio) são abertas pela
 // aba; as inline (máscaras) ficam embutidas. Webposto e Autosystem têm abas
 // diferentes.
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   X, Link2, Landmark, CreditCard, Layers, Network,
   Database, Wallet, Trash2, Settings2,
@@ -70,6 +70,13 @@ export default function ModalEditarRedeHub({
         { key: 'mascaras',  label: 'Máscaras',            icon: Layers },
       ];
   const [aba, setAba] = useState(abas[0].key);
+
+  // Ao (re)abrir, ou trocar de rede/tipo, volta sempre pra primeira aba —
+  // senão o estado fica preso na aba da rede anterior (ex.: "Sem conteúdo").
+  useEffect(() => {
+    if (open) setAba(abas[0].key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tipo, rede?.id]);
 
   if (!open || !rede) return null;
 
