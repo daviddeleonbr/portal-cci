@@ -4,8 +4,8 @@
 // diferentes.
 import { useState } from 'react';
 import {
-  X, Building2, Link2, Landmark, CreditCard, Layers, Network,
-  Database, Boxes, Wallet, Trash2, ExternalLink, Settings2,
+  X, Link2, Landmark, CreditCard, Layers, Network,
+  Database, Wallet, Trash2, Settings2,
   BarChart3, TrendingUp, Loader2,
 } from 'lucide-react';
 import SeletorMascarasRede from './SeletorMascarasRede';
@@ -44,29 +44,6 @@ function RelatoriosTabAS({ rede, onToggleRelatorio, togglesAtivos }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-// Painel padrão para uma parametrização que abre em modal próprio.
-function PainelAbrir({ Icone, titulo, descricao, botao, onAbrir, danger }) {
-  return (
-    <div className="flex flex-col items-start gap-3">
-      <div className="flex items-start gap-3">
-        <div className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${danger ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-          <Icone className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-900">{titulo}</p>
-          <p className="text-[12px] text-gray-500 mt-0.5 max-w-md">{descricao}</p>
-        </div>
-      </div>
-      <button onClick={onAbrir}
-        className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-          danger ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-blue-600 text-white hover:bg-blue-700'
-        }`}>
-        {danger ? <Trash2 className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />} {botao}
-      </button>
     </div>
   );
 }
