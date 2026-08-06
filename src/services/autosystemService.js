@@ -101,11 +101,17 @@ export async function atualizarRede(id, campos) {
   if (resto.exibir_fluxo_caixa !== undefined) update.exibir_fluxo_caixa = !!resto.exibir_fluxo_caixa;
 
   if (Object.keys(update).length > 0) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('as_rede')
       .update(update)
-      .eq('id', id);
+      .eq('id', id)
+      .select('id');
     if (error) throw error;
+    // update sem erro mas 0 linhas = RLS bloqueou (sessão sem cci_tipo=admin)
+    // ou id inexistente. Sem isso, o front reporta "sucesso" e nada persiste.
+    if (!data || data.length === 0) {
+      throw new Error('Rede não atualizada: sem permissão de admin ou rede inexistente.');
+    }
   }
 
   // Credenciais — dispara RPC se algum dos campos sensíveis veio definido
