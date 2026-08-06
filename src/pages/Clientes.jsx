@@ -931,6 +931,29 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
     });
   };
 
+  // Modo "vincular empresas numa rede já existente" (aba Empresas do hub):
+  // a chave já está definida — navegação vira sub-abas Chave API / Empresas,
+  // sem "Voltar" até a escolha inicial de integração.
+  const modoVincular = !!preRede?.chaveApiId;
+  const SubAbasChaveEmpresas = () => (
+    <div className="flex items-center gap-1 border-b border-gray-100 -mt-1 -mx-1">
+      {[
+        { key: 'webposto-key', label: 'Chave API', Icone: Key },
+        { key: 'webposto-select', label: 'Empresas', Icone: Link2 },
+      ].map(t => {
+        const ativo = step === t.key;
+        return (
+          <button key={t.key} type="button" onClick={() => setStep(t.key)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-[12.5px] font-medium border-b-2 transition-colors ${
+              ativo ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}>
+            <t.Icone className="h-3.5 w-3.5" /> {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <Modal open={open} onClose={onClose} inline={inline} title={titleFor(step, !!editandoRede)} size={step === 'webposto-select' ? 'lg' : 'md'}
       footer={
@@ -1033,9 +1056,11 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
         {step === 'webposto-key' && (
           <motion.div key="key" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
             className="space-y-4">
-            <button onClick={() => setStep('choice')} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
-              <ArrowLeft className="h-3 w-3" /> Voltar
-            </button>
+            {modoVincular ? <SubAbasChaveEmpresas /> : (
+              <button onClick={() => setStep('choice')} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
+                <ArrowLeft className="h-3 w-3" /> Voltar
+              </button>
+            )}
 
             <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-3 flex gap-2">
               <Key className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -1070,9 +1095,11 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
         {step === 'webposto-select' && (
           <motion.div key="select" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
             className="space-y-4">
-            <button onClick={() => setStep('webposto-key')} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
-              <ArrowLeft className="h-3 w-3" /> Voltar
-            </button>
+            {modoVincular ? <SubAbasChaveEmpresas /> : (
+              <button onClick={() => setStep('webposto-key')} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
+                <ArrowLeft className="h-3 w-3" /> Voltar
+              </button>
+            )}
 
             <div className="flex items-center justify-between">
               <div>
