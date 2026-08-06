@@ -1231,6 +1231,9 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
                 placeholder="Gerado automaticamente do nome"
                 className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Gerado automaticamente a partir do nome. Pode ser editado.</p>
+              <p className="text-[11px] font-mono text-amber-600 mt-1">
+                [DEBUG] editandoRede.slug = {JSON.stringify(editandoRede?.slug)} · redeSlug = {JSON.stringify(redeSlug)}
+              </p>
             </div>
           </motion.form>
         )}
