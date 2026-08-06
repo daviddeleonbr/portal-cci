@@ -807,12 +807,15 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
       if (editandoRede?.id) {
         // Modo edicao: campos vazios ou inalterados (IP/senha/token) = manter atual.
         // Service preserva o valor quando recebemos undefined no payload.
+        // slug nunca vazio: se o campo estiver em branco, regenera do nome
+        const slugFinal = redeSlug.trim() || autosystemService.gerarSlug(redeNome.trim());
         const payload = {
           nome: redeNome.trim(),
-          slug: redeSlug.trim(),
+          slug: slugFinal,
           tipo_conexao: redeTipoConexao,
           conexao_usuario: redeUsuario.trim(),
         };
+        console.warn('[DIAG salvarRede] editando', { id: editandoRede.id, redeSlug, slugFinal, redeNome });
         const ipTrim = redeIp.trim();
         if (ipTrim !== '' && ipTrim !== redeIpMascarado) payload.conexao_ip = ipTrim;
         if (redePorta !== '') payload.conexao_porta = redePorta;

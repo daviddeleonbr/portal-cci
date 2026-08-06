@@ -106,6 +106,7 @@ export async function atualizarRede(id, campos) {
       .update(update)
       .eq('id', id)
       .select('id');
+    console.warn('[DIAG atualizarRede]', { id, update, data, error });
     if (error) throw error;
     // update sem erro mas 0 linhas = RLS bloqueou (sessão sem cci_tipo=admin)
     // ou id inexistente. Sem isso, o front reporta "sucesso" e nada persiste.
