@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 
 // `footer`: opcional. Renderizado FORA do scroll container — fica fixo
 // na base do modal mesmo quando o conteúdo rola.
-export default function Modal({ open, onClose, title, children, footer, size = 'md' }) {
+export default function Modal({ open, onClose, title, children, footer, size = 'md', inline = false }) {
   const sizes = {
     sm: 'max-w-md',
     md: 'max-w-lg',
@@ -11,6 +11,18 @@ export default function Modal({ open, onClose, title, children, footer, size = '
     xl: 'max-w-4xl',
     xxl: 'max-w-6xl',
   };
+
+  // Modo INLINE: renderiza o conteúdo (+ footer) sem overlay/header/X — pra
+  // embutir o modal como painel de aba (ex.: hub "Editar rede").
+  if (inline) {
+    if (!open) return null;
+    return (
+      <div className="flex flex-col">
+        <div className="flex-1">{children}</div>
+        {footer && <div className="mt-4 pt-3 border-t border-gray-100 dark:border-white/10">{footer}</div>}
+      </div>
+    );
+  }
 
   return (
     <AnimatePresence>

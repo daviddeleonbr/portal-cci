@@ -73,11 +73,11 @@ function PainelAbrir({ Icone, titulo, descricao, botao, onAbrir, danger }) {
 
 export default function ModalEditarRedeHub({
   open, tipo, rede, onClose, showToast,
-  // Webposto
-  onVincularEmpresas, onContasBancarias, onAdministradoras,
-  // Autosystem
-  onParametrizarRede, onImportarEmpresas, onGrupos, onContasAS, onContasReceberAS, onExcluirRede,
+  // Wizards (multi-step) — abrem em modal próprio
+  onVincularEmpresas, onParametrizarRede, onExcluirRede,
   onToggleRelatorio, togglesAtivos,
+  // Painéis inline (sub-modais em modo inline) por aba, montados pelo pai
+  paineis,
 }) {
   const webposto = tipo === 'webposto';
   const abas = webposto
@@ -106,7 +106,7 @@ export default function ModalEditarRedeHub({
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100">
           <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">
@@ -139,56 +139,24 @@ export default function ModalEditarRedeHub({
 
         {/* Conteúdo */}
         <div className="flex-1 overflow-y-auto p-5">
-          {aba === 'mascaras' && (
+          {aba === 'mascaras' ? (
             <div>
               <p className="text-xs font-semibold text-gray-900 mb-2">Máscaras permitidas (rede)</p>
               <SeletorMascarasRede rede={redeMascara} showToast={showToast} />
             </div>
-          )}
-
-          {webposto && aba === 'empresas' && (
+          ) : aba === 'relatorios' ? (
+            <RelatoriosTabAS key={rede.id} rede={rede} onToggleRelatorio={onToggleRelatorio} togglesAtivos={togglesAtivos} />
+          ) : webposto && aba === 'empresas' ? (
             <PainelAbrir Icone={Building2} titulo="Empresas da rede"
               descricao="Vincule/importe as empresas do Webposto para esta rede."
               botao="Vincular empresas" onAbrir={onVincularEmpresas} />
-          )}
-          {webposto && aba === 'contas' && (
-            <PainelAbrir Icone={Landmark} titulo="Contas bancárias"
-              descricao="Classifique as contas bancárias/caixa usadas no Fluxo de Caixa."
-              botao="Classificar contas" onAbrir={onContasBancarias} />
-          )}
-          {webposto && aba === 'admin' && (
-            <PainelAbrir Icone={CreditCard} titulo="Administradoras (cartões frota)"
-              descricao="Cadastre as administradoras de cartões frota da rede."
-              botao="Abrir administradoras" onAbrir={onAdministradoras} />
-          )}
-
-          {!webposto && aba === 'rede' && (
+          ) : !webposto && aba === 'rede' ? (
             <PainelAbrir Icone={Settings2} titulo="Parametrização da rede"
               descricao="Nome, slug e credenciais de conexão (TCP/HTTPS) do Autosystem."
               botao="Editar parametrização" onAbrir={onParametrizarRede} />
-          )}
-          {!webposto && aba === 'empresas' && (
-            <PainelAbrir Icone={Database} titulo="Empresas"
-              descricao="Importe as empresas do servidor Autosystem para a rede."
-              botao="Importar empresas" onAbrir={onImportarEmpresas} />
-          )}
-          {!webposto && aba === 'grupos' && (
-            <PainelAbrir Icone={Boxes} titulo="Grupos de produto"
-              descricao="Classifique os grupos de produto (combustível, automotivos, conveniência)."
-              botao="Classificar grupos" onAbrir={onGrupos} />
-          )}
-          {!webposto && aba === 'contas' && (
-            <PainelAbrir Icone={Wallet} titulo="Contas / formas de recebimento"
-              descricao="Classifique as contas do plano de contas (formas de recebimento)."
-              botao="Classificar contas" onAbrir={onContasAS} />
-          )}
-          {!webposto && aba === 'receber' && (
-            <PainelAbrir Icone={CreditCard} titulo="Contas a receber"
-              descricao="Prefixos por categoria (cartões, cheques, notas, faturas)."
-              botao="Classificar contas a receber" onAbrir={onContasReceberAS} />
-          )}
-          {!webposto && aba === 'relatorios' && (
-            <RelatoriosTabAS key={rede.id} rede={rede} onToggleRelatorio={onToggleRelatorio} togglesAtivos={togglesAtivos} />
+          ) : (
+            /* Configs pesadas: painel inline montado pelo pai (só o da aba ativa) */
+            paineis?.[aba] || <p className="text-sm text-gray-400">Sem conteúdo.</p>
           )}
         </div>
 

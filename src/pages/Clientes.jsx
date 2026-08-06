@@ -207,6 +207,24 @@ export default function Clientes({ embedded = false }) {
   const totalInativos = clientes.filter(c => c.status === 'inativo').length;
   const totalWebposto = clientes.filter(c => c.usa_webposto).length;
 
+  // Painéis inline (por aba) do hub "Editar rede" — só monta o da aba ativa
+  // (o hub renderiza apenas paineis[aba]). onClose = no-op (é painel, não modal).
+  const hubRede = modalRedeHub.rede;
+  const hubEmp0 = hubRede?.empresas?.[0];
+  const paineisRedeHub = !modalRedeHub.open
+    ? null
+    : modalRedeHub.tipo === 'webposto'
+      ? {
+          contas: <ModalContasBancarias inline open cliente={hubEmp0} onClose={() => {}} showToast={showToast} />,
+          admin:  <ModalAdministradorasFrota inline open cliente={hubEmp0} onClose={() => {}} showToast={showToast} />,
+        }
+      : {
+          empresas: <ModalEmpresasAutosystem inline open rede={hubRede} clientesExistentes={clientes} onClose={() => {}} onSaved={carregar} showToast={showToast} />,
+          grupos:   <ModalGruposProdutoAutosystem inline open rede={hubRede} onClose={() => {}} showToast={showToast} />,
+          contas:   <ModalContasCategoriaAutosystem inline open rede={hubRede} onClose={() => {}} showToast={showToast} />,
+          receber:  <ModalContasReceberAutosystem inline open rede={hubRede} onClose={() => {}} showToast={showToast} />,
+        };
+
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
@@ -500,16 +518,10 @@ export default function Clientes({ embedded = false }) {
         rede={modalRedeHub.rede}
         onClose={() => setModalRedeHub({ open: false, tipo: null, rede: null })}
         showToast={showToast}
-        // Webposto
+        paineis={paineisRedeHub}
+        // Wizards (multi-step): abrem em modal próprio
         onVincularEmpresas={() => setModalWizard({ open: true, preRede: modalRedeHub.rede, editandoRede: null })}
-        onContasBancarias={() => setModalContas({ open: true, cliente: modalRedeHub.rede?.empresas?.[0] })}
-        onAdministradoras={() => setModalAdmin({ open: true, cliente: modalRedeHub.rede?.empresas?.[0] })}
-        // Autosystem
         onParametrizarRede={() => setModalWizard({ open: true, preRede: null, editandoRede: modalRedeHub.rede })}
-        onImportarEmpresas={() => setModalEmpresasAS({ open: true, rede: modalRedeHub.rede })}
-        onGrupos={() => setModalGruposAS({ open: true, rede: modalRedeHub.rede })}
-        onContasAS={() => setModalContasAS({ open: true, rede: modalRedeHub.rede })}
-        onContasReceberAS={() => setModalContasReceberAS({ open: true, rede: modalRedeHub.rede })}
         onExcluirRede={() => setModalConfirm({
           open: true,
           message: `Excluir a rede "${modalRedeHub.rede?.nome}"? Esta ação não pode ser desfeita.`,
@@ -2076,7 +2088,7 @@ function ContactLine({ icon: Icon, children }) {
 // ═══════════════════════════════════════════════════════════
 // Modal Classificar Contas Bancarias
 // ═══════════════════════════════════════════════════════════
-function ModalContasBancarias({ open, cliente, onClose, showToast }) {
+export function ModalContasBancarias({ open, cliente, onClose, showToast, inline = false }) {
   const [loading, setLoading] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [error, setError] = useState(null);
@@ -2160,7 +2172,7 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
 
   const redeNome = cliente.chaves_api?.nome || 'Rede';
   return (
-    <Modal open={open} onClose={onClose} title={`Classificar contas - ${redeNome}`} size="lg">
+    <Modal open={open} onClose={onClose} title={`Classificar contas - ${redeNome}`} size="lg" inline={inline}>
       <div className="space-y-4">
         <div className="rounded-lg bg-blue-50/60 dark:bg-blue-500/10 border border-blue-200 p-3 text-[11px] text-blue-800">
           Classificação por <strong>rede</strong>: configure uma vez e vale para todas as empresas da {redeNome}.
@@ -2267,7 +2279,7 @@ function ModalContasBancarias({ open, cliente, onClose, showToast }) {
 // ═══════════════════════════════════════════════════════════
 // Modal: Administradoras de cartão — marcar quais são FROTA
 // ═══════════════════════════════════════════════════════════
-function ModalAdministradorasFrota({ open, cliente, onClose, showToast }) {
+export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, inline = false }) {
   const [loading, setLoading] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [error, setError] = useState(null);
@@ -2332,7 +2344,7 @@ function ModalAdministradorasFrota({ open, cliente, onClose, showToast }) {
     : itens;
 
   return (
-    <Modal open={open} onClose={onClose} title={`Administradoras · cartões frota — ${redeNome}`} size="lg">
+    <Modal open={open} onClose={onClose} title={`Administradoras · cartões frota — ${redeNome}`} size="lg" inline={inline}>
       <div className="space-y-4">
         <div className="rounded-lg bg-violet-50/60 border border-violet-200 p-3 text-[11px] text-violet-800">
           Marque quais administradoras são de <strong>cartão frota</strong>. A classificação é por
@@ -2419,7 +2431,7 @@ function ModalAdministradorasFrota({ open, cliente, onClose, showToast }) {
 // ═══════════════════════════════════════════════════════════
 // Modal: Importar empresas do Autosystem
 // ═══════════════════════════════════════════════════════════
-function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSaved, showToast }) {
+export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSaved, showToast, inline = false }) {
   const [modo, setModo] = useState('importar'); // 'importar' | 'manual'
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2566,7 +2578,7 @@ function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSa
 
   return (
     <Modal open={open} onClose={onClose}
-      title={`Empresas — ${rede?.nome || ''}`} size="xl">
+      title={`Empresas — ${rede?.nome || ''}`} size="xl" inline={inline}>
       <div className="space-y-4">
         {/* Tabs: importar do servidor vs. cadastro manual */}
         <div className="inline-flex p-1 rounded-lg bg-gray-100 dark:bg-white/5">
@@ -3011,7 +3023,7 @@ const CAT_CLASSES = {
   gray:    { ativa: 'bg-gray-200 text-gray-700 border-gray-300',         idle: 'border-gray-200 text-gray-500 hover:border-gray-400' },
 };
 
-function ModalGruposProdutoAutosystem({ open, rede, onClose, showToast }) {
+export function ModalGruposProdutoAutosystem({ open, rede, onClose, showToast, inline = false }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [grupos, setGrupos] = useState([]); // [{ codigo, grid, nome, categoria }]
@@ -3086,7 +3098,7 @@ function ModalGruposProdutoAutosystem({ open, rede, onClose, showToast }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose}
+    <Modal open={open} onClose={onClose} inline={inline}
       title={`Classificar grupos de produto — ${rede?.nome || ''}`} size="xl"
       footer={!loading && !erro && grupos.length > 0 ? (
         <div className="flex justify-end gap-3">
@@ -3284,7 +3296,7 @@ function descendentesDe(node) {
   return out;
 }
 
-function ModalContasCategoriaAutosystem({ open, rede, onClose, showToast }) {
+export function ModalContasCategoriaAutosystem({ open, rede, onClose, showToast, inline = false }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [contas, setContas] = useState([]); // lista plana vinda do servidor
@@ -3425,7 +3437,7 @@ function ModalContasCategoriaAutosystem({ open, rede, onClose, showToast }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose}
+    <Modal open={open} onClose={onClose} inline={inline}
       title={`Classificar contas — ${rede?.nome || ''}`} size="xl"
       footer={!loading && !erro && contas.length > 0 ? (
         <div className="flex justify-end gap-3">
@@ -3644,7 +3656,7 @@ const CAT_RECEBER_CHIP = {
   amber:  'bg-amber-100 text-amber-800 border-amber-300',
 };
 
-function ModalContasReceberAutosystem({ open, rede, onClose, showToast }) {
+export function ModalContasReceberAutosystem({ open, rede, onClose, showToast, inline = false }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [prefixos, setPrefixos] = useState([]);
@@ -3719,7 +3731,7 @@ function ModalContasReceberAutosystem({ open, rede, onClose, showToast }) {
   const redeNome = rede.nome;
 
   return (
-    <Modal open={open} onClose={onClose} title={`Classificar contas a receber por prefixo — ${redeNome}`} size="xl">
+    <Modal open={open} onClose={onClose} title={`Classificar contas a receber por prefixo — ${redeNome}`} size="xl" inline={inline}>
       <div className="space-y-4">
         <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 text-[11.5px] text-blue-800 leading-relaxed">
           Cadastre os <strong>prefixos</strong> de cada categoria. Qualquer conta cujo código <em>comece</em> com
