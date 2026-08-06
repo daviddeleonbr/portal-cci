@@ -665,7 +665,11 @@ function KpiCard({ label, value, icon: Icon, color }) {
 // Wizard: Novo Cliente (Manual ou Webposto)
 // ═══════════════════════════════════════════════════════════
 export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede = null, editandoRede = null, empresasJaVinculadas = [], inline = false }) {
-  const [step, setStep] = useState('choice');  // choice | webposto-key | webposto-select | form
+  // Step inicial já resolvido dos props — evita o flash da tela "choice" ao abrir
+  // inline em modo vincular (webposto) ou editar rede (autosystem).
+  const [step, setStep] = useState(() =>
+    preRede?.chaveApiId ? 'webposto-select' : editandoRede?.id ? 'rede-form' : 'choice'
+  );  // choice | webposto-key | webposto-select | form | rede-form | rede-conexao
   const [method, setMethod] = useState(null);
 
   // Webposto flow
@@ -1101,6 +1105,11 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
               </button>
             )}
 
+            {buscando && empresasWebposto.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+                <Loader2 className="h-5 w-5 animate-spin" /> <span className="text-sm">Carregando empresas…</span>
+              </div>
+            ) : (<>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-gray-900">{empresasWebposto.length} empresa(s) encontrada(s)</p>
@@ -1156,7 +1165,7 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
                 );
               })}
             </div>
-
+            </>)}
           </motion.div>
         )}
 
