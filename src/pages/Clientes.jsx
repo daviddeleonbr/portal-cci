@@ -220,9 +220,7 @@ export default function Clientes({ embedded = false }) {
         }
       : {
           empresas: <ModalEmpresasAutosystem inline open rede={hubRede} clientesExistentes={clientes} onClose={() => {}} onSaved={carregar} showToast={showToast} />,
-          grupos:   <ModalGruposProdutoAutosystem inline open rede={hubRede} onClose={() => {}} showToast={showToast} />,
           contas:   <ModalContasCategoriaAutosystem inline open rede={hubRede} onClose={() => {}} showToast={showToast} />,
-          receber:  <ModalContasReceberAutosystem inline open rede={hubRede} onClose={() => {}} showToast={showToast} />,
         };
 
   return (

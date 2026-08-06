@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Loader2, AlertCircle, Fuel, Search, Save, Droplet, CheckCircle2, Tags, Tag,
+  Loader2, AlertCircle, Fuel, Search, Save, Droplet, CheckCircle2, Tags, Tag, Coins,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
+import Toast from '../../../components/ui/Toast';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as autosystemService from '../../../services/autosystemService';
 import AbaApelidos from '../../../components/cliente/AbaApelidos';
+import { ModalContasReceberAutosystem } from '../../Clientes';
 
 function fmtNum(v, casas = 0) {
   if (v == null || !Number.isFinite(Number(v))) return '0';
@@ -37,6 +39,7 @@ const CAT_CLASSES = {
 const ABAS = [
   { key: 'gasolina', label: 'Classificação de gasolina', icon: Droplet, descricao: 'Aditivada / Comum por produto' },
   { key: 'grupos',   label: 'Classificação de grupos',   icon: Tags,    descricao: 'Combustível / Automotivos / Conveniência' },
+  { key: 'contas_receber', label: 'Contas a receber',    icon: Coins,   descricao: 'Prefixos: cartões, cheques, notas, faturas' },
   { key: 'apelidos', label: 'Apelidos das empresas',     icon: Tag,     descricao: 'Nome curto por empresa' },
 ];
 
@@ -45,6 +48,11 @@ export default function ClienteConfiguracoes() {
   const asRede = session?.asRede;
   const redeId = asRede?.id;
   const [aba, setAba] = useState('gasolina');
+  const [toast, setToast] = useState(null);
+  const showToast = (tipo, mensagem) => {
+    setToast({ tipo, mensagem });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   if (!redeId) {
     return (
@@ -88,7 +96,14 @@ export default function ClienteConfiguracoes() {
 
       {aba === 'gasolina' && <AbaMixGasolina redeId={redeId} />}
       {aba === 'grupos'   && <AbaClassificacaoGrupos redeId={redeId} />}
+      {aba === 'contas_receber' && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <ModalContasReceberAutosystem inline open rede={asRede} onClose={() => {}} showToast={showToast} />
+        </div>
+      )}
       {aba === 'apelidos' && <AbaApelidos />}
+
+      {toast && <Toast tipo={toast.tipo} mensagem={toast.mensagem} onClose={() => setToast(null)} />}
     </div>
   );
 }

@@ -90,9 +90,7 @@ export default function ModalEditarRedeHub({
     : [
         { key: 'rede',      label: 'Parametrização da rede', icon: Settings2 },
         { key: 'empresas',  label: 'Empresas',            icon: Database },
-        { key: 'grupos',    label: 'Grupos de produto',   icon: Boxes },
         { key: 'contas',    label: 'Contas / recebimento', icon: Wallet },
-        { key: 'receber',   label: 'Contas a receber',    icon: CreditCard },
         { key: 'relatorios', label: 'Relatórios',         icon: BarChart3 },
         { key: 'mascaras',  label: 'Máscaras',            icon: Layers },
       ];
