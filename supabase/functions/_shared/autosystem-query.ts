@@ -332,6 +332,17 @@ async function executarHttps(
   // cf-ray) e nunca chegou no proxy — caso típico: rota não publicada,
   // proxy fora do ar, ou /query servido como HTML.
   if (!text || !ct.includes('json')) {
+    const ehHtml = ct.includes('html') || /^\s*<(!doctype|html)/i.test(text || '');
+    const gateway = resp.status === 502 || resp.status === 503 || resp.status === 504;
+    // Caso típico: túnel/proxy do cliente fora do ar. O Cloudflare responde com
+    // 502/503/504 (ou uma página HTML) — inútil despejar o HTML pro usuário.
+    if (gateway || (ehHtml && server.includes('cloudflare'))) {
+      throw new Error(
+        `Não foi possível conectar ao servidor da rede (HTTP ${resp.status}). ` +
+        `O túnel de conexão do cliente parece estar offline ou indisponível. ` +
+        `Verifique se o agente de conexão (Cloudflare Tunnel) e o serviço de banco de dados do cliente estão ativos.`
+      );
+    }
     const snippet = (text || '').replace(/\s+/g, ' ').slice(0, 300) || '<vazio>';
     throw new Error(
       `Proxy não retornou JSON (HTTP ${resp.status}, content-type="${ct || 'n/a'}", ` +
