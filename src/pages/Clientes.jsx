@@ -737,7 +737,9 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
     if (editandoRede?.id) {
       setMethod('rede');
       setRedeNome(editandoRede.nome || '');
-      setRedeSlug(editandoRede.slug || '');
+      // slug pode vir vazio (rede antiga) — gera a partir do nome pra nao travar
+      // o botao "Proximo" (disabled quando o slug esta vazio).
+      setRedeSlug(editandoRede.slug || autosystemService.gerarSlug(editandoRede.nome || ''));
       setRedeSlugEdited(true); // impede o auto-gerador de slug
       setStep('rede-form');
       (async () => {
