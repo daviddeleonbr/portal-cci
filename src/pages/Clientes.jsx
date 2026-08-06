@@ -214,18 +214,19 @@ export default function Clientes({ embedded = false }) {
   const hubEmpresasVinculadas = hubRede?.chaveApiId
     ? clientes.filter(c => c.chave_api_id === hubRede.chaveApiId).map(c => c.empresa_codigo).filter(v => v != null)
     : [];
+  const fecharHub = () => setModalRedeHub({ open: false, tipo: null, rede: null });
   const paineisRedeHub = !modalRedeHub.open
     ? null
     : modalRedeHub.tipo === 'webposto'
       ? {
-          empresas: <WizardNovoCliente inline open preRede={hubRede} empresasJaVinculadas={hubEmpresasVinculadas} onClose={() => {}} onSaved={carregar} showToast={showToast} />,
-          contas:  <ModalContasBancarias inline open cliente={hubEmp0} onClose={() => {}} showToast={showToast} />,
-          admin:   <ModalAdministradorasFrota inline open cliente={hubEmp0} onClose={() => {}} showToast={showToast} />,
+          empresas: <WizardNovoCliente inline open preRede={hubRede} empresasJaVinculadas={hubEmpresasVinculadas} onClose={fecharHub} onSaved={carregar} showToast={showToast} />,
+          contas:  <ModalContasBancarias inline open cliente={hubEmp0} onClose={fecharHub} showToast={showToast} />,
+          admin:   <ModalAdministradorasFrota inline open cliente={hubEmp0} onClose={fecharHub} showToast={showToast} />,
         }
       : {
-          rede:     <WizardNovoCliente inline open editandoRede={hubRede} onClose={() => {}} onSaved={carregar} showToast={showToast} />,
-          empresas: <ModalEmpresasAutosystem inline open rede={hubRede} clientesExistentes={clientes} onClose={() => {}} onSaved={carregar} showToast={showToast} />,
-          contas:   <ModalContasCategoriaAutosystem inline open rede={hubRede} onClose={() => {}} showToast={showToast} />,
+          rede:     <WizardNovoCliente inline open editandoRede={hubRede} onClose={fecharHub} onSaved={carregar} showToast={showToast} />,
+          empresas: <ModalEmpresasAutosystem inline open rede={hubRede} clientesExistentes={clientes} onClose={fecharHub} onSaved={carregar} showToast={showToast} />,
+          contas:   <ModalContasCategoriaAutosystem inline open rede={hubRede} onClose={fecharHub} showToast={showToast} />,
         };
 
   return (
@@ -737,10 +738,11 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
     if (editandoRede?.id) {
       setMethod('rede');
       setRedeNome(editandoRede.nome || '');
-      // slug pode vir vazio (rede antiga) — gera a partir do nome pra nao travar
-      // o botao "Proximo" (disabled quando o slug esta vazio).
-      setRedeSlug(editandoRede.slug || autosystemService.gerarSlug(editandoRede.nome || ''));
-      setRedeSlugEdited(true); // impede o auto-gerador de slug
+      // slug: se já existe, preserva e trava o auto-gerador; se vem vazio,
+      // deixa redeSlugEdited=false pro auto-gerador preenchê-lo a partir do nome.
+      const slugExistente = editandoRede.slug || '';
+      setRedeSlug(slugExistente || autosystemService.gerarSlug(editandoRede.nome || ''));
+      setRedeSlugEdited(!!slugExistente);
       setStep('rede-form');
       (async () => {
         try {
@@ -815,7 +817,6 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
           tipo_conexao: redeTipoConexao,
           conexao_usuario: redeUsuario.trim(),
         };
-        console.warn('[DIAG salvarRede] editando', { id: editandoRede.id, redeSlug, slugFinal, redeNome });
         const ipTrim = redeIp.trim();
         if (ipTrim !== '' && ipTrim !== redeIpMascarado) payload.conexao_ip = ipTrim;
         if (redePorta !== '') payload.conexao_porta = redePorta;
@@ -990,7 +991,7 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
               className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
               Cancelar
             </button>
-            <button type="submit" form="form-rede-form" disabled={!redeNome.trim() || !redeSlug.trim()}
+            <button type="submit" form="form-rede-form" disabled={!redeNome.trim()}
               className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
               Próximo <ChevronRight className="h-4 w-4" />
             </button>
@@ -1225,9 +1226,9 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Slug <span className="text-gray-400 dark:text-gray-500 font-normal">(identificador único)</span>
               </label>
-              <input type="text" required value={redeSlug}
+              <input type="text" value={redeSlug}
                 onChange={(e) => { setRedeSlug(e.target.value); setRedeSlugEdited(true); }}
-                placeholder="rede-trivela"
+                placeholder="Gerado automaticamente do nome"
                 className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 text-sm font-mono focus:border-blue-400 dark:focus:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-500/20" />
               <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Gerado automaticamente a partir do nome. Pode ser editado.</p>
             </div>
