@@ -68,6 +68,7 @@ export default function AbaExportacao({ showToast }) {
   const [colsSel, setColsSel] = useState(() => new Set(COLS_PADRAO));
   const [modalCols, setModalCols] = useState(false);
   const [mostrarExcluidas, setMostrarExcluidas] = useState(false);
+  const [soPendentes, setSoPendentes] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -129,16 +130,26 @@ export default function AbaExportacao({ showToast }) {
     return { total: linhas.length, excluidas, exportaveis: exportaveis.length, pendentes: pend };
   }, [linhas, exportaveis]);
 
+  // conjunto que vai pro arquivo (respeita "só pendentes")
+  const conjuntoDownload = useMemo(
+    () => soPendentes ? exportaveis.filter(l => l.pendente) : exportaveis, [exportaveis, soPendentes]);
+  // conjunto exibido na prévia
+  const visiveis = useMemo(() => {
+    if (soPendentes) return exportaveis.filter(l => l.pendente);
+    return mostrarExcluidas ? (linhas || []) : exportaveis;
+  }, [soPendentes, mostrarExcluidas, exportaveis, linhas]);
+
   const baixar = () => {
-    if (!exportaveis.length) return;
+    if (!conjuntoDownload.length) return;
     const aoa = [
       colunasAtivas.map(c => c.label),
-      ...exportaveis.map(l => colunasAtivas.map(c => c.num ? Number(c.get(l, ctx)) : c.get(l, ctx))),
+      ...conjuntoDownload.map(l => colunasAtivas.map(c => c.num ? Number(c.get(l, ctx)) : c.get(l, ctx))),
     ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Exportacao');
-    XLSX.writeFile(wb, `exportacao-contabil-${dataDe}_a_${dataAte}.xlsx`);
+    const sufixo = soPendentes ? '-pendentes' : '';
+    XLSX.writeFile(wb, `exportacao-contabil-${dataDe}_a_${dataAte}${sufixo}.xlsx`);
   };
 
   const toggleEmp = (cod) => setEmpresaSel(prev => { const n = new Set(prev); const k = String(cod); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -239,17 +250,21 @@ export default function AbaExportacao({ showToast }) {
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{resumo.exportaveis} exportável(is) de {resumo.total}</p>
             {resumo.excluidas > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 px-2 py-0.5 text-[11.5px] font-medium">{resumo.excluidas} excluída(s)</span>}
             {resumo.pendentes > 0
-              ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[11.5px] font-medium"><AlertCircle className="h-3.5 w-3.5" /> {resumo.pendentes} sem mapeamento completo</span>
+              ? <button onClick={() => setSoPendentes(v => !v)} title="Filtrar só os sem mapeamento"
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
+                    soPendentes ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20'
+                  }`}><AlertCircle className="h-3.5 w-3.5" /> {resumo.pendentes} sem mapeamento completo</button>
               : <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[11.5px] font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> todos mapeados</span>}
+            {soPendentes && <span className="text-[11.5px] text-amber-600 dark:text-amber-400 font-medium">· mostrando só pendentes</span>}
             <div className="ml-auto flex items-center gap-3">
-              {resumo.excluidas > 0 && (
+              {resumo.excluidas > 0 && !soPendentes && (
                 <label className="inline-flex items-center gap-1.5 text-[12px] text-gray-600 dark:text-gray-300 cursor-pointer">
                   <input type="checkbox" checked={mostrarExcluidas} onChange={e => setMostrarExcluidas(e.target.checked)} className="rounded" /> Mostrar excluídas
                 </label>
               )}
-              <button onClick={baixar} disabled={!exportaveis.length}
+              <button onClick={baixar} disabled={!conjuntoDownload.length}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-white/10 px-3 py-1.5 text-[12.5px] font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50">
-                <Download className="h-4 w-4" /> Baixar .xlsx
+                <Download className="h-4 w-4" /> {soPendentes ? `Baixar pendentes (${conjuntoDownload.length})` : 'Baixar .xlsx'}
               </button>
             </div>
           </div>
@@ -268,7 +283,7 @@ export default function AbaExportacao({ showToast }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-                  {(mostrarExcluidas ? linhas : exportaveis).slice(0, 500).map((l, i) => (
+                  {visiveis.slice(0, 500).map((l, i) => (
                     <tr key={i} className={l.excluida ? 'opacity-45' : l.pendente ? 'bg-amber-50/40 dark:bg-amber-500/5' : 'hover:bg-gray-50/60 dark:hover:bg-white/5'}>
                       {colunasAtivas.map(c => {
                         const v = c.get(l, ctx);
@@ -283,7 +298,7 @@ export default function AbaExportacao({ showToast }) {
                   ))}
                 </tbody>
               </table>
-              {(mostrarExcluidas ? linhas.length : exportaveis.length) > 500 && <p className="px-5 py-2 text-[12px] text-gray-400">Mostrando 500 de {mostrarExcluidas ? linhas.length : exportaveis.length}. Baixe o .xlsx para ver todas.</p>}
+              {visiveis.length > 500 && <p className="px-5 py-2 text-[12px] text-gray-400">Mostrando 500 de {visiveis.length}. Baixe o .xlsx para ver todas.</p>}
             </div>
           )}
         </div>
