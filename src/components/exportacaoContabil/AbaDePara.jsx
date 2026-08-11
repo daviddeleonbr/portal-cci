@@ -5,8 +5,9 @@
 //   • Regras condicionais: sobrepõem o mapa conforme conta débito/crédito.
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Loader2, Network, Search, Plus, Trash2, Check, ChevronDown, AlertCircle, X, ListChecks, GitBranch, Type, Pencil, Ban,
+  Loader2, Network, Search, Plus, Trash2, Check, ChevronDown, AlertCircle, X, ListChecks, GitBranch, Type, Pencil, Ban, Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import * as autosystemService from '../../services/autosystemService';
 import * as deParaService from '../../services/deParaService';
 import * as planoService from '../../services/planoContabilService';
@@ -376,6 +377,26 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
   const LADO = { debito: 'Débito', credito: 'Crédito', ambos: 'Ambos' };
   const provisao = form?.tipo_lancamento === 'provisao';
 
+  const exportarXlsx = () => {
+    const aoa = [
+      ['Tipo', 'Condição débito', 'Condição crédito', 'Despesa de origem', 'Lado contábil', 'Conta contábil', 'Descrição'],
+      ...regras.map(r => [
+        r.tipo_lancamento === 'pagamento' ? 'Pagamento' : 'Provisão',
+        r.cond_conta_debitar ? rotuloGer(r.cond_conta_debitar) : '',
+        r.cond_conta_creditar ? rotuloGer(r.cond_conta_creditar) : '',
+        r.cond_despesa_origem ? rotuloGer(r.cond_despesa_origem) : '',
+        LADO[r.lado] || r.lado,
+        rotuloCont(r.conta_contabil_codigo),
+        r.descricao || '',
+      ]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 11 }, { wch: 34 }, { wch: 34 }, { wch: 28 }, { wch: 12 }, { wch: 36 }, { wch: 28 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Regras');
+    XLSX.writeFile(wb, 'regras-de-para.xlsx');
+  };
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3 gap-3">
@@ -384,6 +405,12 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
         </p>
         {!form && (
           <div className="flex gap-2 flex-shrink-0">
+            {regras.length > 0 && (
+              <button onClick={exportarXlsx} title="Exportar regras em .xlsx"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-white/10 px-3 py-2 text-[12.5px] font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5">
+                <Download className="h-4 w-4" /> Exportar
+              </button>
+            )}
             <button onClick={() => novaRegra('provisao')} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-[12.5px] font-medium text-white hover:bg-blue-700">
               <Plus className="h-4 w-4" /> Provisão
             </button>
