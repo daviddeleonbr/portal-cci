@@ -376,6 +376,10 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
   const rotuloCont = (cod) => cod ? `${cod} · ${contabilPorCodigo[cod]?.descricao || '—'}` : '—';
   const LADO = { debito: 'Débito', credito: 'Crédito', ambos: 'Ambos' };
   const provisao = form?.tipo_lancamento === 'provisao';
+  // "padrão" = sem a condição específica (pagamento: sem origem; provisão: só 1 conta)
+  const ehPadrao = !!form && (provisao
+    ? !(form.cond_conta_debitar && form.cond_conta_creditar)
+    : !form.cond_despesa_origem);
 
   const exportarXlsx = () => {
     const aoa = [
@@ -402,6 +406,7 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
       <div className="flex items-center justify-between mb-3 gap-3">
         <p className="text-[12.5px] text-gray-500 dark:text-gray-400">
           <strong>Provisão</strong>: condiciona pelas contas da própria linha. <strong>Pagamento</strong>: condiciona pela conta de passagem + a despesa de origem (rastreando a provisão).
+          <br /><span className="text-gray-400">💡 Regra <strong>padrão</strong>: deixe a condição específica em branco (despesa de origem no pagamento; ou só uma das contas na provisão). A regra com mais condições sempre vence a padrão.</span>
         </p>
         {!form && (
           <div className="flex gap-2 flex-shrink-0">
@@ -423,8 +428,11 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
 
       {form && (
         <div className={`rounded-xl border p-4 mb-4 space-y-3 ${provisao ? 'border-blue-200 dark:border-blue-500/30 bg-blue-50/40 dark:bg-blue-500/5' : 'border-violet-200 dark:border-violet-500/30 bg-violet-50/40 dark:bg-violet-500/5'}`}>
-          <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-200">
+          <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
             {form.id ? 'Editar regra' : 'Regra'} de <span className={provisao ? 'text-blue-700 dark:text-blue-300' : 'text-violet-700 dark:text-violet-300'}>{provisao ? 'Provisão' : 'Pagamento'}</span>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${ehPadrao ? 'bg-gray-200 dark:bg-white/15 text-gray-600 dark:text-gray-300' : 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'}`}>
+              {ehPadrao ? '★ REGRA PADRÃO' : 'específica'}
+            </span>
           </p>
 
           {provisao ? (
