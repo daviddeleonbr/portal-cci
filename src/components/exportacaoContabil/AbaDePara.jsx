@@ -332,7 +332,7 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
   const salvar = async () => {
     if (form.tipo_lancamento === 'pagamento') {
       if (!form.cond_conta_debitar) { showToast?.('warning', 'Escolha a conta de passagem.'); return; }
-      if (!form.cond_despesa_origem) { showToast?.('warning', 'Escolha a despesa de origem (na provisão).'); return; }
+      // despesa de origem é opcional: sem ela, a regra é a PADRÃO da passagem.
     } else if (!form.cond_conta_debitar && !form.cond_conta_creditar) {
       showToast?.('warning', 'Defina ao menos uma condição (débito ou crédito).'); return;
     }
@@ -455,9 +455,9 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
                 )}
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-1">E a DESPESA DE ORIGEM (débito da provisão)</label>
-                <ContaPicker contas={gerenciais} campoLabel="nome" valor={form.cond_despesa_origem}
-                  valorLabel={form.cond_despesa_origem ? rotuloGer(form.cond_despesa_origem) : ''} placeholder="Ex.: FGTS…"
+                <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-1">E a DESPESA DE ORIGEM <span className="text-gray-400 font-normal">(vazio = padrão da passagem)</span></label>
+                <ContaPicker contas={gerenciais} campoLabel="nome" valor={form.cond_despesa_origem} permitirLimpar
+                  valorLabel={form.cond_despesa_origem ? rotuloGer(form.cond_despesa_origem) : ''} placeholder="qualquer (padrão)"
                   onSelect={cod => setForm(f => ({ ...f, cond_despesa_origem: cod }))} />
               </div>
             </div>
@@ -522,8 +522,9 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
                     {pag ? (
                       <>
                         <span>passagem=<span className="font-medium text-gray-800 dark:text-gray-200">{rotuloGer(r.cond_conta_debitar)}</span></span>
-                        <span className="text-gray-400">e origem=</span>
-                        <span className="font-medium text-gray-800 dark:text-gray-200">{rotuloGer(r.cond_despesa_origem)}</span>
+                        {r.cond_despesa_origem
+                          ? <><span className="text-gray-400">e origem=</span><span className="font-medium text-gray-800 dark:text-gray-200">{rotuloGer(r.cond_despesa_origem)}</span></>
+                          : <span className="rounded bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 text-[10px] font-medium">padrão</span>}
                       </>
                     ) : (
                       <>
