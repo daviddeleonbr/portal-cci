@@ -39,10 +39,12 @@ const COLUNAS = [
   { key: 'valor',      label: 'Valor',              get: (l) => Number(l.valor || 0), num: true },
   { key: 'historico',  label: 'Histórico',          get: (l) => l.historico || '' },
   // opcionais (default OFF) — referência/depuração
-  { key: 'deb_ger',    label: 'Débito gerencial',   get: (l) => l.conta_debitar || '', opcional: true },
-  { key: 'cred_ger',   label: 'Crédito gerencial',  get: (l) => l.conta_creditar || '', opcional: true },
-  { key: 'documento',  label: 'Documento',          get: (l) => l.documento || '', opcional: true },
-  { key: 'pessoa',     label: 'Pessoa',             get: (l) => l.pessoa_nome || '', opcional: true },
+  { key: 'deb_ger',       label: 'Débito gerencial',        get: (l) => l.conta_debitar || '', opcional: true },
+  { key: 'deb_ger_nome',  label: 'Nome débito gerencial',   get: (l) => l.debito_nome || '', opcional: true },
+  { key: 'cred_ger',      label: 'Crédito gerencial',       get: (l) => l.conta_creditar || '', opcional: true },
+  { key: 'cred_ger_nome', label: 'Nome crédito gerencial',  get: (l) => l.credito_nome || '', opcional: true },
+  { key: 'documento',     label: 'Documento',               get: (l) => l.documento || '', opcional: true },
+  { key: 'pessoa',        label: 'Pessoa',                  get: (l) => l.pessoa_nome || '', opcional: true },
 ];
 const COLS_PADRAO = COLUNAS.filter(c => !c.opcional).map(c => c.key);
 
