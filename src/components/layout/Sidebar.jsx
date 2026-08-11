@@ -6,9 +6,10 @@ import {
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Landmark, Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
   MessageCircle, RefreshCw, Eye, AlertTriangle,
-  Activity, FileSpreadsheet, Receipt, FileSignature,
+  Activity, FileSpreadsheet, Receipt, FileSignature, FileDown,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
+import { nivelAdmin } from '../../services/usuariosSistemaService';
 import LogoCCI from '../ui/LogoCCI';
 import { logoutAdmin } from '../../lib/auth';
 import * as pendenciasService from '../../services/pendenciasService';
@@ -68,6 +69,12 @@ const navigationAll = [
     ],
   },
   {
+    section: 'Ferramentas',
+    items: [
+      { name: 'Exportação Contábil', href: '/admin/ferramentas/exportacao-contabil', icon: FileDown, nivelMinimo: 3 },
+    ],
+  },
+  {
     section: 'Comunicações',
     items: [
       { name: 'Pendências', href: '/admin/pendencias', icon: AlertTriangle, badgeKey: 'pendencias' },
@@ -91,9 +98,11 @@ const navigationAll = [
 // Filtra navegacao com base nas permissoes do usuario logado.
 // Suporta `permissao` (string única — precisa ter) e `permissaoQualquer`
 // (array — basta ter pelo menos uma). Útil em itens agrupados (Cadastros).
-function filtrarNavegacao(permissoes) {
-  const perms = new Set(permissoes || []);
+function filtrarNavegacao(usuario) {
+  const perms = new Set(usuario?.permissoes || []);
+  const nivel = nivelAdmin(usuario);
   const visivel = (item) => {
+    if (item.nivelMinimo && nivel < item.nivelMinimo) return false;
     if (item.permissao && !perms.has(item.permissao)) return false;
     if (item.permissaoQualquer && !item.permissaoQualquer.some(p => perms.has(p))) return false;
     return true;
@@ -126,7 +135,7 @@ export default function Sidebar({ collapsed, onToggle }) {
   const session = useAdminSession();
   const usuario = session?.usuario;
 
-  const navigation = useMemo(() => filtrarNavegacao(usuario?.permissoes), [usuario?.permissoes]);
+  const navigation = useMemo(() => filtrarNavegacao(usuario), [usuario]);
 
   // Contadores pra badges em "Pendências" e "Melhorias do Sistema".
   // Re-carrega ao navegar (admin pode ter resolvido algo na página anterior).

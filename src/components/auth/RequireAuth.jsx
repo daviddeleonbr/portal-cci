@@ -2,12 +2,40 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { useAdminSession, useClienteSession } from '../../hooks/useAuth';
 import { primeiraPaginaPermitida, temAcessoDashboard } from '../../utils/clientePrimeiraPagina';
+import { nivelAdmin } from '../../services/usuariosSistemaService';
 
 export function RequireAdmin({ children }) {
   const session = useAdminSession();
   const location = useLocation();
   if (!session) {
     return <Navigate to="/admin" replace state={{ from: location.pathname }} />;
+  }
+  return children;
+}
+
+// Bloqueia a rota admin se o usuário não tem o nível mínimo (default: 3).
+// Usado nas Ferramentas e demais recursos restritos a admins de nível alto.
+// A sidebar já oculta o item; isto protege de fato quando a URL é digitada.
+export function RequireNivelAdmin({ nivel = 3, children }) {
+  const session = useAdminSession();
+  const location = useLocation();
+  if (!session) {
+    return <Navigate to="/admin" replace state={{ from: location.pathname }} />;
+  }
+  if (nivelAdmin(session.usuario) < nivel) {
+    return (
+      <div className="px-6 py-16">
+        <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-12 text-center shadow-sm max-w-lg mx-auto dark:bg-slate-900 dark:border-white/10">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 mb-3 dark:bg-amber-500/10 dark:text-amber-300">
+            <Lock className="h-5 w-5" />
+          </div>
+          <p className="text-base font-semibold text-gray-900 mb-1 dark:text-gray-100">Acesso restrito</p>
+          <p className="text-[13px] text-gray-500 leading-relaxed dark:text-gray-400">
+            Esta seção está disponível apenas para administradores de nível {nivel}.
+          </p>
+        </div>
+      </div>
+    );
   }
   return children;
 }

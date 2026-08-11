@@ -81,6 +81,7 @@ import AdminSuporte from './pages/AdminSuporte';
 import AdminWebpostoSync from './pages/AdminWebpostoSync';
 import AdminPortalDemo from './pages/AdminPortalDemo';
 import AdminPendencias from './pages/AdminPendencias';
+import AdminExportacaoContabil from './pages/AdminExportacaoContabil';
 // import AdminOrcamentoSolicitacoes from './pages/AdminOrcamentoSolicitacoes'; // INATIVO — uso futuro
 import WpConfiguracoes from './pages/cliente/webposto/ClienteConfiguracoes';
 import ClienteRelatoriosBi from './pages/cliente/webposto/ClienteRelatoriosBi';
@@ -104,7 +105,7 @@ import AsEstoques from './pages/cliente/autosystem/ClienteEstoques';
 import AsConfiguracoes from './pages/cliente/autosystem/ClienteConfiguracoes';
 
 // Auth
-import { RequireAdmin, RequireCliente, RequirePermissaoCliente, RequireDashboardCliente } from './components/auth/RequireAuth';
+import { RequireAdmin, RequireNivelAdmin, RequireCliente, RequirePermissaoCliente, RequireDashboardCliente } from './components/auth/RequireAuth';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 
 export default function App() {
@@ -173,6 +174,9 @@ export default function App() {
 
           {/* Contratos — gestão de contratos ativos, propostas e catálogo de serviços */}
           <Route path="/admin/contratos" element={<Contratos />} />
+
+          {/* Ferramentas — restritas ao admin nível 3 */}
+          <Route path="/admin/ferramentas/exportacao-contabil" element={<RequireNivelAdmin nivel={3}><AdminExportacaoContabil /></RequireNivelAdmin>} />
 
           {/* Relatorios Cliente (analises por empresa) */}
           <Route path="/admin/relatorios-cliente" element={<RelatoriosCliente />} />
