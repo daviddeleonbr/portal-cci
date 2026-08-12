@@ -322,6 +322,11 @@ function Passagem({ gerenciais, passagem, onAlternar }) {
 function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, regras, passagem, onMudou, showToast }) {
   const gerPorCodigo = useMemo(() => Object.fromEntries(gerenciais.map(g => [g.codigo, g])), [gerenciais]);
   const passagemContas = useMemo(() => gerenciais.filter(g => passagem.has(g.codigo)), [gerenciais, passagem]);
+  // regras padrão sempre no topo (ordenação estável mantém o resto)
+  const regrasOrdenadas = useMemo(() => {
+    const ehPadrao = (r) => r.tipo_lancamento === 'pagamento' ? !r.cond_despesa_origem : !(r.cond_conta_debitar && r.cond_conta_creditar);
+    return [...regras].sort((a, b) => (ehPadrao(a) ? 0 : 1) - (ehPadrao(b) ? 0 : 1));
+  }, [regras]);
   const [form, setForm] = useState(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -517,7 +522,7 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
         <p className="text-center text-[13px] text-gray-400 py-10">Nenhuma regra. O mapa direto será usado para todas as contas.</p>
       ) : (
         <div className="space-y-2">
-          {regras.map(r => {
+          {regrasOrdenadas.map(r => {
             const pag = r.tipo_lancamento === 'pagamento';
             const padrao = pag ? !r.cond_despesa_origem : !(r.cond_conta_debitar && r.cond_conta_creditar);
             return (
