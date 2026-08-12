@@ -4,6 +4,7 @@
 //   • Mapa direto: conta gerencial → conta contábil.
 //   • Regras condicionais: sobrepõem o mapa conforme conta débito/crédito.
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Loader2, Network, Search, Plus, Trash2, Check, ChevronDown, AlertCircle, X, ListChecks, GitBranch, Type, Pencil, Ban, Download,
 } from 'lucide-react';
@@ -863,17 +864,50 @@ function Exclusoes({ redeId, planoId, gerenciais, exclusoes, onMudou, showToast 
 
 // ─── Picker searchable de conta (gerencial ou contábil) ──────
 // contas: [{codigo, descricao|nome}]. campoLabel = 'descricao' (default) ou 'nome'.
+// O dropdown é renderizado via portal (position: fixed) para ficar SEMPRE por cima
+// da página, sem ser cortado pelo overflow dos containers.
 function ContaPicker({ contas, valor, valorLabel, placeholder, onSelect, campoLabel = 'descricao', permitirLimpar = false }) {
   const [aberto, setAberto] = useState(false);
   const [q, setQ] = useState('');
-  const ref = useRef(null);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const dropRef = useRef(null);
+
+  const calcularPos = useCallback(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const alturaEstim = 320;
+    const espacoAbaixo = window.innerHeight - r.bottom;
+    const paraCima = espacoAbaixo < alturaEstim && r.top > espacoAbaixo;
+    const maxH = Math.max(180, Math.min(320, (paraCima ? r.top : espacoAbaixo) - 12));
+    setPos({
+      left: r.left,
+      width: Math.max(r.width, 260),
+      top: paraCima ? undefined : r.bottom + 4,
+      bottom: paraCima ? window.innerHeight - r.top + 4 : undefined,
+      maxH,
+    });
+  }, []);
 
   useEffect(() => {
     if (!aberto) return;
-    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
-    document.addEventListener('mousedown', fora);
-    return () => document.removeEventListener('mousedown', fora);
-  }, [aberto]);
+    calcularPos();
+    const onScroll = () => calcularPos();
+    const onFora = (e) => {
+      if (btnRef.current?.contains(e.target)) return;
+      if (dropRef.current?.contains(e.target)) return;
+      setAberto(false);
+    };
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    document.addEventListener('mousedown', onFora);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+      document.removeEventListener('mousedown', onFora);
+    };
+  }, [aberto, calcularPos]);
 
   const filtradas = useMemo(() => {
     const s = q.toLowerCase();
@@ -882,7 +916,7 @@ function ContaPicker({ contas, valor, valorLabel, placeholder, onSelect, campoLa
   }, [contas, q, campoLabel]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative" ref={btnRef}>
       <button type="button" onClick={() => { setAberto(o => !o); setQ(''); }}
         className={`w-full flex items-center justify-between gap-2 rounded-lg border px-3 h-9 text-left text-[12.5px] transition-colors ${
           valor ? 'border-gray-200 dark:border-white/10 text-gray-800 dark:text-gray-200' : 'border-dashed border-gray-300 dark:border-white/15 text-gray-400'
@@ -896,14 +930,16 @@ function ContaPicker({ contas, valor, valorLabel, placeholder, onSelect, campoLa
         </span>
       </button>
 
-      {aberto && (
-        <div className="absolute z-30 mt-1 w-full min-w-[260px] rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl overflow-hidden">
+      {aberto && pos && createPortal(
+        <div ref={dropRef}
+          style={{ position: 'fixed', left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, zIndex: 1000 }}
+          className="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-white/10">
             <Search className="h-3.5 w-3.5 text-gray-400" />
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar código ou descrição…"
               className="flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-gray-400 dark:text-gray-100" />
           </div>
-          <div className="max-h-64 overflow-y-auto py-1">
+          <div className="overflow-y-auto py-1" style={{ maxHeight: pos.maxH }}>
             {filtradas.map(c => {
               const sel = c.codigo === valor;
               return (
@@ -919,7 +955,8 @@ function ContaPicker({ contas, valor, valorLabel, placeholder, onSelect, campoLa
             {filtradas.length === 0 && <p className="px-3 py-4 text-center text-[12px] text-gray-400">Nada encontrado.</p>}
             {contas.length > 100 && !q && <p className="px-3 py-2 text-center text-[11px] text-gray-400">Digite para buscar entre {contas.length} contas…</p>}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
