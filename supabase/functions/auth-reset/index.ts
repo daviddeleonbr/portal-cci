@@ -57,13 +57,33 @@ function htmlEmailReset(link: string, logoUrl: string): string {
 </body></html>`;
 }
 
+// Base do link do e-mail por origem do pedido. O PWA de terceirização roda em
+// outro host e tem a mesma rota /redefinir-senha — sem isso, quem pede reset no
+// app recebe um link do portal web.
+//
+// A base NUNCA vem do body: aceitar uma URL do cliente seria account takeover
+// (bastaria pedir reset do e-mail da vítima apontando o link, com token válido,
+// para um host do atacante). O cliente só escolhe entre origens conhecidas e a
+// URL de cada uma vem do ambiente.
+type Origem = "web" | "pwa";
+
+function baseWeb(): string {
+  return (Deno.env.get("APP_BASE_URL") || "https://www.cci.app.br").replace(/\/+$/, "");
+}
+
+function baseDaOrigem(origem: Origem): string {
+  if (origem !== "pwa") return baseWeb();
+  // Sem PWA_BASE_URL configurada, cai no portal web (o token vale nos dois).
+  return (Deno.env.get("PWA_BASE_URL") || baseWeb()).replace(/\/+$/, "");
+}
+
 // Envia o link de redefinição por e-mail (Resend). Retorna true só se enviou.
 // Sem RESEND_API_KEY (ou falha) => false, e o chamador cai no fallback (devolve
 // o token pra CCI repassar o link manualmente).
-async function enviarEmailReset(email: string, token: string): Promise<boolean> {
+async function enviarEmailReset(email: string, token: string, origem: Origem): Promise<boolean> {
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) { console.warn("[auth-reset] RESEND_API_KEY ausente — usando fallback (link on-screen)"); return false; }
-  const base = (Deno.env.get("APP_BASE_URL") || "https://www.cci.app.br").replace(/\/+$/, "");
+  const base = baseDaOrigem(origem);
   const from = Deno.env.get("RESET_EMAIL_FROM") || "CCI <nao-responda@cci.app.br>";
   const link = `${base}/redefinir-senha?token=${token}`;
   try {
@@ -74,7 +94,8 @@ async function enviarEmailReset(email: string, token: string): Promise<boolean> 
         from,
         to: [email],
         subject: "Redefinição de senha — Portal CCI",
-        html: htmlEmailReset(link, `${base}/logo-cci-landing.png`),
+        // Logo sempre do portal web: é o host que serve esse asset (o PWA não).
+        html: htmlEmailReset(link, `${baseWeb()}/logo-cci-landing.png`),
         text: `Recebemos um pedido para redefinir sua senha no Portal CCI.\n\nAbra o link abaixo (válido por 1 hora):\n${link}\n\nSe você não solicitou, ignore este e-mail.`,
       }),
     });
@@ -96,7 +117,9 @@ Deno.serve(async (req) => {
   );
 
   try {
-    const { action, email, token, novaSenha } = await req.json().catch(() => ({}));
+    const { action, email, token, novaSenha, origem } = await req.json().catch(() => ({}));
+    // Qualquer valor fora de 'pwa' cai no portal web (default).
+    const origemLink: Origem = origem === "pwa" ? "pwa" : "web";
 
     if (action === "solicitar") {
       const emailNorm = String(email || "").trim().toLowerCase();
@@ -117,7 +140,7 @@ Deno.serve(async (req) => {
       // Tenta enviar por e-mail. Se enviou, NÃO devolve o token (o link some da
       // tela). Se não há provedor / falhou, devolve o token como fallback (a CCI
       // repassa o link manualmente) — assim nada quebra antes do Resend configurado.
-      const enviado = await enviarEmailReset(usuario!.email, tok);
+      const enviado = await enviarEmailReset(usuario!.email, tok, origemLink);
       if (enviado) return json({ ok: true, enviado: true });
       return json({ ok: true, enviado: false, token: tok, usuario_email: usuario!.email, usuario_tipo: usuario!.tipo });
     }
