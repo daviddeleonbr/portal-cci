@@ -519,11 +519,15 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
         <div className="space-y-2">
           {regras.map(r => {
             const pag = r.tipo_lancamento === 'pagamento';
+            const padrao = pag ? !r.cond_despesa_origem : !(r.cond_conta_debitar && r.cond_conta_creditar);
             return (
-              <div key={r.id} className="rounded-xl border border-gray-200 dark:border-white/10 p-3 flex items-center gap-3">
+              <div key={r.id} className={`rounded-xl border p-3 flex items-center gap-3 ${padrao ? 'border-amber-200 dark:border-amber-500/30 bg-amber-50/40 dark:bg-amber-500/[0.06] border-l-4 border-l-amber-400 dark:border-l-amber-500' : 'border-gray-200 dark:border-white/10'}`}>
                 <span className={`flex-shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${pag ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'}`}>
                   {pag ? 'PAGAMENTO' : 'PROVISÃO'}
                 </span>
+                {padrao && (
+                  <span className="flex-shrink-0 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10.5px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">★ PADRÃO</span>
+                )}
                 <div className="flex-1 min-w-0 text-[12.5px]">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-gray-400">SE</span>
@@ -532,7 +536,7 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
                         <span>passagem=<span className="font-medium text-gray-800 dark:text-gray-200">{rotuloGer(r.cond_conta_debitar)}</span></span>
                         {r.cond_despesa_origem
                           ? <><span className="text-gray-400">e origem=</span><span className="font-medium text-gray-800 dark:text-gray-200">{rotuloGer(r.cond_despesa_origem)}</span></>
-                          : <span className="rounded bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 text-[10px] font-medium">padrão</span>}
+                          : <span className="text-gray-400 italic">qualquer origem</span>}
                       </>
                     ) : (
                       <>
