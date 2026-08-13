@@ -2,7 +2,7 @@
 // Busca a movto do período/empresa (via túnel), aplica o de/para + históricos
 // (com rastreio de provisão) e mostra a prévia + download para testes.
 // As colunas exportadas são configuráveis (modal "Colunas").
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Loader2, ChevronDown, AlertCircle, Play, Download, FileDown, CheckCircle2, SlidersHorizontal,
 } from 'lucide-react';
@@ -71,6 +71,7 @@ export default function AbaExportacao({ showToast }) {
   const [modalCols, setModalCols] = useState(false);
   const [mostrarExcluidas, setMostrarExcluidas] = useState(false);
   const [soPendentes, setSoPendentes] = useState(false);
+  const [soSemHist, setSoSemHist] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -129,17 +130,24 @@ export default function AbaExportacao({ showToast }) {
     if (!linhas) return null;
     const excluidas = linhas.filter(l => l.excluida).length;
     const pend = exportaveis.filter(l => l.pendente).length;
-    return { total: linhas.length, excluidas, exportaveis: exportaveis.length, pendentes: pend };
+    const semHist = exportaveis.filter(l => !l.historico).length;
+    return { total: linhas.length, excluidas, exportaveis: exportaveis.length, pendentes: pend, semHist };
   }, [linhas, exportaveis]);
 
-  // conjunto que vai pro arquivo (respeita "só pendentes")
-  const conjuntoDownload = useMemo(
-    () => soPendentes ? exportaveis.filter(l => l.pendente) : exportaveis, [exportaveis, soPendentes]);
+  const aplicarFiltros = useCallback((arr) => {
+    let r = arr;
+    if (soPendentes) r = r.filter(l => l.pendente);
+    if (soSemHist) r = r.filter(l => !l.historico);
+    return r;
+  }, [soPendentes, soSemHist]);
+
+  // conjunto que vai pro arquivo (respeita os filtros ativos)
+  const conjuntoDownload = useMemo(() => aplicarFiltros(exportaveis), [aplicarFiltros, exportaveis]);
   // conjunto exibido na prévia
   const visiveis = useMemo(() => {
-    if (soPendentes) return exportaveis.filter(l => l.pendente);
+    if (soPendentes || soSemHist) return aplicarFiltros(exportaveis);
     return mostrarExcluidas ? (linhas || []) : exportaveis;
-  }, [soPendentes, mostrarExcluidas, exportaveis, linhas]);
+  }, [aplicarFiltros, soPendentes, soSemHist, mostrarExcluidas, exportaveis, linhas]);
 
   const baixar = () => {
     if (!conjuntoDownload.length) return;
@@ -150,7 +158,7 @@ export default function AbaExportacao({ showToast }) {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Exportacao');
-    const sufixo = soPendentes ? '-pendentes' : '';
+    const sufixo = soPendentes ? '-pendentes' : soSemHist ? '-sem-historico' : '';
     XLSX.writeFile(wb, `exportacao-contabil-${dataDe}_a_${dataAte}${sufixo}.xlsx`);
   };
 
@@ -252,21 +260,27 @@ export default function AbaExportacao({ showToast }) {
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{resumo.exportaveis} exportável(is) de {resumo.total}</p>
             {resumo.excluidas > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 px-2 py-0.5 text-[11.5px] font-medium">{resumo.excluidas} excluída(s)</span>}
             {resumo.pendentes > 0
-              ? <button onClick={() => setSoPendentes(v => !v)} title="Filtrar só os sem mapeamento"
+              ? <button onClick={() => { setSoPendentes(v => !v); setSoSemHist(false); }} title="Filtrar só os sem mapeamento"
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
                     soPendentes ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20'
                   }`}><AlertCircle className="h-3.5 w-3.5" /> {resumo.pendentes} sem mapeamento completo</button>
               : <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[11.5px] font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> todos mapeados</span>}
-            {soPendentes && <span className="text-[11.5px] text-amber-600 dark:text-amber-400 font-medium">· mostrando só pendentes</span>}
+            {resumo.semHist > 0 && (
+              <button onClick={() => { setSoSemHist(v => !v); setSoPendentes(false); }} title="Filtrar só os sem histórico"
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
+                  soSemHist ? 'bg-orange-500 text-white' : 'bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-500/20'
+                }`}><AlertCircle className="h-3.5 w-3.5" /> {resumo.semHist} sem histórico</button>
+            )}
+            {(soPendentes || soSemHist) && <span className="text-[11.5px] text-amber-600 dark:text-amber-400 font-medium">· filtrado</span>}
             <div className="ml-auto flex items-center gap-3">
-              {resumo.excluidas > 0 && !soPendentes && (
+              {resumo.excluidas > 0 && !soPendentes && !soSemHist && (
                 <label className="inline-flex items-center gap-1.5 text-[12px] text-gray-600 dark:text-gray-300 cursor-pointer">
                   <input type="checkbox" checked={mostrarExcluidas} onChange={e => setMostrarExcluidas(e.target.checked)} className="rounded" /> Mostrar excluídas
                 </label>
               )}
               <button onClick={baixar} disabled={!conjuntoDownload.length}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-white/10 px-3 py-1.5 text-[12.5px] font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50">
-                <Download className="h-4 w-4" /> {soPendentes ? `Baixar pendentes (${conjuntoDownload.length})` : 'Baixar .xlsx'}
+                <Download className="h-4 w-4" /> {soPendentes ? `Baixar pendentes (${conjuntoDownload.length})` : soSemHist ? `Baixar sem histórico (${conjuntoDownload.length})` : 'Baixar .xlsx'}
               </button>
             </div>
           </div>
