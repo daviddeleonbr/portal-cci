@@ -105,21 +105,45 @@ export function limparCache() {
     .forEach(k => localStorage.removeItem(k));
 }
 
-// ─── Fetch raw com semaforo ───────────────────────────────────
+// ─── Fetch raw com semaforo + retry ──────────────────────────
+// O gateway da Quality (nginx) devolve 502/503/504 quando o backend deles
+// sobrecarrega/timeouta — geralmente transitório. Tentamos algumas vezes com
+// backoff antes de desistir, e devolvemos uma mensagem limpa (sem o HTML do 502).
+const RETRY_MAX = 3;
 async function fetchJson(urlBase, endpoint, apiKey, params) {
   const qp = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') qp.set(k, String(v));
   });
   const url = `${urlBase}/${endpoint}?${qp}`;
-  return semaforo.run(async () => {
-    const res = await fetch(url, { headers: { 'x-api-key': apiKey } });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`API ${res.status}: ${text}`);
+
+  let ultimoErro;
+  for (let tentativa = 1; tentativa <= RETRY_MAX; tentativa++) {
+    try {
+      return await semaforo.run(async () => {
+        const res = await fetch(url, { headers: { 'x-api-key': apiKey } });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          const err = new Error(`API ${res.status}: ${text}`);
+          err.status = res.status;
+          throw err;
+        }
+        return res.json();
+      });
+    } catch (e) {
+      ultimoErro = e;
+      const status = e?.status || 0; // 0 = falha de rede
+      const retryable = status === 0 || (status >= 500 && status <= 504);
+      if (!retryable || tentativa === RETRY_MAX) break;
+      await new Promise(r => setTimeout(r, 600 * tentativa)); // backoff: 600ms, 1200ms
     }
-    return res.json();
-  });
+  }
+
+  const status = ultimoErro?.status || 0;
+  if (status >= 500 || status === 0) {
+    throw new Error(`Servidor Quality temporariamente indisponível (${status ? `HTTP ${status}` : 'sem resposta'}). Tente gerar novamente em instantes.`);
+  }
+  throw ultimoErro;
 }
 
 // ─── Pagina sequencialmente (cursor-based) ────────────────────
