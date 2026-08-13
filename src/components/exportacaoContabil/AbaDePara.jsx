@@ -577,7 +577,20 @@ function Historicos({ redeId, planoId, gerenciais, historicos, passagem, onMudou
   const passagemContas = useMemo(() => gerenciais.filter(g => passagem.has(g.codigo)), [gerenciais, passagem]);
   const [form, setForm] = useState(null);
   const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState('');
   const templateRef = useRef(null);
+
+  // filtra por conta gerencial (código ou nome) usada nas condições, ou template/descrição
+  const historicosFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return historicos;
+    const casa = (cod) => cod && (cod.toLowerCase().includes(q) || (gerPorCodigo[cod]?.nome || '').toLowerCase().includes(q));
+    return historicos.filter(h =>
+      casa(h.cond_conta_debitar) || casa(h.cond_conta_creditar) || casa(h.cond_despesa_origem)
+      || (h.template || '').toLowerCase().includes(q)
+      || (h.descricao || '').toLowerCase().includes(q)
+    );
+  }, [historicos, busca, gerPorCodigo]);
 
   const nova = (tipo) => setForm(tipo === 'pagamento'
     ? { tipo_lancamento: 'pagamento', cond_conta_debitar: '', cond_despesa_origem: '', template: '', descricao: '' }
@@ -651,6 +664,16 @@ function Historicos({ redeId, planoId, gerenciais, historicos, passagem, onMudou
         )}
       </div>
 
+      {historicos.length > 0 && (
+        <div className="flex items-center gap-2 mb-3 rounded-lg border border-gray-200 dark:border-white/10 px-3 h-9">
+          <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Filtrar por conta gerencial (código ou nome), template…"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400 dark:text-gray-100" />
+          {busca && <span className="text-[11.5px] text-gray-400 flex-shrink-0">{historicosFiltrados.length}/{historicos.length}</span>}
+          {busca && <button onClick={() => setBusca('')} className="text-gray-400 hover:text-gray-600 flex-shrink-0"><X className="h-3.5 w-3.5" /></button>}
+        </div>
+      )}
+
       {form && (
         <div className={`rounded-xl border p-4 mb-4 space-y-3 ${provisao ? 'border-blue-200 dark:border-blue-500/30 bg-blue-50/40 dark:bg-blue-500/5' : 'border-violet-200 dark:border-violet-500/30 bg-violet-50/40 dark:bg-violet-500/5'}`}>
           <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-200">
@@ -723,9 +746,11 @@ function Historicos({ redeId, planoId, gerenciais, historicos, passagem, onMudou
 
       {historicos.length === 0 && !form ? (
         <p className="text-center text-[13px] text-gray-400 py-10">Nenhum histórico padrão. Defina os templates de narração.</p>
+      ) : historicosFiltrados.length === 0 ? (
+        <p className="text-center text-[13px] text-gray-400 py-10">Nenhum histórico com "{busca}".</p>
       ) : (
         <div className="space-y-2">
-          {historicos.map(h => {
+          {historicosFiltrados.map(h => {
             const pag = h.tipo_lancamento === 'pagamento';
             return (
               <div key={h.id} className="rounded-xl border border-gray-200 dark:border-white/10 p-3 flex items-center gap-3">
