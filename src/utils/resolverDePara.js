@@ -11,10 +11,12 @@
 // }
 // ============================================================
 
-// Um "pagamento" é uma linha cujo débito é conta de passagem (baixa). A despesa
-// de origem (origem_debito) refina as regras específicas; sem match, cai na padrão.
+// "pagamento" (baixa) = débito é conta de passagem E há uma provisão de origem
+// RASTREADA (movto.child/parent). Sem provisão rastreada, a linha é a própria
+// provisão — ex.: venda de cartão a receber (déb VISA a receber, créd receita),
+// que NÃO pode ser tratada como pagamento (senão o histórico de provisão some).
 function classificar(row, passagem) {
-  return passagem.has(row.conta_debitar) ? 'pagamento' : 'provisao';
+  return (passagem.has(row.conta_debitar) && row.origem_debito) ? 'pagamento' : 'provisao';
 }
 
 function regraProvisaoBate(r, row, lados) {
