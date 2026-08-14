@@ -721,6 +721,65 @@ export async function buscarCartaoRemessa(apiKey, { dataInicial, dataFinal, empr
   });
 }
 
+// ─── Apuração DRE oficial do Quality (JÁ CLASSIFICADA) ────────
+// GET /INTEGRACAO/DRE (schema DRE) — a apuração já vem na conta gerencial PAI e
+// FILHO (a analítica, formato "CODIGO - DESCRICAO"). É a fonte que o BI usa e
+// resolve a classificação que os endpoints avulsos (CARTAO_REMESSA etc.) não
+// trazem — ex.: cada taxa de cartão na sua conta (TAXA ADM CARTAO CREDITO/
+// DEBITO/FROTA/CARTEIRA DIGITAL). Autentica por query `CHAVE` (como no BI) +
+// header x-api-key. UMA requisição (sem paginação por cursor). `empresaCodigo`
+// filtra por filial (param `filiais`); sem ele, apura a rede inteira.
+// Resposta (schema DRE): {
+//   empresaCodigo, receitaBruta, vendasGrupo, deducaoFiscal,
+//   apuracaoReceita:    [Apuracao],   // RECEITAS classificadas
+//   apuracaoPagamentos: [Apuracao],   // DESPESAS  classificadas
+// }  onde Apuracao = { planoContaGerencialPAI, planoContaGerencialFILHO,
+//   centroCusto, data, descricaoDocumento, valor }
+export async function buscarApuracaoDRE(apiKey, { dataInicial, dataFinal, apuracaoCaixa = false, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
+  const data = await fetchJson(urlBase, 'DRE', apiKey, {
+    CHAVE: apiKey,
+    dataInicial,
+    dataFinal,
+    apuracaoCaixa: apuracaoCaixa ? 'true' : 'false',
+    ...(empresaCodigo != null ? { filiais: empresaCodigo } : {}),
+  });
+  return data || {};
+}
+
+// Separa "CODIGO - DESCRICAO" da conta gerencial. Ex.:
+// "3.2.05.4 - TAXA ADM CARTAO CREDITO" → { codigo, descricao }.
+export function separarConta(planoContaGerencial) {
+  const s = String(planoContaGerencial || '');
+  const i = s.indexOf(' - ');
+  return i >= 0
+    ? { codigo: s.slice(0, i).trim(), descricao: s.slice(i + 3).trim() }
+    : { codigo: s.trim(), descricao: '' };
+}
+
+// Normaliza uma lista de itens de apuração (despesas OU receitas) já com a
+// conta gerencial separada em código/descrição.
+function _normalizarApuracao(itens) {
+  return (Array.isArray(itens) ? itens : []).map(a => {
+    const filho = separarConta(a.planoContaGerencialFILHO);
+    const pai = separarConta(a.planoContaGerencialPAI);
+    return {
+      conta_codigo:      filho.codigo,
+      conta_descricao:   filho.descricao,
+      conta_pai_codigo:  pai.codigo,
+      conta_pai_descricao: pai.descricao,
+      centro_custo:      a.centroCusto ?? null,
+      data:              a.data,
+      documento:         a.descricaoDocumento || '',
+      valor:             Number(a.valor || 0),
+    };
+  });
+}
+
+// Despesas classificadas (apuracaoPagamentos) da resposta do DRE.
+export function apuracaoDespesas(dre) { return _normalizarApuracao(dre?.apuracaoPagamentos); }
+// Receitas classificadas (apuracaoReceita) da resposta do DRE.
+export function apuracaoReceitas(dre) { return _normalizarApuracao(dre?.apuracaoReceita); }
+
 // Fechamentos de caixa: valores apresentados vs apurados por caixa (turno)
 export async function buscarCaixasApresentados(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'CAIXA_APRESENTADO', apiKey, {
