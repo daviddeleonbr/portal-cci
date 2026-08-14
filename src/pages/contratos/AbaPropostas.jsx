@@ -372,6 +372,21 @@ function KpiInline({ label, value, color }) {
 
 // ═══════════════════════════════════════════════════════════
 // Modal: criar / editar proposta
+// Mapeia um serviço do catálogo para um item de proposta.
+function servicoParaItem(s) {
+  return {
+    servico_id:     s.id,
+    nome:           s.nome,
+    descricao:      s.descricao,
+    categoria:      s.categoria,
+    periodicidade:  s.periodicidade,
+    tipo_valor:     s.tipo_valor || 'fixo',
+    unidade:        s.unidade    || null,
+    quantidade:     1,
+    valor_unitario: Number(s.valor || 0),
+  };
+}
+
 // ═══════════════════════════════════════════════════════════
 function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showToast }) {
   const [form, setForm] = useState(estadoInicial());
@@ -409,11 +424,14 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
         if (!cancel) {
           setClientes((cls || []).filter(c => c.status === 'ativo'));
           setServicos(srv || []);
+          // Nova proposta: já insere todos os serviços ativos como itens
+          // (o usuário remove os que não quiser e ajusta os valores).
+          if (!propostaId) setItens((srv || []).map(servicoParaItem));
         }
       } catch { /* form funciona mesmo sem catálogos */ }
     })();
     return () => { cancel = true; };
-  }, [open]);
+  }, [open, propostaId]);
 
   // Carrega proposta (modo edição)
   useEffect(() => {
@@ -450,9 +468,13 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
   })();
 
   const servicosFiltrados = (() => {
+    // Não sugere serviços que já estão na proposta (assim a busca serve
+    // pra readicionar os que o usuário removeu).
+    const jaNaProposta = new Set(itens.map(i => i.servico_id).filter(Boolean));
+    const disponiveis = servicos.filter(s => !jaNaProposta.has(s.id));
     const t = buscaServico.trim().toLowerCase();
-    if (!t) return servicos.slice(0, 30);
-    return servicos.filter(s =>
+    if (!t) return disponiveis.slice(0, 30);
+    return disponiveis.filter(s =>
       s.nome.toLowerCase().includes(t) || (s.descricao || '').toLowerCase().includes(t)
     ).slice(0, 30);
   })();
@@ -469,17 +491,7 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
   };
 
   const adicionarServico = (s) => {
-    setItens(prev => [...prev, {
-      servico_id:     s.id,
-      nome:           s.nome,
-      descricao:      s.descricao,
-      categoria:      s.categoria,
-      periodicidade:  s.periodicidade,
-      tipo_valor:     s.tipo_valor || 'fixo',
-      unidade:        s.unidade    || null,
-      quantidade:     1,
-      valor_unitario: Number(s.valor || 0),
-    }]);
+    setItens(prev => [...prev, servicoParaItem(s)]);
     setBuscaServico('');
   };
 
