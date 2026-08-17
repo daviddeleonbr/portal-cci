@@ -1460,6 +1460,7 @@ function emptyForm() {
     inscricao_estadual: '', inscricao_municipal: '',
     regime_tributario: '', segmento: '', status: 'ativo',
     contato_nome: '', contato_email: '', contato_telefone: '',
+    representante_nome: '', representante_cpf: '', representante_cargo: '', representante_email: '',
     endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
     observacoes: '',
   };
@@ -1621,6 +1622,35 @@ function ClienteSteppedForm({ form, setForm, saving, onCancel, onSubmit, submitL
                 <label className="block text-xs font-medium text-gray-700 mb-1">Telefone</label>
                 <input type="text" value={form.contato_telefone || ''} onChange={e => setField('contato_telefone', e.target.value)}
                   className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+
+              {/* Representante legal — assina os contratos (opcional; a validação do contrato aponta se faltar) */}
+              <div className="pt-1 border-t border-gray-100">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mt-2 mb-1.5">Representante legal (assina contratos)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Nome</label>
+                    <input type="text" value={form.representante_nome || ''} onChange={e => setField('representante_nome', e.target.value)}
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">CPF</label>
+                    <input type="text" value={form.representante_cpf || ''} onChange={e => setField('representante_cpf', e.target.value)}
+                      placeholder="000.000.000-00"
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Cargo</label>
+                    <input type="text" value={form.representante_cargo || ''} onChange={e => setField('representante_cargo', e.target.value)}
+                      placeholder="Sócio, Administrador…"
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">E-mail</label>
+                    <input type="email" value={form.representante_email || ''} onChange={e => setField('representante_email', e.target.value)}
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}

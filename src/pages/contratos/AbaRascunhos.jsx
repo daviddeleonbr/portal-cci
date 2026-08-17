@@ -2,28 +2,20 @@
 // Lista os contratos em rascunho / enviados para assinatura (gerados a partir
 // de propostas) e permite visualizar/imprimir o contrato antes da assinatura.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
-  FileText, Eye, Send, Trash2, Loader2, Printer, X,
+  FileText, Eye, Send, Trash2, Loader2, Printer, X, AlertTriangle, CheckCircle2, ShieldAlert,
 } from 'lucide-react';
 import { TableSkeleton } from '../../components/ui/LoadingSkeleton';
 import { formatCurrency, formatDate } from '../../utils/format';
 import * as contratosService from '../../services/contratosService';
-import { CLAUSULAS_SERVICO } from '../../data/clausulasContrato';
+import { montarDocumentoDeContrato } from '../../lib/contratos/gerarContrato';
 
-// Papel timbrado (mesmo da proposta). Coloque em public/papel-timbrado.png.
-const PAPEL_TIMBRADO_URL = '/papel-timbrado.png';
-const MARGENS_A4 = { topo: 40, laterais: 20, base: 45 };
-
-// Dados da CONTRATADA (CCI) — ajuste conforme necessário.
-const CONTRATADA = {
-  nome: 'CCI · Consultoria Inteligente',
-  cnpj: '57.268.175/0001-00',
-  endereco: 'Rua Humaitá, Divino Espírito Santo · Vila Velha - ES · 29.107-250',
-  local: 'Vila Velha - ES',
-};
+// Documento em folha branca (sem papel timbrado), fonte Arial.
+const FONTE_CONTRATO = 'Arial, Helvetica, sans-serif';
+const MARGENS_A4 = { topo: 25, laterais: 20, base: 20 };
 
 const STATUS_STYLE = {
   rascunho:  'bg-gray-100   text-gray-600    border-gray-200',
@@ -54,6 +46,14 @@ export default function AbaRascunhos({ showToast }) {
 
   const enviar = async (c) => {
     try {
+      // Bloqueio de emissão: só envia para assinatura se a validação passar.
+      const contrato = await contratosService.buscarContrato(c.id);
+      const doc = await montarDocumentoDeContrato(contrato);
+      if (!doc.validacao.ok) {
+        showToast('error', 'Contrato incompleto — corrija antes de enviar: ' + doc.validacao.erros.slice(0, 2).join(' · '));
+        setVerId(c.id); // abre a pré-visualização com o painel de pendências
+        return;
+      }
       await contratosService.alterarStatus(c.id, 'enviado');
       showToast('success', 'Contrato marcado como enviado para assinatura.');
       await carregar();
@@ -202,57 +202,10 @@ function BlocoClausula({ bloco }) {
   return null;
 }
 
-// ─── Visualização A4 imprimível do contrato ────────────────────
-function RelatorioContrato({ contratoId, showToast, onFechar }) {
-  const [contrato, setContrato] = useState(null);
-  const [carregando, setCarregando] = useState(true);
-  const [paginas, setPaginas] = useState(null);
-  const medRefs = useRef([]);
-
-  useEffect(() => {
-    let cancelado = false;
-    (async () => {
-      try {
-        const c = await contratosService.buscarContrato(contratoId);
-        if (!cancelado) setContrato(c);
-      } catch (e) {
-        showToast?.('error', 'Erro ao abrir contrato: ' + e.message);
-        onFechar();
-      } finally {
-        if (!cancelado) setCarregando(false);
-      }
-    })();
-    return () => { cancelado = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contratoId]);
-
-  const dataExtenso = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-
-  // Blocos do contrato = unidades de paginação (medidas e distribuídas em A4).
-  const blocos = [];
-  if (contrato) {
-    const itens = contrato.conteudo?.itens || [];
-    const clausulas = (contrato.conteudo?.clausulaIds || []).map(id => CLAUSULAS_SERVICO[id]).filter(Boolean);
-
-    blocos.push(
-      <h1 className="text-center text-base font-bold text-gray-900 uppercase">Contrato de Prestação de Serviços de BPO</h1>,
-    );
-    blocos.push(
-      <div className="mt-5 text-[11px] leading-relaxed text-gray-700 text-justify space-y-2">
-        <p><strong>CONTRATADA:</strong> {CONTRATADA.nome}, inscrita no CNPJ sob o nº {CONTRATADA.cnpj}, com sede em {CONTRATADA.endereco}.</p>
-        <p><strong>CONTRATANTE:</strong> {contrato.cliente_nome}{contrato.cliente_cnpj ? `, inscrita no CNPJ sob o nº ${contrato.cliente_cnpj}` : ''}.</p>
-        <p>As partes acima qualificadas têm entre si, justo e contratado, o presente Contrato de Prestação de Serviços de Terceirização de Processos de Negócios (BPO), que se regerá pelas cláusulas seguintes.</p>
-      </div>,
-    );
-    blocos.push(
-      <div className="mt-5">
-        <p className="text-[12px] font-bold text-gray-900">CLÁUSULA 1ª — DO OBJETO E DO PREÇO</p>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-gray-700 text-justify">
-          O objeto deste contrato é a prestação, pela CONTRATADA, dos serviços de BPO de apoio administrativo-financeiro abaixo relacionados, com a seguinte forma de cobrança:
-        </p>
-      </div>,
-    );
-    blocos.push(
+// ─── Tabela de serviços (injetada no marcador {{tabela_servicos}}) ──
+function TabelaServicos({ itens, valorTotal }) {
+  return (
+    <>
       <table className="w-full mt-2 text-[11px] border-collapse">
         <thead>
           <tr className="border-b-2 border-gray-300 text-left text-[9.5px] uppercase tracking-wide text-gray-500">
@@ -260,7 +213,7 @@ function RelatorioContrato({ contratoId, showToast, onFechar }) {
           </tr>
         </thead>
         <tbody>
-          {itens.map((it, i) => {
+          {(itens || []).map((it, i) => {
             const fixo = it.tipo_valor === 'fixo' || !it.unidade;
             return (
               <tr key={i} className="border-b border-gray-100 align-top">
@@ -273,32 +226,117 @@ function RelatorioContrato({ contratoId, showToast, onFechar }) {
             );
           })}
         </tbody>
-      </table>,
+      </table>
+      <p className="mt-2 text-[11px] leading-relaxed text-gray-700 text-justify">
+        Os serviços de <strong>valor fixo</strong> são cobrados mensalmente pelo valor indicado. Os serviços cobrados <strong>por unidade</strong> são faturados conforme o volume efetivamente realizado no período, multiplicando-se o valor unitário pela quantidade — podendo variar mês a mês. A título ilustrativo, o valor total apurado foi de {formatCurrency(Number(valorTotal || 0))}.
+      </p>
+    </>
+  );
+}
+
+// ─── Visualização A4 imprimível do contrato ────────────────────
+function RelatorioContrato({ contratoId, showToast, onFechar }) {
+  const [contrato, setContrato] = useState(null);
+  const [doc, setDoc] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const c = await contratosService.buscarContrato(contratoId);
+        const d = await montarDocumentoDeContrato(c);
+        if (!cancelado) { setContrato(c); setDoc(d); }
+      } catch (e) {
+        showToast?.('error', 'Erro ao abrir contrato: ' + e.message);
+        onFechar();
+      } finally {
+        if (!cancelado) setCarregando(false);
+      }
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contratoId]);
+
+  const v = doc?.valores || {};
+  const itens = contrato?.conteudo?.itens || [];
+  const dataExtenso = new Date(contrato?.conteudo?.geradoEm || Date.now())
+    .toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  // Qualificação de uma parte no preâmbulo (omite trechos sem dado; a validação aponta o que falta).
+  const qualificacao = (papel, pfx, nomeFallback) => {
+    const nome = v[`${pfx}.razaoSocial`] || nomeFallback;
+    const cnpj = v[`${pfx}.cnpj`];
+    const end = v[`${pfx}.endereco`];
+    const rep = v[`${pfx}.representante`];
+    const cargo = v[`${pfx}.representanteCargo`];
+    const cpf = v[`${pfx}.representanteCpf`];
+    return (
+      <p><strong>{papel}:</strong> {nome || '—'}
+        {cnpj ? `, inscrita no CNPJ sob o nº ${cnpj}` : ''}
+        {end ? `, com sede em ${end}` : ''}
+        {rep ? `, neste ato representada por ${rep}${cargo ? `, ${cargo}` : ''}, portador(a) do CPF nº ${cpf || '—'}` : ''}.</p>
+    );
+  };
+
+  // Renderiza um bloco de cláusula — substitui o marcador da tabela de serviços.
+  const renderBloco = (b, key) =>
+    b?.tipo === 'marcador' && b.nome === 'tabela_servicos'
+      ? <TabelaServicos key={key} itens={itens} valorTotal={contrato.valor_total} />
+      : <BlocoClausula key={key} bloco={b} />;
+
+  // Blocos do contrato = unidades de paginação (medidas e distribuídas em A4).
+  const blocos = [];
+  if (contrato && doc) {
+    blocos.push(
+      <h1 className="text-center text-base font-bold text-gray-900 uppercase">{doc.titulo}</h1>,
     );
     blocos.push(
-      <p className="mt-2 text-[11px] leading-relaxed text-gray-700 text-justify">
-        Os serviços de <strong>valor fixo</strong> são cobrados mensalmente pelo valor indicado. Os serviços cobrados <strong>por unidade</strong> são faturados conforme o volume efetivamente realizado no período, multiplicando-se o valor unitário pela quantidade — podendo, portanto, variar mês a mês. A título ilustrativo, o valor total apurado no último mês de operação foi de {formatCurrency(Number(contrato.valor_total || 0))}.
-      </p>,
+      <div className="mt-5 text-[11px] leading-relaxed text-gray-700 text-justify space-y-2">
+        {qualificacao('CONTRATADA', 'contratada')}
+        {qualificacao('CONTRATANTE', 'contratante', contrato.cliente_nome)}
+        <p>As partes acima qualificadas têm entre si, justo e contratado, o presente Contrato de Prestação de Serviços de Terceirização de Processos de Negócios (BPO), que se regerá pelas cláusulas e condições seguintes.</p>
+      </div>,
     );
-    clausulas.forEach((cl, idx) => {
-      const [primeiro, ...resto] = cl.blocos;
+    // Cláusulas selecionadas pelo motor (já com variáveis preenchidas).
+    doc.clausulas.forEach((cl, idx) => {
+      const bcs = cl.blocos || [];
+      // Unidade 1: título da cláusula + 1º bloco (o título nunca fica órfão).
       blocos.push(
-        <div className="mt-5">
-          <p className="text-[12px] font-bold text-gray-900">CLÁUSULA {idx + 2}ª — {cl.titulo.toUpperCase()}</p>
-          {primeiro && <BlocoClausula bloco={primeiro} />}
+        <div className="mt-5 bloco-keep">
+          <p className="text-[12px] font-bold text-gray-900">CLÁUSULA {idx + 1}ª — {cl.titulo.toUpperCase()}</p>
+          {bcs[0] && renderBloco(bcs[0], 'p0')}
         </div>,
       );
-      resto.forEach((b) => blocos.push(<BlocoClausula bloco={b} />));
+      // Demais blocos: um subtítulo nunca fica sozinho no fim da página —
+      // é agrupado com o bloco seguinte para não quebrar entre eles.
+      for (let i = 1; i < bcs.length; i++) {
+        const b = bcs[i];
+        if (b?.tipo === 'subtitulo' && bcs[i + 1]) {
+          blocos.push(<div className="bloco-keep">{renderBloco(b, `s${i}`)}{renderBloco(bcs[i + 1], `sn${i}`)}</div>);
+          i++; // já consumiu o bloco seguinte
+        } else {
+          blocos.push(renderBloco(b, `b${i}`));
+        }
+      }
     });
+    // Fecho + assinaturas
     blocos.push(
-      <p className="mt-5 text-[10px] text-gray-400">As condições gerais (vigência, reajuste, rescisão e foro) serão incluídas conforme definição.</p>,
-    );
-    blocos.push(
-      <div className="mt-12">
-        <p className="text-[11px] text-gray-700">{CONTRATADA.local}, {dataExtenso}.</p>
+      <div className="mt-12 bloco-keep">
+        <p className="text-[11px] text-gray-700">
+          {v['foro.comarca'] ? `${v['foro.comarca']}${v['foro.uf'] ? ' - ' + v['foro.uf'] : ''}, ` : ''}{dataExtenso}.
+        </p>
         <div className="mt-16 grid grid-cols-2 gap-10 text-center text-[10.5px] text-gray-700">
-          <div className="border-t border-gray-500 pt-1"><p className="font-semibold text-gray-900">{CONTRATADA.nome}</p><p>CONTRATADA · CNPJ {CONTRATADA.cnpj}</p></div>
-          <div className="border-t border-gray-500 pt-1"><p className="font-semibold text-gray-900">{contrato.cliente_nome}</p><p>CONTRATANTE{contrato.cliente_cnpj ? ` · CNPJ ${contrato.cliente_cnpj}` : ''}</p></div>
+          <div className="border-t border-gray-500 pt-1">
+            <p className="font-semibold text-gray-900">{v['contratada.razaoSocial'] || '—'}</p>
+            <p>CONTRATADA{v['contratada.cnpj'] ? ` · CNPJ ${v['contratada.cnpj']}` : ''}</p>
+            {v['contratada.representante'] && <p className="text-gray-500">{v['contratada.representante']}{v['contratada.representanteCargo'] ? ` · ${v['contratada.representanteCargo']}` : ''}</p>}
+          </div>
+          <div className="border-t border-gray-500 pt-1">
+            <p className="font-semibold text-gray-900">{v['contratante.razaoSocial'] || contrato.cliente_nome}</p>
+            <p>CONTRATANTE{v['contratante.cnpj'] ? ` · CNPJ ${v['contratante.cnpj']}` : ''}</p>
+            {v['contratante.representante'] && <p className="text-gray-500">{v['contratante.representante']}{v['contratante.representanteCargo'] ? ` · ${v['contratante.representanteCargo']}` : ''}</p>}
+          </div>
         </div>
         <div className="mt-12 grid grid-cols-2 gap-10 text-center text-[10px] text-gray-500">
           <div className="border-t border-gray-400 pt-1">Testemunha 1 · CPF</div>
@@ -308,53 +346,35 @@ function RelatorioContrato({ contratoId, showToast, onFechar }) {
     );
   }
 
-  // Mede a altura de cada bloco e distribui em páginas A4.
-  useLayoutEffect(() => {
-    if (!contrato || blocos.length === 0) return;
-    const mmToPx = 96 / 25.4;
-    const maxPx = (297 - MARGENS_A4.topo - MARGENS_A4.base) * mmToPx;
-    const pages = [[]];
-    let acc = 0;
-    for (let i = 0; i < blocos.length; i++) {
-      const h = medRefs.current[i]?.offsetHeight || 0;
-      const cur = pages[pages.length - 1];
-      if (cur.length > 0 && acc + h > maxPx) { pages.push([]); acc = 0; }
-      pages[pages.length - 1].push(i);
-      acc += h;
-    }
-    setPaginas(pages);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contrato]);
-
-  const larguraConteudo = 210 - 2 * MARGENS_A4.laterais;
-  const bg = PAPEL_TIMBRADO_URL
-    ? { backgroundImage: `url(${PAPEL_TIMBRADO_URL})`, backgroundSize: '210mm 297mm', backgroundRepeat: 'no-repeat' }
-    : {};
+  // Paginação é feita pelo CSS na impressão (fluxo contínuo + @page A4).
   const folhaStyle = {
-    width: '210mm', minHeight: '297mm', boxSizing: 'border-box',
+    maxWidth: '210mm', boxSizing: 'border-box',
     padding: `${MARGENS_A4.topo}mm ${MARGENS_A4.laterais}mm ${MARGENS_A4.base}mm`,
-    ...bg,
+    fontFamily: FONTE_CONTRATO,
   };
-  const pgs = paginas || (blocos.length ? [blocos.map((_, i) => i)] : []);
 
   return createPortal(
     <div className="relatorio-overlay fixed inset-0 z-[60] bg-gray-700/70 overflow-auto">
       <style>{`
+        /* Paginação por CSS: o conteúdo flui e o navegador quebra em A4.
+           Blocos .bloco-keep não partem no meio (títulos + 1º parágrafo, subtítulos, assinaturas). */
+        #contrato-folha .bloco-keep { break-inside: avoid; }
         @media print {
           #root { display: none !important; }
           .relatorio-overlay { position: static !important; overflow: visible !important; background: #fff !important; }
           .relatorio-overlay .no-print { display: none !important; }
-          #contrato-doc { padding: 0 !important; }
-          #contrato-doc .folha { box-shadow: none !important; margin: 0 !important; break-after: page; }
-          #contrato-doc .folha:last-child { break-after: auto; }
-          @page { size: A4; margin: 0; }
-          html, body { background: #fff !important; }
+          #contrato-folha {
+            box-shadow: none !important; margin: 0 !important; padding: 0 !important;
+            max-width: none !important; width: auto !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          @page { size: A4 portrait; margin: ${MARGENS_A4.topo}mm ${MARGENS_A4.laterais}mm ${MARGENS_A4.base}mm; }
+          html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
         }
-        #contrato-doc .folha { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       `}</style>
 
       <div className="no-print sticky top-0 z-10 flex items-center justify-between bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2.5">
-        <p className="text-sm font-medium text-gray-700">Pré-visualização do contrato (rascunho){pgs.length ? ` · ${pgs.length} página(s)` : ''}</p>
+        <p className="text-sm font-medium text-gray-700">Pré-visualização do contrato (rascunho)</p>
         <div className="flex items-center gap-2">
           <button onClick={() => window.print()} disabled={carregando || !contrato}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
@@ -367,22 +387,44 @@ function RelatorioContrato({ contratoId, showToast, onFechar }) {
         </div>
       </div>
 
-      {/* Medição invisível para paginar */}
-      {contrato && (
-        <div aria-hidden style={{ position: 'fixed', left: '-9999px', top: 0, width: `${larguraConteudo}mm`, visibility: 'hidden' }}>
-          {blocos.map((b, i) => <div key={i} ref={(el) => { medRefs.current[i] = el; }}>{b}</div>)}
+      {/* Painel de validação (bloqueia emissão) */}
+      {doc && (
+        <div className="no-print mx-auto max-w-[220mm] px-3 pt-4 space-y-2">
+          {doc.validacao.erros.length > 0 && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-rose-700">
+                <ShieldAlert className="h-4 w-4" /> Não pode ser emitido — {doc.validacao.erros.length} pendência(s):
+              </p>
+              <ul className="mt-1 ml-6 list-disc text-xs text-rose-700 space-y-0.5">
+                {doc.validacao.erros.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            </div>
+          )}
+          {doc.validacao.avisos.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
+                <AlertTriangle className="h-4 w-4" /> Revisar com jurídico antes de emitir:
+              </p>
+              <ul className="mt-1 ml-6 list-disc text-xs text-amber-700 space-y-0.5">
+                {doc.validacao.avisos.map((a, i) => <li key={i}>{a}</li>)}
+              </ul>
+            </div>
+          )}
+          {doc.validacao.ok && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-sm font-medium text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" /> Contrato válido — pronto para emissão.
+            </div>
+          )}
         </div>
       )}
 
-      {carregando || !contrato ? (
+      {carregando || !contrato || !doc ? (
         <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
       ) : (
-        <div id="contrato-doc" className="py-6 px-3">
-          {pgs.map((idxs, p) => (
-            <div key={p} className="folha bg-white shadow-xl mx-auto mb-6" style={folhaStyle}>
-              {idxs.map((i) => <div key={i}>{blocos[i]}</div>)}
-            </div>
-          ))}
+        <div className="py-6 px-3">
+          <div id="contrato-folha" className="bg-white shadow-xl mx-auto" style={folhaStyle}>
+            {blocos.map((b, i) => <div key={i}>{b}</div>)}
+          </div>
         </div>
       )}
     </div>,

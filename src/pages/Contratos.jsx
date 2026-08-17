@@ -7,8 +7,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  FileCheck, FileText, Briefcase, AlertCircle, Calculator,
+  FileCheck, FileText, Briefcase, AlertCircle,
   Plus, Search, Pencil, Trash2, CheckCircle2, Pause, Play, Loader2,
+  Building2, ScrollText,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Modal from '../components/ui/Modal';
@@ -17,15 +18,17 @@ import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import { formatCurrency } from '../utils/format';
 import * as servicosService from '../services/servicosOferecidosService';
 import AbaPropostas from './contratos/AbaPropostas';
-import AbaPrecificacao from './contratos/AbaPrecificacao';
 import AbaRascunhos from './contratos/AbaRascunhos';
+import AbaConfigEmpresa from './contratos/AbaConfigEmpresa';
+import AbaClausulas from './contratos/AbaClausulas';
 
 const TABS = [
   { key: 'ativos',        label: 'Ativos',              icon: FileCheck  },
   { key: 'rascunhos',     label: 'Rascunhos',           icon: Pencil     },
   { key: 'propostas',     label: 'Propostas',           icon: FileText   },
   { key: 'servicos',      label: 'Serviços oferecidos', icon: Briefcase  },
-  { key: 'precificacao',  label: 'Precificação',        icon: Calculator },
+  { key: 'clausulas',     label: 'Cláusulas',           icon: ScrollText },
+  { key: 'empresa',       label: 'Empresa',             icon: Building2  },
 ];
 
 export default function Contratos() {
@@ -69,7 +72,8 @@ export default function Contratos() {
       {aba === 'rascunhos'    && <AbaRascunhos showToast={showToast} />}
       {aba === 'propostas'    && <AbaPropostas showToast={showToast} />}
       {aba === 'servicos'     && <AbaServicos showToast={showToast} />}
-      {aba === 'precificacao' && <AbaPrecificacao showToast={showToast} />}
+      {aba === 'clausulas'    && <AbaClausulas showToast={showToast} />}
+      {aba === 'empresa'      && <AbaConfigEmpresa showToast={showToast} />}
     </div>
   );
 }
@@ -239,9 +243,6 @@ function AbaServicos({ showToast }) {
                       </td>
                       <td className="px-6 py-3 text-right font-semibold text-gray-900 tabular-nums">
                         {formatCurrency(Number(s.valor || 0))}
-                        {s.tipo_valor === 'unitario' && (
-                          <span className="ml-1 text-[10.5px] font-normal text-gray-400">/ {s.unidade || 'un'}</span>
-                        )}
                       </td>
                       <td className="px-6 py-3 text-xs text-gray-600">
                         {per.label}
@@ -301,7 +302,7 @@ function ModalServico({ open, servico, onClose, onSave }) {
   const [form, setForm] = useState({
     nome: '', descricao: '', categoria: 'consultoria',
     valor: '', periodicidade: 'mensal', tipo_valor: 'fixo', unidade: '',
-    ativo: true, observacoes: '',
+    ativo: true, observacoes: '', contrato_meta: {},
   });
   const [salvando, setSalvando] = useState(false);
 
@@ -313,15 +314,18 @@ function ModalServico({ open, servico, onClose, onSave }) {
         valor: String(servico.valor ?? ''),
         tipo_valor: servico.tipo_valor || 'fixo',
         unidade:    servico.unidade    || '',
+        contrato_meta: servico.contrato_meta || {},
       });
     } else {
       setForm({
         nome: '', descricao: '', categoria: 'consultoria',
         valor: '', periodicidade: 'mensal', tipo_valor: 'fixo', unidade: '',
-        ativo: true, observacoes: '',
+        ativo: true, observacoes: '', contrato_meta: {},
       });
     }
   }, [open, servico]);
+
+  const setMeta = (campo, val) => setForm(f => ({ ...f, contrato_meta: { ...f.contrato_meta, [campo]: val } }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -458,6 +462,41 @@ function ModalServico({ open, servico, onClose, onSave }) {
             placeholder="Notas internas sobre o serviço (não aparecem em proposta)"
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
+
+        {/* ── Metadados contratuais — alimentam o motor de cláusulas ── */}
+        <details className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-semibold text-gray-700 select-none">Metadados contratuais (opcional)</summary>
+          <div className="mt-3 space-y-3">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={!!form.contrato_meta?.envolve_dados_pessoais}
+                onChange={e => setMeta('envolve_dados_pessoais', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              Envolve tratamento de dados pessoais <span className="text-xs text-gray-400">(inclui a cláusula LGPD no contrato)</span>
+            </label>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Escopo específico</label>
+              <textarea rows={2} value={form.contrato_meta?.escopo || ''}
+                onChange={e => setMeta('escopo', e.target.value)}
+                placeholder="Descrição do escopo deste serviço no contrato"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Limitações — uma por linha</label>
+              <textarea rows={2} value={(form.contrato_meta?.limitacoes || []).join('\n')}
+                onChange={e => setMeta('limitacoes', e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
+                placeholder={'O que NÃO está incluído\n(uma por linha)'}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Cláusulas específicas — chaves separadas por vírgula</label>
+              <input type="text" value={(form.contrato_meta?.clausula_chaves || []).join(', ')}
+                onChange={e => setMeta('clausula_chaves', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                placeholder="servico_conciliacao_bancaria"
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              <p className="text-[10.5px] text-gray-400 mt-0.5">Vazio = o motor associa a cláusula pelo nome do serviço (compatível com os padrões).</p>
+            </div>
+          </div>
+        </details>
 
         <div>
           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
