@@ -278,6 +278,17 @@ export default function RelatoriosCliente() {
                         <Wallet className="h-3 w-3" />
                         Fluxo da Rede
                       </Link>
+                      {podeUsarIA && (
+                        <Link
+                          to={`/admin/relatorios-cliente/rede-as/${rede.asRedeId}/analise-ia`}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Análise da rede Autosystem com IA (DRE e Fluxo)"
+                          className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-br from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all shadow-sm"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          Análise IA da Rede
+                        </Link>
+                      )}
                     </>
                   )}
                   {usaWebposto && rede.chaveApiId && (

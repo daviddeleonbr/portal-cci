@@ -13,6 +13,9 @@ import * as vendasIA from '../services/vendasInsightsService';
 import * as dreIA from '../services/dreInsightsService';
 import * as fluxoIA from '../services/fluxoInsightsService';
 import * as geralIA from '../services/diagnosticoGeralService';
+import * as dreAutoIA from '../services/dreInsightsAutosystemService';
+import * as fluxoAutoIA from '../services/fluxoInsightsAutosystemService';
+import * as autosystemService from '../services/autosystemService';
 import { carregarApiKey, salvarApiKey, limparApiKey, carregarConfiguracaoIa } from '../services/iaSharedHelpers';
 import { useAnonimizador } from '../services/anonimizarService';
 import { useAdminSession } from '../hooks/useAuth';
@@ -22,8 +25,9 @@ import Modal from '../components/ui/Modal';
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
-  const { clienteId, chaveApiId } = useParams();
+export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webposto' } = {}) {
+  const { clienteId, chaveApiId, asRedeId } = useParams();
+  const isAutosystem = origem === 'autosystem';
   const navigate = useNavigate();
   const { labelEmpresa, labelRede, labelCnpj } = useAnonimizador();
   const session = useAdminSession();
@@ -36,7 +40,8 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
 
   const hoje = new Date();
   const [mesRef, setMesRef] = useState({ ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 });
-  const [tab, setTab] = useState('vendas');
+  // Autosystem (Fase 1): só DRE + Fluxo — começa na aba DRE.
+  const [tab, setTab] = useState(origem === 'autosystem' ? 'dre' : 'vendas');
 
   // Mascaras (para DRE e Fluxo)
   const [mascarasDre, setMascarasDre] = useState([]);
@@ -73,7 +78,26 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
     (async () => {
       try {
         setLoading(true); setErr(null);
-        if (modoRede) {
+        if (isAutosystem) {
+          // Empresas da rede = clientes com as_rede_id (mesma fonte do RelatorioDREAsRede),
+          // não a query viva do ERP.
+          const [rede, todosClientes] = await Promise.all([
+            autosystemService.buscarRede(asRedeId),
+            clientesService.listarClientes(),
+          ]);
+          if (!rede) throw new Error('Rede Autosystem não encontrada');
+          const empresas = (todosClientes || []).filter(c =>
+            c.as_rede_id === asRedeId && c.status === 'ativo' && c.empresa_codigo != null);
+          if (empresas.length === 0) throw new Error('Nenhuma empresa Autosystem ativa encontrada nesta rede');
+          const empresaCodigos = empresas.map(e => Number(e.empresa_codigo));
+          setContexto({
+            tipo: 'rede-as',
+            rede,
+            empresas,
+            empresaCodigos,
+            cliente: { nome: rede.nome, _empresaCodigos: empresaCodigos },
+          });
+        } else if (modoRede) {
           const [chaves, clientes] = await Promise.all([
             mapService.listarChavesApi(),
             clientesService.listarClientes(),
@@ -160,15 +184,24 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
     setLoadingAba('dre'); setErr(null);
     try {
       const chaveApiIdForMap = modoRede ? chaveApiId : contexto.cliente.chave_api_id;
-      const dados = await dreIA.agregarDadosDRE({
-        cliente: contexto.cliente,
-        modoRede,
-        chaveApi: contexto.chaveApi,
-        chaveApiId: chaveApiIdForMap,
-        mascaraId: mascaraDreId,
-        mesRef,
-        onProgress: setProgress,
-      });
+      const dados = isAutosystem
+        ? await dreAutoIA.agregarDadosDREAutosystem({
+            rede: contexto.rede,
+            empresaCodigos: contexto.empresaCodigos,
+            empresas: contexto.empresas,
+            mascaraId: mascaraDreId,
+            mesRef,
+            onProgress: setProgress,
+          })
+        : await dreIA.agregarDadosDRE({
+            cliente: contexto.cliente,
+            modoRede,
+            chaveApi: contexto.chaveApi,
+            chaveApiId: chaveApiIdForMap,
+            mascaraId: mascaraDreId,
+            mesRef,
+            onProgress: setProgress,
+          });
       setProgress('Processando análise...');
       const r = await dreIA.gerarAnaliseDREIA(dados, apiKey);
       setResultados(prev => ({ ...prev, dre: { insights: r.insights, usage: r.usage, dados, mesKey } }));
@@ -182,15 +215,23 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
     setLoadingAba('fluxo'); setErr(null);
     try {
       const chaveApiIdForContas = modoRede ? chaveApiId : contexto.cliente.chave_api_id;
-      const dados = await fluxoIA.agregarDadosFluxo({
-        cliente: contexto.cliente,
-        modoRede,
-        chaveApi: contexto.chaveApi,
-        chaveApiId: chaveApiIdForContas,
-        mascaraFluxoId,
-        mesRef,
-        onProgress: setProgress,
-      });
+      const dados = isAutosystem
+        ? await fluxoAutoIA.agregarDadosFluxoAutosystem({
+            rede: contexto.rede,
+            empresaCodigos: contexto.empresaCodigos,
+            mascaraFluxoId,
+            mesRef,
+            onProgress: setProgress,
+          })
+        : await fluxoIA.agregarDadosFluxo({
+            cliente: contexto.cliente,
+            modoRede,
+            chaveApi: contexto.chaveApi,
+            chaveApiId: chaveApiIdForContas,
+            mascaraFluxoId,
+            mesRef,
+            onProgress: setProgress,
+          });
       setProgress('Processando análise...');
       const r = await fluxoIA.gerarAnaliseFluxoIA(dados, apiKey);
       setResultados(prev => ({ ...prev, fluxo: { insights: r.insights, usage: r.usage, dados, mesKey } }));
@@ -258,7 +299,8 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
     { id: 'dre', label: 'DRE', icon: FileBarChart, color: 'blue' },
     { id: 'fluxo', label: 'Fluxo de Caixa', icon: Wallet, color: 'emerald' },
     { id: 'geral', label: 'Diagnóstico Geral', icon: GitBranch, color: 'violet' },
-  ];
+    // Autosystem (Fase 1): apenas DRE + Fluxo. Vendas e Diagnóstico Geral virão depois.
+  ].filter(a => !isAutosystem || a.id === 'dre' || a.id === 'fluxo');
 
   const podeGerarGeral = resultados.vendas?.mesKey === mesKey
     && resultados.dre?.mesKey === mesKey && resultados.fluxo?.mesKey === mesKey;
@@ -283,7 +325,7 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
             </h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               {modoRede ? <Network className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
-              <span className="truncate">{modoRede ? labelRede(contexto.cliente?.nome, chaveApiId) : labelEmpresa(contexto.cliente)}</span>
+              <span className="truncate">{modoRede ? labelRede(contexto.cliente?.nome, chaveApiId || asRedeId) : labelEmpresa(contexto.cliente)}</span>
               {modoRede && (
                 <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
                   · {contexto.empresas?.length} empresas
@@ -292,6 +334,11 @@ export default function RelatorioAnaliseIA({ modoRede = false } = {}) {
               {contexto.cliente?.usa_webposto && (
                 <span className="inline-flex items-center gap-1 text-amber-600 ml-1">
                   <Zap className="h-2.5 w-2.5" /> Webposto
+                </span>
+              )}
+              {isAutosystem && (
+                <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
+                  <Network className="h-2.5 w-2.5" /> Autosystem
                 </span>
               )}
             </div>

@@ -258,6 +258,17 @@ export function agregarDrePorGrupo(dadosPorMes, grupos, mapeamentos, opcoes = {}
     });
   }
 
+  // 2b. Vendas/CMV pré-agregados por grupo (injeção externa) — usado pelo
+  //     agregador AUTOSYSTEM, cuja fonte de vendas é a edge function (vendas
+  //     por categoria de grupo de produto) e NÃO os catálogos Quality. É um
+  //     Map<grupo_dre_id, valor_com_sinal> (venda = +, custo/CMV = −). Webposto
+  //     nunca passa isso, então é 100% retrocompatível.
+  if (opcoes.vendasPorGrupoExtra) {
+    opcoes.vendasPorGrupoExtra.forEach((v, gid) => {
+      totalPorGrupo.set(gid, (totalPorGrupo.get(gid) || 0) + v);
+    });
+  }
+
   // 3. Antes do acumulado: pra cada grupo PAI sem valor direto, soma os
   //    descendentes (recursivo). Assim "RECEITA OPERACIONAL BRUTA" (pai
   //    sem mapeamento) recebe a soma de "REVENDA DE PRODUTOS" + qualquer
