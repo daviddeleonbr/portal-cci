@@ -88,6 +88,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const [planoContasMap, setPlanoContasMap] = useState(new Map());
   // Mapa GRID (INT) → HIERARQUIA ("1.02.06") do plano gerencial
   const [planoContasHierarquiaMap, setPlanoContasHierarquiaMap] = useState(new Map());
+  // Mapa inverso HIERARQUIA ("2.03.18.002") → GRID (INT). A Apuração Quality
+  // devolve a conta pela hierarquia; o mapeamento da máscara usa o GRID. Ponte.
+  const [hierarquiaGridMap, setHierarquiaGridMap] = useState(new Map());
 
   const [loading, setLoading] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
@@ -126,6 +129,10 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const [ocultarZeradas, setOcultarZeradas] = useState(true);
   const [showAH, setShowAH] = useState(true);
   const [mostrarTotal, setMostrarTotal] = useState(true);
+  // Modo Apuração Quality: monta a DRE a partir do endpoint /INTEGRACAO/DRE
+  // (despesas + receitas JÁ classificadas na conta gerencial analítica), em vez
+  // de títulos/movimentos/remessas/vendas. Resolve a classificação (ex.: cada
+  // taxa de cartão na sua conta). Desligado por padrão — clicar Montar DRE aplica.
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
   const [tempoGeracao, setTempoGeracao] = useState(null); // ms
@@ -518,19 +525,26 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         //    permitir match por hierarquia em vez do INT.
         const pcMap = new Map();
         const pcHierMap = new Map();
+        const hgMap = new Map();
         (planos || []).forEach(p => {
           const cod = p.planoContaCodigo ?? p.planoContaGerencialCodigo ?? p.codigo;
           const desc = p.descricao || p.nome || '';
           const hier = p.hierarquia || '';
           if (cod != null) {
             if (desc) pcMap.set(String(cod), desc.trim());
-            if (hier) pcHierMap.set(String(cod), String(hier).trim());
+            if (hier) {
+              const h = String(hier).trim();
+              pcHierMap.set(String(cod), h);
+              hgMap.set(h, String(cod));          // HIERARQUIA → GRID (ponte apuração)
+              hgMap.set(h.replace(/\b0+(\d)/g, '$1'), String(cod)); // idem sem zeros à esquerda
+            }
           }
         });
         setProdutosMap(pMap);
         setGruposCatMap(gMap);
         setPlanoContasMap(pcMap);
         setPlanoContasHierarquiaMap(pcHierMap);
+        setHierarquiaGridMap(hgMap);
       }
 
       // 2. Buscar atual + ano anterior em paralelo
@@ -553,22 +567,23 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           const empresaCodigos = modoRede
             ? (cliente?._empresaCodigos || [])
             : [cliente.empresa_codigo];
-          const allPagar = [], allReceber = [], allMovimentos = [], allRemessas = [], allVendaItens = [], allVendas = [];
+          const allVendaItens = [], allVendas = [], allApuDespesas = [], allApuReceitas = [];
           for (const ec of empresaCodigos) {
             const filtros = { dataInicial: p.dataInicial, dataFinal: p.dataFinal, empresaCodigo: ec };
-            const [pagar, receber, movimentos, remessas, vendaItens, vendas] = await Promise.all([
-              qualityApi.buscarTitulosPagar(chave.chave, filtros),
-              qualityApi.buscarTitulosReceber(chave.chave, { ...filtros, convertido: null }),
-              qualityApi.buscarMovimentoConta(chave.chave, filtros).catch(() => []),
-              qualityApi.buscarCartaoRemessa(chave.chave, filtros).catch(() => []),
+            const annot = modoRede ? (arr) => (arr || []).map(x => ({ ...x, empresaCodigo: ec })) : (arr) => (arr || []);
+
+            // Webposto: fonte oficial classificada do Quality (endpoint DRE).
+            // Despesas/receitas já vêm na conta gerencial analítica.
+            const dre = await qualityApi.buscarApuracaoDRE(chave.chave, filtros)
+              .catch((e) => { console.error('Falha na apuração DRE Quality', e); return {}; });
+            allApuDespesas.push(...annot(qualityApi.apuracaoDespesas(dre)));
+            allApuReceitas.push(...annot(qualityApi.apuracaoReceitas(dre)));
+            // Vendas + CMV têm parametrização própria (mapeamentoVendas) e NÃO
+            // vêm na apuração de títulos — busca à parte pra receita/custo aparecerem.
+            const [vendaItens, vendas] = await Promise.all([
               qualityApi.buscarVendaItens(chave.chave, filtros).catch(() => []),
               qualityApi.buscarVendas(chave.chave, filtros).catch(() => []),
             ]);
-            const annot = modoRede ? (arr) => (arr || []).map(x => ({ ...x, empresaCodigo: ec })) : (arr) => (arr || []);
-            allPagar.push(...annot(pagar));
-            allReceber.push(...annot(receber));
-            allMovimentos.push(...annot(movimentos));
-            allRemessas.push(...annot(remessas));
             allVendaItens.push(...annot(vendaItens));
             allVendas.push(...annot(vendas));
           }
@@ -577,9 +592,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           setLoadingProgress({
             atual: concluidas,
             total,
-            mensagem: `${periodoLabel} \u00b7 ${allPagar.length + allReceber.length} lancs \u00b7 ${allVendaItens.length} itens \u00b7 ${allVendas.length} vendas${modoRede ? ` · ${empresaCodigos.length} empresas` : ''}`,
+            mensagem: `${periodoLabel} \u00b7 ${allApuDespesas.length + allApuReceitas.length} lancs \u00b7 ${allVendaItens.length} itens \u00b7 ${allVendas.length} vendas${modoRede ? ` · ${empresaCodigos.length} empresas` : ''}`,
           });
-          return { ...p, pagar: allPagar, receber: allReceber, movimentos: allMovimentos, remessasCartao: allRemessas, vendaItens: allVendaItens, vendas: allVendas };
+          return { ...p, vendaItens: allVendaItens, vendas: allVendas, apuracaoDespesas: allApuDespesas, apuracaoReceitas: allApuReceitas };
         })
       );
 
@@ -587,7 +602,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       const anterior = {};
       results.forEach(r => {
         const target = r.isPrev ? anterior : atual;
-        target[r.key] = { titulosPagar: r.pagar, titulosReceber: r.receber, movimentos: r.movimentos, remessasCartao: r.remessasCartao, vendaItens: r.vendaItens, vendas: r.vendas };
+        target[r.key] = { vendaItens: r.vendaItens, vendas: r.vendas, apuracaoDespesas: r.apuracaoDespesas, apuracaoReceitas: r.apuracaoReceitas };
       });
       setLoadingProgress({ atual: total, total, mensagem: 'Montando o relatório...' });
       // Pequeno delay para o usuario ver a mensagem final
@@ -675,6 +690,35 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // Inclui: títulos receber/pagar + movimentos extras + remessas cartão.
   // Cada item já vem com _sinal (+1 / -1) e _tipo aplicados.
   function montarLancamentosDoMes(dados, gridTaxaCartao) {
+    // WEBPOSTO → Apuração Quality: fonte única já classificada (despesas + receitas
+    // na conta gerencial analítica). Despesa vem positiva e é invertida (_sinal -1);
+    // receita _sinal +1. AUTOSYSTEM segue pelo caminho legado (títulos), abaixo.
+    if (cliente?.usa_webposto) {
+      // A apuração traz a conta pela HIERARQUIA ("2.03.18.002"); a máscara mapeia
+      // pelo GRID interno. Traduz hierarquia→grid pra o match funcionar; se não
+      // achar, mantém a hierarquia (cai em "não mapeadas" com a descrição certa).
+      const hierParaGrid = (h) => {
+        const k = String(h || '').trim();
+        return hierarquiaGridMap.get(k) ?? hierarquiaGridMap.get(k.replace(/\b0+(\d)/g, '$1')) ?? k;
+      };
+      const mapAp = (arr, sinal, tipo) => (arr || []).map((a, i) => ({
+        planoContaGerencialCodigo:    hierParaGrid(a.conta_codigo),
+        planoContaGerencialDescricao: a.conta_descricao,
+        valor:         Math.abs(Number(a.valor || 0)),
+        _sinal:        sinal,
+        _tipo:         tipo,
+        dataMovimento: a.data,
+        descricao:     a.documento,
+        numeroTitulo:  '',
+        codigo:        `${tipo}-${a.conta_codigo}-${i}`,
+        empresaCodigo: a.empresaCodigo,
+      }));
+      return [
+        ...mapAp(dados.apuracaoReceitas, 1, 'apuracao-receita'),
+        ...mapAp(dados.apuracaoDespesas, -1, 'apuracao-despesa'),
+      ];
+    }
+
     // MOVIMENTO_CONTA: indexa TODOS os movimentos (mapeados ou não) pra
     // que GRIDs não mapeados apareçam na seção "Contas não mapeadas".
     // Filtros:
@@ -784,9 +828,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     return { totais, lancamentos, descricoes };
   }
 
-  const idxAtualFull = useMemo(() => indexarPorConta(dadosPorMes), [dadosPorMes, gridTaxaCartao]);
+  const idxAtualFull = useMemo(() => indexarPorConta(dadosPorMes), [dadosPorMes, gridTaxaCartao, hierarquiaGridMap]);
 
-  const idxAnteriorFull = useMemo(() => indexarPorConta(dadosPorMesAnterior), [dadosPorMesAnterior, gridTaxaCartao]);
+  const idxAnteriorFull = useMemo(() => indexarPorConta(dadosPorMesAnterior), [dadosPorMesAnterior, gridTaxaCartao, hierarquiaGridMap]);
   const idxAtual = idxAtualFull.totais;
   const idxAnterior = idxAnteriorFull.totais;
   const descricoesAtual = idxAtualFull.descricoes || {};
@@ -1219,7 +1263,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       totalConsolidado,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap, mapVendasAutosystem, vendasAutosystemPorMes.atual, meses, gridTaxaCartao]);
+  }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap, mapVendasAutosystem, vendasAutosystemPorMes.atual, meses, gridTaxaCartao, hierarquiaGridMap]);
 
   // ═══════════════════════════════════════════════════════════
   // ABA "POR EMPRESA": mesmo relatorio da mascara DRE, mas com
@@ -1300,7 +1344,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     });
     return { totais, lancamentos, temOrfaos };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesEmpresa, dadosPorMes, gridTaxaCartao]);
+  }, [mesEmpresa, dadosPorMes, gridTaxaCartao, hierarquiaGridMap]);
 
   // Adiciona coluna virtual "Rede" no fim quando há lançamentos órfãos
   // (sem empresaCodigo) no mês selecionado. Sem isso, o total não bate
