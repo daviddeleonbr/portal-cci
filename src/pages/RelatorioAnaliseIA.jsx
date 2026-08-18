@@ -15,6 +15,7 @@ import * as fluxoIA from '../services/fluxoInsightsService';
 import * as geralIA from '../services/diagnosticoGeralService';
 import * as dreAutoIA from '../services/dreInsightsAutosystemService';
 import * as fluxoAutoIA from '../services/fluxoInsightsAutosystemService';
+import * as vendasAutoIA from '../services/vendasInsightsAutosystemService';
 import * as autosystemService from '../services/autosystemService';
 import { carregarApiKey, salvarApiKey, limparApiKey, carregarConfiguracaoIa } from '../services/iaSharedHelpers';
 import { useAnonimizador } from '../services/anonimizarService';
@@ -40,8 +41,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
 
   const hoje = new Date();
   const [mesRef, setMesRef] = useState({ ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 });
-  // Autosystem (Fase 1): só DRE + Fluxo — começa na aba DRE.
-  const [tab, setTab] = useState(origem === 'autosystem' ? 'dre' : 'vendas');
+  const [tab, setTab] = useState('vendas');
 
   // Mascaras (para DRE e Fluxo)
   const [mascarasDre, setMascarasDre] = useState([]);
@@ -78,7 +78,12 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     (async () => {
       try {
         setLoading(true); setErr(null);
+        // Escopo para carregar SÓ as máscaras liberadas pra esta rede/cliente
+        // (igual ao RelatorioDRE). Sem isso, a IA pegava a máscara padrão global
+        // — que pode não ter os mapeamentos de vendas desta rede.
+        let escopoMascara = { asRedeId: null, chaveApiId: null };
         if (isAutosystem) {
+          escopoMascara = { asRedeId, chaveApiId: null };
           // Empresas da rede = clientes com as_rede_id (mesma fonte do RelatorioDREAsRede),
           // não a query viva do ERP.
           const [rede, todosClientes] = await Promise.all([
@@ -98,6 +103,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
             cliente: { nome: rede.nome, _empresaCodigos: empresaCodigos },
           });
         } else if (modoRede) {
+          escopoMascara = { asRedeId: null, chaveApiId };
           const [chaves, clientes] = await Promise.all([
             mapService.listarChavesApi(),
             clientesService.listarClientes(),
@@ -120,6 +126,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
         } else {
           const cli = await clientesService.buscarCliente(clienteId);
           if (!cli?.chave_api_id) throw new Error('Cliente sem chave API');
+          escopoMascara = { asRedeId: cli.as_rede_id || null, chaveApiId: cli.chave_api_id || null };
           const chaves = await mapService.listarChavesApi();
           const chave = chaves.find(c => c.id === cli.chave_api_id);
           if (!chave) throw new Error('Chave API não encontrada');
@@ -127,8 +134,8 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
         }
         // Mascaras
         const [mds, mfs] = await Promise.all([
-          mascaraDreService.listarMascaras().catch(() => []),
-          mascaraFluxoService.listarMascaras().catch(() => []),
+          mascaraDreService.listarMascaras(escopoMascara).catch(() => []),
+          mascaraFluxoService.listarMascaras(escopoMascara).catch(() => []),
         ]);
         setMascarasDre(mds || []);
         setMascarasFluxo(mfs || []);
@@ -164,15 +171,25 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     if (!contexto || !garantirApiKey()) return;
     setLoadingAba('vendas'); setErr(null);
     try {
-      const dados = await vendasIA.prepararDadosVendas({
-        cliente: contexto.cliente,
-        modoRede,
-        chaveApi: contexto.chaveApi,
-        mesRef,
-        onProgress: setProgress,
-      });
+      const dados = isAutosystem
+        ? await vendasAutoIA.prepararDadosVendasAutosystem({
+            rede: contexto.rede,
+            empresaCodigos: contexto.empresaCodigos,
+            empresas: contexto.empresas,
+            mesRef,
+            onProgress: setProgress,
+          })
+        : await vendasIA.prepararDadosVendas({
+            cliente: contexto.cliente,
+            modoRede,
+            chaveApi: contexto.chaveApi,
+            mesRef,
+            onProgress: setProgress,
+          });
       setProgress('Processando análise...');
-      const r = await vendasIA.gerarAnaliseVendasIA(dados, apiKey, { modoRede });
+      const r = isAutosystem
+        ? await vendasAutoIA.gerarAnaliseVendasAutosystemIA(dados, apiKey, { modoRede })
+        : await vendasIA.gerarAnaliseVendasIA(dados, apiKey, { modoRede });
       setResultados(prev => ({ ...prev, vendas: { insights: r.insights, usage: r.usage, dados, mesKey } }));
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoadingAba(null); setProgress(''); }
@@ -299,8 +316,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     { id: 'dre', label: 'DRE', icon: FileBarChart, color: 'blue' },
     { id: 'fluxo', label: 'Fluxo de Caixa', icon: Wallet, color: 'emerald' },
     { id: 'geral', label: 'Diagnóstico Geral', icon: GitBranch, color: 'violet' },
-    // Autosystem (Fase 1): apenas DRE + Fluxo. Vendas e Diagnóstico Geral virão depois.
-  ].filter(a => !isAutosystem || a.id === 'dre' || a.id === 'fluxo');
+  ];
 
   const podeGerarGeral = resultados.vendas?.mesKey === mesKey
     && resultados.dre?.mesKey === mesKey && resultados.fluxo?.mesKey === mesKey;
@@ -575,6 +591,7 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
           <RelatorioDissertativo
             aba={tab}
             insights={resultado.insights}
+            dados={resultado.dados}
             empresa={empresa}
             periodo={periodoLabel}
             modoRede={modoRede}

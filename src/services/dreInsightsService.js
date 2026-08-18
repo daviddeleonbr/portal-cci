@@ -12,6 +12,21 @@ import { getAtivo as demoAtivo, mascararEmpresa, mascararRede } from './anonimiz
 // ─── System prompt (cacheado) ─────────────────────────────────
 const SYSTEM_PROMPT = `Voce e um consultor senior de finanças gerenciais especializado em postos de combustiveis.
 
+REGRAS DE LINGUAGEM (OBRIGATORIO — quem le e o DONO do posto, sem formacao contabil):
+- Escreva em portugues simples e direto. Frases de no maximo ~25 palavras. Voz ativa.
+- NAO use jargao. Faca estas trocas SEMPRE ao escrever qualquer texto:
+  - "YoY" / "year over year" -> "vs. mesmo mes do ano passado"
+  - "MoM" -> "vs. mes passado"
+  - "CMV" -> "custo do que foi vendido (CMV)" na 1a vez; depois "custo dos produtos"
+  - "pp" -> escreva "pontos percentuais" por extenso e explique na 1a ocorrencia
+  - "parametrizacao" / "mapeamento contabil" -> "configuracao do sistema"
+  - "rubrica" -> "conta"; "granularidade" -> "detalhamento"
+  - "competencia contabil" -> "mes em que a conta pertence"
+  - "deterioracao de margem" -> "queda no lucro por litro vendido"
+- Nao escreva "requer detalhamento por natureza"; escreva "peca ao contador a lista do que entrou nessa conta".
+- Sempre explique o numero pelo efeito no caixa do posto, nao apenas cite o valor.
+- IMPORTANTE: as CHAVES do JSON continuam tecnicas (interpretacao_yoy, etc.); apenas o TEXTO que voce escreve dentro delas muda.
+
 REGRA CRITICA — ESTRUTURA DA DRE:
 O payload contem \`mascara_dre.estrutura\` com a lista EXATA de grupos da DRE
 parametrizada do cliente (com nomes, tipos base/subtotal/resultado, hierarquia
@@ -130,9 +145,9 @@ REGRAS:
 - Use SEMPRE os numeros do payload. Nao invente valores.
 - Use SEMPRE os \`grupoNome\` do payload pra nomear linhas/itens. Nao crie nomes.
 - Cite valores em R$ e percentuais com precisao.
-- YoY eliminado de sazonalidade; trimestre para suavizar ruido; tendencia 6m para direcao.
-- Para comparacoes de margem, use pontos percentuais (pp), nao variacao relativa.
-- Tom consultivo. Foco em acao, nao em descricao.
+- A comparacao com o mesmo mes do ano passado elimina sazonalidade; o trimestre suaviza ruido; a tendencia de 6 meses mostra a direcao.
+- Para comparar margens, use "pontos percentuais" (por extenso), nao variacao relativa.
+- Tom de conversa com o dono. Foco em acao concreta, nao em descricao tecnica.
 - Responda APENAS o JSON, sem texto adicional, sem markdown, sem code fences.`;
 
 // ─── Agregacao de VENDAS por grupo_dre (usa mascara de vendas) ─
@@ -284,21 +299,27 @@ export function agregarDrePorGrupo(dadosPorMes, grupos, mapeamentos, opcoes = {}
   // Travessia POST-ORDER: visita filhos primeiro, depois o pai.
   // Assim grupos com múltiplos níveis (pai→filho→neto) propagam o valor
   // até o topo. Se um nó tem valor próprio, preserva; senão soma descendentes.
+  // Memoização: cada grupo é totalizado UMA vez (evita duplicar quando um pai
+  // é alcançado por mais de um caminho na travessia).
+  const _rollupComputado = new Map();
   function popularDescendentes(grupoId, visitados = new Set()) {
+    if (_rollupComputado.has(grupoId)) return _rollupComputado.get(grupoId);
     if (visitados.has(grupoId)) return totalPorGrupo.get(grupoId) || 0; // proteção contra ciclo
     visitados.add(grupoId);
     const filhos = filhosPorPai.get(grupoId) || [];
-    if (filhos.length === 0) return totalPorGrupo.get(grupoId) || 0;
+    const valorProprio = totalPorGrupo.get(grupoId) || 0;
+    if (filhos.length === 0) { _rollupComputado.set(grupoId, valorProprio); return valorProprio; }
     // Visita os filhos primeiro
     let somaFilhos = 0;
     filhos.forEach(fid => { somaFilhos += popularDescendentes(fid, visitados); });
-    // Se este pai não tem valor próprio, herda a soma dos filhos
-    const valorProprio = totalPorGrupo.get(grupoId) || 0;
-    if (valorProprio === 0 && somaFilhos !== 0) {
-      totalPorGrupo.set(grupoId, somaFilhos);
-      return somaFilhos;
-    }
-    return valorProprio;
+    // Total do pai = valor PRÓPRIO (contas mapeadas direto no pai, ex.: receita
+    // de carvão em REVENDA) + soma dos filhos. Antes herdava os filhos SÓ quando
+    // o próprio era 0, o que zerava os filhos sempre que o pai também tinha valor
+    // direto — descartando, por exemplo, a receita de combustível.
+    const total = valorProprio + somaFilhos;
+    totalPorGrupo.set(grupoId, total);
+    _rollupComputado.set(grupoId, total);
+    return total;
   }
   gruposOrdenados.forEach(g => {
     if (g.tipo === 'subtotal' || g.tipo === 'resultado') return;

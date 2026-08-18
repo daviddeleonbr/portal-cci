@@ -3,6 +3,10 @@
 // Fica invisivel em tela (display:none) e so aparece no @media print.
 
 import { formatCurrency } from '../../utils/format';
+import RelatorioDre from './RelatorioDre';
+import RelatorioVendas from './RelatorioVendas';
+import RelatorioFluxo from './RelatorioFluxo';
+import RelatorioGeral from './RelatorioGeral';
 
 const TITULO_POR_ABA = {
   vendas: 'Relatório de Análise Técnica Comercial',
@@ -11,8 +15,14 @@ const TITULO_POR_ABA = {
   geral: 'Relatório de Análise Técnica · Diagnóstico Estrategico Integrado',
 };
 
-export default function RelatorioDissertativo({ aba, insights, empresa, periodo, modoRede = false }) {
+export default function RelatorioDissertativo({ aba, insights, empresa, periodo, modoRede = false, dados = null }) {
   if (!insights) return null;
+
+  // Layout novo (leigo) para os 4 relatórios.
+  if (aba === 'dre') return <RelatorioDre insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} />;
+  if (aba === 'vendas') return <RelatorioVendas insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} />;
+  if (aba === 'fluxo') return <RelatorioFluxo insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} />;
+  if (aba === 'geral') return <RelatorioGeral insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} />;
 
   const dataAgora = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const titulo = TITULO_POR_ABA[aba] || 'Análise Empresarial';
