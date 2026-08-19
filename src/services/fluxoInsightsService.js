@@ -19,6 +19,7 @@ REGRAS DE LINGUAGEM (OBRIGATORIO — quem le e o DONO do posto, sem formacao con
   - "pp" -> "pontos percentuais" (por extenso); "granularidade" -> "detalhamento"; "rubrica" -> "conta"
 - Explique cada numero pelo efeito no caixa do dono, nao apenas cite o valor.
 - As CHAVES do JSON continuam tecnicas; apenas o TEXTO dentro delas muda.
+- NAO diga o obvio nem repita fatos genericos do setor. O dono ja sabe que combustivel tem margem baixa e alto volume, que recebe cartao em D+1/D+2 e paga a distribuidora em 7-30 dias. Nunca gaste frase confirmando o que qualquer dono de posto ja sabe. Traga so o que os NUMEROS DELE revelam: desvios, tendencias, comparacoes e valores especificos.
 
 CONTEXTO:
 - Caixa do posto: recebimentos em sua maioria imediatos (cartao D+1/D+2, pix, dinheiro); pagamentos a distribuidora em 7-30 dias
@@ -57,7 +58,7 @@ SUA RESPOSTA DEVE SER UM JSON VALIDO com EXATAMENTE esta estrutura:
     "risco_liquidez_proximos_meses": "baixo|medio|alto"
   },
   "concentracoes": [
-    {"conta_gerencial": "...", "pct_do_total": 0, "risco": "...", "sugestao": "..."}
+    {"grupo": "...", "pct_do_total": 0, "risco": "...", "sugestao": "..."}
   ],
   "oportunidades": {
     "aumentar_entradas": ["..."],
@@ -71,6 +72,11 @@ SUA RESPOSTA DEVE SER UM JSON VALIDO com EXATAMENTE esta estrutura:
 }
 
 REGRAS:
+- ANALISE SEMPRE pelos GRUPOS DA MASCARA DE FLUXO (campo por_grupo) — as contas
+  configuradas do cliente (ex.: "Recebimentos de clientes", "Pagamentos a fornecedores",
+  "Salarios e encargos", "Impostos pagos"). Use EXATAMENTE esses nomes (campo grupo).
+  NUNCA cite contas cruas/gerenciais do ERP (ex.: "PIX - STONE", "MASTERCARD CREDITO",
+  "PDV PISTA", "VISA CREDITO") — o payload nem traz mais essas contas.
 - Use os numeros do payload. Nao invente.
 - Cite R$ e % com precisao.
 - Variacao de margem/percentual = pp. Variacao de receita/saldo = %.
@@ -257,13 +263,14 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
     .sort((a, b) => b.variacao_pct - a.variacao_pct)
     .slice(0, 5);
 
-  // Concentracao: conta que sozinha responde por >30% das saidas
-  const concentracaoRisco = aggAtual.top_contas_gerenciais
-    .filter(c => c.saidas > 0 && aggAtual.saidas_total > 0 && (c.saidas / aggAtual.saidas_total) > 0.3)
-    .map(c => ({
-      conta: c.nome,
-      pct_das_saidas: round((c.saidas / aggAtual.saidas_total) * 100, 2),
-      valor: c.saidas,
+  // Concentracao: GRUPO DA MASCARA que sozinho responde por >30% das saidas.
+  // (Analise pela estrutura da mascara de fluxo, nao pelas contas cruas do ERP.)
+  const concentracaoRisco = aggAtual.por_grupo
+    .filter(g => g.saidas > 0 && aggAtual.saidas_total > 0 && (g.saidas / aggAtual.saidas_total) > 0.3)
+    .map(g => ({
+      conta: g.grupo,
+      pct_das_saidas: round((g.saidas / aggAtual.saidas_total) * 100, 2),
+      valor: g.saidas,
     }));
 
   return {
@@ -280,7 +287,6 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
       saidas_total: aggAtual.saidas_total,
       variacao_caixa: aggAtual.variacao_caixa,
       por_grupo: aggAtual.por_grupo,
-      top_contas_gerenciais: aggAtual.top_contas_gerenciais,
       sem_plano: aggAtual.sem_plano,
     },
     comparativo_yoy: {

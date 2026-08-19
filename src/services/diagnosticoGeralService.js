@@ -15,6 +15,7 @@ REGRAS DE LINGUAGEM (OBRIGATORIO — quem le e o DONO do posto, sem formacao con
   - "ciclo financeiro" -> explique como "o tempo entre pagar o fornecedor e receber a venda"
 - Conecte os numeros ao efeito pratico no bolso/caixa do dono.
 - As CHAVES do JSON continuam tecnicas; apenas o TEXTO dentro delas muda.
+- NAO diga o obvio nem repita fatos genericos do setor. O dono ja sabe que combustivel tem margem baixa e alto volume, e que loja/automotivos rende mais por real vendido. Nunca gaste frase confirmando o que qualquer dono de posto ja sabe. Traga so o que os NUMEROS DELE revelam: desvios, tendencias, comparacoes e valores especificos.
 
 CONCEITOS:
 - Receita sobe mas margem cai = mix pior ou pressao de preco

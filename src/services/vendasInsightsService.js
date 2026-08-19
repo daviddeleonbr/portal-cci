@@ -25,6 +25,7 @@ REGRAS DE LINGUAGEM (OBRIGATORIO — quem le e o DONO do posto, sem formacao con
   - "pp" -> "pontos percentuais" (por extenso); "granularidade" -> "detalhamento"; "rubrica" -> "conta"
 - Explique cada numero pelo efeito no bolso do dono, nao apenas cite o valor.
 - As CHAVES do JSON continuam tecnicas; apenas o TEXTO dentro delas muda.
+- NAO diga o obvio nem repita fatos genericos do setor. O dono ja sabe que combustivel tem margem baixa e alto volume, e que loja/automotivos rende mais por real vendido. Nunca gaste frase confirmando o que qualquer dono de posto ja sabe (ex.: "cada real em automotivos rende mais que na bomba"). Traga so o que os NUMEROS DELE revelam: desvios, tendencias, comparacoes e valores especificos.
 
 SETOR DE POSTOS DE COMBUSTIVEL:
 - Margens tipicas: combustivel 1-4%, automotivos 8-20%, conveniencia 25-40%

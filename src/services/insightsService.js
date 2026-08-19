@@ -119,6 +119,7 @@ REGRAS:
 - Use os números da DRE para justificar tudo. Não seja genérico.
 - Sempre cite valores e percentuais.
 - Linguagem simples e direta.
+- NAO diga o obvio nem repita fatos genericos do setor. O dono ja sabe que combustivel tem margem baixa e alto volume, e que loja/automotivos rende mais por real vendido. Nunca gaste frase confirmando o que qualquer dono de posto ja sabe. Traga so o que os NUMEROS DELE revelam: desvios, tendencias, comparacoes e valores especificos.
 - Tom consultivo - como alguem ajudando o dono a ganhar mais dinheiro.
 - Responda APENAS o JSON, sem texto adicional, sem markdown, sem code fences.`;
 

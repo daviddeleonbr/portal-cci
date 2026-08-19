@@ -155,13 +155,13 @@ export async function agregarDadosFluxoAutosystem({ rede, empresaCodigos, mascar
     .sort((a, b) => b.variacao_pct - a.variacao_pct)
     .slice(0, 5);
 
-  // Concentração: conta que sozinha responde por >30% das saídas
-  const concentracaoRisco = aggAtual.top_contas_gerenciais
-    .filter(c => c.saidas > 0 && aggAtual.saidas_total > 0 && (c.saidas / aggAtual.saidas_total) > 0.3)
-    .map(c => ({
-      conta: c.nome,
-      pct_das_saidas: round((c.saidas / aggAtual.saidas_total) * 100, 2),
-      valor: c.saidas,
+  // Concentração: grupo da máscara que sozinho responde por >30% das saídas
+  const concentracaoRisco = aggAtual.por_grupo
+    .filter(g => g.saidas > 0 && aggAtual.saidas_total > 0 && (g.saidas / aggAtual.saidas_total) > 0.3)
+    .map(g => ({
+      conta: g.grupo,
+      pct_das_saidas: round((g.saidas / aggAtual.saidas_total) * 100, 2),
+      valor: g.saidas,
     }));
 
   return {
@@ -176,7 +176,6 @@ export async function agregarDadosFluxoAutosystem({ rede, empresaCodigos, mascar
       saidas_total: aggAtual.saidas_total,
       variacao_caixa: aggAtual.variacao_caixa,
       por_grupo: aggAtual.por_grupo,
-      top_contas_gerenciais: aggAtual.top_contas_gerenciais,
       sem_plano: aggAtual.sem_plano,
     },
     comparativo_yoy: {

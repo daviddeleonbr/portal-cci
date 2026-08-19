@@ -35,7 +35,6 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
   const serie = dados?.tendencia_6m || [];
   const yoy = dados?.comparativo_yoy || {};
   const porGrupo = pa.por_grupo || [];
-  const topContas = pa.top_contas_gerenciais || [];
   const alertasDados = dados?.alertas || {};
 
   // ── Detecção de inconsistência (sem movimento nenhum) ──
@@ -168,20 +167,23 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
             </section>
           )}
 
-          {/* ── Contas que mais pesaram ── */}
-          {topContas.length > 0 && (
+          {/* ── Contas que mais pesaram (grupos da MÁSCARA de fluxo, não contas cruas do ERP) ── */}
+          {porGrupo.length > 0 && (
             <section className="rd-secao">
               <h2>Contas que mais pesaram</h2>
-              <p className="rd-oque-e">O que é isso? As contas que mais movimentaram dinheiro no mês — onde vale a pena olhar de perto para economizar.</p>
+              <p className="rd-oque-e">O que é isso? As contas da sua estrutura de fluxo de caixa (máscara) que mais movimentaram dinheiro no mês — onde vale a pena olhar de perto para economizar.</p>
               <TabelaDados
                 className="longa"
                 colunas={[
-                  { chave: 'nome', titulo: 'Conta / plano gerencial', render: (v) => trad(v) },
+                  { chave: 'grupo', titulo: 'Conta (máscara de fluxo)', render: (v) => trad(v) },
                   { chave: 'saidas', titulo: 'Saídas', num: true, render: (v) => moeda(v) },
                   { chave: 'entradas', titulo: 'Entradas', num: true, render: (v) => moeda(v) },
                   { chave: 'pct', titulo: '% das saídas', num: true, render: (_, l) => saidas > 0 ? pct((Number(l.saidas || 0) / saidas) * 100) : '—' },
                 ]}
-                linhas={topContas}
+                linhas={[...porGrupo]
+                  .filter(g => Number(g.entradas || 0) > 0 || Number(g.saidas || 0) > 0)
+                  .sort((a, b) => (Number(b.saidas || 0) + Number(b.entradas || 0)) - (Number(a.saidas || 0) + Number(a.entradas || 0)))
+                  .slice(0, 15)}
               />
             </section>
           )}
@@ -194,7 +196,7 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
               {concentracoes.length > 0 ? (
                 <ul>{concentracoes.map((c, i) => (
                   <li key={i}>
-                    <span className="rd-forte">{c.conta_gerencial || c.conta}</span>
+                    <span className="rd-forte">{c.grupo || c.conta_gerencial || c.conta}</span>
                     {c.pct_do_total != null ? ` — ${pct(c.pct_do_total)} das saídas` : ''}
                     {c.risco ? `. ${trad(c.risco)}` : ''}
                     {c.sugestao ? ` ${trad(c.sugestao)}` : ''}

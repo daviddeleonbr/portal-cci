@@ -27,6 +27,7 @@ REGRAS DE LINGUAGEM (OBRIGATORIO — quem le e o DONO do posto, sem formacao con
 - Nao escreva "requer detalhamento por natureza"; escreva "peca ao contador a lista do que entrou nessa conta".
 - Sempre explique o numero pelo efeito no caixa do posto, nao apenas cite o valor.
 - IMPORTANTE: as CHAVES do JSON continuam tecnicas (interpretacao_yoy, etc.); apenas o TEXTO que voce escreve dentro delas muda.
+- NAO diga o obvio nem repita fatos genericos do setor. O dono ja sabe que combustivel tem margem baixa e alto volume, e que loja/automotivos rende mais por real vendido (ex.: nao escreva "cada real em automotivos rende mais que na bomba"). Nunca gaste frase confirmando o que qualquer dono de posto ja sabe. Traga so o que os NUMEROS DELE revelam: desvios, tendencias, comparacoes e valores especificos.
 
 REGRA CRITICA — ESTRUTURA DA DRE:
 O payload contem \`mascara_dre.estrutura\` com a lista EXATA de grupos da DRE
