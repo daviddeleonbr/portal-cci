@@ -299,8 +299,9 @@ function FluxoTreeBuilder({ mascara, grupos, saving, onBack, onAddLinha, onUpdat
   }, [grupos, editingId]);
 
   useEffect(() => {
-    const grupoIds = grupos.filter(g => g.tipo === 'grupo').map(g => g.id);
-    setExpandedGrupos(new Set(grupoIds));
+    // Expande por default todo nó que TEM filhos (grupo, entrada ou saída com sub-itens).
+    const comFilhos = new Set(grupos.filter(g => g.parent_id).map(g => g.parent_id));
+    setExpandedGrupos(comFilhos);
   }, [grupos]);
 
   const startEdit = (grupo) => {
@@ -505,6 +506,10 @@ function SortableTreeRow({
   const isEditing = editingId === grupo.id;
   const isExpanded = expandedGrupos.has(grupo.id);
   const indent = depth * 24;
+  const temFilhos = Array.isArray(children) && children.length > 0;
+  // Grupo, Entrada e Saída podem receber sub-itens; Subtotal/Resultado (calculados) não.
+  const podeTerFilhos = ['grupo', 'entrada', 'saida'].includes(grupo.tipo);
+  const mostrarChevron = isGrupo || temFilhos;
 
   const rowBg = isResultado
     ? 'bg-gradient-to-r from-emerald-50/60 to-transparent'
@@ -535,7 +540,7 @@ function SortableTreeRow({
         )}
 
         <div className="flex-shrink-0 w-5 flex items-center justify-center">
-          {isGrupo ? (
+          {mostrarChevron ? (
             <button onClick={() => onToggleExpand(grupo.id)}
               className="flex items-center justify-center h-5 w-5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
               <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }}>
@@ -596,10 +601,15 @@ function SortableTreeRow({
             </button>
           )}
 
+          {/* Adicionar sub-item — sempre visível em Grupo, Entrada e Saída, pra
+              deixar claro que dá pra criar mais níveis dentro de qualquer um deles. */}
+          {podeTerFilhos && (
+            <AddChildDropdown
+              onAdd={(t) => onAddChild(t, grupo.id, getChildren(grupo.id).length)}
+              sempreVisivel
+            />
+          )}
           <div className="flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity">
-            {isGrupo && (
-              <AddChildDropdown onAdd={(t) => onAddChild(t, grupo.id, getChildren(grupo.id).length)} />
-            )}
             <button onClick={() => onDelete(grupo)}
               className="rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Excluir">
               <Trash2 className="h-3.5 w-3.5" />
@@ -609,7 +619,7 @@ function SortableTreeRow({
       </div>
 
       <AnimatePresence>
-        {isGrupo && isExpanded && (
+        {temFilhos && isExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -684,8 +694,10 @@ function AddLineDropdown({ onAdd }) {
   );
 }
 
-// Dropdown within a group row - opens same set of child types
-function AddChildDropdown({ onAdd }) {
+// Dropdown within a group row - opens same set of child types.
+// `sempreVisivel`: mostra um botao rotulado (nao some fora do hover), pra deixar
+// claro que da pra criar sub-grupos/entradas dentro deste grupo (mais niveis).
+function AddChildDropdown({ onAdd, sempreVisivel = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -703,11 +715,14 @@ function AddChildDropdown({ onAdd }) {
   ];
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative flex-shrink-0" ref={ref}>
       <button onClick={() => setOpen(!open)}
-        className="rounded p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-        title="Adicionar filho">
+        className={sempreVisivel
+          ? 'flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors'
+          : 'rounded p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors'}
+        title="Adicionar sub-item (sub-grupo, entrada, saída ou subtotal)">
         <Plus className="h-3.5 w-3.5" />
+        {sempreVisivel && <span>Sub-item</span>}
       </button>
       <AnimatePresence>
         {open && (
