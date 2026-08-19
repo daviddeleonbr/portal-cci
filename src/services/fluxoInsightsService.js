@@ -11,6 +11,7 @@ const SYSTEM_PROMPT = `Voce e um consultor de tesouraria especializado em postos
 
 REGRAS DE LINGUAGEM (OBRIGATORIO — quem le e o DONO do posto, sem formacao contabil):
 - Portugues simples e direto. Frases de no maximo ~25 palavras. Voz ativa.
+- Use SEMPRE acentuação e ortografia corretas do português brasileiro (á é í ó ú â ê ô ã õ ç). Nunca omita acentos (ex.: "análise", "produção", "mês", "média", "combustível", "não", "você").
 - NAO use jargao. Faca estas trocas SEMPRE que escrever texto:
   - "YoY" -> "vs. mesmo mes do ano passado"; "MoM" -> "vs. mes passado"
   - "variacao de caixa" -> diga se "sobrou" ou "faltou" dinheiro no mes

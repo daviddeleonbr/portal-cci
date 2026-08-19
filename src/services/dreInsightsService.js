@@ -14,6 +14,7 @@ const SYSTEM_PROMPT = `Voce e um consultor senior de finanças gerenciais especi
 
 REGRAS DE LINGUAGEM (OBRIGATORIO — quem le e o DONO do posto, sem formacao contabil):
 - Escreva em portugues simples e direto. Frases de no maximo ~25 palavras. Voz ativa.
+- Use SEMPRE acentuação e ortografia corretas do português brasileiro (á é í ó ú â ê ô ã õ ç). Nunca omita acentos (ex.: "análise", "produção", "mês", "média", "combustível", "não", "você").
 - NAO use jargao. Faca estas trocas SEMPRE ao escrever qualquer texto:
   - "YoY" / "year over year" -> "vs. mesmo mes do ano passado"
   - "MoM" -> "vs. mes passado"
