@@ -50,6 +50,29 @@ export function FaixaQualidade({ titulo = 'Atenção: os números deste relatór
   );
 }
 
+// ─── Nota explicativa do consultor (texto livre → PDF) ─────────
+// Preserva quebras de linha do que o consultor digitou. Só aparece se houver
+// texto. Fica logo após o resumo do relatório, com destaque próprio.
+export function NotaConsultor({ texto, titulo = 'Notas do consultor' }) {
+  const t = (texto || '').trim();
+  if (!t) return null;
+  return (
+    <section className="rd-nota-consultor rd-secao">
+      <div className="rd-nota-cabeca">
+        <span className="rd-nota-icone" aria-hidden="true">✎</span>
+        <h2>{titulo}</h2>
+      </div>
+      {t.split(/\n{2,}/).map((par, i) => (
+        <p key={i} className="rd-nota-par">
+          {par.split('\n').map((linha, j, arr) => (
+            <span key={j}>{linha}{j < arr.length - 1 ? <br /> : null}</span>
+          ))}
+        </p>
+      ))}
+    </section>
+  );
+}
+
 // ─── Tabela de dados genérica ──────────────────────────────────
 // colunas: [{ chave, titulo, num?, render? }]  ·  linhas: [obj]
 export function TabelaDados({ colunas, linhas, className = '' }) {

@@ -136,6 +136,71 @@
 .rd-faixa-alerta p { margin: 1.5mm 0 0; font-size: 9.5pt; color: var(--grafite); }
 .rd-faixa-alerta .acao { margin-top: 2mm; font-weight: 700; }
 
+/* ─── Nota explicativa do consultor (destaque, logo após o resumo) ── */
+.rd-nota-consultor {
+  background: #f0fdfa; border: 1.5px solid var(--verde);
+  border-left-width: 4px; border-radius: 6px;
+  padding: 3.5mm 4mm; margin: 4mm 0 5mm; break-inside: avoid;
+}
+.rd-nota-consultor .rd-nota-cabeca { display: flex; align-items: center; gap: 2mm; margin-bottom: 1.5mm; }
+.rd-nota-consultor .rd-nota-icone { font-size: 12pt; color: var(--verde); line-height: 1; }
+.rd-nota-consultor h2 {
+  font-family: var(--fonte-titulo); font-weight: 800; color: var(--verde);
+  font-size: 12pt; margin: 0; border: 0; padding: 0; text-transform: none; letter-spacing: 0;
+}
+.rd-nota-consultor .rd-nota-par { margin: 0 0 2mm; font-size: 10pt; line-height: 1.5; color: var(--grafite); }
+.rd-nota-consultor .rd-nota-par:last-child { margin-bottom: 0; }
+
+/* ─── Nota por item/tópico (o "porquê" do consultor, NO CONTEXTO) ── */
+.rd-nota-item {
+  background: #ecfdf5;
+  border: 1.5px solid var(--verde);
+  border-left-width: 5px;
+  border-radius: 6px;
+  padding: 2.5mm 3.5mm;
+  margin: 2mm 0 3mm;
+  break-inside: avoid;
+  font-size: 10pt; line-height: 1.5; color: var(--grafite);
+  box-shadow: 0 1px 2px rgba(6, 95, 70, .12);
+}
+.rd-nota-item .rd-nota-item-rot {
+  display: block;
+  font-family: var(--fonte-titulo);
+  font-weight: 800; color: var(--verde);
+  font-size: 10pt; margin-bottom: 0.8mm;
+  text-transform: uppercase; letter-spacing: .3px;
+}
+
+/* ─── Notas do consultor — seção consolidada com DESTAQUE forte ──── */
+.rd-notas-consultor {
+  background: #ecfdf5;
+  border: 2px solid var(--verde);
+  border-radius: 8px;
+  padding: 4mm 4.5mm 3mm;
+  margin: 4mm 0 5mm;
+  box-shadow: inset 4px 0 0 var(--verde);
+}
+.rd-notas-consultor .rd-nc-cabeca { display: flex; align-items: center; gap: 2.5mm; }
+.rd-notas-consultor .rd-nc-icone {
+  font-size: 15pt; color: #fff; background: var(--verde);
+  width: 8mm; height: 8mm; border-radius: 5px; line-height: 8mm; text-align: center;
+}
+.rd-notas-consultor h2 {
+  font-family: var(--fonte-titulo); font-weight: 800; color: var(--verde);
+  font-size: 14pt; margin: 0; border: 0; padding: 0; text-transform: none; letter-spacing: 0;
+}
+.rd-notas-consultor .rd-nc-intro { font-size: 9.5pt; color: var(--cinza); margin: 1.5mm 0 2.5mm; }
+.rd-notas-consultor .rd-nc-item {
+  break-inside: avoid; margin: 0 0 2.5mm; padding: 2mm 3mm;
+  background: #fff; border: 1px solid #a7f3d0; border-radius: 5px;
+}
+.rd-notas-consultor .rd-nc-item:last-child { margin-bottom: 0; }
+.rd-notas-consultor .rd-nc-rotulo {
+  font-family: var(--fonte-titulo); font-weight: 700; color: var(--grafite);
+  font-size: 10.5pt; margin-bottom: 0.5mm;
+}
+.rd-notas-consultor .rd-nc-texto { font-size: 10pt; line-height: 1.5; color: var(--grafite); white-space: pre-wrap; }
+
 /* ─── Tabela de dados ──────────────────────────────────────── */
 .rd-tabela {
   width: 100%; border-collapse: collapse; margin: 2.5mm 0 4mm;

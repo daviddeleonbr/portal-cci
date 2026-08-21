@@ -8,7 +8,9 @@ import {
   Layers, Wallet, GitBranch, Calendar, Package, Activity, CreditCard, ShieldAlert,
   Building2,
 } from 'lucide-react';
+import { useState } from 'react';
 import { formatCurrency } from '../../utils/format';
+import { chaveNota, useNotasItens, PainelNotasSecao, algumaNotaEm } from './notasItens';
 
 export default function AnaliseIaView({ insights, modoRede = false, usage = null }) {
   if (!insights) return null;
@@ -21,8 +23,8 @@ export default function AnaliseIaView({ insights, modoRede = false, usage = null
       {insights.mix_produto && <CardMixProduto mix={insights.mix_produto} />}
       {insights.diagnostico_grupos && <CardDiagnosticoGrupos d={insights.diagnostico_grupos} />}
       {insights.combustiveis && <CardCombustiveis c={insights.combustiveis} />}
-      {insights.automotivos_analise && <CardCategoriaAnalise a={insights.automotivos_analise} titulo="Automotivos" icone={Package} cor="blue" />}
-      {insights.conveniencia_analise && <CardCategoriaAnalise a={insights.conveniencia_analise} titulo="Conveniência" icone={Package} cor="emerald" />}
+      {insights.automotivos_analise && <CardCategoriaAnalise a={insights.automotivos_analise} titulo="Automotivos" secao="grupo-auto" icone={Package} cor="blue" />}
+      {insights.conveniencia_analise && <CardCategoriaAnalise a={insights.conveniencia_analise} titulo="Conveniência" secao="grupo-conv" icone={Package} cor="emerald" />}
       {insights.volumes_precos?.analise && <CardVolumesPrecos v={insights.volumes_precos} />}
       {insights.alertas_produtos && <CardAlertasProdutos a={insights.alertas_produtos} />}
       {insights.formas_pagamento && <CardFormasPagamento f={insights.formas_pagamento} />}
@@ -98,18 +100,32 @@ function ResumoExecutivo({ insights, usage }) {
   const positivos = re.destaques_positivos ?? re.pontos_positivos ?? [];
   const negativos = re.destaques_negativos ?? re.pontos_negativos ?? re.alertas_agudos ?? [];
 
+  const ctx = useNotasItens();
+  const [painel, setPainel] = useState(false);
+  const itensNota = [{ chave: chaveNota('topico', 'Resumo executivo'), rotulo: 'Resumo executivo' }];
+  const temNota = ctx && algumaNotaEm(ctx.notas, itensNota);
+
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       className={`rounded-2xl border p-5 shadow-sm ${bg}`}>
       <div className="flex items-center gap-2 mb-2">
         <cfg.Icon className="h-5 w-5" />
         <h3 className="text-sm font-bold uppercase tracking-wider">Situação: {cfg.label}</h3>
+        {ctx && (
+          <button type="button" onClick={() => setPainel(v => !v)}
+            className={`ml-auto inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10.5px] font-semibold ${
+              temNota ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-300 bg-white/70 text-gray-500 hover:bg-white'
+            }`}>
+            {temNota ? '✎ porquê' : '+ porquê'}
+          </button>
+        )}
         {usage?.cache_read_input_tokens > 0 && (
           <span className="ml-auto text-[10px] text-gray-500 bg-white/60 px-2 py-0.5 rounded-full">
             cache hit {usage.cache_read_input_tokens} tokens
           </span>
         )}
       </div>
+      {painel && <PainelNotasSecao itens={itensNota} onFechar={() => setPainel(false)} />}
       <p className="text-[13.5px] leading-relaxed">{resumo}</p>
       {(positivos.length > 0 || negativos.length > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
@@ -146,8 +162,9 @@ function ResumoExecutivo({ insights, usage }) {
 }
 
 function CardMixProduto({ mix }) {
+  const itensNota = (mix.concentracao || []).map(c => ({ chave: chaveNota('mix-cat', c.categoria), rotulo: c.categoria }));
   return (
-    <Card icon={Target} color="blue" titulo="Mix de produto">
+    <Card icon={Target} color="blue" titulo="Mix de produto" itensNota={itensNota}>
       {mix.interpretacao && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{mix.interpretacao}</p>}
       {mix.concentracao?.length > 0 && (
         <Tabela headers={['Categoria', '% Receita', '% Margem', 'Comentário']}
@@ -178,8 +195,10 @@ function CardMixProduto({ mix }) {
 }
 
 function CardDiagnosticoGrupos({ d }) {
+  const itensNota = [...(d.grupos_problema || []), ...(d.grupos_destaque || [])]
+    .map(g => ({ chave: chaveNota('grupo', g.grupo), rotulo: g.grupo }));
   return (
-    <Card icon={Layers} color="violet" titulo="Diagnóstico por grupo">
+    <Card icon={Layers} color="violet" titulo="Diagnóstico por grupo" itensNota={itensNota}>
       {d.interpretacao && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{d.interpretacao}</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {d.grupos_problema?.length > 0 && (
@@ -215,8 +234,13 @@ function CardDiagnosticoGrupos({ d }) {
 }
 
 function CardCombustiveis({ c }) {
+  const itensNota = [
+    ...(c.tipos_em_queda || []).map(t => ({ chave: chaveNota('comb-item', t.tipo), rotulo: t.tipo })),
+    ...(c.produtos_destaque || []).map(p => ({ chave: chaveNota('comb-item', p.produto), rotulo: p.produto })),
+    ...(c.produtos_preocupantes || []).map(p => ({ chave: chaveNota('comb-item', p.produto), rotulo: p.produto })),
+  ];
   return (
-    <Card icon={Fuel} color="amber" titulo="Análise de combustíveis">
+    <Card icon={Fuel} color="amber" titulo="Análise de combustíveis" itensNota={itensNota}>
       {c.analise_por_tipo && (
         <>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Por tipo (Gasolina, Diesel, Etanol, GNV)</p>
@@ -285,9 +309,11 @@ function CardCombustiveis({ c }) {
   );
 }
 
-function CardCategoriaAnalise({ a, titulo, icone: Icone = Package, cor = 'blue' }) {
+function CardCategoriaAnalise({ a, titulo, secao, icone: Icone = Package, cor = 'blue' }) {
+  const itensNota = [...(a.grupos_destaque || []), ...(a.grupos_problema || [])]
+    .map(g => ({ chave: chaveNota(secao, g.grupo), rotulo: g.grupo }));
   return (
-    <Card icon={Icone} color={cor} titulo={`Análise de ${titulo}`}>
+    <Card icon={Icone} color={cor} titulo={`Análise de ${titulo}`} itensNota={itensNota}>
       {a.interpretacao && <p className="text-[13px] text-gray-700 mb-3 leading-relaxed">{a.interpretacao}</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {a.grupos_destaque?.length > 0 && (
@@ -368,8 +394,10 @@ function CardVolumesPrecos({ v }) {
 }
 
 function CardAlertasProdutos({ a }) {
+  const itensNota = [...(a.produtos_em_queda || []), ...(a.produtos_em_alta_para_replicar || [])]
+    .map(p => ({ chave: chaveNota('produto', p.produto), rotulo: p.produto }));
   return (
-    <Card icon={AlertTriangle} color="red" titulo="Produtos em movimento">
+    <Card icon={AlertTriangle} color="red" titulo="Produtos em movimento" itensNota={itensNota}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {a.produtos_em_queda?.length > 0 && (
           <div>
@@ -383,7 +411,7 @@ function CardAlertasProdutos({ a }) {
                     ) : (
                       <span className="inline-block rounded-full bg-red-100 text-red-700 text-[9px] font-bold uppercase px-1.5 py-0.5">{p.tipo}</span>
                     )}
-                    <span className="text-[12.5px] font-semibold truncate">{p.produto}</span>
+                    <span className="text-[12.5px] font-semibold truncate flex-1">{p.produto}</span>
                   </div>
                   {p.queda_pct != null && (
                     <p className="text-[11.5px] text-red-700 font-mono tabular-nums mt-1">-{Math.abs(p.queda_pct).toFixed(1)}%</p>
@@ -446,8 +474,9 @@ function CardMargens({ m }) {
 }
 
 function CardLinhasCriticas({ linhas }) {
+  const itensNota = linhas.map(l => ({ chave: chaveNota('linha-critica', l.linha), rotulo: l.linha }));
   return (
-    <Card icon={ListOrdered} color="red" titulo="Linhas críticas da DRE">
+    <Card icon={ListOrdered} color="red" titulo="Linhas críticas da DRE" itensNota={itensNota}>
       <Tabela headers={['Linha', 'Atual', 'YoY', 'Var %', 'Impacto']}
         rows={linhas.map(l => [
           <span className="font-medium">{l.linha}</span>,
@@ -470,8 +499,9 @@ function CardLinhasCriticas({ linhas }) {
 }
 
 function CardCustosDespesas({ c }) {
+  const itensNota = (c.maiores_itens || []).map(i => ({ chave: chaveNota('custo-item', i.nome), rotulo: i.nome }));
   return (
-    <Card icon={Wallet} color="amber" titulo="Custos e despesas">
+    <Card icon={Wallet} color="amber" titulo="Custos e despesas" itensNota={itensNota}>
       {c.maiores_itens?.length > 0 && (
         <Tabela headers={['Item', 'Valor', '% Receita', 'Comentário']}
           rows={c.maiores_itens.map(i => [
@@ -546,8 +576,9 @@ function CardVariacaoCaixa({ v }) {
 }
 
 function CardPadraoGruposFluxo({ p }) {
+  const itensNota = (p.saidas_crescentes || []).map(s => ({ chave: chaveNota('saida-crescente', s.grupo), rotulo: s.grupo }));
   return (
-    <Card icon={Layers} color="blue" titulo="Padrão por grupo (caixa)">
+    <Card icon={Layers} color="blue" titulo="Padrão por grupo (caixa)" itensNota={itensNota}>
       {p.entradas_principais?.length > 0 && (
         <>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 mb-2">Entradas principais</p>
@@ -593,13 +624,15 @@ function CardPadraoGruposFluxo({ p }) {
 }
 
 function CardConcentracoes({ c }) {
+  const nomeDe = (item) => item.grupo || item.conta_gerencial || item.conta;
+  const itensNota = c.map(item => ({ chave: chaveNota('concentracao', nomeDe(item)), rotulo: nomeDe(item) }));
   return (
-    <Card icon={AlertTriangle} color="amber" titulo="Concentracoes de risco">
+    <Card icon={AlertTriangle} color="amber" titulo="Concentracoes de risco" itensNota={itensNota}>
       <div className="space-y-2">
         {c.map((item, i) => (
           <div key={i} className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[12.5px] font-semibold">{item.conta_gerencial || item.conta}</span>
+              <span className="text-[12.5px] font-semibold">{nomeDe(item)}</span>
               {item.pct_do_total != null && (
                 <span className="ml-auto font-mono tabular-nums text-[11.5px] text-amber-700">{Number(item.pct_do_total).toFixed(1)}%</span>
               )}
@@ -622,8 +655,9 @@ function CardDiagnosticoIntegrado({ d }) {
 }
 
 function CardGargalos({ g }) {
+  const itensNota = g.map(item => ({ chave: chaveNota('gargalo', item.gargalo), rotulo: item.gargalo }));
   return (
-    <Card icon={AlertCircle} color="red" titulo="Gargalos críticos">
+    <Card icon={AlertCircle} color="red" titulo="Gargalos críticos" itensNota={itensNota}>
       <div className="space-y-2">
         {g.map((item, i) => (
           <div key={i} className="rounded-lg border border-red-200 bg-red-50/50 p-3">
@@ -642,8 +676,9 @@ function CardGargalos({ g }) {
 }
 
 function CardAlavancas({ a }) {
+  const itensNota = (a || []).map(item => ({ chave: chaveNota('alavanca', item.alavanca), rotulo: item.alavanca }));
   return (
-    <Card icon={Target} color="emerald" titulo="Alavancas prioritarias">
+    <Card icon={Target} color="emerald" titulo="Alavancas prioritarias" itensNota={itensNota}>
       <div className="space-y-2">
         {a.map((item, i) => (
           <div key={i} className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
@@ -661,8 +696,9 @@ function CardAlavancas({ a }) {
 }
 
 function CardContradicoes({ c }) {
+  const itensNota = c.map(item => ({ chave: chaveNota('contradicao', item.observacao), rotulo: item.observacao }));
   return (
-    <Card icon={AlertTriangle} color="amber" titulo="Contradicoes a investigar">
+    <Card icon={AlertTriangle} color="amber" titulo="Contradicoes a investigar" itensNota={itensNota}>
       <ul className="space-y-2">
         {c.map((item, i) => (
           <li key={i} className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
@@ -676,8 +712,9 @@ function CardContradicoes({ c }) {
 }
 
 function CardPlano90({ p }) {
+  const itensNota = (p || []).map(item => ({ chave: chaveNota('plano-item', item.acao), rotulo: item.acao }));
   return (
-    <Card icon={Calendar} color="blue" titulo="Plano de 90 dias">
+    <Card icon={Calendar} color="blue" titulo="Plano de 90 dias" itensNota={itensNota}>
       <div className="space-y-2">
         {p.map((item, i) => (
           <div key={i} className="rounded-lg border border-gray-200 bg-white p-3">
@@ -774,8 +811,9 @@ function CardTendencia({ t }) {
 }
 
 function CardRankingEmpresas({ r }) {
+  const itensNota = (r || []).map(e => ({ chave: chaveNota('rank-emp', e.empresa), rotulo: e.empresa }));
   return (
-    <Card icon={Award} color="amber" titulo="Ranking de empresas">
+    <Card icon={Award} color="amber" titulo="Ranking de empresas" itensNota={itensNota}>
       <Tabela headers={['#', 'Empresa', 'Receita', 'Margem %', '% Rede', 'Avaliação']}
         rows={r.map((e, i) => [
           <span className="font-mono text-gray-400">{e.posicao || i + 1}</span>,
@@ -1027,7 +1065,11 @@ function CardIntegridadeDados({ i }) {
   );
 }
 
-function Card({ icon: Icon, color, titulo, children }) {
+// itensNota: [{ chave, rotulo }] — os itens desta seção que podem receber nota.
+// Se não vier, a seção inteira é o único item anotável (nota do tópico).
+function Card({ icon: Icon, color, titulo, children, itensNota }) {
+  const ctx = useNotasItens();
+  const [painel, setPainel] = useState(false);
   const colorMap = {
     blue: 'text-blue-600 bg-blue-50',
     emerald: 'text-emerald-600 bg-emerald-50',
@@ -1038,6 +1080,10 @@ function Card({ icon: Icon, color, titulo, children }) {
     violet: 'text-blue-600 bg-blue-50',
     gray: 'text-gray-600 bg-gray-50',
   };
+  const itens = (itensNota && itensNota.length)
+    ? itensNota
+    : [{ chave: chaveNota('topico', titulo), rotulo: titulo }];
+  const temNota = ctx && algumaNotaEm(ctx.notas, itens);
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
       className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
@@ -1046,7 +1092,18 @@ function Card({ icon: Icon, color, titulo, children }) {
           <Icon className="h-3.5 w-3.5" />
         </div>
         <h3 className="text-sm font-semibold text-gray-800">{titulo}</h3>
+        {ctx && (
+          <button type="button" onClick={() => setPainel(v => !v)}
+            className={`ml-auto inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
+              temNota ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                : 'border-gray-300 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+            }`}
+            title="Explicar o porquê de um item desta seção (entra no PDF)">
+            {temNota ? '✎ porquê' : '+ porquê'}
+          </button>
+        )}
       </div>
+      {painel && <div className="px-5 pt-1"><PainelNotasSecao itens={itens} onFechar={() => setPainel(false)} /></div>}
       <div className="p-5">{children}</div>
     </motion.div>
   );

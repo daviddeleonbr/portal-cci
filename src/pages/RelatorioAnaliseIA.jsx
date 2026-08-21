@@ -18,10 +18,12 @@ import * as fluxoAutoIA from '../services/fluxoInsightsAutosystemService';
 import * as vendasAutoIA from '../services/vendasInsightsAutosystemService';
 import * as autosystemService from '../services/autosystemService';
 import { carregarApiKey, salvarApiKey, limparApiKey, carregarConfiguracaoIa } from '../services/iaSharedHelpers';
+import { montarEscopo, carregarRelatorios, salvarResultadoIa, salvarNota, salvarNotasItens } from '../services/analiseIaRelatorioService';
 import { useAnonimizador } from '../services/anonimizarService';
 import { useAdminSession } from '../hooks/useAuth';
 import AnaliseIaView from '../components/ia/AnaliseIaView';
 import RelatorioDissertativo from '../components/ia/RelatorioDissertativo';
+import { NotasItensProvider } from '../components/ia/notasItens';
 import Modal from '../components/ui/Modal';
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -53,6 +55,11 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
   const [resultados, setResultados] = useState({ vendas: null, dre: null, fluxo: null, geral: null });
   const [loadingAba, setLoadingAba] = useState(null);
   const [progress, setProgress] = useState('');
+  // Notas explicativas do consultor (por aba) — persistidas no banco e impressas no PDF.
+  const [notas, setNotas] = useState({ vendas: '', dre: '', fluxo: '', geral: '' });
+  const [notaStatus, setNotaStatus] = useState('idle'); // idle | saving | saved | error
+  // Notas por item: { [aba]: { [chaveItem]: texto } }
+  const [notasItens, setNotasItens] = useState({ vendas: {}, dre: {}, fluxo: {}, geral: {} });
 
   // API key — inicializa do localStorage (sync) e hidrata do Supabase
   // (chave admin-managed em `configuracoes_ia`) ao montar. Assim qualquer
@@ -147,11 +154,115 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId, chaveApiId, modoRede]);
 
-  // Quando troca mes, invalida os resultados (forca o usuario a gerar de novo)
+  // Quando troca mes, limpa a tela na hora (a carga do cache abaixo repopula).
   useEffect(() => {
     setResultados({ vendas: null, dre: null, fluxo: null, geral: null });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setNotas({ vendas: '', dre: '', fluxo: '', geral: '' });
+    setNotasItens({ vendas: {}, dre: {}, fluxo: {}, geral: {} });
+    setNotaStatus('idle');
   }, [mesKey]);
+
+  // ─── Escopo estavel (empresa | rede | rede-as) p/ cache + notas ──
+  const escopoCtx = useMemo(() => {
+    if (!contexto) return null;
+    const tipo = contexto.tipo;
+    let cliId = null, chvId = null, asId = null;
+    if (tipo === 'empresa') {
+      cliId = contexto.cliente?.id || clienteId || null;
+      chvId = contexto.cliente?.chave_api_id || null;
+      asId = contexto.cliente?.as_rede_id || null;
+    } else if (tipo === 'rede') {
+      chvId = chaveApiId || null;
+    } else if (tipo === 'rede-as') {
+      asId = asRedeId || null;
+    }
+    const escopo = montarEscopo({ tipo, clienteId: cliId, chaveApiId: chvId, asRedeId: asId });
+    return escopo ? { escopo, tipo, clienteId: cliId, chaveApiId: chvId, asRedeId: asId } : null;
+  }, [contexto, clienteId, chaveApiId, asRedeId]);
+
+  // ─── Carrega o cache (resultado da IA + nota) do periodo ─────────
+  // Evita regenerar (economiza tokens) e traz de volta as notas ja escritas.
+  useEffect(() => {
+    if (!escopoCtx?.escopo) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const mapa = await carregarRelatorios({ escopo: escopoCtx.escopo, ano: mesRef.ano, mes: mesRef.mes });
+        if (cancelado) return;
+        const novoRes = { vendas: null, dre: null, fluxo: null, geral: null };
+        const novasNotas = { vendas: '', dre: '', fluxo: '', geral: '' };
+        const novasNotasItens = { vendas: {}, dre: {}, fluxo: {}, geral: {} };
+        ['vendas', 'dre', 'fluxo', 'geral'].forEach(aba => {
+          const row = mapa[aba];
+          if (!row) return;
+          novasNotas[aba] = row.nota || '';
+          novasNotasItens[aba] = row.notas_itens || {};
+          if (row.insights) {
+            novoRes[aba] = {
+              insights: row.insights, usage: row.usage, dados: row.dados,
+              mesKey, geradoEm: row.gerado_em, doCache: true,
+            };
+          }
+        });
+        setResultados(novoRes);
+        setNotas(novasNotas);
+        setNotasItens(novasNotasItens);
+      } catch (e) {
+        console.warn('[analise-ia] falha ao carregar cache:', e.message || e);
+      }
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [escopoCtx, mesKey]);
+
+  // Persiste o resultado da IA (best-effort — nao quebra o fluxo se falhar).
+  const persistirResultado = useCallback((aba, r, dados) => {
+    if (!escopoCtx?.escopo) return;
+    salvarResultadoIa({
+      escopo: escopoCtx.escopo, aba, ano: mesRef.ano, mes: mesRef.mes,
+      chaveApiId: escopoCtx.chaveApiId, asRedeId: escopoCtx.asRedeId, clienteId: escopoCtx.clienteId,
+      insights: r.insights, dados, usage: r.usage,
+    }).catch(e => console.warn('[analise-ia] falha ao salvar cache:', e.message || e));
+  }, [escopoCtx, mesRef]);
+
+  const onNotaChange = useCallback((aba, texto) => {
+    setNotas(prev => ({ ...prev, [aba]: texto }));
+    setNotaStatus('idle');
+  }, []);
+
+  const salvarNotaAba = useCallback(async (aba) => {
+    if (!escopoCtx?.escopo) return;
+    setNotaStatus('saving');
+    try {
+      await salvarNota({
+        escopo: escopoCtx.escopo, aba, ano: mesRef.ano, mes: mesRef.mes,
+        chaveApiId: escopoCtx.chaveApiId, asRedeId: escopoCtx.asRedeId, clienteId: escopoCtx.clienteId,
+        texto: notas[aba] || '',
+      });
+      setNotaStatus('saved');
+    } catch (e) {
+      console.warn('[analise-ia] falha ao salvar nota:', e.message || e);
+      setNotaStatus('error');
+    }
+  }, [escopoCtx, mesRef, notas]);
+
+  // Nota por item/tópico: atualiza o mapa da aba (removendo chave vazia) e persiste.
+  const salvarNotaItem = useCallback((aba, chave, texto, rotulo) => {
+    setNotasItens(prev => {
+      const mapaAba = { ...(prev[aba] || {}) };
+      if (texto && texto.trim()) mapaAba[chave] = { rotulo: rotulo || '', texto: texto.trim() };
+      else delete mapaAba[chave];
+      const proximo = { ...prev, [aba]: mapaAba };
+      if (escopoCtx?.escopo) {
+        salvarNotasItens({
+          escopo: escopoCtx.escopo, aba, ano: mesRef.ano, mes: mesRef.mes,
+          chaveApiId: escopoCtx.chaveApiId, asRedeId: escopoCtx.asRedeId, clienteId: escopoCtx.clienteId,
+          notasItens: mapaAba,
+        }).catch(e => console.warn('[analise-ia] falha ao salvar nota de item:', e.message || e));
+      }
+      return proximo;
+    });
+  }, [escopoCtx, mesRef]);
 
   const navegarMes = (delta) => {
     let a = mesRef.ano, m = mesRef.mes + delta;
@@ -191,9 +302,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
         ? await vendasAutoIA.gerarAnaliseVendasAutosystemIA(dados, apiKey, { modoRede })
         : await vendasIA.gerarAnaliseVendasIA(dados, apiKey, { modoRede });
       setResultados(prev => ({ ...prev, vendas: { insights: r.insights, usage: r.usage, dados, mesKey } }));
+      persistirResultado('vendas', r, dados);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoadingAba(null); setProgress(''); }
-  }, [contexto, apiKey, mesRef, modoRede, mesKey]);
+  }, [contexto, apiKey, mesRef, modoRede, mesKey, persistirResultado]);
 
   const gerarDRE = useCallback(async () => {
     if (!contexto || !garantirApiKey()) return;
@@ -222,9 +334,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
       setProgress('Processando análise...');
       const r = await dreIA.gerarAnaliseDREIA(dados, apiKey);
       setResultados(prev => ({ ...prev, dre: { insights: r.insights, usage: r.usage, dados, mesKey } }));
+      persistirResultado('dre', r, dados);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoadingAba(null); setProgress(''); }
-  }, [contexto, apiKey, mesRef, modoRede, mesKey, mascaraDreId, chaveApiId]);
+  }, [contexto, apiKey, mesRef, modoRede, mesKey, mascaraDreId, chaveApiId, persistirResultado]);
 
   const gerarFluxo = useCallback(async () => {
     if (!contexto || !garantirApiKey()) return;
@@ -252,9 +365,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
       setProgress('Processando análise...');
       const r = await fluxoIA.gerarAnaliseFluxoIA(dados, apiKey);
       setResultados(prev => ({ ...prev, fluxo: { insights: r.insights, usage: r.usage, dados, mesKey } }));
+      persistirResultado('fluxo', r, dados);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoadingAba(null); setProgress(''); }
-  }, [contexto, apiKey, mesRef, modoRede, mesKey, mascaraFluxoId, chaveApiId]);
+  }, [contexto, apiKey, mesRef, modoRede, mesKey, mascaraFluxoId, chaveApiId, persistirResultado]);
 
   const gerarGeral = useCallback(async () => {
     if (!contexto || !garantirApiKey()) return;
@@ -274,9 +388,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
       setProgress('Sintetizando as 3 análises...');
       const r = await geralIA.gerarDiagnosticoGeralIA(dados, apiKey);
       setResultados(prev => ({ ...prev, geral: { insights: r.insights, usage: r.usage, dados, mesKey } }));
+      persistirResultado('geral', r, dados);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoadingAba(null); setProgress(''); }
-  }, [contexto, apiKey, mesRef, mesKey, resultados]);
+  }, [contexto, apiKey, mesRef, mesKey, resultados, persistirResultado]);
 
   const salvarChave = () => {
     salvarApiKey(tempKey.trim());
@@ -447,7 +562,12 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
             : labelEmpresa(contexto.cliente),
           cnpj: labelCnpj(contexto.cliente?.cnpj),
         };
-        const paneProps = { tab, modoRede, empresa: empresaInfo, periodoLabel };
+        const paneProps = {
+          tab, modoRede, empresa: empresaInfo, periodoLabel,
+          nota: notas[tab] || '', onNotaChange, onSalvarNota: salvarNotaAba, notaStatus,
+          notasItens: notasItens[tab] || {},
+          onSalvarNotaItem: (chave, texto, rotulo) => salvarNotaItem(tab, chave, texto, rotulo),
+        };
         if (tab === 'vendas') return (
           <PaneAnalise {...paneProps}
             titulo="Análise de Vendas"
@@ -529,7 +649,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
   );
 }
 
-function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGerar, modoRede, aviso, tab, empresa, periodoLabel }) {
+function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGerar, modoRede, aviso, tab, empresa, periodoLabel, nota, onNotaChange, onSalvarNota, notaStatus, notasItens, onSalvarNotaItem }) {
   return (
     <div>
       <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm mb-5 no-print">
@@ -540,6 +660,12 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 mb-0.5">{titulo}</h3>
             <p className="text-[12px] text-gray-500">{descricao}</p>
+            {resultado?.doCache && resultado?.geradoEm && (
+              <p className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-2 py-0.5">
+                <Info className="h-3 w-3" />
+                Reaproveitado do banco · gerado em {new Date(resultado.geradoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} — sem novo custo de IA
+              </p>
+            )}
           </div>
           {resultado && (
             <button onClick={() => window.print()}
@@ -585,8 +711,34 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
 
       {!carregando && resultado && (
         <>
+          <div className="no-print bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm mb-5">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <FileBarChart className="h-4 w-4 text-blue-600" />
+                <h4 className="text-sm font-semibold text-gray-900">Notas explicativas do consultor</h4>
+              </div>
+              <span className="text-[11px] text-gray-400">
+                {notaStatus === 'saving' ? 'Salvando…'
+                  : notaStatus === 'saved' ? 'Salvo ✓'
+                  : notaStatus === 'error' ? 'Erro ao salvar' : 'Salva ao sair do campo'}
+              </span>
+            </div>
+            <p className="text-[12px] text-gray-500 mb-2">
+              Texto livre que entra no PDF entregue ao cliente — descreva o problema encontrado e o que fazer / por que aconteceu.
+            </p>
+            <textarea
+              value={nota}
+              onChange={e => onNotaChange(tab, e.target.value)}
+              onBlur={() => onSalvarNota(tab)}
+              rows={5}
+              placeholder="Ex.: A margem da gasolina caiu 1,8pp no trimestre por causa do reajuste da distribuidora não repassado. Recomendamos revisar o preço de bomba em +R$ 0,07/L…"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 leading-relaxed focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 resize-y"
+            />
+          </div>
           <div className="no-print">
-            <AnaliseIaView insights={resultado.insights} usage={resultado.usage} modoRede={modoRede} />
+            <NotasItensProvider notas={notasItens} onSalvar={onSalvarNotaItem}>
+              <AnaliseIaView insights={resultado.insights} usage={resultado.usage} modoRede={modoRede} />
+            </NotasItensProvider>
           </div>
           <RelatorioDissertativo
             aba={tab}
@@ -595,6 +747,8 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
             empresa={empresa}
             periodo={periodoLabel}
             modoRede={modoRede}
+            nota={nota}
+            notasItens={notasItens}
           />
         </>
       )}

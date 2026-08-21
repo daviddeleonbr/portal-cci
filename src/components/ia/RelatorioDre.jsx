@@ -9,8 +9,9 @@ import PapelTimbrado from './PapelTimbrado';
 import { moeda, pct, variacao, traduzirRotulo, statusDaSituacao } from './formatarPtBr';
 import {
   SeloStatus, CartaoKpi, FaixaQualidade, TabelaDados, BarraComposicao,
-  MiniTendencia, PlanoAcao, Glossario, Tag,
+  MiniTendencia, PlanoAcao, Glossario, Tag, NotaConsultor,
 } from './componentesRelatorio';
+import { NotaItemImpressa, NotasConsultorConsolidado, NotasDaSecao, chaveNota } from './notasItens';
 
 // Termos do DRE explicados em uma frase (glossário — última página).
 const GLOSSARIO_DRE = [
@@ -26,7 +27,7 @@ const GLOSSARIO_DRE = [
   { termo: 'vs. mesmo mês do ano passado', def: 'Comparação com o mesmo mês do ano anterior (ex.: julho deste ano vs. julho do ano passado).' },
 ];
 
-export default function RelatorioDre({ insights, dados, empresa, periodo, modoRede = false }) {
+export default function RelatorioDre({ insights, dados, empresa, periodo, modoRede = false, nota = '', notasItens = {} }) {
   const kpis = dados?.periodo_atual?.kpis || {};
   const yoy = dados?.comparativo_yoy || {};
   const serie = dados?.tendencia_6m || [];
@@ -76,6 +77,11 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
 
   const recomendacoes = insights?.recomendacoes || [];
   const perguntas = insights?.perguntas_gestor || insights?.perguntas_chave_gestor || [];
+
+  // Notas por tópico no contexto de cada seção (pelo título do card na tela).
+  const nt = (t) => <NotaItemImpressa chave={chaveNota('topico', t)} notas={notasItens} rotulo={t} />;
+  const TOPICOS_INLINE = ['Resumo executivo', 'Margens', 'Linhas críticas da DRE', 'Custos e despesas', 'Tendência', 'Recomendacoes estrategicas', 'Perguntas para o gestor refletir'];
+  const sobras = (chave) => chave.startsWith('topico:') && !TOPICOS_INLINE.map(t => chaveNota('topico', t)).includes(chave);
 
   return (
     <div className="rd-doc-wrap">
@@ -129,6 +135,10 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
               explica="Faturamento comparado a um ano atrás." />
           </div>
 
+          {/* Nota geral do consultor + nota do resumo (no contexto do topo) */}
+          <NotaConsultor texto={nota} />
+          {nt('Resumo executivo')}
+
           {/* ── Margens ── */}
           <section className="rd-secao">
             <h2>Sua margem de lucro</h2>
@@ -144,6 +154,7 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
             {inconsistente && (
               <p className="rd-muted"><em>Percentuais de margem omitidos: o faturamento reconhecido está inconsistente (veja o aviso no topo).</em></p>
             )}
+            {nt('Margens')}
           </section>
 
           {/* ── Para onde vai o dinheiro (barra de composição) ── */}
@@ -180,6 +191,10 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
                   ))}
                 </ul>
               )}
+              {insights.linhas_criticas.map((l, i) => (
+                <NotaItemImpressa key={i} chave={chaveNota('linha-critica', l.linha)} notas={notasItens} rotulo={l.linha} />
+              ))}
+              {nt('Linhas críticas da DRE')}
             </section>
           )}
 
@@ -208,6 +223,8 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
                   <ul>{insights.custos_despesas.excessos.map((e, i) => <li key={i}>{trad(e)}</li>)}</ul>
                 </>
               )}
+              {nt('Custos e despesas')}
+              <NotasDaSecao notas={notasItens} prefixo="custo-item" />
             </section>
           )}
 
@@ -221,6 +238,7 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
                 serie={serie.map(s => ({ mes: s.mes, valor: s.receita_liquida }))}
               />
               {insights?.tendencia?.resumo_6m && <p>{trad(insights.tendencia.resumo_6m)}</p>}
+              {nt('Tendência')}
             </section>
           )}
 
@@ -242,6 +260,7 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
                   ))}
                 </ul>
               )}
+              {nt('Recomendacoes estrategicas')}
             </section>
           )}
 
@@ -252,8 +271,12 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
               <ol style={{ paddingLeft: '6mm' }}>
                 {perguntas.map((p, i) => <li key={i}>{trad(p)}</li>)}
               </ol>
+              {nt('Perguntas para o gestor refletir')}
             </section>
           )}
+
+          {/* Notas de tópicos sem seção própria neste relatório */}
+          <NotasConsultorConsolidado notas={notasItens} titulo="Outras observações do consultor" filtro={sobras} />
 
           {/* ── Glossário ── */}
           <Glossario termos={GLOSSARIO_DRE} />

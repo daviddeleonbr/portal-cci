@@ -8,8 +8,9 @@ import PapelTimbrado from './PapelTimbrado';
 import { moeda, pct, variacao, traduzirRotulo, statusDaSituacao } from './formatarPtBr';
 import {
   SeloStatus, CartaoKpi, FaixaQualidade, TabelaDados, BarraComposicao,
-  MiniTendencia, PlanoAcao, Glossario,
+  MiniTendencia, PlanoAcao, Glossario, NotaConsultor,
 } from './componentesRelatorio';
+import { NotaItemImpressa, NotasConsultorConsolidado, chaveNota } from './notasItens';
 
 // Termos de fluxo de caixa explicados em uma frase (glossário — última página).
 const GLOSSARIO_FLUXO = [
@@ -25,7 +26,7 @@ const GLOSSARIO_FLUXO = [
   { termo: 'Liquidez', def: 'A capacidade do posto de ter dinheiro em mãos para pagar as contas em dia.' },
 ];
 
-export default function RelatorioFluxo({ insights, dados, empresa, periodo, modoRede = false }) {
+export default function RelatorioFluxo({ insights, dados, empresa, periodo, modoRede = false, nota = '', notasItens = {} }) {
   // ── Extração defensiva dos KPIs (webposto x autosystem têm o mesmo formato) ──
   const pa = dados?.periodo_atual || {};
   const entradas = Number(pa.entradas_total ?? 0);
@@ -90,6 +91,11 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
   const perguntas = insights?.perguntas_gestor || insights?.perguntas_chave_gestor || [];
   const concentracoes = insights?.concentracoes || [];
 
+  // Notas por tópico no contexto de cada seção (pelo título do card na tela).
+  const nt = (t) => <NotaItemImpressa chave={chaveNota('topico', t)} notas={notasItens} rotulo={t} />;
+  const TOPICOS_INLINE = ['Resumo executivo', 'Variação de caixa', 'Concentracoes de risco', 'Tendência', 'Padrão por grupo (caixa)', 'Oportunidades', 'Recomendacoes estrategicas', 'Perguntas para o gestor refletir'];
+  const sobras = (chave) => chave.startsWith('topico:') && !TOPICOS_INLINE.map(t => chaveNota('topico', t)).includes(chave);
+
   return (
     <div className="rd-doc-wrap">
       <PapelTimbrado />
@@ -143,6 +149,10 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
               explica="Saídas comparadas ao mesmo mês do ano passado (subir é ruim para o caixa)." />
           </div>
 
+          {/* Nota geral do consultor + nota do resumo (no contexto do topo) */}
+          <NotaConsultor texto={nota} />
+          {nt('Resumo executivo')}
+
           {/* ── O que sobrou ou faltou ── */}
           {insights?.variacao_caixa && (
             <section className="rd-secao">
@@ -155,6 +165,7 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
                   <ul>{insights.variacao_caixa.causas_principais.map((c, i) => <li key={i}>{trad(c)}</li>)}</ul>
                 </>
               )}
+              {nt('Variação de caixa')}
             </section>
           )}
 
@@ -194,14 +205,18 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
               <h2>Cuidado com a dependência de poucas contas</h2>
               <p className="rd-oque-e">O que é isso? Quando uma só conta responde por uma fatia enorme das saídas, qualquer variação nela mexe muito no caixa. Vale acompanhar de perto.</p>
               {concentracoes.length > 0 ? (
-                <ul>{concentracoes.map((c, i) => (
+                <ul>{concentracoes.map((c, i) => {
+                  const nome = c.grupo || c.conta_gerencial || c.conta;
+                  return (
                   <li key={i}>
-                    <span className="rd-forte">{c.grupo || c.conta_gerencial || c.conta}</span>
+                    <span className="rd-forte">{nome}</span>
                     {c.pct_do_total != null ? ` — ${pct(c.pct_do_total)} das saídas` : ''}
                     {c.risco ? `. ${trad(c.risco)}` : ''}
                     {c.sugestao ? ` ${trad(c.sugestao)}` : ''}
+                    <NotaItemImpressa chave={chaveNota('concentracao', nome)} notas={notasItens} rotulo={nome} />
                   </li>
-                ))}</ul>
+                  );
+                })}</ul>
               ) : (
                 <ul>{alertasDados.concentracao_risco.map((c, i) => (
                   <li key={i}>
@@ -211,6 +226,7 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
                   </li>
                 ))}</ul>
               )}
+              {nt('Concentracoes de risco')}
             </section>
           )}
 
@@ -227,6 +243,7 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
               {insights?.tendencia?.risco_liquidez_proximos_meses && (
                 <p>Risco de faltar caixa nos próximos meses: <span className="rd-forte">{trad(insights.tendencia.risco_liquidez_proximos_meses)}</span>.</p>
               )}
+              {nt('Tendência')}
             </section>
           )}
 
@@ -240,8 +257,10 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
                   <span className="rd-forte">{s.grupo}</span>
                   {s.variacao_yoy_pct != null ? ` — subiu ${pct(Number(s.variacao_yoy_pct))} vs. ano passado` : ''}
                   {s.comentario ? `. ${trad(s.comentario)}` : ''}
+                  <NotaItemImpressa chave={chaveNota('saida-crescente', s.grupo)} notas={notasItens} rotulo={s.grupo} />
                 </li>
               ))}</ul>
+              {nt('Padrão por grupo (caixa)')}
             </section>
           )}
 
@@ -251,6 +270,7 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
               <h2>Como segurar mais dinheiro no caixa</h2>
               <p className="rd-oque-e">O que é isso? Ideias práticas para aumentar as entradas, reduzir as saídas e ganhar prazo de pagamento.</p>
               <ul>{oportunidades.map((o, i) => <li key={i}>{trad(o)}</li>)}</ul>
+              {nt('Oportunidades')}
             </section>
           )}
 
@@ -272,6 +292,7 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
                   ))}
                 </ul>
               )}
+              {nt('Recomendacoes estrategicas')}
             </section>
           )}
 
@@ -282,8 +303,12 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
               <ol style={{ paddingLeft: '6mm' }}>
                 {perguntas.map((p, i) => <li key={i}>{trad(p)}</li>)}
               </ol>
+              {nt('Perguntas para o gestor refletir')}
             </section>
           )}
+
+          {/* Notas de tópicos sem seção própria neste relatório */}
+          <NotasConsultorConsolidado notas={notasItens} titulo="Outras observações do consultor" filtro={sobras} />
 
           {/* ── Glossário ── */}
           <Glossario termos={GLOSSARIO_FLUXO} />

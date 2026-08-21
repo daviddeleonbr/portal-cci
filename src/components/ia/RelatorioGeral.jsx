@@ -6,8 +6,9 @@ import './relatorioImpressao.css';
 import PapelTimbrado from './PapelTimbrado';
 import { moeda, pct, traduzirRotulo, statusDaSituacao } from './formatarPtBr';
 import {
-  SeloStatus, CartaoKpi, TabelaDados, CardAlerta, PlanoAcao, Glossario,
+  SeloStatus, CartaoKpi, TabelaDados, CardAlerta, PlanoAcao, Glossario, NotaConsultor,
 } from './componentesRelatorio';
+import { NotaItemImpressa, NotasConsultorConsolidado, NotasDaSecao, chaveNota } from './notasItens';
 
 const GLOSSARIO_GERAL = [
   { termo: 'Diagnóstico integrado', def: 'A foto do mês juntando as três pontas: o que vendeu, quanto sobrou de lucro e como ficou o caixa.' },
@@ -21,7 +22,7 @@ const GLOSSARIO_GERAL = [
   { termo: 'Plano de 90 dias', def: 'A lista de ações para os próximos três meses, com responsável e meta.' },
 ];
 
-export default function RelatorioGeral({ insights, dados, empresa, periodo, modoRede = false }) {
+export default function RelatorioGeral({ insights, dados, empresa, periodo, modoRede = false, nota = '', notasItens = {} }) {
   const kc = dados?.kpis_cross || {};
   const lucro = kc.lucro_liquido != null ? Number(kc.lucro_liquido) : null;
   const margem = kc.margem_liquida_pct != null ? Number(kc.margem_liquida_pct) : null;
@@ -52,6 +53,13 @@ export default function RelatorioGeral({ insights, dados, empresa, periodo, modo
 
   const trad = (t) => traduzirRotulo(t || '');
 
+  // Notas por tópico: renderizadas NO CONTEXTO de cada seção. `nt` imprime a
+  // nota daquele tópico (pelo título do card na tela); `sobras` filtra, para o
+  // fim, só os tópicos anotados que não têm seção própria aqui.
+  const nt = (t) => <NotaItemImpressa chave={chaveNota('topico', t)} notas={notasItens} rotulo={t} />;
+  const TOPICOS_INLINE = ['Resumo executivo', 'Diagnóstico integrado', 'Gargalos críticos', 'Alavancas prioritarias', 'Contradicoes a investigar', 'Plano de 90 dias'];
+  const sobras = (chave) => chave.startsWith('topico:') && !TOPICOS_INLINE.map(t => chaveNota('topico', t)).includes(chave);
+
   return (
     <div className="rd-doc-wrap">
       <PapelTimbrado />
@@ -81,12 +89,17 @@ export default function RelatorioGeral({ insights, dados, empresa, periodo, modo
             explica="Dinheiro que de fato entrou menos o que saiu no mês." />
         </div>
 
+        {/* Nota geral do consultor + nota do Resumo (topo, no contexto do resumo) */}
+        <NotaConsultor texto={nota} />
+        {nt('Resumo executivo')}
+
         {/* ── Diagnóstico integrado (a história) ── */}
         {insights?.diagnostico_integrado && (
           <section className="rd-secao">
             <h2>A história do mês</h2>
             <p className="rd-oque-e">O que é isso? A leitura das três pontas juntas: o que a venda gerou, quanto virou lucro e como isso caiu (ou não) no caixa.</p>
             <p>{trad(insights.diagnostico_integrado)}</p>
+            {nt('Diagnóstico integrado')}
           </section>
         )}
 
@@ -96,13 +109,16 @@ export default function RelatorioGeral({ insights, dados, empresa, periodo, modo
             <h2>O que mais trava o resultado</h2>
             <p className="rd-oque-e">O que é isso? Os pontos que mais pesam contra o posto agora — atacar aqui rende mais.</p>
             {gargalos.map((g, i) => (
-              <CardAlerta
-                key={i}
-                severidade={String(g.impacto || 'media').toLowerCase() === 'alto' ? 'alta' : String(g.impacto || '').toLowerCase() === 'baixo' ? 'baixa' : 'media'}
-                risco={trad(g.gargalo)}
-                mitigacao={g.evidencia_cross ? trad(g.evidencia_cross) : null}
-              />
+              <div key={i}>
+                <CardAlerta
+                  severidade={String(g.impacto || 'media').toLowerCase() === 'alto' ? 'alta' : String(g.impacto || '').toLowerCase() === 'baixo' ? 'baixa' : 'media'}
+                  risco={trad(g.gargalo)}
+                  mitigacao={g.evidencia_cross ? trad(g.evidencia_cross) : null}
+                />
+                <NotaItemImpressa chave={chaveNota('gargalo', g.gargalo)} notas={notasItens} rotulo={trad(g.gargalo)} />
+              </div>
             ))}
+            {nt('Gargalos críticos')}
           </section>
         )}
 
@@ -119,6 +135,8 @@ export default function RelatorioGeral({ insights, dados, empresa, periodo, modo
                 {a.efeito_caixa && <div><span className="rd-forte">No caixa:</span> {trad(a.efeito_caixa)}</div>}
               </div>
             ))}
+            {nt('Alavancas prioritarias')}
+            <NotasDaSecao notas={notasItens} prefixo="alavanca" />
           </section>
         )}
 
@@ -129,9 +147,13 @@ export default function RelatorioGeral({ insights, dados, empresa, periodo, modo
             <p className="rd-oque-e">O que é isso? Sinais que parecem se contradizer e merecem uma olhada de perto.</p>
             <ul>
               {contradicoes.map((c, i) => (
-                <li key={i}><span className="rd-forte">{trad(c.observacao)}</span>{c.o_que_investigar ? ` — ${trad(c.o_que_investigar)}` : ''}</li>
+                <li key={i}>
+                  <span className="rd-forte">{trad(c.observacao)}</span>{c.o_que_investigar ? ` — ${trad(c.o_que_investigar)}` : ''}
+                  <NotaItemImpressa chave={chaveNota('contradicao', c.observacao)} notas={notasItens} rotulo={trad(c.observacao)} />
+                </li>
               ))}
             </ul>
+            {nt('Contradicoes a investigar')}
           </section>
         )}
 
@@ -150,6 +172,8 @@ export default function RelatorioGeral({ insights, dados, empresa, periodo, modo
               ]}
               linhas={plano}
             />
+            {nt('Plano de 90 dias')}
+            <NotasDaSecao notas={notasItens} prefixo="plano-item" />
           </section>
         )}
 
@@ -174,6 +198,9 @@ export default function RelatorioGeral({ insights, dados, empresa, periodo, modo
             </ol>
           </section>
         )}
+
+        {/* Notas de tópicos sem seção própria neste relatório */}
+        <NotasConsultorConsolidado notas={notasItens} titulo="Outras observações do consultor" filtro={sobras} />
 
         {/* ── Glossário ── */}
         <Glossario termos={GLOSSARIO_GERAL} />

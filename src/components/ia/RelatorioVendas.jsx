@@ -9,8 +9,9 @@ import PapelTimbrado from './PapelTimbrado';
 import { moeda, pct, variacao, traduzirRotulo, statusDaSituacao } from './formatarPtBr';
 import {
   SeloStatus, CartaoKpi, FaixaQualidade, TabelaDados, BarraComposicao,
-  MiniTendencia, PlanoAcao, Glossario,
+  MiniTendencia, PlanoAcao, Glossario, NotaConsultor,
 } from './componentesRelatorio';
+import { NotaItemImpressa, NotasConsultorConsolidado, NotasDaSecao, chaveNota } from './notasItens';
 
 // Termos de vendas explicados em uma frase (glossário — última página).
 const GLOSSARIO_VENDAS = [
@@ -35,7 +36,7 @@ const CAT_ROTULO = {
   sem_categoria: 'Sem classificação',
 };
 
-export default function RelatorioVendas({ insights, dados, empresa, periodo, modoRede = false }) {
+export default function RelatorioVendas({ insights, dados, empresa, periodo, modoRede = false, nota = '', notasItens = {} }) {
   // ── Extração defensiva dos KPIs (webposto x autosystem x rede consolidada) ──
   const totais = dados?.totais || {};
   const consolidado = dados?.consolidado || {};
@@ -101,6 +102,11 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
   const perguntas = insights?.perguntas_gestor || insights?.perguntas_chave_gestor || [];
   const alertasProd = insights?.alertas_produtos || {};
 
+  // Notas por tópico no contexto de cada seção (pelo título do card na tela).
+  const nt = (t) => <NotaItemImpressa chave={chaveNota('topico', t)} notas={notasItens} rotulo={t} />;
+  const TOPICOS_INLINE = ['Resumo executivo', 'Mix de produto', 'Análise de combustíveis', 'Análise de Automotivos', 'Análise de Conveniência', 'Diagnóstico por grupo', 'Produtos em movimento', 'Comparativos temporais', 'Ranking de empresas', 'Análise da rede', 'Oportunidades', 'Recomendacoes estrategicas', 'Perguntas para o gestor refletir'];
+  const sobras = (chave) => chave.startsWith('topico:') && !TOPICOS_INLINE.map(t => chaveNota('topico', t)).includes(chave);
+
   return (
     <div className="rd-doc-wrap">
       <PapelTimbrado />
@@ -152,6 +158,10 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
               explica="Faturamento comparado a um ano atrás." />
           </div>
 
+          {/* Nota geral do consultor + nota do resumo (no contexto do topo) */}
+          <NotaConsultor texto={nota} />
+          {nt('Resumo executivo')}
+
           {/* ── Mix de produtos ── */}
           {(itensMix.length > 0 || insights?.mix_produto) && (
             <section className="rd-secao">
@@ -170,6 +180,8 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
                   linhas={insights.mix_produto.concentracao}
                 />
               )}
+              {nt('Mix de produto')}
+              <NotasDaSecao notas={notasItens} prefixo="mix-cat" />
             </section>
           )}
 
@@ -188,6 +200,12 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
               {insights?.automotivos_analise?.interpretacao && (
                 <><h3>Produtos automotivos</h3><p>{trad(insights.automotivos_analise.interpretacao)}</p></>
               )}
+              {nt('Análise de combustíveis')}
+              {nt('Análise de Conveniência')}
+              {nt('Análise de Automotivos')}
+              <NotasDaSecao notas={notasItens} prefixo="comb-item" />
+              <NotasDaSecao notas={notasItens} prefixo="grupo-conv" />
+              <NotasDaSecao notas={notasItens} prefixo="grupo-auto" />
             </section>
           )}
 
@@ -200,7 +218,10 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
                 <>
                   <h3>Ajudaram o resultado</h3>
                   <ul>{insights.diagnostico_grupos.grupos_destaque.map((g, i) => (
-                    <li key={i}><span className="rd-forte">{g.grupo}:</span> {trad(g.porque)}</li>
+                    <li key={i}>
+                      <span className="rd-forte">{g.grupo}:</span> {trad(g.porque)}
+                      <NotaItemImpressa chave={chaveNota('grupo', g.grupo)} notas={notasItens} rotulo={g.grupo} />
+                    </li>
                   ))}</ul>
                 </>
               )}
@@ -208,10 +229,14 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
                 <>
                   <h3>Atrapalharam o resultado</h3>
                   <ul>{insights.diagnostico_grupos.grupos_problema.map((g, i) => (
-                    <li key={i}><span className="rd-forte">{g.grupo}:</span> {trad(g.motivo)}{g.acao_sugerida ? ` — ${trad(g.acao_sugerida)}` : ''}</li>
+                    <li key={i}>
+                      <span className="rd-forte">{g.grupo}:</span> {trad(g.motivo)}{g.acao_sugerida ? ` — ${trad(g.acao_sugerida)}` : ''}
+                      <NotaItemImpressa chave={chaveNota('grupo', g.grupo)} notas={notasItens} rotulo={g.grupo} />
+                    </li>
                   ))}</ul>
                 </>
               )}
+              {nt('Diagnóstico por grupo')}
             </section>
           )}
 
@@ -228,6 +253,7 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
                       <span className="rd-forte">{p.produto}</span>
                       {p.tipo === 'sumiu' ? ' — sumiu das vendas' : p.queda_pct != null ? ` — caiu ${pct(Math.abs(Number(p.queda_pct)))}` : ''}
                       {p.acao ? `. ${trad(p.acao)}` : ''}
+                      <NotaItemImpressa chave={chaveNota('produto', p.produto)} notas={notasItens} rotulo={p.produto} />
                     </li>
                   ))}</ul>
                 </>
@@ -240,10 +266,12 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
                       <span className="rd-forte">{p.produto}</span>
                       {p.crescimento_pct != null ? ` — subiu ${pct(Number(p.crescimento_pct))}` : ''}
                       {p.porque_funcionou ? `. ${trad(p.porque_funcionou)}` : ''}
+                      <NotaItemImpressa chave={chaveNota('produto', p.produto)} notas={notasItens} rotulo={p.produto} />
                     </li>
                   ))}</ul>
                 </>
               )}
+              {nt('Produtos em movimento')}
             </section>
           )}
 
@@ -258,6 +286,7 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
               />
               {insights?.comparativo?.tendencia_direcao && <p>Direção da tendência: <span className="rd-forte">{trad(insights.comparativo.tendencia_direcao)}</span>.</p>}
               {insights?.comparativo?.vs_yoy && <p>{trad(insights.comparativo.vs_yoy)}</p>}
+              {nt('Comparativos temporais')}
             </section>
           )}
 
@@ -280,6 +309,9 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
               />
               {insights?.dispersao?.concentracao && <p>{trad(insights.dispersao.concentracao)}</p>}
               {insights?.dispersao?.padrao_rede && <p>{trad(insights.dispersao.padrao_rede)}</p>}
+              {nt('Ranking de empresas')}
+              {nt('Análise da rede')}
+              <NotasDaSecao notas={notasItens} prefixo="rank-emp" />
             </section>
           )}
 
@@ -289,6 +321,7 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
               <h2>Onde dá para vender e sobrar mais</h2>
               <p className="rd-oque-e">O que é isso? Ideias práticas para aumentar o faturamento e, principalmente, o que sobra no fim.</p>
               <ul>{oportunidades.map((o, i) => <li key={i}>{trad(o)}</li>)}</ul>
+              {nt('Oportunidades')}
             </section>
           )}
 
@@ -310,6 +343,7 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
                   ))}
                 </ul>
               )}
+              {nt('Recomendacoes estrategicas')}
             </section>
           )}
 
@@ -320,8 +354,12 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
               <ol style={{ paddingLeft: '6mm' }}>
                 {perguntas.map((p, i) => <li key={i}>{trad(p)}</li>)}
               </ol>
+              {nt('Perguntas para o gestor refletir')}
             </section>
           )}
+
+          {/* Notas de tópicos sem seção própria neste relatório */}
+          <NotasConsultorConsolidado notas={notasItens} titulo="Outras observações do consultor" filtro={sobras} />
 
           {/* ── Glossário ── */}
           <Glossario termos={GLOSSARIO_VENDAS} />

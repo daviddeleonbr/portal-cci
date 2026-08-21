@@ -15,14 +15,14 @@ const TITULO_POR_ABA = {
   geral: 'Relatório de Análise Técnica · Diagnóstico Estrategico Integrado',
 };
 
-export default function RelatorioDissertativo({ aba, insights, empresa, periodo, modoRede = false, dados = null }) {
+export default function RelatorioDissertativo({ aba, insights, empresa, periodo, modoRede = false, dados = null, nota = '', notasItens = {} }) {
   if (!insights) return null;
 
   // Layout novo (leigo) para os 4 relatórios.
-  if (aba === 'dre') return <RelatorioDre insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} />;
-  if (aba === 'vendas') return <RelatorioVendas insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} />;
-  if (aba === 'fluxo') return <RelatorioFluxo insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} />;
-  if (aba === 'geral') return <RelatorioGeral insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} />;
+  if (aba === 'dre') return <RelatorioDre insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} nota={nota} notasItens={notasItens} />;
+  if (aba === 'vendas') return <RelatorioVendas insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} nota={nota} notasItens={notasItens} />;
+  if (aba === 'fluxo') return <RelatorioFluxo insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} nota={nota} notasItens={notasItens} />;
+  if (aba === 'geral') return <RelatorioGeral insights={insights} dados={dados} empresa={empresa} periodo={periodo} modoRede={modoRede} nota={nota} notasItens={notasItens} />;
 
   const dataAgora = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const titulo = TITULO_POR_ABA[aba] || 'Análise Empresarial';
