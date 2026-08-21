@@ -26,7 +26,7 @@ export default function Header({ onMenuClick }) {
             Fonte menor pra ficar fluido no topbar. */}
         {pageTitle && (
           <div className="min-w-0">
-            <h1 className="text-sm font-semibold text-gray-900 leading-tight truncate">{pageTitle}</h1>
+            <h1 className="font-display text-sm font-semibold text-gray-900 leading-tight truncate">{pageTitle}</h1>
             {pageDescription && (
               <p className="text-[11px] text-gray-500 leading-tight truncate">{pageDescription}</p>
             )}

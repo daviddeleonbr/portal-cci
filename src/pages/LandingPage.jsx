@@ -153,7 +153,7 @@ function Hero() {
         <motion.h1
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.05 }}
-          className="text-center text-[44px] sm:text-6xl md:text-7xl font-semibold tracking-tight leading-[1.05] max-w-5xl mx-auto"
+          className="font-display text-center text-[44px] sm:text-6xl md:text-7xl font-semibold tracking-tight leading-[1.05] max-w-5xl mx-auto"
         >
           O resultado que o seu posto{' '}
           <span className="text-blue-300">
@@ -413,7 +413,7 @@ function Problems() {
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">
             Quase todo posto sofre disso
           </p>
-          <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Vender muito não significa <span className="text-slate-400">lucrar muito.</span>
           </h2>
           <p className="mt-5 text-slate-400 text-[15px] leading-relaxed">
@@ -502,7 +502,7 @@ function Services() {
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">
             Como entregamos resultado
           </p>
-          <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Três frentes, uma só missão:{' '}
             <span className="text-blue-300">
               colocar seu posto no lucro real.
@@ -569,7 +569,7 @@ function Differentials() {
           className="text-center mb-16 max-w-3xl mx-auto"
         >
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">Por que CCI</p>
-          <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Construído por quem vive postos.{' '}
             <span className="text-slate-400">Não por consultoria genérica.</span>
           </h2>
@@ -618,7 +618,7 @@ function Results() {
               className="max-w-2xl mb-12"
             >
               <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300 mb-3">O resultado em números</p>
-              <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+              <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
                 Postos que viraram a chave{' '}
                 <span className="text-emerald-300">
                   e nunca mais voltaram.
@@ -669,7 +669,7 @@ function DashboardShowcase() {
           className="max-w-2xl mb-14"
         >
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">A plataforma</p>
-          <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Um portal. Toda a saúde financeira do seu posto{' '}
             <span className="text-slate-400">em tempo real.</span>
           </h2>
@@ -769,7 +769,7 @@ function Testimonials() {
           className="max-w-2xl mb-14"
         >
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">Quem já usa</p>
-          <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Empresários de postos que decidiram <span className="text-slate-400">parar de adivinhar.</span>
           </h2>
         </motion.div>
@@ -835,7 +835,7 @@ function FinalCTA() {
             Diagnóstico financeiro gratuito · Setor postos
           </span>
 
-          <h2 className="text-4xl sm:text-6xl font-semibold tracking-tight leading-[1.05] max-w-3xl mx-auto">
+          <h2 className="font-display text-4xl sm:text-6xl font-semibold tracking-tight leading-[1.05] max-w-3xl mx-auto">
             Pronto para parar de tomar decisões <span className="text-slate-300">no escuro?</span>
           </h2>
           <p className="mt-6 text-[16px] text-slate-300 max-w-xl mx-auto leading-relaxed">

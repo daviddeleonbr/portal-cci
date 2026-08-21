@@ -255,7 +255,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           </div>
           {!collapsed && (
             <div>
-              <p className="text-[14px] font-semibold text-gray-900 tracking-tight leading-tight">CCI Admin</p>
+              <p className="font-display text-[14px] font-semibold text-gray-900 tracking-tight leading-tight">CCI Admin</p>
               <p className="text-[11px] text-gray-400 leading-tight">Portal interno</p>
             </div>
           )}
