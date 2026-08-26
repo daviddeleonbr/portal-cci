@@ -504,22 +504,15 @@ export async function enviarParaCci(id) {
   if (!temBoleto && !temMotivo) {
     throw new Error('Anexe pelo menos um boleto ou informe o motivo da ausência (ex: "paga em dinheiro").');
   }
-  const totalProdutos = (nf.produtos || []).reduce(
-    (s, p) => s + Number(p.quantidade || 0) * Number(p.valor_unitario || 0), 0,
-  );
-  const valorNota = Number(nf.valor || 0);
-  if (Math.abs(totalProdutos - valorNota) > 0.01) {
-    throw new Error(
-      `Total dos produtos (R$ ${totalProdutos.toFixed(2)}) diverge do valor da NF ` +
-      `(R$ ${valorNota.toFixed(2)}). Ajuste antes de enviar.`
-    );
-  }
 
+  // Reenvio após correção: limpa os motivos de devolução dos itens.
+  await limparMotivosItens(id);
   return atualizar(id, { status_portal: 'enviada', enviada_em: new Date().toISOString() });
 }
 
 // Admin marca como lançada.
 export async function marcarLancada(id, { adminUsuarioId }) {
+  await limparMotivosItens(id);
   return atualizar(id, {
     status_portal: 'lancada',
     lancada_em: new Date().toISOString(),
@@ -528,13 +521,38 @@ export async function marcarLancada(id, { adminUsuarioId }) {
   });
 }
 
-// Admin devolve para correção.
-export async function devolverParaCliente(id, { motivo, adminUsuarioId }) {
-  if (!motivo || !motivo.trim()) throw new Error('Informe o motivo da devolução');
+// Limpa o motivo de devolução de todos os itens da nota (ao reenviar/lançar).
+async function limparMotivosItens(nfId) {
+  const { error } = await supabase
+    .from('nf_manifestacao_produto')
+    .update({ motivo_devolucao: null })
+    .eq('nf_manifestacao_id', nfId);
+  if (error) throw error;
+}
+
+// Admin devolve para correção — o motivo vai POR ITEM.
+// `motivos`: [{ produtoId, motivo }] (só precisa vir os itens com observação;
+// os demais têm o motivo limpo). Exige ao menos um item com motivo.
+export async function devolverParaCliente(id, { motivos, adminUsuarioId }) {
+  const lista = (motivos || []).map(m => ({ produtoId: m.produtoId, motivo: (m.motivo || '').trim() }));
+  if (!lista.some(m => m.motivo)) {
+    throw new Error('Marque ao menos um item com o motivo da correção');
+  }
+  // Zera todos os motivos e grava os informados (mantém consistência).
+  await limparMotivosItens(id);
+  const comMotivo = lista.filter(m => m.motivo && m.produtoId);
+  const resultados = await Promise.all(comMotivo.map(m =>
+    supabase.from('nf_manifestacao_produto')
+      .update({ motivo_devolucao: m.motivo })
+      .eq('id', m.produtoId)
+  ));
+  const falha = resultados.find(r => r.error);
+  if (falha?.error) throw falha.error;
+
   return atualizar(id, {
     status_portal: 'devolvida',
     devolvida_em: new Date().toISOString(),
     devolvida_por: adminUsuarioId || null,
-    motivo_devolucao: motivo.trim(),
+    motivo_devolucao: null,
   });
 }

@@ -54,7 +54,8 @@ export default function AdminNfManifestacaoDetalhe() {
   const [salvando, setSalvando] = useState(false);
   const [toast, setToast] = useState(null);
   const [modalDevolver, setModalDevolver] = useState(false);
-  const [motivoDevolucao, setMotivoDevolucao] = useState('');
+  // Motivo da devolução POR ITEM: { [produtoId]: texto }
+  const [motivosItens, setMotivosItens] = useState({});
 
   const carregar = useCallback(async () => {
     setLoading(true); setError(null);
@@ -90,15 +91,20 @@ export default function AdminNfManifestacaoDetalhe() {
     } finally { setSalvando(false); }
   };
 
+  const motivos = (nota?.produtos || [])
+    .map(p => ({ produtoId: p.id, motivo: (motivosItens[p.id] || '').trim() }))
+    .filter(m => m.motivo);
+  const podeDevolver = motivos.length > 0;
+
   const confirmarDevolucao = async () => {
-    if (!motivoDevolucao.trim()) {
-      setToast({ tipo: 'error', mensagem: 'Informe o motivo da devolução' });
+    if (!podeDevolver) {
+      setToast({ tipo: 'error', mensagem: 'Marque ao menos um item com o motivo da correção' });
       return;
     }
     setSalvando(true);
     try {
       await nfService.devolverParaCliente(nota.id, {
-        motivo: motivoDevolucao,
+        motivos,
         adminUsuarioId: usuario?.id,
       });
       setToast({ tipo: 'success', mensagem: 'Nota devolvida ao cliente' });
@@ -211,10 +217,12 @@ export default function AdminNfManifestacaoDetalhe() {
           {nota.devolvida_em && <span className="inline-flex items-center gap-1.5"><XCircle className="h-3 w-3 text-rose-500" /> Devolvida: <strong className="text-gray-700 dark:text-gray-200">{fmtDataHora(nota.devolvida_em)}</strong></span>}
         </div>
 
-        {nota.motivo_devolucao && (
+        {(nota.motivo_devolucao || (nota.status_portal === 'devolvida' && (nota.produtos || []).some(p => p.motivo_devolucao))) && (
           <div className="mt-3 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 p-3 text-sm text-rose-800 dark:text-rose-300">
-            <p className="font-semibold mb-1">Motivo da devolução:</p>
-            <p>{nota.motivo_devolucao}</p>
+            <p className="font-semibold mb-1">Devolvida para correção</p>
+            {nota.motivo_devolucao
+              ? <p>{nota.motivo_devolucao}</p>
+              : <p>Veja os itens marcados abaixo com o motivo da correção.</p>}
           </div>
         )}
       </div>
@@ -324,6 +332,12 @@ export default function AdminNfManifestacaoDetalhe() {
                             </button>
                           ))}
                         </div>
+                        {p.motivo_devolucao && (
+                          <p className="mt-1 text-[11.5px] text-rose-700 dark:text-rose-300 flex items-start gap-1">
+                            <span className="font-semibold whitespace-nowrap">⚠ Correção:</span>
+                            <span>{p.motivo_devolucao}</span>
+                          </p>
+                        )}
                       </td>
                     </tr>
                   );
@@ -372,13 +386,13 @@ export default function AdminNfManifestacaoDetalhe() {
         </div>
       )}
 
-      {/* Modal devolver */}
-      <Modal open={modalDevolver} onClose={() => setModalDevolver(false)} title="Devolver nota ao cliente"
+      {/* Modal devolver — motivo POR ITEM */}
+      <Modal open={modalDevolver} onClose={() => setModalDevolver(false)} title="Devolver nota ao cliente" size="lg"
         footer={(
           <div className="flex justify-end gap-2">
             <button onClick={() => setModalDevolver(false)}
               className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06]">Cancelar</button>
-            <button onClick={confirmarDevolucao} disabled={salvando || !motivoDevolucao.trim()}
+            <button onClick={confirmarDevolucao} disabled={salvando || !podeDevolver}
               className="rounded-lg bg-rose-600 text-white px-4 py-2 text-sm font-semibold hover:bg-rose-700 disabled:opacity-50">
               Devolver ao cliente
             </button>
@@ -386,11 +400,36 @@ export default function AdminNfManifestacaoDetalhe() {
         )}>
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
-            Descreva o que o cliente precisa corrigir/complementar. Ele verá esta mensagem no portal.
+            Escreva o que precisa ser corrigido em <strong>cada item</strong> que tem problema. Deixe em branco os itens que estão OK. O cliente verá a observação colada no produto.
           </p>
-          <textarea value={motivoDevolucao} onChange={e => setMotivoDevolucao(e.target.value)}
-            rows={5} placeholder="Ex: Valor do produto X está divergente da nota. Corrigir e reenviar."
-            className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 p-3 text-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-900/40" />
+          <div className="space-y-2.5 max-h-[55vh] overflow-y-auto pr-1">
+            {(nota.produtos || []).map((p, idx) => {
+              const preenchido = (motivosItens[p.id] || '').trim();
+              return (
+                <div key={p.id}
+                  className={`rounded-lg border p-3 ${preenchido
+                    ? 'border-rose-300 dark:border-rose-500/40 bg-rose-50/50 dark:bg-rose-500/[0.06]'
+                    : 'border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800/40'}`}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500">#{idx + 1}</span>
+                    <span className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">
+                      {p.descricao || <span className="italic text-gray-400">sem descrição</span>}
+                    </span>
+                    {p.codigo_interno && <span className="text-[11px] font-mono text-gray-400">· {p.codigo_interno}</span>}
+                  </div>
+                  <textarea
+                    value={motivosItens[p.id] || ''}
+                    onChange={e => setMotivosItens(m => ({ ...m, [p.id]: e.target.value }))}
+                    rows={2}
+                    placeholder="Motivo da correção deste item (opcional)"
+                    className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 p-2.5 text-[13px] focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-900/40" />
+                </div>
+              );
+            })}
+          </div>
+          {!podeDevolver && (
+            <p className="text-[12px] text-gray-500 dark:text-gray-400">Preencha o motivo em pelo menos um item para devolver.</p>
+          )}
         </div>
       </Modal>
 

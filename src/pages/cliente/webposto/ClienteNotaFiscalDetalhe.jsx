@@ -284,10 +284,12 @@ export default function ClienteNotaFiscalDetalhe() {
           <p className="font-mono text-[11px] text-gray-600 dark:text-gray-400 break-all mt-0.5">{nota.chave_documento}</p>
         </div>
 
-        {nota.status_portal === 'devolvida' && nota.motivo_devolucao && (
+        {nota.status_portal === 'devolvida' && (nota.motivo_devolucao || produtosLocal.some(p => p.motivo_devolucao)) && (
           <div className="mt-3 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 p-3 text-sm text-rose-800 dark:text-rose-300">
-            <p className="font-semibold mb-1">CCI devolveu para correção:</p>
-            <p>{nota.motivo_devolucao}</p>
+            <p className="font-semibold mb-1">CCI devolveu para correção</p>
+            {nota.motivo_devolucao
+              ? <p>{nota.motivo_devolucao}</p>
+              : <p>Corrija os itens marcados abaixo (a observação está em cada produto) e reenvie.</p>}
           </div>
         )}
       </div>
@@ -557,6 +559,12 @@ function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
             onMudarDestinacao={(novo) => onCommit({ tipo_destinacao: novo })}
             onToggleBonificacao={() => onCommit({ bonificacao: !produto.bonificacao })} />
         </div>
+        {produto.motivo_devolucao && (
+          <p className="mt-1 text-[11px] text-rose-700 dark:text-rose-300 flex items-start gap-1">
+            <span className="font-semibold whitespace-nowrap">⚠ Corrigir:</span>
+            <span>{produto.motivo_devolucao}</span>
+          </p>
+        )}
       </td>
       {!readonly && (
         <td className="px-2 py-1.5">
@@ -615,6 +623,11 @@ function ProdutoCard({ produto, readonly, sistemaLabel = 'Webposto', onEdit, onC
             className="h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-xs font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
         )}
       </div>
+      {produto.motivo_devolucao && (
+        <div className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-3 py-2 text-[12px] text-rose-800 dark:text-rose-300">
+          <span className="font-semibold">⚠ Corrigir: </span>{produto.motivo_devolucao}
+        </div>
+      )}
     </div>
   );
 }
