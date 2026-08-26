@@ -56,6 +56,8 @@ export default function AdminNfManifestacaoDetalhe() {
   const [modalDevolver, setModalDevolver] = useState(false);
   // Motivo da devolução POR ITEM: { [produtoId]: texto }
   const [motivosItens, setMotivosItens] = useState({});
+  const [motivoNf, setMotivoNf] = useState('');
+  const [motivoBoleto, setMotivoBoleto] = useState('');
 
   const carregar = useCallback(async () => {
     setLoading(true); setError(null);
@@ -94,17 +96,19 @@ export default function AdminNfManifestacaoDetalhe() {
   const motivos = (nota?.produtos || [])
     .map(p => ({ produtoId: p.id, motivo: (motivosItens[p.id] || '').trim() }))
     .filter(m => m.motivo);
-  const podeDevolver = motivos.length > 0;
+  const podeDevolver = motivos.length > 0 || !!motivoNf.trim() || !!motivoBoleto.trim();
 
   const confirmarDevolucao = async () => {
     if (!podeDevolver) {
-      setToast({ tipo: 'error', mensagem: 'Marque ao menos um item com o motivo da correção' });
+      setToast({ tipo: 'error', mensagem: 'Aponte o motivo em ao menos um item, na Nota Fiscal ou nos Boletos' });
       return;
     }
     setSalvando(true);
     try {
       await nfService.devolverParaCliente(nota.id, {
         motivos,
+        motivoNf,
+        motivoBoleto,
         adminUsuarioId: usuario?.id,
       });
       setToast({ tipo: 'success', mensagem: 'Nota devolvida ao cliente' });
@@ -350,8 +354,22 @@ export default function AdminNfManifestacaoDetalhe() {
 
       {/* Anexos */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BlocoAnexos titulo="Nota Fiscal" arquivos={arquivosNF} icone={FileText} cor="blue" onBaixar={baixar} />
-        <BlocoAnexos titulo="Boletos"     arquivos={arquivosBol} icone={File}     cor="emerald" onBaixar={baixar} />
+        <div className="space-y-2">
+          <BlocoAnexos titulo="Nota Fiscal" arquivos={arquivosNF} icone={FileText} cor="blue" onBaixar={baixar} />
+          {nota.motivo_devol_nf && (
+            <p className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-3 py-2 text-[12px] text-rose-800 dark:text-rose-300">
+              <span className="font-semibold">⚠ Correção na NF: </span>{nota.motivo_devol_nf}
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <BlocoAnexos titulo="Boletos" arquivos={arquivosBol} icone={File} cor="emerald" onBaixar={baixar} />
+          {nota.motivo_devol_boleto && (
+            <p className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-3 py-2 text-[12px] text-rose-800 dark:text-rose-300">
+              <span className="font-semibold">⚠ Correção nos boletos: </span>{nota.motivo_devol_boleto}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Motivo da ausência de boleto (quando informado) */}
@@ -427,8 +445,29 @@ export default function AdminNfManifestacaoDetalhe() {
               );
             })}
           </div>
+
+          {/* Problemas nos arquivos */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <div className="rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800/40 p-3">
+              <div className="flex items-center gap-1.5 mb-1.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
+                <FileText className="h-3.5 w-3.5 text-blue-500" /> Nota Fiscal
+              </div>
+              <textarea value={motivoNf} onChange={e => setMotivoNf(e.target.value)} rows={2}
+                placeholder="Problema no arquivo da NF (opcional)"
+                className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 p-2.5 text-[13px] focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-900/40" />
+            </div>
+            <div className="rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800/40 p-3">
+              <div className="flex items-center gap-1.5 mb-1.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
+                <FileText className="h-3.5 w-3.5 text-emerald-500" /> Boletos
+              </div>
+              <textarea value={motivoBoleto} onChange={e => setMotivoBoleto(e.target.value)} rows={2}
+                placeholder="Problema nos boletos (opcional)"
+                className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 p-2.5 text-[13px] focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-900/40" />
+            </div>
+          </div>
+
           {!podeDevolver && (
-            <p className="text-[12px] text-gray-500 dark:text-gray-400">Preencha o motivo em pelo menos um item para devolver.</p>
+            <p className="text-[12px] text-gray-500 dark:text-gray-400">Aponte o motivo em pelo menos um item, na Nota Fiscal ou nos Boletos para devolver.</p>
           )}
         </div>
       </Modal>

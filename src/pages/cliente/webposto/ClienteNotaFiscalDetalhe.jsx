@@ -203,6 +203,13 @@ export default function ClienteNotaFiscalDetalhe() {
   }
 
   const readonly = ['enviada', 'lancada'].includes(nota.status_portal);
+  // Em correção (devolvida), o cliente vê SÓ o que tem motivo de devolução:
+  // itens marcados + Nota Fiscal / Boletos marcados.
+  const soCorrecao = nota.status_portal === 'devolvida';
+  const itemVisivel = (p) => !soCorrecao || !!p.motivo_devolucao;
+  const produtosVisiveis = produtosLocal.filter(itemVisivel);
+  const mostrarNF = !soCorrecao || !!nota.motivo_devol_nf;
+  const mostrarBoletos = !soCorrecao || !!nota.motivo_devol_boleto;
   const statusCfg = STATUS_INFO[nota.status_portal];
   const arquivosNF = (nota.arquivos || []).filter(a => a.tipo === 'nota_fiscal');
   const arquivosBol = (nota.arquivos || []).filter(a => a.tipo === 'boleto');
@@ -294,12 +301,13 @@ export default function ClienteNotaFiscalDetalhe() {
         )}
       </div>
 
-      {/* Produtos */}
+      {/* Produtos (em correção, só os itens marcados aparecem) */}
+      {(!soCorrecao || produtosVisiveis.length > 0) && (
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden">
         <div className="px-4 sm:px-5 py-3 border-b border-gray-100 dark:border-white/10 flex items-center gap-2 flex-wrap">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Produtos da nota</p>
-          <span className="text-[11px] text-gray-400 dark:text-gray-500">· {produtosLocal.length} {produtosLocal.length === 1 ? 'item' : 'itens'}</span>
-          {!readonly && (
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{soCorrecao ? 'Itens a corrigir' : 'Produtos da nota'}</p>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">· {produtosVisiveis.length} {produtosVisiveis.length === 1 ? 'item' : 'itens'}</span>
+          {!readonly && !soCorrecao && (
             <div className="ml-auto flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setModalScan(true)}
                 title={`Estoque (revenda) — buscar no catálogo do ${sistemaLabel}`}
@@ -332,7 +340,7 @@ export default function ClienteNotaFiscalDetalhe() {
           <>
             {/* Mobile: cards */}
             <div className="md:hidden divide-y divide-gray-100 dark:divide-white/10">
-              {produtosLocal.map((p, idx) => (
+              {produtosLocal.map((p, idx) => itemVisivel(p) && (
                 <ProdutoCard key={p.id} produto={p} readonly={readonly} sistemaLabel={sistemaLabel}
                   onEdit={(campos) => editarProdutoLocal(idx, campos)}
                   onCommit={(campos) => commitProduto(idx, campos)}
@@ -353,7 +361,7 @@ export default function ClienteNotaFiscalDetalhe() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/10">
-                  {produtosLocal.map((p, idx) => (
+                  {produtosLocal.map((p, idx) => itemVisivel(p) && (
                     <ProdutoRow key={p.id} produto={p} idx={idx} readonly={readonly}
                       onEdit={(campos) => editarProdutoLocal(idx, campos)}
                       onCommit={(campos) => commitProduto(idx, campos)}
@@ -365,22 +373,44 @@ export default function ClienteNotaFiscalDetalhe() {
           </>
         )}
       </div>
+      )}
 
-      {/* Arquivos */}
+      {/* Arquivos (em correção, só os marcados aparecem) */}
+      {(mostrarNF || mostrarBoletos) && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ZonaArquivos titulo="Nota Fiscal" subtitulo="PDF, XML ou imagem" tipo="nota_fiscal"
-          icone={FileText} cor="blue"
-          arquivos={arquivosNF} readonly={readonly}
-          onUpload={(file) => uploadArquivo(file, 'nota_fiscal')}
-          onRemove={removerArquivo} onBaixar={baixarArquivo} />
-        <ZonaArquivos titulo="Boletos" subtitulo="Pode anexar vários" tipo="boleto"
-          icone={File} cor="emerald"
-          arquivos={arquivosBol} readonly={readonly}
-          onUpload={(file) => uploadArquivo(file, 'boleto')}
-          onRemove={removerArquivo} onBaixar={baixarArquivo} />
+        {mostrarNF && (
+          <div className="space-y-2">
+            <ZonaArquivos titulo="Nota Fiscal" subtitulo="PDF, XML ou imagem" tipo="nota_fiscal"
+              icone={FileText} cor="blue"
+              arquivos={arquivosNF} readonly={readonly}
+              onUpload={(file) => uploadArquivo(file, 'nota_fiscal')}
+              onRemove={removerArquivo} onBaixar={baixarArquivo} />
+            {nota.motivo_devol_nf && (
+              <p className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-3 py-2 text-[12px] text-rose-800 dark:text-rose-300">
+                <span className="font-semibold">⚠ Corrigir: </span>{nota.motivo_devol_nf}
+              </p>
+            )}
+          </div>
+        )}
+        {mostrarBoletos && (
+          <div className="space-y-2">
+            <ZonaArquivos titulo="Boletos" subtitulo="Pode anexar vários" tipo="boleto"
+              icone={File} cor="emerald"
+              arquivos={arquivosBol} readonly={readonly}
+              onUpload={(file) => uploadArquivo(file, 'boleto')}
+              onRemove={removerArquivo} onBaixar={baixarArquivo} />
+            {nota.motivo_devol_boleto && (
+              <p className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-3 py-2 text-[12px] text-rose-800 dark:text-rose-300">
+                <span className="font-semibold">⚠ Corrigir: </span>{nota.motivo_devol_boleto}
+              </p>
+            )}
+          </div>
+        )}
       </div>
+      )}
 
       {/* Motivo da ausência de boleto — alternativa ao anexo */}
+      {mostrarBoletos && (
       <MotivoSemBoleto
         valor={nota.motivo_sem_boleto || ''}
         temBoletos={arquivosBol.length > 0}
@@ -397,6 +427,7 @@ export default function ClienteNotaFiscalDetalhe() {
           }
         }}
       />
+      )}
 
       {/* Botão enviar pra CCI */}
       {!readonly && (

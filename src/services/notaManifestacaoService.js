@@ -505,9 +505,14 @@ export async function enviarParaCci(id) {
     throw new Error('Anexe pelo menos um boleto ou informe o motivo da ausência (ex: "paga em dinheiro").');
   }
 
-  // Reenvio após correção: limpa os motivos de devolução dos itens.
+  // Reenvio após correção: limpa os motivos de devolução (itens + arquivos).
   await limparMotivosItens(id);
-  return atualizar(id, { status_portal: 'enviada', enviada_em: new Date().toISOString() });
+  return atualizar(id, {
+    status_portal: 'enviada',
+    enviada_em: new Date().toISOString(),
+    motivo_devol_nf: null,
+    motivo_devol_boleto: null,
+  });
 }
 
 // Admin marca como lançada.
@@ -518,6 +523,8 @@ export async function marcarLancada(id, { adminUsuarioId }) {
     lancada_em: new Date().toISOString(),
     lancada_por: adminUsuarioId || null,
     motivo_devolucao: null,
+    motivo_devol_nf: null,
+    motivo_devol_boleto: null,
   });
 }
 
@@ -530,15 +537,18 @@ async function limparMotivosItens(nfId) {
   if (error) throw error;
 }
 
-// Admin devolve para correção — o motivo vai POR ITEM.
-// `motivos`: [{ produtoId, motivo }] (só precisa vir os itens com observação;
-// os demais têm o motivo limpo). Exige ao menos um item com motivo.
-export async function devolverParaCliente(id, { motivos, adminUsuarioId }) {
+// Admin devolve para correção — motivos POR ITEM e/ou na Nota Fiscal / Boletos.
+// `motivos`: [{ produtoId, motivo }] (os itens sem observação têm o motivo limpo).
+// `motivoNf` / `motivoBoleto`: texto opcional apontando problema nos arquivos.
+// Exige ao menos um motivo (item, NF ou boleto).
+export async function devolverParaCliente(id, { motivos, motivoNf, motivoBoleto, adminUsuarioId }) {
   const lista = (motivos || []).map(m => ({ produtoId: m.produtoId, motivo: (m.motivo || '').trim() }));
-  if (!lista.some(m => m.motivo)) {
-    throw new Error('Marque ao menos um item com o motivo da correção');
+  const nf = (motivoNf || '').trim();
+  const boleto = (motivoBoleto || '').trim();
+  if (!lista.some(m => m.motivo) && !nf && !boleto) {
+    throw new Error('Aponte o motivo em ao menos um item, na Nota Fiscal ou nos Boletos');
   }
-  // Zera todos os motivos e grava os informados (mantém consistência).
+  // Zera todos os motivos de item e grava os informados (mantém consistência).
   await limparMotivosItens(id);
   const comMotivo = lista.filter(m => m.motivo && m.produtoId);
   const resultados = await Promise.all(comMotivo.map(m =>
@@ -554,5 +564,7 @@ export async function devolverParaCliente(id, { motivos, adminUsuarioId }) {
     devolvida_em: new Date().toISOString(),
     devolvida_por: adminUsuarioId || null,
     motivo_devolucao: null,
+    motivo_devol_nf: nf || null,
+    motivo_devol_boleto: boleto || null,
   });
 }
