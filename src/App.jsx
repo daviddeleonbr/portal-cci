@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 // Landing
 import LandingPage from './pages/LandingPage';
 import LandingPortal from './pages/LandingPortal';
+import LandingVisor360 from './pages/LandingVisor360';
 // import SolicitarOrcamento from './pages/SolicitarOrcamento'; // INATIVO — uso futuro
 
 // Admin
@@ -118,6 +119,8 @@ export default function App() {
         {/* <Route path="/solicitar-orcamento" element={<SolicitarOrcamento />} /> */}
         {/* Seletor de portais (admin / cliente) */}
         <Route path="/portais" element={<LandingPortal />} />
+        {/* Seletor do Visor360 (webposto / autosystem) */}
+        <Route path="/visor360" element={<LandingVisor360 />} />
 
         {/* Admin Portal */}
         <Route path="/admin" element={<Login />} />
