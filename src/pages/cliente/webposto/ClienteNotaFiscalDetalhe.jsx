@@ -206,8 +206,6 @@ export default function ClienteNotaFiscalDetalhe() {
   const statusCfg = STATUS_INFO[nota.status_portal];
   const arquivosNF = (nota.arquivos || []).filter(a => a.tipo === 'nota_fiscal');
   const arquivosBol = (nota.arquivos || []).filter(a => a.tipo === 'boleto');
-  const totalProdutos = produtosLocal.reduce((s, p) =>
-    s + (Number(p.quantidade || 0) * Number(p.valor_unitario || 0)), 0);
 
   // Resolve nome da empresa pelo empresa_codigo (rede pode ter várias).
   // Cai pro nome do próprio cliente se for empresa única ou se não achar match.
@@ -229,15 +227,6 @@ export default function ClienteNotaFiscalDetalhe() {
   const motivoSemBoletoOk = !!(nota.motivo_sem_boleto && nota.motivo_sem_boleto.trim());
   if (arquivosBol.length === 0 && !motivoSemBoletoOk) {
     pendencias.push('Boleto anexado ou motivo da ausência');
-  }
-  // Verifica divergência: soma dos produtos × valor total da NF (tolerância 1ct).
-  const valorNota = Number(nota.valor || 0);
-  const divergencia = totalProdutos - valorNota;
-  const haDivergencia = produtosLocal.length > 0 && Math.abs(divergencia) > 0.01;
-  if (haDivergencia) {
-    pendencias.push(
-      `Total dos produtos (${formatCurrency(totalProdutos)}) diverge do valor da NF (${formatCurrency(valorNota)})`
-    );
   }
   const podeEnviar = pendencias.length === 0;
 
@@ -358,9 +347,6 @@ export default function ClienteNotaFiscalDetalhe() {
                     <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Código de barras</th>
                     <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Cód. interno</th>
                     <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Descrição</th>
-                    <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] text-right w-20">Qtd</th>
-                    <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] text-right w-28">Valor unit.</th>
-                    <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] text-right w-28">Subtotal</th>
                     {!readonly && <th className="px-2 py-2 bg-gray-50 w-10" />}
                   </tr>
                 </thead>
@@ -372,58 +358,7 @@ export default function ClienteNotaFiscalDetalhe() {
                       onRemove={() => removerProduto(idx)} />
                   ))}
                 </tbody>
-                <tfoot className="bg-gray-50/80 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
-                  <tr className="font-semibold">
-                    <td colSpan={6} className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">Total dos produtos</td>
-                    <td className={`px-3 py-2 text-right font-mono tabular-nums ${haDivergencia ? 'text-rose-700 dark:text-rose-400' : 'text-gray-900 dark:text-gray-100'}`}>{formatCurrency(totalProdutos)}</td>
-                    {!readonly && <td />}
-                  </tr>
-                  <tr>
-                    <td colSpan={6} className="px-3 py-2 text-right text-[11px] text-gray-500 dark:text-gray-400">Valor da NF</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums text-[11.5px] text-gray-600 dark:text-gray-300">{formatCurrency(valorNota)}</td>
-                    {!readonly && <td />}
-                  </tr>
-                  {haDivergencia && (
-                    <tr>
-                      <td colSpan={!readonly ? 8 : 7} className="px-3 py-2.5 bg-rose-50 dark:bg-rose-500/10 border-t border-rose-200 dark:border-rose-500/20">
-                        <div className="flex items-start gap-2 text-[12px] text-rose-800 dark:text-rose-300">
-                          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <strong>Diferença de {formatCurrency(Math.abs(divergencia))}</strong>
-                            {divergencia > 0
-                              ? ` — produtos somam ${formatCurrency(divergencia)} a mais que o valor da NF.`
-                              : ` — faltam ${formatCurrency(Math.abs(divergencia))} para fechar o valor da NF.`}
-                            <span className="block text-[11px] text-rose-700/80 dark:text-rose-300/80 mt-0.5">Ajuste quantidades/valores ou inclua os produtos faltantes antes de enviar.</span>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tfoot>
               </table>
-            </div>
-
-            {/* Mobile: rodapé total + alerta */}
-            <div className="md:hidden border-t-2 border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-white/[0.03]">
-              <div className="px-4 py-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total dos produtos</p>
-                <p className={`font-mono tabular-nums text-base font-bold ${haDivergencia ? 'text-rose-700 dark:text-rose-400' : 'text-gray-900 dark:text-gray-100'}`}>{formatCurrency(totalProdutos)}</p>
-              </div>
-              <div className="px-4 pb-2 flex items-center justify-between">
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">Valor da NF</p>
-                <p className="font-mono tabular-nums text-[12px] text-gray-600 dark:text-gray-300">{formatCurrency(valorNota)}</p>
-              </div>
-              {haDivergencia && (
-                <div className="px-4 py-3 bg-rose-50 dark:bg-rose-500/10 border-t border-rose-200 dark:border-rose-500/20 flex items-start gap-2 text-[12px] text-rose-800 dark:text-rose-300">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <strong>Diferença de {formatCurrency(Math.abs(divergencia))}</strong>
-                    <span className="block text-[11px] mt-0.5">
-                      {divergencia > 0 ? 'Produtos somam mais que o valor da NF.' : 'Faltam produtos para fechar o valor.'}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           </>
         )}
@@ -588,7 +523,6 @@ function BadgesProduto({ produto, readonly, onMudarDestinacao, onToggleBonificac
 
 // ─── Produto: linha (desktop) ────────────────────────────────
 function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
-  const subtotal = Number(produto.quantidade || 0) * Number(produto.valor_unitario || 0);
   return (
     <tr className={produto.produto_novo
       ? 'bg-amber-50/40 dark:bg-amber-500/[0.06] hover:bg-amber-50/70 dark:hover:bg-amber-500/[0.1]'
@@ -624,22 +558,6 @@ function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
             onToggleBonificacao={() => onCommit({ bonificacao: !produto.bonificacao })} />
         </div>
       </td>
-      <td className="px-3 py-1.5">
-        <input type="number" step="0.0001" min="0" value={produto.quantidade ?? ''} disabled={readonly}
-          onChange={e => onEdit({ quantidade: e.target.value })}
-          onBlur={e => onCommit({ quantidade: Number(e.target.value) || 0 })}
-          className="w-full h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[12px] text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
-      </td>
-      <td className="px-3 py-1.5">
-        <input type="number" step="0.01" min="0" value={produto.valor_unitario ?? ''}
-          disabled={readonly}
-          onChange={e => onEdit({ valor_unitario: e.target.value })}
-          onBlur={e => onCommit({ valor_unitario: Number(e.target.value) || 0 })}
-          className="w-full h-8 px-2 rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-[12px] text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
-      </td>
-      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[12px] font-semibold text-gray-900 dark:text-gray-100">
-        {formatCurrency(subtotal)}
-      </td>
       {!readonly && (
         <td className="px-2 py-1.5">
           <button onClick={onRemove}
@@ -655,7 +573,6 @@ function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
 
 // ─── Produto: card (mobile) ──────────────────────────────────
 function ProdutoCard({ produto, readonly, sistemaLabel = 'Webposto', onEdit, onCommit, onRemove }) {
-  const subtotal = Number(produto.quantidade || 0) * Number(produto.valor_unitario || 0);
   return (
     <div className={`p-3 space-y-2 ${produto.produto_novo ? 'bg-amber-50/40 dark:bg-amber-500/[0.06]' : ''}`}>
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -697,29 +614,6 @@ function ProdutoCard({ produto, readonly, sistemaLabel = 'Webposto', onEdit, onC
             placeholder="Cód. interno"
             className="h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-xs font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
         )}
-      </div>
-      <div className="grid grid-cols-3 gap-2 items-end">
-        <label className="block">
-          <span className="text-[10px] text-gray-500">Qtd</span>
-          <input type="number" step="0.0001" min="0" value={produto.quantidade ?? ''} disabled={readonly}
-            onChange={e => onEdit({ quantidade: e.target.value })}
-            onBlur={e => onCommit({ quantidade: Number(e.target.value) || 0 })}
-            className="w-full h-10 px-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
-        </label>
-        <label className="block">
-          <span className="text-[10px] text-gray-500">Valor unit.</span>
-          <input type="number" step="0.01" min="0" value={produto.valor_unitario ?? ''}
-            disabled={readonly}
-            onChange={e => onEdit({ valor_unitario: e.target.value })}
-            onBlur={e => onCommit({ valor_unitario: Number(e.target.value) || 0 })}
-            className="w-full h-10 px-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
-        </label>
-        <div>
-          <span className="text-[10px] text-gray-500 block">Subtotal</span>
-          <p className="h-10 px-2 flex items-center justify-end font-mono tabular-nums text-sm font-bold text-gray-900 dark:text-gray-100">
-            {formatCurrency(subtotal)}
-          </p>
-        </div>
       </div>
     </div>
   );

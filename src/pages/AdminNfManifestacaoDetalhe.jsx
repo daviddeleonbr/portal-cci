@@ -134,7 +134,6 @@ export default function AdminNfManifestacaoDetalhe() {
   const statusCfg = STATUS_INFO[nota.status_portal];
   const arquivosNF = (nota.arquivos || []).filter(a => a.tipo === 'nota_fiscal');
   const arquivosBol = (nota.arquivos || []).filter(a => a.tipo === 'boleto');
-  const totalProdutos = (nota.produtos || []).reduce((s, p) => s + Number(p.subtotal || 0), 0);
   const podeAgir = nota.status_portal === 'enviada';
 
   return (
@@ -283,9 +282,6 @@ export default function AdminNfManifestacaoDetalhe() {
                   <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Código de barras</th>
                   <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Cód. interno</th>
                   <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Descrição</th>
-                  <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] text-right w-20">Qtd</th>
-                  <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] text-right w-28">Valor unit.</th>
-                  <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] text-right w-28">Subtotal</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/10">
@@ -329,26 +325,10 @@ export default function AdminNfManifestacaoDetalhe() {
                           ))}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{p.quantidade}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCurrency(p.valor_unitario)}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(p.subtotal)}</td>
                     </tr>
                   );
                 })}
               </tbody>
-              <tfoot className="bg-gray-50/80 dark:bg-white/[0.03] border-t-2 border-gray-200 dark:border-white/10">
-                <tr className="font-semibold">
-                  <td colSpan={6} className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">Total dos produtos</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-gray-900 dark:text-gray-100">{formatCurrency(totalProdutos)}</td>
-                </tr>
-                {Math.abs(totalProdutos - Number(nota.valor || 0)) > 0.01 && (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50/50 dark:bg-amber-500/10">
-                      ⚠ Divergência: total dos produtos ({formatCurrency(totalProdutos)}) difere do valor da NF ({formatCurrency(nota.valor)})
-                    </td>
-                  </tr>
-                )}
-              </tfoot>
             </table>
           </div>
         )}
