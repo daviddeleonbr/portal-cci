@@ -4,7 +4,7 @@ import {
   Plus, Trash2, ChevronRight, ChevronDown, Layers, Key,
   Loader2, AlertCircle, Search, Link2, Unlink, Building2,
   ArrowLeft, RefreshCw, FolderOpen, Check, GripVertical,
-  Zap, Pencil, FileBarChart, Wallet,
+  Zap, Pencil, FileBarChart, Wallet, Filter,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
@@ -376,6 +376,7 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
   const [loadingApi, setLoadingApi] = useState(false);
   const [loadingMascaras, setLoadingMascaras] = useState(true);
   const [search, setSearch] = useState('');
+  const [soNaoMapeadas, setSoNaoMapeadas] = useState(false);
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [grupoAtivo, setGrupoAtivo] = useState(null); // grupo selecionado como destino
   const [planoExpanded, setPlanoExpanded] = useState(new Set());
@@ -575,9 +576,12 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
   const getMapsDoGrupo = (grupoId) => mapeamentos.filter(m => m[grupoIdField] === grupoId);
   const topLevelGrupos = grupos.filter(g => !g.parent_id).sort((a, b) => a.ordem - b.ordem);
 
-  const contasFiltradas = planoContas.filter(c =>
-    !search || c.descricao.toLowerCase().includes(search.toLowerCase()) || c.hierarquia.includes(search)
-  );
+  const contasFiltradas = planoContas.filter(c => {
+    const passaBusca = !search || c.descricao.toLowerCase().includes(search.toLowerCase()) || c.hierarquia.includes(search);
+    if (!passaBusca) return false;
+    if (soNaoMapeadas && contasVinculadasMap.has(String(c.planoContaCodigo ?? c.codigo))) return false;
+    return true;
+  });
 
   // Construir arvore hierarquica respeitando o campo "hierarquia" da API
   const planoTree = buildPlanoTree(contasFiltradas);
@@ -677,6 +681,7 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
                   <span className="text-sm font-semibold text-gray-800">Plano de Contas</span>
                   <span className="text-[10px] text-gray-400 bg-gray-50 rounded-full px-2 py-0.5">{contasFiltradas.length}</span>
                 </div>
+                <FiltroNaoMapeadas ativo={soNaoMapeadas} onToggle={() => setSoNaoMapeadas(v => !v)} />
               </div>
               <div className="px-3 py-2 border-b border-gray-50 flex-shrink-0">
                 <div className="relative">
@@ -1017,6 +1022,7 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
   const [planoExpanded, setPlanoExpanded] = useState(new Set());
   const [grupoAtivo, setGrupoAtivo] = useState(null);
   const [search, setSearch] = useState('');
+  const [soNaoMapeadas, setSoNaoMapeadas] = useState(false);
   const [modalConta, setModalConta] = useState({ open: false, data: null });
   const [modalConfirm, setModalConfirm] = useState({ open: false });
 
@@ -1221,9 +1227,12 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
   const getContasDoGrupo = (grupoId) => contas.filter(c => c[grupoIdField] === grupoId);
   const topLevelGrupos = grupos.filter(g => !g.parent_id).sort((a, b) => a.ordem - b.ordem);
 
-  const contasFiltradas = planoContas.filter(c =>
-    !search || (c.nome || '').toLowerCase().includes(search.toLowerCase()) || String(c.codigo).includes(search)
-  );
+  const contasFiltradas = planoContas.filter(c => {
+    const passaBusca = !search || (c.nome || '').toLowerCase().includes(search.toLowerCase()) || String(c.codigo).includes(search);
+    if (!passaBusca) return false;
+    if (soNaoMapeadas && contasVinculadasMap.has(String(c.codigo))) return false;
+    return true;
+  });
 
   // Adapta { codigo, nome } → { hierarquia, descricao, natureza } pra reutilizar buildPlanoTree/PlanoContaTreeNode
   const planoAdaptado = contasFiltradas.map(c => ({
@@ -1338,11 +1347,14 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
                   <span className="text-sm font-semibold text-gray-800">Plano de Contas Autosystem</span>
                   <span className="text-[10px] text-gray-400 bg-gray-50 rounded-full px-2 py-0.5">{contasFiltradas.length}</span>
                 </div>
-                <button onClick={() => setModalConta({ open: true, data: null })}
-                  className="flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                  title="Adicionar conta manual (fora do plano)">
-                  <Plus className="h-3 w-3" /> Manual
-                </button>
+                <div className="flex items-center gap-2">
+                  <FiltroNaoMapeadas ativo={soNaoMapeadas} onToggle={() => setSoNaoMapeadas(v => !v)} />
+                  <button onClick={() => setModalConta({ open: true, data: null })}
+                    className="flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                    title="Adicionar conta manual (fora do plano)">
+                    <Plus className="h-3 w-3" /> Manual
+                  </button>
+                </div>
               </div>
               <div className="px-3 py-2 border-b border-gray-50 flex-shrink-0">
                 <div className="relative">
@@ -1680,6 +1692,25 @@ function ModalConfirmManual({ open, message, onClose, onConfirm }) {
 
 // Constroi arvore a partir da lista flat baseada no campo "hierarquia" (ex: "1", "1.01", "1.01.01")
 // Mantem a ordem natural da hierarquia numerica (ordem do sistema)
+// Toggle "mostrar só contas não mapeadas" no cabeçalho do Plano de Contas.
+function FiltroNaoMapeadas({ ativo, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={ativo ? 'Mostrando só contas não mapeadas — clique para ver todas' : 'Mostrar só as contas ainda não mapeadas'}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors ${
+        ativo
+          ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+      }`}
+    >
+      <Filter className="h-3 w-3" />
+      Não mapeadas
+    </button>
+  );
+}
+
 function buildPlanoTree(flatList) {
   // Ordena por hierarquia numerica
   const sorted = [...flatList].sort((a, b) => {
