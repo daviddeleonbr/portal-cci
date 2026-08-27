@@ -586,6 +586,18 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
   // Construir arvore hierarquica respeitando o campo "hierarquia" da API
   const planoTree = buildPlanoTree(contasFiltradas);
 
+  // Contas que têm filhas no plano COMPLETO (independe do filtro). Usado para
+  // bloquear a marcação de contas pai mesmo quando "Não mapeadas" esconde os
+  // filhos e o pai vira "folha" na árvore filtrada.
+  const contasComFilhos = useMemo(() => {
+    const s = new Set();
+    planoContas.forEach(c => {
+      const parts = String(c.hierarquia || '').split('.');
+      if (parts.length > 1) s.add(parts.slice(0, -1).join('.'));
+    });
+    return s;
+  }, [planoContas]);
+
   const grupoAtivoObj = grupoAtivo ? grupos.find(g => g.id === grupoAtivo) : null;
 
   return (
@@ -726,6 +738,7 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
                         onVincular={vincularConta}
                         onDesvincular={desvincularConta}
                         somenteFolhas
+                        contasComFilhos={contasComFilhos}
                       />
                     ))}
                   </div>
@@ -1749,15 +1762,18 @@ function buildPlanoTree(flatList) {
   return roots;
 }
 
-function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasMap, grupoAtivo, grupoRelField = 'grupos_dre', onVincular, onDesvincular, somenteFolhas = false }) {
+function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasMap, grupoAtivo, grupoRelField = 'grupos_dre', onVincular, onDesvincular, somenteFolhas = false, contasComFilhos = null }) {
   const codigo = String(node.planoContaCodigo || node.codigo);
   const mapExistente = contasVinculadasMap.get(codigo);
   const jaVinculada = !!mapExistente;
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expanded.has(node.hierarquia);
+  // Tem filhas no plano COMPLETO? (não só na árvore filtrada — o filtro "Não
+  // mapeadas" pode esconder os filhos e fazer um pai parecer folha).
+  const temFilhasNoPlano = contasComFilhos ? contasComFilhos.has(node.hierarquia) : hasChildren;
   // Só folhas podem ser marcadas (Webposto). Um pai já vinculado (legado) ainda
   // pode ser DESvinculado, mas não recebe nova marcação.
-  const bloqueadoParaMarcar = somenteFolhas && hasChildren && !jaVinculada;
+  const bloqueadoParaMarcar = somenteFolhas && temFilhasNoPlano && !jaVinculada;
   const isDisabled = (!grupoAtivo && !jaVinculada) || bloqueadoParaMarcar;
 
   // Alguma descendente vinculada? (para highlight visual do pai)
@@ -1864,6 +1880,7 @@ function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasM
               onVincular={onVincular}
               onDesvincular={onDesvincular}
               somenteFolhas={somenteFolhas}
+              contasComFilhos={contasComFilhos}
             />
           ))}
         </div>
