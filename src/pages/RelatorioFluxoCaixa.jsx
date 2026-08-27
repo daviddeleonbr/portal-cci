@@ -78,6 +78,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [qtdMeses, setQtdMeses] = useState(3);
 
   const [dadosPorMes, setDadosPorMes] = useState({});
+  // Saldo de abertura REAL por conta (código -> saldo), obtido do último movimento
+  // ANTES do início do período (mesmo mecanismo do fechamento, que bate com a Quality).
+  const [aberturaPorConta, setAberturaPorConta] = useState(() => new Map());
   // Código do plano gerencial (Webposto) -> nome, p/ mostrar nome no diagnóstico
   const [nomePlanoGerencial, setNomePlanoGerencial] = useState(() => new Map());
   // Saldos iniciais por empresa (Autosystem) — soma do efeito líquido das contas
@@ -251,14 +254,22 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         }
         const [grps, maps] = await Promise.all(tasks);
         setGrupos(grps || []);
+        // IMPORTANTE: listarMapeamentosEmpresa (webposto) retorna os mapeamentos
+        // de TODAS as máscaras da empresa. Filtramos SÓ os grupos DESTA máscara —
+        // senão um código mapeado apenas em outra máscara some do fluxo (não entra
+        // na árvore, cujos grupos são desta máscara, nem no "não mapeado", que o
+        // considerava mapeado globalmente).
+        const grupoIds = new Set((grps || []).map(g => g.id));
         // Normaliza: mapeamentos webposto tem plano_conta_codigo, manuais tem conta_codigo
-        const adaptados = (maps || []).map(m => ({
-          id: m.id,
-          grupo_fluxo_id: m.grupo_fluxo_id,
-          plano_conta_codigo: m.plano_conta_codigo || m.conta_codigo,
-          plano_conta_descricao: m.plano_conta_descricao || m.conta_descricao,
-          isManual: !cliente.usa_webposto,
-        }));
+        const adaptados = (maps || [])
+          .filter(m => grupoIds.has(m.grupo_fluxo_id))
+          .map(m => ({
+            id: m.id,
+            grupo_fluxo_id: m.grupo_fluxo_id,
+            plano_conta_codigo: m.plano_conta_codigo || m.conta_codigo,
+            plano_conta_descricao: m.plano_conta_descricao || m.conta_descricao,
+            isManual: !cliente.usa_webposto,
+          }));
         setMapeamentos(adaptados);
         // Expande somente ate o 3o nivel hierarquico por padrao (depth 0 e 1 abertos → depth 0,1,2 visiveis).
         const byId = new Map((grps || []).map(g => [g.id, g]));
@@ -493,9 +504,87 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         return { key: m.key, movimentos: todos };
       }));
 
+      // ─── Ajuste CARTAO_REMESSA: usa o valor LÍQUIDO no fluxo ──────────
+      // Em MOVIMENTO_CONTA, movimentos com tipoDocumentoOrigem === 'CARTAO_REMESSA'
+      // trazem o valor BRUTO. O que de fato cai no banco é o `valorLiquido` da remessa
+      // (endpoint CARTAO_REMESSA), já descontadas taxas e somados acréscimos. A ligação
+      // é MOVIMENTO_CONTA.documentoOrigemCodigo === CARTAO_REMESSA.cartaoRemessaCodigo.
+      // Trocamos o valor no próprio movimento pra que TODO o fluxo (composição, grupos,
+      // totais, não mapeados) use o líquido. Best-effort: se falhar, mantém o bruto.
+      const liquidoPorRemessa = new Map(); // cartaoRemessaCodigo -> valorLiquido
+      try {
+        const primeiroMes = meses[0];
+        const ultimoMes = meses[meses.length - 1];
+        const fmtR = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        // Janela ampliada (1 mês antes até 1 mês depois): a data que o endpoint filtra
+        // (remessa/recebimento) pode cair fora do mês do movimento no banco.
+        const rIni = fmtR(new Date(primeiroMes.ano, primeiroMes.mes - 1 - 1, 1));
+        const rFim = fmtR(new Date(ultimoMes.ano, ultimoMes.mes - 1 + 2, 0));
+        setLoadingProgress({ atual: total, total, mensagem: 'Buscando remessas de cartão (valor líquido)...' });
+        for (const ec of empresaCodigos) {
+          const remessas = await qualityApi.buscarCartaoRemessa(chave.chave, {
+            dataInicial: rIni, dataFinal: rFim, empresaCodigo: ec,
+          });
+          (remessas || []).forEach(rm => {
+            const cod = rm.cartaoRemessaCodigo ?? rm.codigo;
+            const vl = rm.valorLiquido;
+            if (cod == null || vl == null) return;
+            liquidoPorRemessa.set(Number(cod), Number(vl));
+          });
+        }
+      } catch (_) { /* mantém o valor bruto se a busca falhar */ }
+
+      const ajustarCartao = (m) => {
+        if (m.tipoDocumentoOrigem !== 'CARTAO_REMESSA' || m.documentoOrigemCodigo == null) return m;
+        const liquido = liquidoPorRemessa.get(Number(m.documentoOrigemCodigo));
+        if (liquido == null) return m;
+        return { ...m, valor: liquido, valorBrutoCartao: m.valor };
+      };
+
       const mapa = {};
-      results.forEach(r => { mapa[r.key] = { movimentos: r.movimentos }; });
+      results.forEach(r => { mapa[r.key] = { movimentos: r.movimentos.map(ajustarCartao) }; });
       setDadosPorMes(mapa);
+
+      // ─── Saldo de ABERTURA real por conta ───────────────────────────
+      // O campo `saldo` do MOVIMENTO_CONTA é lançado em lote/retro-datado, então
+      // NÃO dá pra reconstruir a abertura pela variação movimento-a-movimento.
+      // Mas o ÚLTIMO movimento ANTES do período deixa a conta exatamente no saldo
+      // de abertura (mesmo mecanismo do fechamento, que bate com a Quality ao centavo).
+      // Buscamos uma janela de 3 meses antes do início e pegamos, por conta, o saldo
+      // do movimento mais recente (por data + sequência). Best-effort: se falhar, a
+      // composição cai no cálculo derivado.
+      try {
+        const primeiroMes = meses[0];
+        const fmtD = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        const iniAbertura = fmtD(new Date(primeiroMes.ano, primeiroMes.mes - 1 - 3, 1)); // 3 meses antes
+        const fimAbertura = fmtD(new Date(primeiroMes.ano, primeiroMes.mes - 1, 0));      // véspera do início
+        setLoadingProgress({ atual: total, total, mensagem: 'Buscando saldo de abertura das contas...' });
+        const saldoDepois = (m) => {
+          const v = m.saldoPosterior ?? m.saldoApos ?? m.saldoAtual ?? m.saldo ?? m.saldoConta;
+          return v != null ? Number(v) : null;
+        };
+        // cod -> { key, saldo } do movimento mais recente da janela
+        const ultimoPorConta = new Map();
+        for (const ec of empresaCodigos) {
+          const movs = await qualityApi.buscarMovimentoConta(chave.chave, {
+            dataInicial: iniAbertura, dataFinal: fimAbertura, empresaCodigo: ec,
+          });
+          (movs || []).forEach(m => {
+            if (m.contaCodigo == null) return;
+            const cod = String(m.contaCodigo);
+            const sd = saldoDepois(m);
+            if (sd == null) return;
+            const key = `${m.dataMovimento || ''}|${String(m.movimentoContaCodigo || 0).padStart(20, '0')}`;
+            const prev = ultimoPorConta.get(cod);
+            if (!prev || key > prev.key) ultimoPorConta.set(cod, { key, saldo: sd });
+          });
+        }
+        const mapAbertura = new Map();
+        ultimoPorConta.forEach((v, cod) => mapAbertura.set(cod, v.saldo));
+        setAberturaPorConta(mapAbertura);
+      } catch (_) {
+        setAberturaPorConta(new Map());
+      }
 
       // Catálogo do plano gerencial (código -> nome) p/ mostrar o NOME das
       // contas não mapeadas no diagnóstico. Best-effort: se falhar, usa o código.
@@ -775,8 +864,19 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
   // ─── Composicao do saldo por conta (saldo inicial + movs = saldo atual) ─
   // Respeita os mesmos filtros aplicados ao fluxo (bancaria/caixa + multi-select).
-  // Fonte dos saldos: campos saldoAnterior e saldoPosterior/saldo do MOVIMENTO_CONTA.
+  // Fonte dos saldos: MOVIMENTO_CONTA com mostraSaldo=true (saldo anterior/posterior
+  // por movimento). Se a API só trouxer o saldo pós-movimento, derivamos o inicial.
   const composicaoSaldo = useMemo(() => {
+    // Saldo ANTES do movimento (opening candidate) e DEPOIS (closing candidate).
+    const saldoAntes = (mm) => {
+      const v = mm.saldoAnterior ?? mm.saldoAnteriorConta ?? mm.saldoInicial;
+      return v != null ? Number(v) : null;
+    };
+    const saldoDepois = (mm) => {
+      const v = mm.saldoPosterior ?? mm.saldoApos ?? mm.saldoAtual ?? mm.saldo ?? mm.saldoConta;
+      return v != null ? Number(v) : null;
+    };
+
     const todos = [];
     Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => todos.push(m)));
     todos.sort((a, b) => (a.dataMovimento || '').localeCompare(b.dataMovimento || ''));
@@ -790,13 +890,23 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       if (!tiposContaAtivos.has(tipoConta)) return;
       if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
 
+      const valorSinal = Math.abs(Number(m.valor || 0)) * (m.tipo === 'Crédito' ? 1 : -1);
+
       let atual = porConta.get(cod);
       if (!atual) {
-        const saldoIniCandidato = m.saldoAnterior ?? m.saldoAnteriorConta;
+        // Saldo inicial: fonte confiável = saldo do último movimento ANTES do período
+        // (aberturaPorConta, buscado à parte). Só cai no derivado (saldo antes do 1º
+        // movimento do período, ou saldoDepois − valor) se a conta não teve movimento
+        // na janela anterior.
+        const sb = saldoAntes(m);
+        const sd = saldoDepois(m);
+        const iniDerivado = sb != null ? sb : (sd != null ? sd - valorSinal : 0);
+        const iniReal = aberturaPorConta.get(cod);
+        const ini = iniReal != null ? iniReal : iniDerivado;
         atual = {
           contaCodigo: cod,
           contaNome: descricaoPorConta.get(cod) || `Conta #${cod}`,
-          saldoInicial: saldoIniCandidato != null ? Number(saldoIniCandidato) : 0,
+          saldoInicial: ini,
           entradas: 0,
           saidas: 0,
           saldoAtual: null,
@@ -806,8 +916,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const valor = Math.abs(Number(m.valor || 0));
       if (m.tipo === 'Crédito') atual.entradas += valor;
       else atual.saidas += valor;
-      const saldoPos = m.saldoPosterior ?? m.saldoApos ?? m.saldo;
-      if (saldoPos != null) atual.saldoAtual = Number(saldoPos);
+      const sd = saldoDepois(m); // o último (mais recente) prevalece = saldo atual
+      if (sd != null) atual.saldoAtual = sd;
     });
     // Fallback: se nenhum movimento trouxe saldoPosterior, calcula pela variacao.
     porConta.forEach(c => {
@@ -815,7 +925,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     });
     return Array.from(porConta.values())
       .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta]);
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, aberturaPorConta]);
 
   // ─── Build Fluxo tree ─────────────────────────────────────
   const fluxoTree = useMemo(() => {
@@ -1045,6 +1155,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     fluxoComCalculos.find(n => n.tipo === 'resultado')?.totalPeriodo
     ?? (fluxoTree.reduce((s, n) => s + n.totalPeriodo, 0) + (transferenciasNode?.totalPeriodo || 0))
   , [fluxoComCalculos, fluxoTree, transferenciasNode]);
+
 
   // ─── Resultado por empresa (apenas em modo rede) ─────────
   // Soma a variacao de caixa (entradas − saidas) por empresa, respeitando os
@@ -1805,7 +1916,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {composicaoSaldo.map(c => {
-                        const variacao = c.entradas - c.saidas;
+                        // Variação = diferença REAL entre abertura e fechamento (ambos do extrato).
+                        // Não usamos entradas−saídas porque movimentos contábeis (desconto/
+                        // acréscimo/taxa de cartão) têm valor mas não mexem no saldo do banco.
+                        const variacao = c.saldoAtual - c.saldoInicial;
                         return (
                           <tr key={c.contaCodigo} className="hover:bg-gray-50/60">
                             <td className="px-4 py-2 text-[12px] text-gray-800 truncate max-w-[260px]">{c.contaNome}</td>
@@ -1835,8 +1949,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         const tIni = composicaoSaldo.reduce((s, c) => s + c.saldoInicial, 0);
                         const tEnt = composicaoSaldo.reduce((s, c) => s + c.entradas, 0);
                         const tSai = composicaoSaldo.reduce((s, c) => s + c.saidas, 0);
-                        const tVar = tEnt - tSai;
                         const tAtu = composicaoSaldo.reduce((s, c) => s + c.saldoAtual, 0);
+                        const tVar = tAtu - tIni;
                         return (
                           <tr className="text-[12px] font-semibold">
                             <td className="px-4 py-3 text-gray-700">Consolidado</td>

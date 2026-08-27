@@ -704,10 +704,12 @@ export async function buscarVendaItensHibrido(apiKey, params = {}, urlBase = DEF
   return [...cache, ...api];
 }
 
-// Movimentacoes das contas bancarias - base do Fluxo de Caixa
+// Movimentacoes das contas bancarias - base do Fluxo de Caixa.
+// mostraSaldo=true faz a API retornar o saldo (anterior/posterior) por movimento,
+// usado na "Composição do saldo" (saldo inicial e saldo atual reais do extrato).
 export async function buscarMovimentoConta(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'MOVIMENTO_CONTA', apiKey, {
-    limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+    limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo, mostraSaldo: true,
   });
 }
 
