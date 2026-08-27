@@ -725,6 +725,7 @@ function MapeamentoWorkspace({ chave, onBack, showToast, adapter }) {
                         grupoRelField={grupoRelField}
                         onVincular={vincularConta}
                         onDesvincular={desvincularConta}
+                        somenteFolhas
                       />
                     ))}
                   </div>
@@ -1748,13 +1749,16 @@ function buildPlanoTree(flatList) {
   return roots;
 }
 
-function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasMap, grupoAtivo, grupoRelField = 'grupos_dre', onVincular, onDesvincular }) {
+function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasMap, grupoAtivo, grupoRelField = 'grupos_dre', onVincular, onDesvincular, somenteFolhas = false }) {
   const codigo = String(node.planoContaCodigo || node.codigo);
   const mapExistente = contasVinculadasMap.get(codigo);
   const jaVinculada = !!mapExistente;
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expanded.has(node.hierarquia);
-  const isDisabled = !grupoAtivo && !jaVinculada;
+  // Só folhas podem ser marcadas (Webposto). Um pai já vinculado (legado) ainda
+  // pode ser DESvinculado, mas não recebe nova marcação.
+  const bloqueadoParaMarcar = somenteFolhas && hasChildren && !jaVinculada;
+  const isDisabled = (!grupoAtivo && !jaVinculada) || bloqueadoParaMarcar;
 
   // Alguma descendente vinculada? (para highlight visual do pai)
   const temVinculadoAbaixo = hasChildren && countVinculadasNaSubtree(node, contasVinculadasMap) > 0;
@@ -1788,17 +1792,22 @@ function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasM
             else if (!isDisabled) onVincular(node);
           }}
           disabled={isDisabled}
+          title={bloqueadoParaMarcar ? 'Esta conta tem contas filhas — vincule as contas finais (sem filhas)' : undefined}
           className={`flex-1 flex items-center gap-2 py-1.5 text-left min-w-0 ${isDisabled ? 'cursor-default' : 'cursor-pointer'}`}>
-          {/* Checkbox */}
-          <div className={`h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-            jaVinculada
-              ? 'bg-emerald-500 border-emerald-500'
-              : grupoAtivo
-                ? 'border-gray-300 group-hover/conta:border-blue-400'
-                : 'border-gray-200'
-          }`}>
-            {jaVinculada && <Check className="h-2.5 w-2.5 text-white" />}
-          </div>
+          {/* Checkbox (contas com filhas não são marcáveis) */}
+          {bloqueadoParaMarcar ? (
+            <div className="w-4 flex-shrink-0" />
+          ) : (
+            <div className={`h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+              jaVinculada
+                ? 'bg-emerald-500 border-emerald-500'
+                : grupoAtivo
+                  ? 'border-gray-300 group-hover/conta:border-blue-400'
+                  : 'border-gray-200'
+            }`}>
+              {jaVinculada && <Check className="h-2.5 w-2.5 text-white" />}
+            </div>
+          )}
 
           {/* Codigo hierarquico */}
           <span className={`font-mono text-[10px] flex-shrink-0 ${
@@ -1854,6 +1863,7 @@ function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasM
               grupoRelField={grupoRelField}
               onVincular={onVincular}
               onDesvincular={onDesvincular}
+              somenteFolhas={somenteFolhas}
             />
           ))}
         </div>
