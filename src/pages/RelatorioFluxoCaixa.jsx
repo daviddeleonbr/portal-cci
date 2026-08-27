@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, Wallet, Printer,
-  EyeOff, Eye, ChevronLeft as ChevLeft,
+  EyeOff, Eye, ChevronLeft as ChevLeft, Download,
 } from 'lucide-react';
 import * as clientesService from '../services/clientesService';
 import * as fluxoService from '../services/mascaraFluxoCaixaService';
@@ -12,6 +12,7 @@ import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
 import * as autosystemService from '../services/autosystemService';
+import * as XLSX from 'xlsx';
 import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
 import { nomeEmpresa } from '../utils/nomeEmpresa';
@@ -77,6 +78,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [qtdMeses, setQtdMeses] = useState(3);
 
   const [dadosPorMes, setDadosPorMes] = useState({});
+  // Código do plano gerencial (Webposto) -> nome, p/ mostrar nome no diagnóstico
+  const [nomePlanoGerencial, setNomePlanoGerencial] = useState(() => new Map());
   // Saldos iniciais por empresa (Autosystem) — soma do efeito líquido das contas
   // caixa/banco anteriores à data inicial do período.
   const [saldosIniciaisPorEmpresa, setSaldosIniciaisPorEmpresa] = useState({});
@@ -406,6 +409,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               movimentoContaCodigo: l.lancamento_id ?? null,
               contaCodigo: l.lado_caixa === 'debito' ? String(l.debito_codigo ?? '') : String(l.credito_codigo ?? ''),
               planoContaGerencialCodigo: planoEfetivo,
+              planoContaGerencialDescricao: l.contraparte_resolvida_nome || l.contraparte_nome || null,
               // Campos extras pra diagnóstico/badge no front
               _viaProvisao: !!l.via_provisao,
               _naoClassificada211: naoClassificada,
@@ -492,6 +496,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const mapa = {};
       results.forEach(r => { mapa[r.key] = { movimentos: r.movimentos }; });
       setDadosPorMes(mapa);
+
+      // Catálogo do plano gerencial (código -> nome) p/ mostrar o NOME das
+      // contas não mapeadas no diagnóstico. Best-effort: se falhar, usa o código.
+      qualityApi.buscarPlanoContasGerencial(chave.chave)
+        .then(plano => {
+          const m = new Map();
+          (plano || []).forEach(p => {
+            const cod = p.codigo ?? p.planoContaGerencialCodigo;
+            const nome = p.descricao ?? p.nome ?? p.planoContaGerencialDescricao;
+            if (cod != null && nome) m.set(String(cod), nome);
+          });
+          setNomePlanoGerencial(m);
+        })
+        .catch(() => { /* nome é opcional */ });
 
       // Busca titulos a pagar num intervalo ampliado (12 meses antes do inicio
       // do periodo), pra pegar pagamentos de titulos emitidos ha mais tempo.
@@ -644,9 +662,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // ─── Indexar movimentos por conta + mes ───────────────────
   // Crédito = +valor (entrou caixa). Débito = -valor (saiu caixa).
   // Aplica filtros: tipo de conta + contas especificas.
-  const { totaisPorConta, lancamentosPorConta } = useMemo(() => {
+  const { totaisPorConta, lancamentosPorConta, nomesPorPlano } = useMemo(() => {
     const totais = {};
     const lancs = {};
+    const nomes = {}; // codigo do plano -> nome da conta gerencial (p/ diagnostico)
     Object.entries(dadosPorMes).forEach(([mesKey, dados]) => {
       (dados.movimentos || []).forEach(m => {
         if (m.contaCodigo == null) return;
@@ -701,6 +720,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               entradasComPlano.forEach((x, idx) => {
                 const parcela = x.valorTitulo * sinal;
                 const planoKey = String(x.planoCod);
+                if (x.titulo.planoContaGerencialDescricao && !nomes[planoKey]) {
+                  nomes[planoKey] = x.titulo.planoContaGerencialDescricao;
+                }
                 if (!totais[planoKey]) totais[planoKey] = {};
                 totais[planoKey][mesKey] = (totais[planoKey][mesKey] || 0) + parcela;
                 if (!lancs[planoKey]) lancs[planoKey] = [];
@@ -728,6 +750,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const codigo = temPlano
           ? String(planoBruto)
           : `${SEM_PLANO_PREFIX}${m.tipoDocumentoOrigem || 'OUTROS'}`;
+        if (temPlano && m.planoContaGerencialDescricao && !nomes[codigo]) {
+          nomes[codigo] = m.planoContaGerencialDescricao;
+        }
 
         if (!totais[codigo]) totais[codigo] = {};
         totais[codigo][mesKey] = (totais[codigo][mesKey] || 0) + valor;
@@ -745,7 +770,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         });
       });
     });
-    return { totaisPorConta: totais, lancamentosPorConta: lancs };
+    return { totaisPorConta: totais, lancamentosPorConta: lancs, nomesPorPlano: nomes };
   }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento]);
 
   // ─── Composicao do saldo por conta (saldo inicial + movs = saldo atual) ─
@@ -860,9 +885,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
       const semPlano = codigo.startsWith(SEM_PLANO_PREFIX);
       const tipoDoc = semPlano ? codigo.substring(SEM_PLANO_PREFIX.length) : null;
+      const nomeConta = semPlano
+        ? null
+        : ((nomesPorPlano && nomesPorPlano[codigo]) || nomePlanoGerencial.get(String(codigo)) || null);
+      // Nome principal: para plano, o nome da conta gerencial (se houver);
+      // para grupos sem plano, o proprio tipo de documento.
       const descricao = semPlano
         ? (tipoDoc || 'OUTROS').replace(/_/g, ' ')
-        : `Plano #${codigo} (sem mapeamento)`;
+        : (nomeConta || `Plano #${codigo} (sem mapeamento)`);
 
       const valoresPorMes = {};
       let totalPeriodo = 0;
@@ -876,9 +906,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         .slice()
         .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
 
+      // Tipos de documento distintos que compoem este grupo
+      const tiposDoc = semPlano
+        ? [(tipoDoc || 'OUTROS').replace(/_/g, ' ')]
+        : [...new Set(lancs.map(l => l.tipoDoc).filter(Boolean))];
+
       contas.push({
         id: `sc-${codigo}`,
         codigo,
+        semPlano,
+        nomeConta,
+        tiposDoc,
         descricao,
         valoresPorMes,
         totalPeriodo,
@@ -908,7 +946,41 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       totalPeriodo,
       isSemClassificacao: true,
     };
-  }, [totaisPorConta, lancamentosPorConta, mapeamentos, meses]);
+  }, [totaisPorConta, lancamentosPorConta, nomesPorPlano, nomePlanoGerencial, mapeamentos, meses]);
+
+  // Exporta o bloco "não mapeados" para XLSX (resumo por grupo + lançamentos).
+  const exportarNaoMapeadosXlsx = useCallback(() => {
+    const node = semClassificacaoNode;
+    if (!node || !node.contas.length) return;
+    const mesCols = meses.map(m => `${m.label} (R$)`);
+
+    const aoaResumo = [
+      ['Nome da conta / Tipo de documento', 'Plano', 'Tipo(s) de documento', 'Qtd lançamentos', ...mesCols, 'Total (R$)'],
+      ...node.contas.map(c => [
+        c.descricao,
+        c.semPlano ? '' : c.codigo,
+        (c.tiposDoc || []).join(', '),
+        c.lancamentos.length,
+        ...meses.map(m => Number(c.valoresPorMes[m.key] || 0)),
+        Number(c.totalPeriodo || 0),
+      ]),
+      ['Total não mapeado', '', '', '', ...meses.map(m => Number(node.valoresPorMes[m.key] || 0)), Number(node.totalPeriodo || 0)],
+    ];
+
+    const aoaLancs = [['Conta / Tipo de documento', 'Data', 'Descrição', 'Tipo de documento', 'Mês', 'Valor (R$)']];
+    node.contas.forEach(c => {
+      (c.lancamentos || []).forEach(l => {
+        const mesLabel = meses.find(m => m.key === l.mesKey)?.label || l.mesKey || '';
+        aoaLancs.push([c.descricao, l.data || '', l.descricao || '', l.tipoDoc || '', mesLabel, Number((l.valor || 0) * (l.sinal || 1))]);
+      });
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaResumo), 'Não mapeados');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaLancs), 'Lançamentos');
+    const periodo = meses.length ? `-${meses[0].key}_a_${meses[meses.length - 1].key}` : '';
+    XLSX.writeFile(wb, `fluxo-nao-mapeados${periodo}.xlsx`);
+  }, [semClassificacaoNode, meses]);
 
   // ─── Grupo sintético "Transferências entre contas" ─────────
   // Movimentos cuja contraparte também é caixa/banco (transferências que
@@ -1862,6 +1934,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   <span className={`ml-auto text-[13px] font-bold ${semClassificacaoNode.totalPeriodo >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                     Impacto: {formatCurrency(semClassificacaoNode.totalPeriodo)}
                   </span>
+                  <button onClick={exportarNaoMapeadosXlsx}
+                    title="Exportar contas/lançamentos não mapeados para Excel"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-50 transition-colors flex-shrink-0">
+                    <Download className="h-3.5 w-3.5" /> Exportar XLSX
+                  </button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-[12px]" style={{ tableLayout: 'fixed', minWidth: 490 + meses.length * 120 + 140 }}>
@@ -1883,6 +1960,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       {semClassificacaoNode.contas.map(conta => {
                         const temLancs = conta.lancamentos && conta.lancamentos.length > 0;
                         const isAberta = expandedContas.has(conta.id);
+                        // Subtítulo: código do plano (quando o nome é o principal) + tipo(s) de documento.
+                        const subPartes = [];
+                        if (conta.nomeConta) subPartes.push(`Plano #${conta.codigo}`);
+                        if (!conta.semPlano && conta.tiposDoc?.length > 0) subPartes.push(conta.tiposDoc.join(', '));
+                        else if (conta.semPlano) subPartes.push('Tipo de documento');
+                        const subtitulo = subPartes.join(' · ');
                         return (
                           <React.Fragment key={conta.id}>
                             <tr className="border-b border-amber-50 hover:bg-amber-50/30">
@@ -1898,7 +1981,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                                   ) : (
                                     <div className="h-1 w-1 rounded-full bg-amber-300 flex-shrink-0" />
                                   )}
-                                  <span className="text-[11.5px] text-gray-800 truncate flex-1">{conta.descricao}</span>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="block text-[11.5px] text-gray-800 truncate" title={conta.descricao}>{conta.descricao}</span>
+                                    {subtitulo && (
+                                      <span className="block text-[9.5px] text-gray-400 truncate" title={subtitulo}>{subtitulo}</span>
+                                    )}
+                                  </div>
                                   {temLancs && (
                                     <span className="text-[9px] text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 flex-shrink-0">
                                       {conta.lancamentos.length}
