@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import LandingPortal from './pages/LandingPortal';
 import LandingVisor360 from './pages/LandingVisor360';
+import LandingBpoFinanceiro from './pages/LandingBpoFinanceiro';
 // import SolicitarOrcamento from './pages/SolicitarOrcamento'; // INATIVO — uso futuro
 
 // Admin
@@ -115,6 +116,8 @@ export default function App() {
       <Routes>
         {/* Landing comercial pública */}
         <Route path="/" element={<LandingPage />} />
+        {/* Landing de vendas — BPO Financeiro (campanha) */}
+        <Route path="/bpo-financeiro" element={<LandingBpoFinanceiro />} />
         {/* Rota /solicitar-orcamento desativada temporariamente — uso futuro */}
         {/* <Route path="/solicitar-orcamento" element={<SolicitarOrcamento />} /> */}
         {/* Seletor de portais (admin / cliente) */}
