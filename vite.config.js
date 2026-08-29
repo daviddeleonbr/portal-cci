@@ -62,7 +62,12 @@ export default defineConfig({
         ],
         // SPA: rotas client-side caem no index.html quando offline.
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        // Exclui do fallback (o shell em cache) as APIs e as LANDINGS PÚBLICAS de
+        // campanha: navegar direto a /bpo-financeiro deve sempre buscar o index.html
+        // vivo na rede, senão um service worker antigo serve um bundle sem a rota e
+        // o catch-all "*" redireciona pra "/". Vale para páginas de anúncio, que
+        // precisam abrir na versão atual mesmo em visitantes com PWA já em cache.
+        navigateFallbackDenylist: [/^\/api\//, /^\/bpo-financeiro(\/|$)/],
         cleanupOutdatedCaches: true,
       },
       // Modo dev: SW desativado por padrão (evita confusão com HMR). Habilite localmente
