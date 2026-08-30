@@ -7,7 +7,9 @@
 //
 // init() é idempotente: pode ser chamado mais de uma vez sem recarregar o script.
 
-const PIXEL_ID = '1084361160655833';
+// Pode conter mais de um pixel: o fbq inicializa todos e os track() disparam
+// para todos automaticamente (broadcast). Ordem = ordem de init.
+const PIXEL_IDS = ['1084361160655833', '1532546344847204'];
 let iniciado = false;
 
 export function initPixel() {
@@ -32,7 +34,7 @@ export function initPixel() {
     if (s && s.parentNode) s.parentNode.insertBefore(t, s);
     else document.head.appendChild(t);
   }
-  window.fbq('init', PIXEL_ID);
+  PIXEL_IDS.forEach((id) => window.fbq('init', id));
 }
 
 export function pixelPageView() {
