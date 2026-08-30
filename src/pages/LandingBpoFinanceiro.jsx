@@ -22,12 +22,19 @@ import {
   Gauge, Layers, HelpCircle,
 } from 'lucide-react';
 import * as cciContatoService from '../services/cciContatoService';
+import { initPixel, pixelPageView, pixelTrack, pixelTrackCustom } from '../lib/metaPixel';
 
-// ─── Analytics leve (só empurra pro dataLayer; GA4/Pixel plugam depois) ──
+// ─── Analytics (dataLayer + Meta Pixel) ──────────────────────────────────
+// Empurra todo evento pro dataLayer (GA4/GTM plugam depois) e mapeia os de
+// conversão pro Meta Pixel: contato (WhatsApp/e-mail) = Lead; abrir CTA = custom.
 function track(event, props = {}) {
   try {
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({ event, pagina: 'bpo-financeiro', ...props });
+  } catch { /* noop */ }
+  try {
+    if (event === 'whatsapp_click' || event === 'email_click') pixelTrack('Lead', props);
+    else if (event === 'cta_click') pixelTrackCustom('CTAClick', props);
   } catch { /* noop */ }
 }
 
@@ -60,6 +67,9 @@ export default function LandingBpoFinanceiro() {
       el.setAttribute('content', val);
       return { el, jaExistia, valAntigo };
     });
+    // Meta Pixel: carrega só aqui (página pública de campanha) e registra a visita.
+    initPixel();
+    pixelPageView();
     track('page_view');
     return () => {
       document.title = titleAntigo;
