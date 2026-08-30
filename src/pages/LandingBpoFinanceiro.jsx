@@ -104,6 +104,7 @@ export default function LandingBpoFinanceiro() {
       <Transformacao />
       <ServicosBpo />
       <EspecializacaoPostos />
+      <IntegracaoSistemas />
       <Implantacao />
       <Liberdade />
       <Prova />
@@ -578,6 +579,53 @@ function EspecializacaoPostos() {
               ))}
             </ul>
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── 7.1. Integração com o sistema do cliente ────────────────────────────
+function IntegracaoSistemas() {
+  const sistemas = [
+    { logo: '/webposto-logo.png', nome: 'Webposto', d: 'Integração direta com o seu Webposto.' },
+    { logo: '/logo-autosystem.png', nome: 'Autosystem', d: 'Conexão com a sua base Autosystem.' },
+  ];
+  return (
+    <section className="px-5 sm:px-6 py-20 sm:py-24 relative">
+      <div className="max-w-5xl mx-auto">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 sm:p-12 relative overflow-hidden">
+          <div className="absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-emerald-500/10 blur-3xl" />
+          <div className="relative text-center max-w-2xl mx-auto">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300 mb-3">Integração</p>
+            <h2 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight leading-tight">
+              Trabalhamos com o sistema que <span className="text-emerald-300">você já usa.</span>
+            </h2>
+            <p className="mt-5 text-slate-400 text-[15px] leading-relaxed">
+              A CCI se integra ao seu ERP — <span className="text-slate-200 font-medium">Webposto</span> ou{' '}
+              <span className="text-slate-200 font-medium">Autosystem</span>. Você não troca de sistema, não
+              muda a sua operação e não perde histórico. A gente entra na rotina que já existe.
+            </p>
+          </div>
+
+          <div className="relative mt-9 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+            {sistemas.map((s, i) => (
+              <motion.div key={s.nome}
+                initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.45, delay: i * 0.1 }}
+                className="flex flex-col items-center text-center rounded-2xl border border-white/10 bg-[#0a0d18] px-6 py-7 hover:border-emerald-400/30 transition-colors">
+                <div className="flex h-14 items-center justify-center mb-4">
+                  <img src={s.logo} alt={s.nome} className="h-11 w-auto max-w-[190px] object-contain" draggable={false} />
+                </div>
+                <p className="text-[12.5px] text-slate-400 leading-snug">{s.d}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          <p className="relative mt-7 text-center text-[12.5px] text-slate-500 inline-flex items-center justify-center gap-1.5 w-full">
+            <ShieldCheck className="h-4 w-4 text-emerald-300" />
+            Conexão segura, com sigilo total dos seus dados.
+          </p>
         </div>
       </div>
     </section>
