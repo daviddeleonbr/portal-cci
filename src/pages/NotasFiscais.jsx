@@ -1056,16 +1056,58 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
   });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  // Consultor de serviços municipais (Asaas /invoices/municipalServices).
+  const [buscaServico, setBuscaServico] = useState('');
+  const [servicos, setServicos] = useState(null); // null = ainda não consultou
+  const [consultando, setConsultando] = useState(false);
 
   useEffect(() => {
     if (open) {
       setForm(config || {
         nome: 'Padrão', ambiente: 'sandbox', api_key: '',
         municipio_servico_id: '', municipio_servico_codigo: '', municipio_servico_descricao: '',
+        national_service_code: '', serie: '1',
         aliquota_iss: '', observacoes_padrao: '', ativo: true,
       });
+      setServicos(null); setBuscaServico('');
     }
   }, [open, config]);
+
+  // Consulta os serviços municipais cadastrados na conta Asaas do município.
+  // É a fonte autoritativa do código que o Portal Nacional aceita como NBS.
+  const consultarServicos = async () => {
+    if (!form.api_key) { showToast('error', 'Informe a chave de API primeiro'); return; }
+    try {
+      setConsultando(true);
+      const res = await asaasApi.listarMunicipalServices(form.ambiente, form.api_key, {
+        description: buscaServico.trim() || undefined, limit: 50,
+      });
+      const lista = res?.data || res?.municipalServices || (Array.isArray(res) ? res : []);
+      setServicos(lista);
+    } catch (err) {
+      showToast('error', 'Falha ao consultar serviços: ' + err.message);
+      setServicos([]);
+    } finally {
+      setConsultando(false);
+    }
+  };
+
+  // Shape do retorno varia por município; escolhe o melhor candidato a código.
+  const codigoDoServico = (s) =>
+    s?.nationalServiceCode ?? s?.serviceCode ?? s?.code ?? s?.municipalServiceCode ?? s?.id ?? '';
+
+  const usarServico = (s) => {
+    const cod = String(codigoDoServico(s) || '');
+    setForm(f => ({
+      ...f,
+      national_service_code: cod || f.national_service_code,
+      municipio_servico_id: s?.id != null ? String(s.id) : f.municipio_servico_id,
+      municipio_servico_codigo: (s?.code ?? s?.municipalServiceCode) != null
+        ? String(s.code ?? s.municipalServiceCode) : f.municipio_servico_codigo,
+      municipio_servico_descricao: s?.description ?? s?.descricao ?? f.municipio_servico_descricao,
+    }));
+    showToast('success', 'Serviço aplicado. Revise o código e salve.');
+  };
 
   const testarConexao = async () => {
     if (!form.api_key) return;
@@ -1175,6 +1217,77 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
             <textarea rows={2} value={form.observacoes_padrao || ''}
               onChange={(e) => setForm(f => ({ ...f, observacoes_padrao: e.target.value }))}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+          </div>
+        </div>
+
+        {/* ─── Portal Nacional NFS-e (código validado como NBS) ─────────── */}
+        <div className="pt-3 border-t border-gray-100">
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Portal Nacional NFS-e</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Código nacional / NBS padrão</label>
+              <input type="text" value={form.national_service_code || ''}
+                onChange={(e) => setForm(f => ({ ...f, national_service_code: e.target.value }))}
+                placeholder="ex: 17.03.03"
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Série</label>
+              <input type="text" value={form.serie || ''}
+                onChange={(e) => setForm(f => ({ ...f, serie: e.target.value }))}
+                placeholder="1"
+                className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+          </div>
+          <p className="mt-1.5 text-[11px] text-gray-400 leading-snug">
+            Este é o código que o Portal Nacional valida como NBS. Se ele estiver errado/inexistente,
+            a emissão falha com "código NBS não encontrado". Descubra o código correto abaixo.
+          </p>
+
+          {/* Consultor de serviços municipais */}
+          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+            <p className="text-[12px] font-medium text-gray-700 mb-2">Consultar serviços do seu município (Asaas)</p>
+            <div className="flex gap-2">
+              <input type="text" value={buscaServico}
+                onChange={(e) => setBuscaServico(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); consultarServicos(); } }}
+                placeholder="Descrição do serviço (ex: contabilidade)"
+                className="flex-1 h-9 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              <button type="button" onClick={consultarServicos} disabled={consultando || !form.api_key}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                {consultando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Consultar
+              </button>
+            </div>
+
+            {servicos != null && (
+              <div className="mt-2 max-h-56 overflow-y-auto space-y-1.5">
+                {servicos.length === 0 ? (
+                  <p className="text-[12px] text-gray-500 py-3 text-center">Nenhum serviço retornado para essa busca.</p>
+                ) : servicos.map((s, i) => (
+                  <div key={i} className="rounded-lg border border-gray-200 bg-white p-2.5 flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12.5px] text-gray-800 font-medium truncate">
+                        {s.description ?? s.descricao ?? s.name ?? '(sem descrição)'}
+                      </p>
+                      <p className="text-[11px] text-gray-500 font-mono mt-0.5 break-all">
+                        {['id', 'code', 'municipalServiceCode', 'nationalServiceCode', 'serviceCode']
+                          .filter(k => s?.[k] != null && s[k] !== '')
+                          .map(k => `${k}: ${s[k]}`).join('  ·  ') || '—'}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => usarServico(s)}
+                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex-shrink-0 whitespace-nowrap">
+                      Usar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-[11px] text-gray-400 leading-snug">
+              Lista os serviços cadastrados na sua conta Asaas para o município. Ao clicar em "Usar",
+              o código preenche o campo acima — confira e salve. É o valor que o Portal Nacional valida.
+            </p>
           </div>
         </div>
 
