@@ -198,13 +198,20 @@ serve(async (req) => {
         email: ag.cliente_email || null,
       }, { onConflict: 'config_id,asaas_customer_id' });
 
-      // Monta payload da invoice (mesmo formato do front)
-      const codigoNbs    = String(ag.national_service_code || config.national_service_code || '').trim();
-      if (!codigoNbs) throw new Error('NBS não informado no agendamento nem na config');
-      // Descrição do serviço municipal — Asaas obriga mesmo no Portal Nacional
-      const descricaoNbs = String(
-        ag.descricao || config.municipio_servico_descricao || 'Serviços prestados'
+      // Monta payload da invoice (mesmo formato do front). DOIS códigos distintos:
+      //  - municipalServiceCode (raiz): código de serviço MUNICIPAL (a prefeitura valida).
+      //  - nbsCode (dentro de taxes): o NBS, separado/opcional.
+      // Mandar o NBS como municipalServiceCode faz o portal responder
+      // "Não foi possível localizar CodigoServicoMunicipal ...".
+      const codigoNbs       = String(ag.national_service_code || config.national_service_code || '').trim();
+      const codigoMunicipal = String(config.municipio_servico_codigo || '').trim();
+      const idMunicipal     = String(config.municipio_servico_id || '').trim();
+      const nomeServico     = String(
+        config.municipio_servico_descricao || ag.descricao || 'Serviços prestados'
       ).slice(0, 250);
+      if (!codigoMunicipal && !idMunicipal) {
+        throw new Error('Código de serviço municipal não informado na config (Serviço Municipal Padrão).');
+      }
 
       const payload: Record<string, unknown> = {
         customer: customer.id,
@@ -213,14 +220,15 @@ serve(async (req) => {
         value: Number(ag.valor),
         deductions: Number(ag.deducoes || 0),
         effectiveDate: hoje,
-        nationalServiceCode:         codigoNbs,
-        municipalServiceCode:        codigoNbs,
-        municipalServiceName:        descricaoNbs,
-        municipalServiceDescription: descricaoNbs,
+        municipalServiceId:   idMunicipal || undefined,
+        municipalServiceCode: codigoMunicipal || undefined,
+        municipalServiceName: nomeServico,
+        nationalServiceCode:  codigoNbs || undefined,
         serie: ag.serie || config.serie || '1',
         taxes: {
           iss: Number(ag.aliquota_iss ?? config.aliquota_iss ?? 0),
           retainedIss: false,
+          ...(codigoNbs ? { nbsCode: codigoNbs } : {}),
         },
         externalReference: `agendamento:${ag.id}`,
       };

@@ -139,6 +139,14 @@ export async function buscarInvoice(ambiente, apiKey, id) {
 // Suporta o NOVO formato Portal Nacional NFS-e (PNFS-e) via `nationalServiceCode`
 // (ex: "17.03.03" — código NBS). Mantém compat com os campos municipais
 // legados — só envia os que estiverem preenchidos.
+// Campos de serviço (confirmado na API do Asaas):
+//  - municipalServiceCode / municipalServiceId / municipalServiceName → RAIZ do
+//    payload. É o CÓDIGO DE SERVIÇO MUNICIPAL (o que a prefeitura valida). Um de
+//    Code/Id é obrigatório; Name também é obrigatório.
+//  - nbsCode → DENTRO de `taxes`. É o NBS (Nomenclatura Brasileira de Serviços),
+//    campo SEPARADO e opcional (exigido por algumas prefeituras / Portal Nacional).
+// NÃO confundir os dois: mandar o NBS como municipalServiceCode faz o portal
+// responder "Não foi possível localizar CodigoServicoMunicipal ...".
 export async function criarInvoice(ambiente, apiKey, {
   customer,
   serviceDescription,
@@ -146,14 +154,15 @@ export async function criarInvoice(ambiente, apiKey, {
   value,
   deductions = 0,
   effectiveDate,
-  // ─── Portal Nacional ───────────────────────
-  nationalServiceCode,        // ex: "17.03.03"
   serie,                      // Série da NF (1-6 alfanuméricos, ex: "1" ou "NFS-E")
-  // ─── Compat municipal (mesmo no Portal Nacional, Asaas ainda exige) ─
+  // ─── Serviço municipal (raiz) ──────────────
   municipalServiceId,
-  municipalServiceCode,
+  municipalServiceCode,       // ex: "17.03.03" — código municipal, NÃO o NBS
   municipalServiceName,
   municipalServiceDescription,
+  // ─── NBS (vai dentro de taxes) ─────────────
+  nbsCode,                    // ex: "1.1806.40.00" — opcional
+  nationalServiceCode,        // legado — alguns cenários aceitam na raiz; mantido best-effort
   // impostos retidos (%)
   taxes = null,  // { retainedIss, iss, cofins, csll, inss, ir, pis }
   externalReference,
@@ -162,7 +171,9 @@ export async function criarInvoice(ambiente, apiKey, {
     customer, serviceDescription, observations, value, deductions, effectiveDate,
     taxes, externalReference,
   };
-  // Portal Nacional tem prioridade quando preenchido
+  // NBS entra DENTRO de taxes (schema do Asaas). Mantemos também nationalServiceCode
+  // na raiz por compat (cenários antigos que o aceitavam lá).
+  if (nbsCode) payload.taxes = { ...(taxes || {}), nbsCode };
   if (nationalServiceCode) payload.nationalServiceCode = nationalServiceCode;
   if (serie)               payload.serie = serie;
   if (municipalServiceId)          payload.municipalServiceId          = municipalServiceId;

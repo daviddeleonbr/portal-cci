@@ -250,14 +250,15 @@ export default function NotasFiscais() {
       email: customer.email,
     });
 
-    // 2. Criar invoice (Portal Nacional NFS-e — NBS).
+    // 2. Criar invoice. DOIS códigos distintos:
+    //    - municipalServiceCode: o código de serviço MUNICIPAL (o que a prefeitura
+    //      valida). Vem da config (Serviço Municipal Padrão → Código), ex: 17.03.03.
+    //    - nbsCode: o NBS (opcional), ex: 1.1806.40.00. Vem de national_service_code.
     const codigoNbs = (form.national_service_code || config.national_service_code || '').trim();
-    const itemNbs = NBS_CODIGOS.find(c => c.codigo === codigoNbs);
-    const descricaoNbs = String(
-      itemNbs?.descricao
-      || config.municipio_servico_descricao
-      || form.descricao
-      || 'Serviços prestados'
+    const codigoMunicipal = (form.municipio_servico_codigo || config.municipio_servico_codigo || '').trim();
+    const idMunicipal = String(form.municipio_servico_id || config.municipio_servico_id || '').trim();
+    const nomeServico = String(
+      config.municipio_servico_descricao || form.descricao || 'Serviços prestados'
     ).trim().slice(0, 250);
 
     const payloadInvoice = {
@@ -267,10 +268,11 @@ export default function NotasFiscais() {
       value: parseFloat(form.valor),
       deductions: parseFloat(form.deducoes || 0),
       effectiveDate: form.data_emissao,
-      nationalServiceCode:         codigoNbs,
-      municipalServiceCode:        codigoNbs,
-      municipalServiceName:        descricaoNbs,
-      municipalServiceDescription: descricaoNbs,
+      municipalServiceId:   idMunicipal || undefined,
+      municipalServiceCode: codigoMunicipal || undefined,
+      municipalServiceName: nomeServico,
+      nbsCode:              codigoNbs || undefined,
+      nationalServiceCode:  codigoNbs || undefined,
       serie: form.serie || config.serie || '1',
       taxes: {
         iss: parseFloat(form.aliquota_iss || config.aliquota_iss || 0),
@@ -1305,14 +1307,19 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
         </div>
 
         <div className="pt-3 border-t border-gray-100">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Serviço Municipal Padrão</p>
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Serviço Municipal Padrão <span className="text-rose-500">*</span></p>
+          <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+            É o <span className="font-medium text-gray-600">código de serviço municipal</span> que a prefeitura valida
+            (ex.: <span className="font-mono">17.03.03</span>) — obrigatório. Não é o NBS. Preencha ao menos o Código
+            (ou o ID) e a Descrição.
+          </p>
           <div className="grid grid-cols-3 gap-2 mb-3">
             <input type="text" value={form.municipio_servico_id || ''}
               onChange={(e) => setForm(f => ({ ...f, municipio_servico_id: e.target.value }))}
-              placeholder="ID" className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              placeholder="ID (opcional)" className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             <input type="text" value={form.municipio_servico_codigo || ''}
               onChange={(e) => setForm(f => ({ ...f, municipio_servico_codigo: e.target.value }))}
-              placeholder="Código" className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              placeholder="Código (ex 17.03.03)" className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
             <input type="text" value={form.municipio_servico_descricao || ''}
               onChange={(e) => setForm(f => ({ ...f, municipio_servico_descricao: e.target.value }))}
               placeholder="Descrição" className="h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
@@ -1353,8 +1360,9 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
             </div>
           </div>
           <p className="mt-1.5 text-[11px] text-gray-400 leading-snug">
-            Este é o código que o Portal Nacional valida como NBS. Se ele estiver errado/inexistente,
-            a emissão falha com "código NBS não encontrado". Descubra o código correto abaixo.
+            O <span className="font-medium text-gray-600">NBS</span> é SEPARADO do código de serviço municipal (acima) e
+            costuma ser opcional (ex.: <span className="font-mono">1.1806.40.00</span>). A emissão precisa do
+            <span className="font-medium text-gray-600"> código municipal</span> preenchido; o NBS vai junto quando informado.
           </p>
 
           {/* Consultor de serviços municipais */}
