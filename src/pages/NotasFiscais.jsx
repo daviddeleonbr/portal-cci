@@ -29,6 +29,13 @@ const STATUS_CONFIG = {
   PROCESSING:                { label: 'Processando', color: 'bg-blue-50 text-blue-700 border-blue-200',    icon: Loader2 },
 };
 
+// Data de hoje no fuso LOCAL (YYYY-MM-DD). Evita o bug do toISOString(), que
+// usa UTC e, à noite no horário de Brasília, retorna o dia seguinte.
+function hojeLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function NotasFiscais() {
   const [config, setConfig] = useState(null);
   const [loadingConfig, setLoadingConfig] = useState(true);
@@ -112,7 +119,7 @@ export default function NotasFiscais() {
     observacoes:      ag.observacoes,
     valor:            ag.valor,
     deducoes:         ag.deducoes,
-    data_emissao:     new Date().toISOString().slice(0, 10),
+    data_emissao:     hojeLocal(),
     aliquota_iss:     ag.aliquota_iss,
     national_service_code: ag.national_service_code,
     serie:            ag.serie,
@@ -229,7 +236,9 @@ export default function NotasFiscais() {
 
   // Núcleo da emissão: cria a invoice no Asaas a partir do form. Lança em erro.
   // Não mexe em UI (toast/modal/reload) — pra poder rodar em lote (reemissão).
-  const criarNotaNoAsaas = async (form) => {
+  // Com { autorizar: true }, chama /authorize logo após criar → emissão IMEDIATA
+  // (senão o Asaas cria como agendada e só emite na effectiveDate).
+  const criarNotaNoAsaas = async (form, { autorizar = false } = {}) => {
     // 1. Encontrar/criar customer no Asaas (com endereço — Asaas usa
     // pra emitir NFS-e em algumas prefeituras).
     const customer = await asaasApi.encontrarOuCriarCustomer(config.ambiente, config.api_key, {
@@ -279,14 +288,23 @@ export default function NotasFiscais() {
         retainedIss: false,
       },
     };
-    const invoice = await asaasApi.criarInvoice(config.ambiente, config.api_key, payloadInvoice);
-
-    // 3. Salvar no cache local (mescla nome/cnpj que já temos).
-    await asaasConfig.salvarNota(config.id, {
-      ...invoice,
-      customerName:    invoice.customerName    || customer.name,
-      customerCpfCnpj: invoice.customerCpfCnpj || customer.cpfCnpj,
+    let invoice = await asaasApi.criarInvoice(config.ambiente, config.api_key, payloadInvoice);
+    const merge = (inv) => ({
+      ...inv,
+      customerName:    inv.customerName    || customer.name,
+      customerCpfCnpj: inv.customerCpfCnpj || customer.cpfCnpj,
     });
+    // Salva o estado inicial (agendada) já no cache.
+    await asaasConfig.salvarNota(config.id, merge(invoice));
+
+    // 3. Emissão IMEDIATA: autoriza a nota recém-criada (Asaas emite na hora
+    // em vez de esperar a effectiveDate). Se falhar, propaga o erro — a nota
+    // agendada já ficou salva.
+    if (autorizar && invoice?.id) {
+      const autorizada = await asaasApi.autorizarInvoice(config.ambiente, config.api_key, invoice.id);
+      invoice = autorizada || invoice;
+      await asaasConfig.salvarNota(config.id, merge(invoice));
+    }
     return invoice;
   };
 
@@ -321,7 +339,8 @@ export default function NotasFiscais() {
     observacoes:   '',
     valor:         n.valor,
     deducoes:      0,
-    data_emissao:  new Date().toISOString().slice(0, 10),
+    // data LOCAL (não UTC) — toISOString() à noite no BRT vira o dia seguinte.
+    data_emissao:  hojeLocal(),
     aliquota_iss:  '',            // usa config.aliquota_iss
     national_service_code: '',    // usa config.national_service_code (corrigido)
     serie:         '',            // usa config.serie
@@ -335,15 +354,15 @@ export default function NotasFiscais() {
     const alvo = filtered.filter(n => selecionadas.has(n.id) && podeReemitir(n));
     if (alvo.length === 0) return;
     if (!confirm(
-      `Reemitir ${alvo.length} nota(s)?\n\n`
-      + `Serão criadas NOVAS NFS-e no Asaas usando o código nacional/série ATUAIS da configuração `
-      + `(NBS ${config?.national_service_code || '—'} · série ${config?.serie || '1'}).\n\n`
+      `Reemitir ${alvo.length} nota(s) AGORA (emissão imediata)?\n\n`
+      + `Serão criadas e autorizadas NOVAS NFS-e no Asaas hoje (${hojeLocal()}), usando o código `
+      + `municipal/NBS/série ATUAIS da configuração.\n\n`
       + `As notas antigas com erro continuam na lista (você pode ignorá-las/cancelá-las).`
     )) return;
     setReemitindo(true);
     let ok = 0, falhas = 0; const erros = [];
     for (const n of alvo) {
-      try { await criarNotaNoAsaas(formDeNota(n)); ok++; }
+      try { await criarNotaNoAsaas(formDeNota(n), { autorizar: true }); ok++; }
       catch (err) { falhas++; erros.push(`${n.cliente_nome || 'nota'}: ${err.message}`); }
     }
     setReemitindo(false);
