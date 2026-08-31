@@ -1060,6 +1060,7 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
   const [buscaServico, setBuscaServico] = useState('');
   const [servicos, setServicos] = useState(null); // null = ainda não consultou
   const [consultando, setConsultando] = useState(false);
+  const [erroConsulta, setErroConsulta] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -1069,7 +1070,7 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
         national_service_code: '', serie: '1',
         aliquota_iss: '', observacoes_padrao: '', ativo: true,
       });
-      setServicos(null); setBuscaServico('');
+      setServicos(null); setBuscaServico(''); setErroConsulta('');
     }
   }, [open, config]);
 
@@ -1079,14 +1080,22 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
     if (!form.api_key) { showToast('error', 'Informe a chave de API primeiro'); return; }
     try {
       setConsultando(true);
+      setErroConsulta('');
       const res = await asaasApi.listarMunicipalServices(form.ambiente, form.api_key, {
         description: buscaServico.trim() || undefined, limit: 50,
       });
       const lista = res?.data || res?.municipalServices || (Array.isArray(res) ? res : []);
       setServicos(lista);
     } catch (err) {
-      showToast('error', 'Falha ao consultar serviços: ' + err.message);
-      setServicos([]);
+      // Contas do Portal Nacional NFS-e não têm o cadastro de serviços municipais
+      // habilitado — o endpoint retorna "não está habilitado para esta conta".
+      // Nesse caso o consultor não se aplica: o código é o NBS, informado à mão.
+      const msg = String(err.message || '');
+      const naoHabilitado = /não está habilitado|nao esta habilitado|not enabled/i.test(msg);
+      setErroConsulta(naoHabilitado
+        ? 'Sua conta é do Portal Nacional NFS-e — o cadastro de serviços municipais não se aplica. Informe o código NBS diretamente no campo acima (ex.: 1.1806.40.00 para contabilidade), conforme sua atividade/contabilidade.'
+        : 'Falha ao consultar serviços: ' + msg);
+      setServicos(null);
     } finally {
       setConsultando(false);
     }
@@ -1259,6 +1268,13 @@ function ModalConfig({ open, config, onClose, onSaved, showToast }) {
                 Consultar
               </button>
             </div>
+
+            {erroConsulta && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 flex gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[12px] text-amber-800 leading-snug">{erroConsulta}</p>
+              </div>
+            )}
 
             {servicos != null && (
               <div className="mt-2 max-h-56 overflow-y-auto space-y-1.5">
