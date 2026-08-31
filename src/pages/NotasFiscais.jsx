@@ -227,69 +227,70 @@ export default function NotasFiscais() {
     }
   };
 
+  // Núcleo da emissão: cria a invoice no Asaas a partir do form. Lança em erro.
+  // Não mexe em UI (toast/modal/reload) — pra poder rodar em lote (reemissão).
+  const criarNotaNoAsaas = async (form) => {
+    // 1. Encontrar/criar customer no Asaas (com endereço — Asaas usa
+    // pra emitir NFS-e em algumas prefeituras).
+    const customer = await asaasApi.encontrarOuCriarCustomer(config.ambiente, config.api_key, {
+      name: form.cliente_nome,
+      cpfCnpj: form.cliente_cnpj,
+      email: form.cliente_email || undefined,
+      postalCode:    (form.cliente_cep || '').replace(/\D/g, '') || undefined,
+      address:       form.cliente_endereco || undefined,
+      addressNumber: form.cliente_numero   || undefined,
+      province:      form.cliente_bairro   || undefined,
+      city:          form.cliente_cidade   || undefined,
+      state:         form.cliente_estado   || undefined,
+    });
+    await asaasConfig.salvarCustomer(config.id, {
+      asaas_customer_id: customer.id,
+      cliente_nome: customer.name,
+      cliente_cnpj: customer.cpfCnpj,
+      email: customer.email,
+    });
+
+    // 2. Criar invoice (Portal Nacional NFS-e — NBS).
+    const codigoNbs = (form.national_service_code || config.national_service_code || '').trim();
+    const itemNbs = NBS_CODIGOS.find(c => c.codigo === codigoNbs);
+    const descricaoNbs = String(
+      itemNbs?.descricao
+      || config.municipio_servico_descricao
+      || form.descricao
+      || 'Serviços prestados'
+    ).trim().slice(0, 250);
+
+    const payloadInvoice = {
+      customer: customer.id,
+      serviceDescription: form.descricao,
+      observations: form.observacoes || config.observacoes_padrao || '',
+      value: parseFloat(form.valor),
+      deductions: parseFloat(form.deducoes || 0),
+      effectiveDate: form.data_emissao,
+      nationalServiceCode:         codigoNbs,
+      municipalServiceCode:        codigoNbs,
+      municipalServiceName:        descricaoNbs,
+      municipalServiceDescription: descricaoNbs,
+      serie: form.serie || config.serie || '1',
+      taxes: {
+        iss: parseFloat(form.aliquota_iss || config.aliquota_iss || 0),
+        retainedIss: false,
+      },
+    };
+    const invoice = await asaasApi.criarInvoice(config.ambiente, config.api_key, payloadInvoice);
+
+    // 3. Salvar no cache local (mescla nome/cnpj que já temos).
+    await asaasConfig.salvarNota(config.id, {
+      ...invoice,
+      customerName:    invoice.customerName    || customer.name,
+      customerCpfCnpj: invoice.customerCpfCnpj || customer.cpfCnpj,
+    });
+    return invoice;
+  };
+
   const emitirNota = async (form) => {
     try {
-      // 1. Encontrar/criar customer no Asaas (com endereço — Asaas usa
-      // pra emitir NFS-e em algumas prefeituras).
-      const customer = await asaasApi.encontrarOuCriarCustomer(config.ambiente, config.api_key, {
-        name: form.cliente_nome,
-        cpfCnpj: form.cliente_cnpj,
-        email: form.cliente_email || undefined,
-        postalCode:    (form.cliente_cep || '').replace(/\D/g, '') || undefined,
-        address:       form.cliente_endereco || undefined,
-        addressNumber: form.cliente_numero   || undefined,
-        province:      form.cliente_bairro   || undefined,
-        city:          form.cliente_cidade   || undefined,
-        state:         form.cliente_estado   || undefined,
-      });
-      await asaasConfig.salvarCustomer(config.id, {
-        asaas_customer_id: customer.id,
-        cliente_nome: customer.name,
-        cliente_cnpj: customer.cpfCnpj,
-        email: customer.email,
-      });
-
-      // 2. Criar invoice (Portal Nacional NFS-e — NBS).
-      // Asaas ainda exige `municipalServiceDescription` mesmo no PNFS-e.
-      const codigoNbs = (form.national_service_code || config.national_service_code || '').trim();
-      const itemNbs = NBS_CODIGOS.find(c => c.codigo === codigoNbs);
-      // Garante string não-vazia em municipalServiceDescription (Asaas obriga)
-      const descricaoNbs = String(
-        itemNbs?.descricao
-        || config.municipio_servico_descricao
-        || form.descricao
-        || 'Serviços prestados'
-      ).trim().slice(0, 250); // limite preventivo
-
-      const payloadInvoice = {
-        customer: customer.id,
-        serviceDescription: form.descricao,
-        observations: form.observacoes || config.observacoes_padrao || '',
-        value: parseFloat(form.valor),
-        deductions: parseFloat(form.deducoes || 0),
-        effectiveDate: form.data_emissao,
-        nationalServiceCode:         codigoNbs,
-        municipalServiceCode:        codigoNbs,            // mesmo NBS — Asaas exige
-        municipalServiceName:        descricaoNbs,
-        municipalServiceDescription: descricaoNbs,
-        serie: form.serie || config.serie || '1',
-        taxes: {
-          iss: parseFloat(form.aliquota_iss || config.aliquota_iss || 0),
-          retainedIss: false,
-        },
-      };
-      const invoice = await asaasApi.criarInvoice(config.ambiente, config.api_key, payloadInvoice);
-
-      // 3. Salvar no cache local. A resposta do Asaas só traz `customer` como
-      // string (ID) — então mesclamos o nome/cnpj que já temos pra não gravar vazio.
-      await asaasConfig.salvarNota(config.id, {
-        ...invoice,
-        customerName:    invoice.customerName    || customer.name,
-        customerCpfCnpj: invoice.customerCpfCnpj || customer.cpfCnpj,
-      });
-      // Mostra status real retornado pelo Asaas (SCHEDULED, AUTHORIZED, etc).
-      // Asaas geralmente cria como SCHEDULED — emite em background quando
-      // chega a effectiveDate. Use "Sincronizar" pra ver a transição.
+      const invoice = await criarNotaNoAsaas(form);
       const labelStatus = STATUS_CONFIG[invoice?.status]?.label || invoice?.status || 'criada';
       showToast('success',
         `Nota fiscal ${labelStatus.toLowerCase()} com sucesso! `
@@ -300,6 +301,76 @@ export default function NotasFiscais() {
     } catch (err) {
       showToast('error', 'Erro: ' + err.message);
       throw err;
+    }
+  };
+
+  // ─── Reemissão em lote (notas que falharam com dado errado) ──────────────
+  const [selecionadas, setSelecionadas] = useState(() => new Set());
+  const [reemitindo, setReemitindo] = useState(false);
+
+  // Reconstrói um form de emissão a partir de uma nota do cache. Deixa NBS/série/
+  // ISS em branco de propósito: assim a emissão usa o PADRÃO ATUAL da config (já
+  // corrigido). Endereço/e-mail podem faltar no cache — não são obrigatórios.
+  const formDeNota = (n) => ({
+    cliente_nome:  n.cliente_nome  || n.raw_json?.customerName    || '',
+    cliente_cnpj:  n.cliente_cnpj  || n.raw_json?.customerCpfCnpj || '',
+    cliente_email: n.raw_json?.customerEmail || undefined,
+    descricao:     n.servico_descricao || 'Serviços prestados',
+    observacoes:   '',
+    valor:         n.valor,
+    deducoes:      0,
+    data_emissao:  new Date().toISOString().slice(0, 10),
+    aliquota_iss:  '',            // usa config.aliquota_iss
+    national_service_code: '',    // usa config.national_service_code (corrigido)
+    serie:         '',            // usa config.serie
+  });
+
+  // Não deixa reemitir nota já autorizada (duplicaria a NFS-e) nem uma em
+  // cancelamento. Reemissão é pra falhas/pendências (ex.: NBS errado).
+  const podeReemitir = (n) => !['AUTHORIZED', 'PROCESSING_CANCELLATION'].includes(n.status);
+
+  const reemitirSelecionadas = async () => {
+    const alvo = filtered.filter(n => selecionadas.has(n.id) && podeReemitir(n));
+    if (alvo.length === 0) return;
+    if (!confirm(
+      `Reemitir ${alvo.length} nota(s)?\n\n`
+      + `Serão criadas NOVAS NFS-e no Asaas usando o código nacional/série ATUAIS da configuração `
+      + `(NBS ${config?.national_service_code || '—'} · série ${config?.serie || '1'}).\n\n`
+      + `As notas antigas com erro continuam na lista (você pode ignorá-las/cancelá-las).`
+    )) return;
+    setReemitindo(true);
+    let ok = 0, falhas = 0; const erros = [];
+    for (const n of alvo) {
+      try { await criarNotaNoAsaas(formDeNota(n)); ok++; }
+      catch (err) { falhas++; erros.push(`${n.cliente_nome || 'nota'}: ${err.message}`); }
+    }
+    setReemitindo(false);
+    setSelecionadas(new Set());
+    await carregarNotas();
+    showToast(falhas === 0 ? 'success' : 'error',
+      `Reemissão: ${ok} criada(s)${falhas ? ` · ${falhas} com erro (${erros[0]}${erros.length > 1 ? '…' : ''})` : ''}.`);
+  };
+
+  // ─── Aplicar NBS/série padrão a TODAS as agendas (corrige as antigas) ────
+  const aplicarCodigoPadraoAgendamentos = async () => {
+    if (!config?.national_service_code) {
+      showToast('error', 'Defina o código nacional/NBS padrão na Configuração Asaas primeiro.');
+      return;
+    }
+    if (!confirm(
+      `Aplicar o código nacional/série PADRÃO da config a TODAS as agendas?\n\n`
+      + `NBS ${config.national_service_code} · série ${config.serie || '1'}\n\n`
+      + `Isso sobrescreve o código de cada agendamento existente.`
+    )) return;
+    try {
+      const n = await agendamentosNf.atualizarCodigoNacionalEmMassa(config.id, {
+        national_service_code: config.national_service_code,
+        serie: config.serie || '1',
+      });
+      showToast('success', `${n} agendamento(s) atualizado(s) com o NBS/série padrão.`);
+      await carregarAgendamentos();
+    } catch (err) {
+      showToast('error', 'Erro ao aplicar: ' + err.message);
     }
   };
 
@@ -468,6 +539,24 @@ export default function NotasFiscais() {
         </select>
       </div>
 
+      {/* Barra de reemissão (aparece com seleção) */}
+      {selecionadas.size > 0 && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5">
+          <span className="text-[13px] text-blue-800 font-medium">
+            {filtered.filter(n => selecionadas.has(n.id)).length} nota(s) selecionada(s) para reemissão
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setSelecionadas(new Set())}
+              className="text-[12px] text-gray-600 hover:text-gray-800 px-2 py-1.5">Limpar</button>
+            <button type="button" onClick={reemitirSelecionadas} disabled={reemitindo}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+              {reemitindo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Reemitir selecionadas
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-xl border border-gray-200/60 overflow-hidden shadow-sm">
@@ -484,6 +573,17 @@ export default function NotasFiscais() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-xs text-gray-500 uppercase">
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" aria-label="Selecionar todas"
+                      checked={filtered.some(podeReemitir) && filtered.filter(podeReemitir).every(n => selecionadas.has(n.id))}
+                      onChange={(e) => setSelecionadas(prev => {
+                        const next = new Set(prev);
+                        if (e.target.checked) filtered.filter(podeReemitir).forEach(n => next.add(n.id));
+                        else filtered.forEach(n => next.delete(n.id));
+                        return next;
+                      })}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 align-middle" />
+                  </th>
                   <th className="text-left px-6 py-3 font-medium">Número</th>
                   <th className="text-left px-6 py-3 font-medium">Cliente</th>
                   <th className="text-left px-6 py-3 font-medium">Descrição</th>
@@ -501,7 +601,19 @@ export default function NotasFiscais() {
                   return (
                     <motion.tr key={n.id}
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }}
-                      className="hover:bg-gray-50/50 transition-colors group">
+                      className={`hover:bg-gray-50/50 transition-colors group ${selecionadas.has(n.id) ? 'bg-blue-50/40' : ''}`}>
+                      <td className="px-4 py-3">
+                        <input type="checkbox" aria-label={`Selecionar nota ${n.numero || ''}`}
+                          checked={selecionadas.has(n.id)}
+                          disabled={!podeReemitir(n)}
+                          title={podeReemitir(n) ? '' : 'Nota autorizada — não pode ser reemitida (duplicaria a NFS-e)'}
+                          onChange={(e) => setSelecionadas(prev => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(n.id); else next.delete(n.id);
+                            return next;
+                          })}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 align-middle disabled:opacity-40 disabled:cursor-not-allowed" />
+                      </td>
                       <td className="px-6 py-3">
                         <span className="font-mono text-xs text-gray-600">
                           {n.numero || <span className="italic text-gray-400">sem número</span>}
@@ -570,6 +682,8 @@ export default function NotasFiscais() {
           onEmitirAgora={emitirAgora}
           onEmitirTodas={emitirTodas}
           emitindoTodas={emitindoTodas}
+          onAplicarCodigoPadrao={aplicarCodigoPadraoAgendamentos}
+          config={config}
         />
       )}
 
@@ -623,12 +737,14 @@ function KpiInline({ label, value, icon: Icon, color }) {
 // Modal: Emitir Nota
 // ═══════════════════════════════════════════════════════════
 function NacionalServicoPicker({ valor, onChange, padrao }) {
-  const [busca, setBusca] = useState('');
   const [aberto, setAberto] = useState(false);
-  const selecionado = NBS_CODIGOS.find(c => c.codigo === valor);
+  // Match na lista é só pra mostrar a descrição — o código pode ser QUALQUER
+  // NBS válido (a lista NBS_CODIGOS é sugestão; o Portal Nacional aceita códigos
+  // que não estão nela, ex.: 1.1806.40.00). Por isso o input é livre.
+  const match = NBS_CODIGOS.find(c => c.codigo === valor);
 
   const filtrados = (() => {
-    const t = busca.trim().toLowerCase();
+    const t = (valor || '').trim().toLowerCase();
     if (!t) return NBS_CODIGOS.slice(0, 20);
     return NBS_CODIGOS
       .filter(c =>
@@ -643,50 +759,38 @@ function NacionalServicoPicker({ valor, onChange, padrao }) {
       <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
         Código de Tributação Nacional (NBS) <span className="text-rose-500">*</span>
       </h4>
-      {selecionado ? (
-        <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="font-mono text-[13px] font-bold text-blue-700">{selecionado.codigo}</p>
-            <p className="text-[12px] text-gray-700 mt-0.5">{selecionado.descricao}</p>
-          </div>
-          <button type="button" onClick={() => { onChange(''); setBusca(''); }}
-            className="text-[11px] text-rose-600 hover:text-rose-800 font-medium flex-shrink-0">
-            Trocar
-          </button>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+        <input type="text"
+          value={valor || ''}
+          onChange={(e) => { onChange(e.target.value); setAberto(true); }}
+          onFocus={() => setAberto(true)}
+          onBlur={() => setTimeout(() => setAberto(false), 200)}
+          placeholder='Digite o NBS (ex: "1.1806.40.00") ou busque por descrição...'
+          className="w-full h-10 rounded-lg border border-gray-200 pl-9 pr-3 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+      </div>
+      {aberto && filtrados.length > 0 && (
+        <div className="mt-1 max-h-56 overflow-y-auto bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 shadow-sm">
+          {filtrados.map(c => (
+            <button key={c.codigo} type="button"
+              onMouseDown={(e) => { e.preventDefault(); onChange(c.codigo); setAberto(false); }}
+              className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors">
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[12.5px] font-bold text-blue-700">{c.codigo}</span>
+                <span className="text-[12px] text-gray-700 truncate">{c.descricao}</span>
+              </div>
+            </button>
+          ))}
         </div>
-      ) : (
-        <>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-            <input type="text"
-              value={busca || valor}
-              onChange={(e) => { setBusca(e.target.value); setAberto(true); onChange(''); }}
-              onFocus={() => setAberto(true)}
-              onBlur={() => setTimeout(() => setAberto(false), 200)}
-              placeholder='Buscar por código (ex: "17.03.03") ou descrição...'
-              className="w-full h-10 rounded-lg border border-gray-200 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          </div>
-          {aberto && filtrados.length > 0 && (
-            <div className="mt-1 max-h-56 overflow-y-auto bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 shadow-sm">
-              {filtrados.map(c => (
-                <button key={c.codigo} type="button"
-                  onMouseDown={(e) => { e.preventDefault(); onChange(c.codigo); setBusca(''); setAberto(false); }}
-                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-mono text-[12.5px] font-bold text-blue-700">{c.codigo}</span>
-                    <span className="text-[12px] text-gray-700 truncate">{c.descricao}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-          <p className="text-[11px] text-gray-400 mt-1">
-            {padrao
-              ? <>Se deixar em branco, usa o padrão: <span className="font-mono font-semibold">{padrao}</span></>
-              : 'Não encontrou o código? Digite o NBS exato (formato 00.00.00) que o Asaas aceita.'}
-          </p>
-        </>
       )}
+      {match && !aberto && (
+        <p className="text-[11.5px] text-gray-600 mt-1">{match.descricao}</p>
+      )}
+      <p className="text-[11px] text-gray-400 mt-1">
+        {padrao
+          ? <>Se deixar em branco, usa o padrão da config: <span className="font-mono font-semibold">{padrao}</span></>
+          : 'Digite o NBS exato que o Portal Nacional aceita (ex.: 1.1806.40.00). A lista é apenas sugestão.'}
+      </p>
     </div>
   );
 }
@@ -1385,7 +1489,7 @@ function ModalDetail({ open, nota, onClose }) {
 // ═══════════════════════════════════════════════════════════
 // Aba: Agendamento — lista de regras recorrentes
 // ═══════════════════════════════════════════════════════════
-function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onRemover, onEmitirAgora, onEmitirTodas, emitindoTodas }) {
+function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onRemover, onEmitirAgora, onEmitirTodas, emitindoTodas, onAplicarCodigoPadrao, config }) {
   const [statusCron, setStatusCron] = useState(null);
   const [carregandoCron, setCarregandoCron] = useState(true);
 
@@ -1465,6 +1569,15 @@ function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onR
                 className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                 <Download className="h-4 w-4" /> CSV
               </button>
+              {onAplicarCodigoPadrao && (
+                <button onClick={onAplicarCodigoPadrao} disabled={!config?.national_service_code}
+                  className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  title={config?.national_service_code
+                    ? `Aplica NBS ${config.national_service_code} / série ${config.serie || '1'} a todas as agendas`
+                    : 'Defina o NBS padrão na Configuração Asaas primeiro'}>
+                  <RefreshCw className="h-4 w-4" /> Aplicar NBS padrão
+                </button>
+              )}
               <button onClick={onEmitirTodas} disabled={emitindoTodas || totalAtivos.length === 0}
                 className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
                 title="Emite agora as notas de todos os agendamentos ativos">

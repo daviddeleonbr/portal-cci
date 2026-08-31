@@ -41,6 +41,30 @@ export async function salvarAgendamento(agendamento) {
   return data;
 }
 
+// Atualiza EM MASSA o código nacional (NBS) e/ou a série de todos os agendamentos
+// de uma config. Usado pra corrigir agendas emitidas com um NBS inválido (o
+// national_service_code fica gravado por-agendamento; mudar o padrão da config
+// não altera as agendas já criadas). Retorna quantas linhas foram atualizadas.
+export async function atualizarCodigoNacionalEmMassa(configId, { national_service_code, serie } = {}) {
+  const patch = {};
+  if (national_service_code != null && String(national_service_code).trim() !== '') {
+    patch.national_service_code = String(national_service_code).trim();
+  }
+  if (serie != null && String(serie).trim() !== '') {
+    patch.serie = String(serie).trim();
+  }
+  if (Object.keys(patch).length === 0) {
+    throw new Error('Informe o código nacional (NBS) e/ou a série para aplicar.');
+  }
+  const { data, error } = await supabase
+    .from('agendamentos_nf')
+    .update(patch)
+    .eq('config_id', configId)
+    .select('id');
+  if (error) throw error;
+  return data?.length || 0;
+}
+
 export async function alternarAtivo(id, ativo) {
   const { data, error } = await supabase
     .from('agendamentos_nf')
