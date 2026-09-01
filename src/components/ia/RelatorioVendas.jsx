@@ -140,7 +140,7 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
           {/* Cartões-chave */}
           <div className="rd-kpis">
             <CartaoKpi rotulo="Faturamento" valor={moeda(faturamento)} explica="Tudo o que o posto vendeu no mês." />
-            <CartaoKpi rotulo="Custo do que foi vendido (CMV)" valor={moeda(cmv)} explica="Quanto o posto pagou pelos produtos que revendeu." />
+            <CartaoKpi rotulo="Custo (CMV)" valor={moeda(cmv)} explica="Quanto o posto pagou pelos produtos que revendeu." />
             <CartaoKpi rotulo="Lucro bruto" valor={moeda(lucroBruto)} explica="O que sobrou da venda depois de pagar o custo do produto." />
             <CartaoKpi
               rotulo="Margem"
@@ -152,7 +152,7 @@ export default function RelatorioVendas({ insights, dados, empresa, periodo, mod
               variacaoPct={momPct != null ? momPct : undefined}
               explica="Faturamento comparado ao mês anterior." />
             <CartaoKpi
-              rotulo="vs. mesmo mês do ano passado"
+              rotulo="vs. ano passado"
               valor={yoy.variacao_receita_pct != null ? variacao(yoy.variacao_receita_pct) : '—'}
               variacaoPct={yoy.variacao_receita_pct}
               explica="Faturamento comparado a um ano atrás." />

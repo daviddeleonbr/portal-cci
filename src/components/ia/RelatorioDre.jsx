@@ -129,7 +129,7 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
               variacaoPct={momPct != null ? momPct : undefined}
               explica="Faturamento comparado ao mês anterior." />
             <CartaoKpi
-              rotulo="vs. mesmo mês do ano passado"
+              rotulo="vs. ano passado"
               valor={yoy.variacao_receita_pct != null ? variacao(yoy.variacao_receita_pct) : '—'}
               variacaoPct={yoy.variacao_receita_pct}
               explica="Faturamento comparado a um ano atrás." />
