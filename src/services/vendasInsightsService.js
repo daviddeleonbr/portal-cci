@@ -828,10 +828,27 @@ function detectarAlertasProduto(porProdutoAtual, porProdutoYoY) {
 }
 
 // ─── Agregador rede ────────────────────────────────────────────
-export function agregarDadosRede({ nomeRede, periodoLabel, empresasAgregadas }) {
+export function agregarDadosRede({ nomeRede, periodoLabel, empresasAgregadas, tendencia6m = [] }) {
   const totalReceita = empresasAgregadas.reduce((s, e) => s + (e.totais?.receita_bruta || 0), 0);
   const totalCMV = empresasAgregadas.reduce((s, e) => s + (e.totais?.cmv || 0), 0);
   const totalLucro = totalReceita - totalCMV;
+
+  // Comparativo YoY consolidado = soma do YoY de cada empresa (cada payload de
+  // empresa ja traz comparativo_yoy). Antes o consolidado nao expunha esse campo
+  // no topo, entao os KPIs "vs. mes/ano passado" vinham vazios ("—") na rede.
+  const empsYoy = empresasAgregadas.map(e => e.comparativo_yoy).filter(Boolean);
+  const totalReceitaYoY = empsYoy.reduce((s, y) => s + Number(y.receita || 0), 0);
+  const totalLucroYoY = empsYoy.reduce((s, y) => s + Number(y.lucro_bruto || 0), 0);
+  const margemRedeAtual = totalReceita > 0 ? (totalLucro / totalReceita) * 100 : 0;
+  const comparativoYoyRede = (empsYoy.length > 0 && totalReceitaYoY > 0) ? {
+    periodo: empsYoy[0].periodo,
+    receita: round(totalReceitaYoY),
+    lucro_bruto: round(totalLucroYoY),
+    margem_pct: round((totalLucroYoY / totalReceitaYoY) * 100, 2),
+    variacao_receita_pct: variacaoPct(totalReceita, totalReceitaYoY),
+    variacao_lucro_pct: totalLucroYoY !== 0 ? variacaoPct(totalLucro, totalLucroYoY) : null,
+    variacao_margem_pp: round(margemRedeAtual - (totalLucroYoY / totalReceitaYoY) * 100, 2),
+  } : null;
   const totalLitros = empresasAgregadas.reduce((s, e) => s + (e.volume_combustivel?.litros_total || 0), 0);
 
   const mixConsolidado = {};
@@ -1046,6 +1063,8 @@ export function agregarDadosRede({ nomeRede, periodoLabel, empresasAgregadas }) 
   return {
     rede: { nome: ativo ? mascararRede(nomeRede, nomeRede, true) : nomeRede, qtd_empresas: empresas.length },
     periodo: periodoLabel,
+    comparativo_yoy: comparativoYoyRede,
+    tendencia_6m: tendencia6m,
     consolidado: {
       receita_bruta: round(totalReceita),
       cmv: round(totalCMV),
@@ -1155,10 +1174,26 @@ export async function prepararDadosVendas({ cliente, modoRede = false, chaveApi,
         serieMensal: [],
       }));
     }
+    // Tendencia 6m CONSOLIDADA: a serie mensal ja foi buscada acima (para toda a
+    // rede junta). Agregamos cada mes somando todas as empresas — assim o KPI
+    // "vs. mes passado" tambem funciona no consolidado.
+    const tendenciaRede = serie.map(s => {
+      const a = agregarPeriodo(s.vendaItens, s.vendas, pMap, gMap);
+      return {
+        mes: s.periodoLabel,
+        receita: a.receita,
+        lucro_bruto: a.lucroBruto,
+        margem_pct: a.margemPct,
+        litros: a.litrosCombustivel,
+        qtd_vendas: a.qtdVendas,
+        ticket_medio: a.ticketMedio,
+      };
+    });
     return agregarDadosRede({
       nomeRede: cliente?.nome || 'Rede',
       periodoLabel: periodos.atual.label,
       empresasAgregadas: empresasAgg,
+      tendencia6m: tendenciaRede,
     });
   }
 
