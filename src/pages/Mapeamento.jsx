@@ -1035,9 +1035,17 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [planoExpanded, setPlanoExpanded] = useState(new Set());
   const [grupoAtivo, setGrupoAtivo] = useState(null);
-  // Direção do próximo vínculo (só Fluxo/Autosystem): 'D'=quando debitada (saída),
-  // 'C'=quando creditada (entrada), null=ambos (líquido, comportamento padrão).
-  const [ladoAtivo, setLadoAtivo] = useState(null);
+  // Direção POR GRUPO (só Fluxo/Autosystem): grupoId -> 'D'(debitada/saída) |
+  // 'C'(creditada/entrada) | null(ambos). Guardada por grupo para cada destino
+  // lembrar sua direção ao alternar entre grupos. Se o grupo ainda não teve
+  // direção escolhida, sugere pelo tipo do grupo (entrada→crédito, saída→débito).
+  const [ladoPorGrupo, setLadoPorGrupo] = useState({});
+  const ladoPadraoDoGrupo = (g) => (g?.tipo === 'entrada' ? 'C' : g?.tipo === 'saida' ? 'D' : null);
+  const ladoDoGrupo = (gid) => {
+    if (gid == null) return null;
+    if (gid in ladoPorGrupo) return ladoPorGrupo[gid];
+    return ladoPadraoDoGrupo(grupos.find(g => g.id === gid));
+  };
   const [search, setSearch] = useState('');
   const [soNaoMapeadas, setSoNaoMapeadas] = useState(false);
   const [modalConta, setModalConta] = useState({ open: false, data: null });
@@ -1153,7 +1161,7 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
         conta_codigo: String(node.codigo),
         conta_descricao: node.nome || node.descricao || '—',
         conta_natureza: null,
-        lado: isFluxo ? ladoAtivo : null,
+        lado: isFluxo ? ladoDoGrupo(grupoAtivo) : null,
       });
       await refreshContas();
     } catch (err) { showToast('error', err.message); }
@@ -1334,16 +1342,16 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
                 </div>
                 {isFluxo ? (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <span className="text-[11px] text-blue-500 font-medium">Ao vincular:</span>
+                    <span className="text-[11px] text-blue-500 font-medium">Direção deste grupo:</span>
                     {[
                       { v: null, label: 'Ambos', title: 'Débito e crédito (valor líquido) — padrão' },
                       { v: 'D', label: 'Débito (saída)', title: 'Só quando a conta for debitada (sai do caixa)' },
                       { v: 'C', label: 'Crédito (entrada)', title: 'Só quando a conta for creditada (entra no caixa)' },
                     ].map(op => (
                       <button key={String(op.v)} type="button" title={op.title}
-                        onClick={() => setLadoAtivo(op.v)}
+                        onClick={() => setLadoPorGrupo(prev => ({ ...prev, [grupoAtivo]: op.v }))}
                         className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
-                          ladoAtivo === op.v
+                          ladoDoGrupo(grupoAtivo) === op.v
                             ? 'bg-blue-600 text-white border-blue-600'
                             : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-100'
                         }`}>
