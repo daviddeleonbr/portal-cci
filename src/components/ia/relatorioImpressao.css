@@ -120,7 +120,7 @@
   background: #fff; break-inside: avoid;
 }
 .rd-kpi .rotulo { font-size: 8.5pt; color: var(--cinza); text-transform: uppercase; letter-spacing: .4px; font-weight: 600; }
-.rd-kpi .valor { font-family: var(--fonte-titulo); font-size: 16pt; font-weight: 700; margin: 1mm 0; color: var(--grafite); }
+.rd-kpi .valor { font-family: var(--fonte-titulo); font-size: 13pt; font-weight: 700; margin: 1mm 0; color: var(--grafite); font-variant-numeric: tabular-nums; letter-spacing: -0.2px; line-height: 1.15; }
 .rd-kpi .var { font-size: 9.5pt; font-weight: 700; }
 .rd-kpi .explica { font-size: 8.5pt; color: var(--cinza); margin-top: 1mm; line-height: 1.35; }
 .tom-bom { color: var(--verde); }
