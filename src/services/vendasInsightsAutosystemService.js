@@ -67,6 +67,8 @@ O QUE VEM NO PAYLOAD:
 - automotivos_detalhado e conveniencia_detalhado: totais da categoria + grupos com receita,
   margem, % da categoria, variacao YoY e top produtos.
 - top_produtos: top 15 por receita. produtos_em_queda/alta/sumiram vs YoY.
+- TODO produto (em qualquer lista: top_produtos, combustiveis_por_produto, produtos_em_queda/alta/
+  sumiram, e os top_produtos dentro dos grupos) traz o campo "codigo" = codigo do produto no Autosystem.
 - integridade_dados: pct_sem_categoria (faturamento em grupos nao classificados).
 - por_empresa (quando ha mais de uma unidade): receita/margem/participacao/litros por empresa.
 
@@ -90,7 +92,7 @@ SUA RESPOSTA DEVE SER UM JSON VALIDO com EXATAMENTE esta estrutura:
   "mix_produto": {
     "interpretacao": "analise do mix receita x margem",
     "concentracao": [{"categoria": "...", "pct_receita": 0, "pct_margem": 0, "comentario": "..."}],
-    "top_produtos": [{"nome": "...", "receita": 0, "margem": 0, "participacao_pct": 0, "avaliacao": "..."}]
+    "top_produtos": [{"nome": "NOME (cod. 8017)", "receita": 0, "margem": 0, "participacao_pct": 0, "avaliacao": "..."}]
   },
   "diagnostico_grupos": {
     "interpretacao": "quais grupos puxam resultado vs quais pesam",
@@ -101,8 +103,8 @@ SUA RESPOSTA DEVE SER UM JSON VALIDO com EXATAMENTE esta estrutura:
     "analise_por_tipo": "quantidade e preco por tipo (Gasolina, Diesel, Etanol, GNV) e comportamento",
     "analise_por_produto": "analise individual dos produtos combustiveis pelo nome — comum vs aditivada, S10 vs S500, etc. Inclua quais tem maior margem R$/litro e quais sao gargalos.",
     "tipos_em_queda": [{"tipo": "...", "variacao_litros_pct": 0, "causa_provavel": "..."}],
-    "produtos_destaque": [{"produto": "...", "motivo": "margem R$/L alta ou crescimento forte"}],
-    "produtos_preocupantes": [{"produto": "...", "motivo": "margem baixa, queda em volume, ou repasse de preco insuficiente"}],
+    "produtos_destaque": [{"produto": "NOME (cod. 8017)", "motivo": "margem R$/L alta ou crescimento forte"}],
+    "produtos_preocupantes": [{"produto": "NOME (cod. 8017)", "motivo": "margem baixa, queda em volume, ou repasse de preco insuficiente"}],
     "mix_ideal": "comentario sobre mix atual"
   },
   "automotivos_analise": {
@@ -123,8 +125,8 @@ SUA RESPOSTA DEVE SER UM JSON VALIDO com EXATAMENTE esta estrutura:
     "observacoes": ["..."]
   },
   "alertas_produtos": {
-    "produtos_em_queda": [{"produto": "...", "queda_pct": 0, "tipo": "receita|margem|sumiu", "acao": "..."}],
-    "produtos_em_alta_para_replicar": [{"produto": "...", "crescimento_pct": 0, "porque_funcionou": "..."}]
+    "produtos_em_queda": [{"produto": "NOME (cod. 8017)", "queda_pct": 0, "tipo": "receita|margem|sumiu", "acao": "..."}],
+    "produtos_em_alta_para_replicar": [{"produto": "NOME (cod. 8017)", "crescimento_pct": 0, "porque_funcionou": "..."}]
   },
   "integridade_dados": {
     "pct_outros": 0,
@@ -150,6 +152,11 @@ REGRAS:
 - Use SEMPRE os numeros do payload. Nao invente. NAO cite formas de pagamento, taxa de cartao,
   ticket medio nem cancelamentos — essa fonte nao tem esses dados.
 - Cite R$ e % com precisao. Para variacao de margem use pp (pontos percentuais).
+- CODIGO DO PRODUTO (OBRIGATORIO): sempre que citar um produto pelo nome — em QUALQUER texto,
+  motivo, acao, avaliacao ou lista — escreva no formato "NOME (cod. CODIGO)", usando o campo
+  "codigo" do payload daquele produto. Ha muitos produtos com nome parecido (ex.: varios
+  "LUBRAX TOP AUTO", "SELENIA ..."); sem o codigo o dono nao acha o item exato no sistema.
+  Se um produto que voce citaria nao estiver no payload (sem codigo), prefira citar os que tem.
 - Em integridade_dados.pct_outros use o pct_sem_categoria do payload.
 - Responda APENAS o JSON, sem texto adicional, sem markdown, sem code fences.`;
 
@@ -328,6 +335,7 @@ function detalharCombustiveisPorProduto(porProduto, receitaTotal) {
   const litrosCombs = combs.reduce((s, p) => s + p.quantidade, 0);
   return combs
     .map(p => ({
+      codigo: p.codigo,
       produto: p.nome,
       tipo: classificarTipoCombustivel(p.nome),
       grupo: p.grupoNome,
@@ -398,6 +406,7 @@ function detalharCategoriaPorGrupo(porProduto, receitaTotalGeral, categoriaAlvo,
         .map(p => {
           const prev = mapYoYProd.get(p.codigo);
           return {
+            codigo: p.codigo,
             produto: p.nome,
             receita: round(p.receita),
             margem_pct: p.receita > 0 ? round(((p.receita - p.custo) / p.receita) * 100, 2) : 0,
@@ -459,20 +468,20 @@ function detectarAlertasProduto(porProdutoAtual, porProdutoYoY) {
 
     if (varReceita != null && varReceita <= -20 && atual.receita >= 100) {
       em_queda.push({
-        produto: atual.nome, categoria: atual.categoria, grupo: atual.grupoNome,
+        codigo: atual.codigo, produto: atual.nome, categoria: atual.categoria, grupo: atual.grupoNome,
         receita_atual: round(atual.receita), receita_yoy: round(prev.receita),
         variacao_pct: round(varReceita, 2), tipo: 'receita',
       });
     } else if (deltaMargem <= -5 && atual.receita >= 100) {
       em_queda.push({
-        produto: atual.nome, categoria: atual.categoria, grupo: atual.grupoNome,
+        codigo: atual.codigo, produto: atual.nome, categoria: atual.categoria, grupo: atual.grupoNome,
         receita_atual: round(atual.receita),
         margem_atual_pct: round(margemAtual, 2), margem_yoy_pct: round(margemPrev, 2),
         variacao_margem_pp: round(deltaMargem, 2), tipo: 'margem',
       });
     } else if (varReceita != null && varReceita >= 20 && atual.receita >= 100) {
       em_alta.push({
-        produto: atual.nome, categoria: atual.categoria, grupo: atual.grupoNome,
+        codigo: atual.codigo, produto: atual.nome, categoria: atual.categoria, grupo: atual.grupoNome,
         receita_atual: round(atual.receita), receita_yoy: round(prev.receita),
         crescimento_pct: round(varReceita, 2),
       });
@@ -484,7 +493,7 @@ function detectarAlertasProduto(porProdutoAtual, porProdutoYoY) {
     const atual = porProdutoAtual.get(prev.codigo);
     if (!atual || atual.receita === 0) {
       sumiram.push({
-        produto: prev.nome, categoria: prev.categoria, grupo: prev.grupoNome,
+        codigo: prev.codigo, produto: prev.nome, categoria: prev.categoria, grupo: prev.grupoNome,
         receita_yoy: round(prev.receita),
       });
     }
@@ -563,6 +572,7 @@ function montarSecoesVendas(atualAgg, yoyAgg) {
     .sort((a, b) => b.receita - a.receita)
     .slice(0, 15)
     .map(p => ({
+      codigo: p.codigo,
       nome: p.nome,
       categoria: p.categoria,
       grupo: p.grupoNome,
