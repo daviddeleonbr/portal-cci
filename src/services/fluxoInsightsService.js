@@ -103,8 +103,18 @@ function contaEntra(mapa, contaCodigo) {
 // mapeamentos: [{plano_conta_codigo, grupo_fluxo_id}]
 // tipoPorConta: Map<contaCodigo, 'bancaria'|'caixa'|...>
 export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorConta) {
-  const planoParaGrupo = new Map();
-  (mapeamentos || []).forEach(m => planoParaGrupo.set(String(m.plano_conta_codigo), m.grupo_fluxo_id));
+  // Roteamento sensível à direção (Autosystem, partida dobrada): a mesma conta
+  // pode ir a grupos diferentes conforme debitada/creditada. 'C'=crédito (entrada),
+  // 'D'=débito (saída), null=ambos. Direção específica tem prioridade sobre 'ambos'.
+  const mapC = new Map();
+  const mapD = new Map();
+  const mapNull = new Map();
+  (mapeamentos || []).forEach(m => {
+    const cod = String(m.plano_conta_codigo);
+    if (m.lado === 'C') mapC.set(cod, m.grupo_fluxo_id);
+    else if (m.lado === 'D') mapD.set(cod, m.grupo_fluxo_id);
+    else mapNull.set(cod, m.grupo_fluxo_id);
+  });
 
   // Totais: grupo -> { entradas, saidas } e contaGerencial -> { entradas, saidas, nome }
   const totalPorGrupo = new Map();
@@ -121,7 +131,11 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
       if (isCredito) entradasTotal += valor; else saidasTotal += valor;
 
       const codigoPlano = String(m.planoContaGerencialCodigo || '');
-      const grupoId = codigoPlano ? planoParaGrupo.get(codigoPlano) : null;
+      const grupoId = codigoPlano
+        ? (isCredito
+            ? (mapC.get(codigoPlano) ?? mapNull.get(codigoPlano))
+            : (mapD.get(codigoPlano) ?? mapNull.get(codigoPlano)))
+        : null;
       if (!grupoId) {
         if (isCredito) semPlano.entradas += valor; else semPlano.saidas += valor;
         return;

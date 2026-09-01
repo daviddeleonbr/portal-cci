@@ -1035,6 +1035,9 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [planoExpanded, setPlanoExpanded] = useState(new Set());
   const [grupoAtivo, setGrupoAtivo] = useState(null);
+  // Direção do próximo vínculo (só Fluxo/Autosystem): 'D'=quando debitada (saída),
+  // 'C'=quando creditada (entrada), null=ambos (líquido, comportamento padrão).
+  const [ladoAtivo, setLadoAtivo] = useState(null);
   const [search, setSearch] = useState('');
   const [soNaoMapeadas, setSoNaoMapeadas] = useState(false);
   const [modalConta, setModalConta] = useState({ open: false, data: null });
@@ -1150,6 +1153,7 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
         conta_codigo: String(node.codigo),
         conta_descricao: node.nome || node.descricao || '—',
         conta_natureza: null,
+        lado: isFluxo ? ladoAtivo : null,
       });
       await refreshContas();
     } catch (err) { showToast('error', err.message); }
@@ -1237,6 +1241,13 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
 
   // Mapa codigo→registro (chave normalizada string)
   const contasVinculadasMap = new Map(contas.map(c => [String(c.conta_codigo), c]));
+  // No Fluxo (Autosystem) a MESMA conta pode ser vinculada a grupos diferentes por
+  // direção (débito/crédito). Então, na árvore do plano, "já vinculada" passa a ser
+  // relativa ao GRUPO ATIVO: clicar a conta com outro grupo selecionado cria um novo
+  // vínculo (não remove o existente em outro grupo). No DRE mantém o global.
+  const contasVinculadasMapNode = isFluxo
+    ? new Map(contas.filter(c => c[grupoIdField] === grupoAtivo).map(c => [String(c.conta_codigo), c]))
+    : contasVinculadasMap;
   const getChildren = (parentId) => grupos.filter(g => g.parent_id === parentId).sort((a, b) => a.ordem - b.ordem);
   const getContasDoGrupo = (grupoId) => contas.filter(c => c[grupoIdField] === grupoId);
   const topLevelGrupos = grupos.filter(g => !g.parent_id).sort((a, b) => a.ordem - b.ordem);
@@ -1321,7 +1332,28 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
                   <p className="text-xs text-blue-600 font-medium">Destino selecionado</p>
                   <p className="text-sm font-semibold text-blue-900 truncate uppercase">{grupoAtivoObj.nome}</p>
                 </div>
-                <p className="text-xs text-blue-500">Clique nas contas à esquerda para vincular</p>
+                {isFluxo ? (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="text-[11px] text-blue-500 font-medium">Ao vincular:</span>
+                    {[
+                      { v: null, label: 'Ambos', title: 'Débito e crédito (valor líquido) — padrão' },
+                      { v: 'D', label: 'Débito (saída)', title: 'Só quando a conta for debitada (sai do caixa)' },
+                      { v: 'C', label: 'Crédito (entrada)', title: 'Só quando a conta for creditada (entra no caixa)' },
+                    ].map(op => (
+                      <button key={String(op.v)} type="button" title={op.title}
+                        onClick={() => setLadoAtivo(op.v)}
+                        className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
+                          ladoAtivo === op.v
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-100'
+                        }`}>
+                        {op.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-blue-500">Clique nas contas à esquerda para vincular</p>
+                )}
                 <button onClick={() => setGrupoAtivo(null)}
                   className="text-xs text-blue-400 hover:text-blue-600 font-medium transition-colors ml-2 flex-shrink-0">
                   Limpar
@@ -1407,7 +1439,7 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
                         depth={0}
                         expanded={planoExpanded}
                         onToggle={togglePlanoNode}
-                        contasVinculadasMap={contasVinculadasMap}
+                        contasVinculadasMap={contasVinculadasMapNode}
                         grupoAtivo={grupoAtivo}
                         grupoRelField={grupoRelField}
                         onVincular={vincularConta}
@@ -1550,6 +1582,13 @@ function GrupoManualMapeamentoRow({ grupo, depth, children, contas, expandedGrup
                   {m.conta_codigo && (
                     <span className="font-mono text-[9px] text-blue-400 bg-blue-50 rounded px-1 py-0.5 flex-shrink-0">
                       {m.conta_codigo}
+                    </span>
+                  )}
+                  {m.lado && (
+                    <span className={`text-[8.5px] rounded px-1 py-0.5 font-semibold flex-shrink-0 ${
+                      m.lado === 'D' ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'
+                    }`} title={m.lado === 'D' ? 'Só quando debitada (saída)' : 'Só quando creditada (entrada)'}>
+                      {m.lado === 'D' ? 'DÉB' : 'CRÉD'}
                     </span>
                   )}
                   <span className="text-[11px] text-gray-500 truncate">{m.conta_descricao}</span>

@@ -268,6 +268,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             grupo_fluxo_id: m.grupo_fluxo_id,
             plano_conta_codigo: m.plano_conta_codigo || m.conta_codigo,
             plano_conta_descricao: m.plano_conta_descricao || m.conta_descricao,
+            // Direção (Autosystem): 'D'=aplica só quando a conta é debitada (saída),
+            // 'C'=só quando creditada (entrada), null=ambos (líquido). Webposto = null.
+            lado: m.lado === 'D' || m.lado === 'C' ? m.lado : null,
             isManual: !cliente.usa_webposto,
           }));
         setMapeamentos(adaptados);
@@ -751,8 +754,18 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // ─── Indexar movimentos por conta + mes ───────────────────
   // Crédito = +valor (entrou caixa). Débito = -valor (saiu caixa).
   // Aplica filtros: tipo de conta + contas especificas.
-  const { totaisPorConta, lancamentosPorConta, nomesPorPlano } = useMemo(() => {
+  const { totaisPorConta, totaisPorContaLado, lancamentosPorConta, nomesPorPlano } = useMemo(() => {
     const totais = {};
+    // Totais SEPARADOS por direção (crédito/entrada 'C' vs débito/saída 'D') por
+    // conta+mês. Usado pelo mapeamento por direção do Autosystem (mesma conta em
+    // grupos diferentes conforme debitada/creditada). 'C' guarda entradas (>0),
+    // 'D' guarda saídas (<0).
+    const totaisLado = {};
+    const addLado = (codigo, mesKey, valorSignado, sinal) => {
+      const dir = sinal > 0 ? 'C' : 'D';
+      if (!totaisLado[codigo]) totaisLado[codigo] = { C: {}, D: {} };
+      totaisLado[codigo][dir][mesKey] = (totaisLado[codigo][dir][mesKey] || 0) + valorSignado;
+    };
     const lancs = {};
     const nomes = {}; // codigo do plano -> nome da conta gerencial (p/ diagnostico)
     Object.entries(dadosPorMes).forEach(([mesKey, dados]) => {
@@ -814,6 +827,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 }
                 if (!totais[planoKey]) totais[planoKey] = {};
                 totais[planoKey][mesKey] = (totais[planoKey][mesKey] || 0) + parcela;
+                addLado(planoKey, mesKey, parcela, sinal);
                 if (!lancs[planoKey]) lancs[planoKey] = [];
                 const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
                 const partLabel = entradasComPlano.length > 1
@@ -845,6 +859,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
         if (!totais[codigo]) totais[codigo] = {};
         totais[codigo][mesKey] = (totais[codigo][mesKey] || 0) + valor;
+        addLado(codigo, mesKey, valor, sinal);
 
         if (!lancs[codigo]) lancs[codigo] = [];
         lancs[codigo].push({
@@ -859,7 +874,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         });
       });
     });
-    return { totaisPorConta: totais, lancamentosPorConta: lancs, nomesPorPlano: nomes };
+    return { totaisPorConta: totais, totaisPorContaLado: totaisLado, lancamentosPorConta: lancs, nomesPorPlano: nomes };
   }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento]);
 
   // ─── Composicao do saldo por conta (saldo inicial + movs = saldo atual) ─
@@ -935,20 +950,26 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const contasMapeadas = mapeamentos.filter(m => m.grupo_fluxo_id === grupo.id);
       const contas = contasMapeadas.map(m => {
         const codKey = String(m.plano_conta_codigo);
+        // Direção (Autosystem): 'C' usa só entradas, 'D' só saídas, null = líquido.
+        const fonte = m.lado === 'C' ? (totaisPorContaLado[codKey]?.C)
+          : m.lado === 'D' ? (totaisPorContaLado[codKey]?.D)
+          : totaisPorConta[codKey];
         const valoresPorMes = {};
         let totalPeriodo = 0;
         meses.forEach(mes => {
-          const v = totaisPorConta[codKey]?.[mes.key] || 0;
+          const v = fonte?.[mes.key] || 0;
           valoresPorMes[mes.key] = v;
           totalPeriodo += v;
         });
-        const lancs = (lancamentosPorConta[codKey] || [])
-          .slice()
-          .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+        let lancs = lancamentosPorConta[codKey] || [];
+        if (m.lado === 'C') lancs = lancs.filter(l => l.sinal > 0);
+        else if (m.lado === 'D') lancs = lancs.filter(l => l.sinal < 0);
+        lancs = lancs.slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
         return {
           id: m.id,
           codigo: m.plano_conta_codigo,
           descricao: m.plano_conta_descricao,
+          lado: m.lado,
           isManual: m.isManual,
           valoresPorMes,
           totalPeriodo,
@@ -977,7 +998,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       .filter(g => !g.parent_id)
       .sort((a, b) => a.ordem - b.ordem)
       .map(buildNode);
-  }, [grupos, mapeamentos, totaisPorConta, lancamentosPorConta, meses]);
+  }, [grupos, mapeamentos, totaisPorConta, totaisPorContaLado, lancamentosPorConta, meses]);
 
   // ─── Grupo sintetico "Sem classificacao" ───────────────────
   // Captura movimentos que nao foram alocados em nenhum grupo da mascara:
@@ -987,11 +1008,21 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // pra evitar mascarar inconsistencias do DRE gerencial. E renderizado em bloco
   // separado abaixo da arvore principal, puramente informativo.
   const semClassificacaoNode = useMemo(() => {
-    const mappedCodes = new Set(mapeamentos.map(m => String(m.plano_conta_codigo)));
+    // Mapeamento sensível à direção (Autosystem): 'null'=ambos, 'C'=crédito, 'D'=débito.
+    const mapNull = new Set(mapeamentos.filter(m => !m.lado).map(m => String(m.plano_conta_codigo)));
+    const mapC = new Set(mapeamentos.filter(m => m.lado === 'C').map(m => String(m.plano_conta_codigo)));
+    const mapD = new Set(mapeamentos.filter(m => m.lado === 'D').map(m => String(m.plano_conta_codigo)));
     const contas = [];
     Object.entries(totaisPorConta).forEach(([codigo, valoresPorMesAll]) => {
-      if (mappedCodes.has(codigo)) return; // ja entrou em algum grupo
       if (codigo === TRANSFER_CODE) return; // vai pro grupo "Transferências", não aqui
+      if (mapNull.has(codigo)) return; // vínculo "ambos" cobre a conta inteira
+      // Direções ainda NÃO mapeadas desta conta (se só um lado tem vínculo, o
+      // outro fica sem classificação — ex.: conta só mapeada como crédito).
+      const dirsNaoMapeadas = [];
+      if (!mapC.has(codigo)) dirsNaoMapeadas.push('C');
+      if (!mapD.has(codigo)) dirsNaoMapeadas.push('D');
+      if (dirsNaoMapeadas.length === 0) return; // ambas direções já mapeadas
+      const soUmaDirecao = dirsNaoMapeadas.length === 1;
 
       const semPlano = codigo.startsWith(SEM_PLANO_PREFIX);
       const tipoDoc = semPlano ? codigo.substring(SEM_PLANO_PREFIX.length) : null;
@@ -1007,14 +1038,21 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const valoresPorMes = {};
       let totalPeriodo = 0;
       meses.forEach(mes => {
-        const v = valoresPorMesAll[mes.key] || 0;
+        // Se só uma direção está sem mapa, mostra apenas o valor daquela direção;
+        // se ambas, o total líquido da conta.
+        const v = soUmaDirecao
+          ? (totaisPorContaLado[codigo]?.[dirsNaoMapeadas[0]]?.[mes.key] || 0)
+          : (valoresPorMesAll[mes.key] || 0);
         valoresPorMes[mes.key] = v;
         totalPeriodo += v;
       });
 
-      const lancs = (lancamentosPorConta[codigo] || [])
-        .slice()
-        .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+      let lancs = lancamentosPorConta[codigo] || [];
+      if (soUmaDirecao) {
+        const d = dirsNaoMapeadas[0];
+        lancs = lancs.filter(l => (l.sinal > 0 ? 'C' : 'D') === d);
+      }
+      lancs = lancs.slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
 
       // Tipos de documento distintos que compoem este grupo
       const tiposDoc = semPlano
@@ -1056,7 +1094,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       totalPeriodo,
       isSemClassificacao: true,
     };
-  }, [totaisPorConta, lancamentosPorConta, nomesPorPlano, nomePlanoGerencial, mapeamentos, meses]);
+  }, [totaisPorConta, totaisPorContaLado, lancamentosPorConta, nomesPorPlano, nomePlanoGerencial, mapeamentos, meses]);
 
   // Exporta o bloco "não mapeados" para XLSX (resumo por grupo + lançamentos).
   const exportarNaoMapeadosXlsx = useCallback(() => {
@@ -1241,12 +1279,19 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Indexa MOVIMENTO_CONTA do mes selecionado por (plano, empresa).
   // Espelha o memo principal (totaisPorConta/lancamentosPorConta) mas com
   // empresaCodigo como "mesKey". Respeita os mesmos filtros.
-  const { totaisPorContaEmpresa, lancamentosPorContaEmpresa } = useMemo(() => {
+  const { totaisPorContaEmpresa, totaisPorContaLadoEmpresa, lancamentosPorContaEmpresa } = useMemo(() => {
     const totais = {};
+    const totaisLado = {};
+    const addLado = (codigo, empKey, valorSignado, sinal) => {
+      const dir = sinal > 0 ? 'C' : 'D';
+      if (!totaisLado[codigo]) totaisLado[codigo] = { C: {}, D: {} };
+      totaisLado[codigo][dir][empKey] = (totaisLado[codigo][dir][empKey] || 0) + valorSignado;
+    };
     const lancs = {};
-    if (!mesEmpresa) return { totaisPorContaEmpresa: totais, lancamentosPorContaEmpresa: lancs };
+    const vazio = { totaisPorContaEmpresa: totais, totaisPorContaLadoEmpresa: totaisLado, lancamentosPorContaEmpresa: lancs };
+    if (!mesEmpresa) return vazio;
     const dados = dadosPorMes[mesEmpresa.key];
-    if (!dados) return { totaisPorContaEmpresa: totais, lancamentosPorContaEmpresa: lancs };
+    if (!dados) return vazio;
 
     (dados.movimentos || []).forEach(m => {
       if (m.contaCodigo == null) return;
@@ -1287,6 +1332,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               const planoKey = String(x.planoCod);
               if (!totais[planoKey]) totais[planoKey] = {};
               totais[planoKey][empKey] = (totais[planoKey][empKey] || 0) + parcela;
+              addLado(planoKey, empKey, parcela, sinal);
               if (!lancs[planoKey]) lancs[planoKey] = [];
               const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
               const partLabel = entradasComPlano.length > 1
@@ -1315,6 +1361,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
       if (!totais[codigo]) totais[codigo] = {};
       totais[codigo][empKey] = (totais[codigo][empKey] || 0) + valor;
+      addLado(codigo, empKey, valor, sinal);
       if (!lancs[codigo]) lancs[codigo] = [];
       lancs[codigo].push({
         id: `${idBase}-e${empKey}`,
@@ -1327,7 +1374,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         sinal,
       });
     });
-    return { totaisPorContaEmpresa: totais, lancamentosPorContaEmpresa: lancs };
+    return { totaisPorContaEmpresa: totais, totaisPorContaLadoEmpresa: totaisLado, lancamentosPorContaEmpresa: lancs };
   }, [mesEmpresa, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento]);
 
   // Arvore Fluxo com empresas como colunas (espelha fluxoTree com colunasEmpresa)
@@ -1338,20 +1385,25 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const contasMapeadas = mapeamentos.filter(m => m.grupo_fluxo_id === grupo.id);
       const contas = contasMapeadas.map(m => {
         const codKey = String(m.plano_conta_codigo);
+        const fonte = m.lado === 'C' ? (totaisPorContaLadoEmpresa[codKey]?.C)
+          : m.lado === 'D' ? (totaisPorContaLadoEmpresa[codKey]?.D)
+          : totaisPorContaEmpresa[codKey];
         const valoresPorMes = {};
         let totalPeriodo = 0;
         colunasEmpresa.forEach(col => {
-          const v = totaisPorContaEmpresa[codKey]?.[col.key] || 0;
+          const v = fonte?.[col.key] || 0;
           valoresPorMes[col.key] = v;
           totalPeriodo += v;
         });
-        const lancs = (lancamentosPorContaEmpresa[codKey] || [])
-          .slice()
-          .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+        let lancs = lancamentosPorContaEmpresa[codKey] || [];
+        if (m.lado === 'C') lancs = lancs.filter(l => l.sinal > 0);
+        else if (m.lado === 'D') lancs = lancs.filter(l => l.sinal < 0);
+        lancs = lancs.slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
         return {
           id: m.id,
           codigo: m.plano_conta_codigo,
           descricao: m.plano_conta_descricao,
+          lado: m.lado,
           isManual: m.isManual,
           valoresPorMes,
           totalPeriodo,
@@ -1379,7 +1431,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       .filter(g => !g.parent_id)
       .sort((a, b) => a.ordem - b.ordem)
       .map(buildNode);
-  }, [modoRede, grupos, mapeamentos, colunasEmpresa, totaisPorContaEmpresa, lancamentosPorContaEmpresa]);
+  }, [modoRede, grupos, mapeamentos, colunasEmpresa, totaisPorContaEmpresa, totaisPorContaLadoEmpresa, lancamentosPorContaEmpresa]);
 
   // Grupo "Transferências entre contas" para a aba Por Empresa (colunas=empresas).
   const transferenciasNodeEmpresa = useMemo(() => {

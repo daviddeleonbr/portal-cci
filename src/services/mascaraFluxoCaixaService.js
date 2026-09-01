@@ -531,13 +531,14 @@ export async function listarContasManualDaRede(asRedeId) {
   return data;
 }
 
-export async function criarContaManualPorRede({ as_rede_id, mascara_id, grupo_fluxo_id, conta_codigo, conta_descricao, conta_natureza, observacoes }) {
+export async function criarContaManualPorRede({ as_rede_id, mascara_id, grupo_fluxo_id, conta_codigo, conta_descricao, conta_natureza, observacoes, lado = null }) {
   const { data, error } = await supabase
     .from('mapeamento_manual_contas_fluxo')
     .insert({
       as_rede_id, mascara_id, grupo_fluxo_id,
       conta_codigo: conta_codigo || null,
       conta_descricao, conta_natureza, observacoes,
+      lado: lado === 'D' || lado === 'C' ? lado : null,
     })
     .select('*, grupos_fluxo_caixa(id, nome, tipo)')
     .single();

@@ -91,6 +91,9 @@ export async function agregarDadosFluxoAutosystem({ rede, empresaCodigos, mascar
       grupo_fluxo_id: m.grupo_fluxo_id,
       plano_conta_codigo: m.conta_codigo,
       plano_conta_descricao: m.conta_descricao,
+      // Direção (partida dobrada): 'D'=só quando debitada (saída), 'C'=só quando
+      // creditada (entrada), null=ambos. Roteia a mesma conta a grupos diferentes.
+      lado: m.lado === 'D' || m.lado === 'C' ? m.lado : null,
     }))
     .filter(m => gruposIds.has(m.grupo_fluxo_id));
   if (mapeamentos.length === 0) {
