@@ -1037,15 +1037,11 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
   const [grupoAtivo, setGrupoAtivo] = useState(null);
   // Direção POR GRUPO (só Fluxo/Autosystem): grupoId -> 'D'(debitada/saída) |
   // 'C'(creditada/entrada) | null(ambos). Guardada por grupo para cada destino
-  // lembrar sua direção ao alternar entre grupos. Se o grupo ainda não teve
-  // direção escolhida, sugere pelo tipo do grupo (entrada→crédito, saída→débito).
+  // lembrar sua direção ao alternar entre grupos. Padrão = 'Ambos' (null): a
+  // direção é OPT-IN, usada só quando a mesma conta precisa cair em grupos
+  // diferentes por débito/crédito (ex.: aplicação → transferência × resgate).
   const [ladoPorGrupo, setLadoPorGrupo] = useState({});
-  const ladoPadraoDoGrupo = (g) => (g?.tipo === 'entrada' ? 'C' : g?.tipo === 'saida' ? 'D' : null);
-  const ladoDoGrupo = (gid) => {
-    if (gid == null) return null;
-    if (gid in ladoPorGrupo) return ladoPorGrupo[gid];
-    return ladoPadraoDoGrupo(grupos.find(g => g.id === gid));
-  };
+  const ladoDoGrupo = (gid) => (gid == null ? null : (ladoPorGrupo[gid] ?? null));
   const [search, setSearch] = useState('');
   const [soNaoMapeadas, setSoNaoMapeadas] = useState(false);
   const [modalConta, setModalConta] = useState({ open: false, data: null });
