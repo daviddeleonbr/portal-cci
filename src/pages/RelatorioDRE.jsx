@@ -1803,7 +1803,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
           {/* Toggles — ficam à direita, na mesma linha quando couber */}
           <div className="flex items-center gap-1.5 ml-auto h-8">
-            <ApelidoToggle empresas={redeContexto?.empresas} />
+            <ApelidoToggle empresas={redeContexto?.empresas} somenteQuandoHaApelidos={false} />
             <button onClick={() => setOcultarZeradas(!ocultarZeradas)}
               title={ocultarZeradas ? 'Mostrar contas zeradas' : 'Ocultar contas zeradas'}
               className={`flex items-center gap-1 h-8 rounded-lg px-2.5 text-[10.5px] font-medium transition-all border ${

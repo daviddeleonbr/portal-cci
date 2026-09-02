@@ -1709,7 +1709,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           </div>
 
           <div className="flex items-center gap-1.5 ml-auto flex-wrap h-8">
-            <ApelidoToggle empresas={redeContexto?.empresas} />
+            <ApelidoToggle empresas={redeContexto?.empresas} somenteQuandoHaApelidos={false} />
             {/* Filtros de tipo e conta específica ficam só para admin */}
             {!modoCliente && (
               <>
