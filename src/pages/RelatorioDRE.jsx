@@ -126,6 +126,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   }, []);
   // Mes selecionado da aba "Por Empresa" (so modoRede). Default: ultimo mes do periodo.
   const [mesEmpresaKey, setMesEmpresaKey] = useState(null);
+  // Ordenação das colunas da aba "Por Empresa" pela numeração (ordem_exibicao):
+  // 'asc' (crescente, padrão) | 'desc' (decrescente) | 'natural' (ordem original).
+  const [ordemEmpDir, setOrdemEmpDir] = useState('asc');
 
   const [ocultarZeradas, setOcultarZeradas] = useState(true);
   const [showAH, setShowAH] = useState(true);
@@ -1276,7 +1279,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // ({key, label}) para que o renderer DreNodeRows funcione sem mudancas.
   const colunasEmpresaBase = useMemo(() => {
     if (!modoRede) return [];
-    return (cliente?._empresas || [])
+    const cols = (cliente?._empresas || [])
       .filter(emp => Number.isFinite(Number(emp.empresa_codigo)))
       .map(emp => {
         const ec = Number(emp.empresa_codigo);
@@ -1288,7 +1291,27 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           _empresa: emp,
         };
       });
-  }, [modoRede, cliente, usarApelido]);
+    // Ordena pela numeração (ordem_exibicao) definida na config de apelidos.
+    // Empresas com número vêm primeiro (crescente/decrescente); sem número, ao
+    // final, por nome. 'natural' mantém a ordem original (sem ordenar por Nº).
+    if (ordemEmpDir !== 'natural') {
+      const dir = ordemEmpDir === 'desc' ? -1 : 1;
+      cols.sort((a, b) => {
+        const oa = a._empresa?.ordem_exibicao;
+        const ob = b._empresa?.ordem_exibicao;
+        const hasA = oa != null && oa !== '';
+        const hasB = ob != null && ob !== '';
+        if (hasA && hasB) {
+          if (Number(oa) !== Number(ob)) return (Number(oa) - Number(ob)) * dir;
+          return (a.label || '').localeCompare(b.label || '');
+        }
+        if (hasA) return -1;
+        if (hasB) return 1;
+        return (a.label || '').localeCompare(b.label || '');
+      });
+    }
+    return cols;
+  }, [modoRede, cliente, usarApelido, ordemEmpDir]);
 
   // Mes de referencia da aba Por Empresa (objeto completo)
   const mesEmpresa = useMemo(
@@ -1944,7 +1967,16 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Mês:</label>
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Ordem:</label>
+                  <button type="button"
+                    onClick={() => setOrdemEmpDir(d => d === 'asc' ? 'desc' : d === 'desc' ? 'natural' : 'asc')}
+                    title="Ordenar as empresas pela numeração (Nº): crescente → decrescente → original"
+                    className={`h-9 inline-flex items-center gap-1 rounded-lg border px-2.5 text-[11.5px] font-semibold transition-colors ${
+                      ordemEmpDir === 'natural' ? 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50' : 'border-blue-200 bg-blue-50 text-blue-700'
+                    }`}>
+                    Nº {ordemEmpDir === 'asc' ? '↑' : ordemEmpDir === 'desc' ? '↓' : '—'}
+                  </button>
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider ml-1">Mês:</label>
                   <select value={mesEmpresaKey || ''}
                     onChange={(e) => setMesEmpresaKey(e.target.value)}
                     className="h-9 rounded-lg border border-gray-200 px-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">

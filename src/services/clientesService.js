@@ -73,6 +73,18 @@ export async function salvarApelidoEmpresa(clienteId, apelido) {
   if (error) throw error;
 }
 
+// Grava/limpa a numeração (ordem de exibição) de UMA empresa. Passe null/''
+// para limpar. Usada pra ordenar a DRE "Por Empresa" por número.
+export async function salvarOrdemEmpresa(clienteId, ordem) {
+  if (!clienteId) throw new Error('clienteId é obrigatório');
+  const n = ordem === '' || ordem == null ? null : Number(ordem);
+  const { error } = await supabase.rpc('cliente_ordem_salvar', {
+    p_cliente_id: clienteId,
+    p_ordem: Number.isFinite(n) ? n : null,
+  });
+  if (error) throw error;
+}
+
 // ─── Máscaras permitidas por REDE (mascara_dre_rede / mascara_fluxo_rede) ───
 // Aplica-se a todas as empresas da rede (Webposto = chave_api_id, Autosystem =
 // as_rede_id). Rede sem nenhuma máscara marcada = todas liberadas.

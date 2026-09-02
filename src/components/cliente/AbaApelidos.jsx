@@ -16,19 +16,28 @@ export default function AbaApelidos() {
   }, [session?.clientesRede, session?.cliente]);
 
   const [valores, setValores] = useState({});
+  const [ordens, setOrdens] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [toast, setToast] = useState(null);
 
   // Inicializa/ressincroniza os inputs a partir da sessão.
   useEffect(() => {
-    const init = {};
-    empresas.forEach(e => { init[e.id] = e.apelido || ''; });
-    setValores(init);
+    const initAp = {};
+    const initOrd = {};
+    empresas.forEach(e => {
+      initAp[e.id] = e.apelido || '';
+      initOrd[e.id] = e.ordem_exibicao != null ? String(e.ordem_exibicao) : '';
+    });
+    setValores(initAp);
+    setOrdens(initOrd);
   }, [empresas]);
 
   const dirty = useMemo(
-    () => empresas.filter(e => (valores[e.id] ?? '').trim() !== (e.apelido || '').trim()),
-    [empresas, valores],
+    () => empresas.filter(e =>
+      (valores[e.id] ?? '').trim() !== (e.apelido || '').trim()
+      || String(ordens[e.id] ?? '').trim() !== (e.ordem_exibicao != null ? String(e.ordem_exibicao) : ''),
+    ),
+    [empresas, valores, ordens],
   );
 
   const salvar = async () => {
@@ -36,11 +45,19 @@ export default function AbaApelidos() {
     setSalvando(true);
     try {
       for (const e of dirty) {
-        const novo = (valores[e.id] ?? '').trim();
-        await clientesService.salvarApelidoEmpresa(e.id, novo);
-        atualizarEmpresaNaSessao(e.id, { apelido: novo || null });
+        const novoAp = (valores[e.id] ?? '').trim();
+        if (novoAp !== (e.apelido || '').trim()) {
+          await clientesService.salvarApelidoEmpresa(e.id, novoAp);
+          atualizarEmpresaNaSessao(e.id, { apelido: novoAp || null });
+        }
+        const ordemStr = String(ordens[e.id] ?? '').trim();
+        if (ordemStr !== (e.ordem_exibicao != null ? String(e.ordem_exibicao) : '')) {
+          const novaOrdem = ordemStr === '' ? null : Number(ordemStr);
+          await clientesService.salvarOrdemEmpresa(e.id, novaOrdem);
+          atualizarEmpresaNaSessao(e.id, { ordem_exibicao: Number.isFinite(novaOrdem) ? novaOrdem : null });
+        }
       }
-      setToast({ tipo: 'success', msg: `${dirty.length} apelido(s) salvo(s)` });
+      setToast({ tipo: 'success', msg: `${dirty.length} empresa(s) salva(s)` });
     } catch (err) {
       setToast({ tipo: 'error', msg: 'Erro ao salvar: ' + (err.message || err) });
     } finally {
@@ -64,8 +81,8 @@ export default function AbaApelidos() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900">Apelidos das empresas</p>
           <p className="text-[11.5px] text-gray-500">
-            Defina um nome curto por empresa. No cabeçalho, o botão <strong>Razão social ↔ Apelido</strong> alterna a
-            exibição em todo o portal.
+            Defina um nome curto e uma <strong>numeração</strong> por empresa. O <strong>Nº</strong> ordena a DRE
+            "Por Empresa" (crescente/decrescente); o botão <strong>Razão social ↔ Apelido</strong> alterna a exibição.
           </p>
         </div>
         <button onClick={salvar} disabled={salvando || dirty.length === 0}
@@ -81,7 +98,8 @@ export default function AbaApelidos() {
             <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
               <th className="px-4 py-2.5">Empresa</th>
               <th className="px-3 py-2.5">CNPJ</th>
-              <th className="px-3 py-2.5 w-[42%]">Apelido</th>
+              <th className="px-3 py-2.5 w-[90px]">Nº</th>
+              <th className="px-3 py-2.5 w-[38%]">Apelido</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -94,6 +112,12 @@ export default function AbaApelidos() {
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-[11.5px] text-gray-400 font-mono whitespace-nowrap">{e.cnpj || '—'}</td>
+                <td className="px-3 py-2.5">
+                  <input type="number" inputMode="numeric" value={ordens[e.id] ?? ''}
+                    onChange={ev => setOrdens(prev => ({ ...prev, [e.id]: ev.target.value }))}
+                    placeholder="—"
+                    className="w-[74px] h-9 px-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 text-center placeholder:text-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                </td>
                 <td className="px-3 py-2.5">
                   <input type="text" value={valores[e.id] ?? ''}
                     onChange={ev => setValores(prev => ({ ...prev, [e.id]: ev.target.value }))}
