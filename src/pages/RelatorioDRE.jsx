@@ -1303,7 +1303,22 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       }
     });
 
-    const arr = Object.values(porEmpresa).sort((a, b) => b.total - a.total);
+    // Ordena pela numeração (ordem_exibicao) definida em Configurações, como na
+    // aba "Por Empresa". Empresas sem número vão ao final por nome; a linha
+    // "Rede / Não alocado" fica sempre por último.
+    const arr = Object.values(porEmpresa).sort((a, b) => {
+      if (a._isRede) return 1;
+      if (b._isRede) return -1;
+      const oa = a.empresa?.ordem_exibicao;
+      const ob = b.empresa?.ordem_exibicao;
+      const hasA = oa != null && oa !== '';
+      const hasB = ob != null && ob !== '';
+      if (hasA && hasB) {
+        if (Number(oa) !== Number(ob)) return Number(oa) - Number(ob);
+      } else if (hasA) return -1;
+      else if (hasB) return 1;
+      return (nomeEmpresa(a.empresa) || '').localeCompare(nomeEmpresa(b.empresa) || '');
+    });
     const somaAbsoluta = arr.reduce((s, p) => s + Math.abs(p.total), 0);
     const totalConsolidado = arr.reduce((s, p) => s + p.total, 0);
     return {
