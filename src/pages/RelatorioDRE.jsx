@@ -1626,6 +1626,45 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     });
   }, [dreTreeEmpresa, colunasEmpresa]);
 
+  // ─── Largura AUTOMÁTICA das colunas de valor (auto-fit ao conteúdo) ─────
+  // Mede o maior valor formatado de cada coluna e devolve a largura ideal já
+  // ajustada. O resize manual (largurasCol) tem prioridade sobre este auto-fit.
+  const largurasAuto = useMemo(() => {
+    const out = {};
+    const bump = (key, val) => {
+      if (val == null || Number.isNaN(val)) return;
+      const w = medirValorPx(formatCurrencyCompact(val));
+      if (w > (out[key] || 0)) out[key] = w;
+    };
+    const walk = (nodes) => (nodes || []).forEach(n => {
+      meses.forEach(m => bump(`v:${m.key}`, n.valoresPorMes?.[m.key]));
+      bump('v:total', n.totalPeriodo);
+      if (n.contas?.length) walk(n.contas);
+      if (n.children?.length) walk(n.children);
+    });
+    walk(dreComCalculos);
+    Object.keys(out).forEach(k => { out[k] = Math.min(220, Math.max(72, Math.ceil(out[k] + 26))); });
+    return out;
+  }, [dreComCalculos, meses]);
+
+  const largurasAutoEmpresa = useMemo(() => {
+    const out = {};
+    const bump = (key, val) => {
+      if (val == null || Number.isNaN(val)) return;
+      const w = medirValorPx(formatCurrencyCompact(val));
+      if (w > (out[key] || 0)) out[key] = w;
+    };
+    const walk = (nodes) => (nodes || []).forEach(n => {
+      colunasEmpresa.forEach(c => bump(`ve:${c.key}`, n.valoresPorMes?.[c.key]));
+      bump('ve:total', n.totalPeriodo);
+      if (n.contas?.length) walk(n.contas);
+      if (n.children?.length) walk(n.children);
+    });
+    walk(dreComCalculosEmpresa);
+    Object.keys(out).forEach(k => { out[k] = Math.min(220, Math.max(72, Math.ceil(out[k] + 26))); });
+    return out;
+  }, [dreComCalculosEmpresa, colunasEmpresa]);
+
   // Base AV (receita bruta) por empresa
   const baseAVEmpresa = useMemo(() => {
     const base = {};
@@ -2022,11 +2061,11 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                     <col style={{ width: 420 }} />
                     {colunasEmpresa.map(c => (
                       <>
-                        <col key={`${c.key}-cv`} style={{ width: largurasCol[`ve:${c.key}`] ?? 90 }} />
+                        <col key={`${c.key}-cv`} style={{ width: largurasCol[`ve:${c.key}`] ?? largurasAutoEmpresa[`ve:${c.key}`] ?? 90 }} />
                         <col key={`${c.key}-cav`} style={{ width: 45 }} />
                       </>
                     ))}
-                    {mostrarTotal && <col style={{ width: largurasCol['ve:total'] ?? 110 }} />}
+                    {mostrarTotal && <col style={{ width: largurasCol['ve:total'] ?? largurasAutoEmpresa['ve:total'] ?? 110 }} />}
                     {mostrarTotal && <col style={{ width: 45 }} />}
                   </colgroup>
                   <thead className="bg-gray-100">
@@ -2040,7 +2079,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                               : (c._empresa ? labelEmpresa(c._empresa) : c.label)}
                             className={`relative text-right px-2 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky top-0 z-20 print:static ${c._isRede ? 'bg-gray-200 text-blue-700' : 'bg-gray-100'}`}>
                             <span className="block truncate">{c.label}</span>
-                            <span onMouseDown={(e) => iniciarResize(`ve:${c.key}`, 90, e)}
+                            <span onMouseDown={(e) => iniciarResize(`ve:${c.key}`, largurasAutoEmpresa[`ve:${c.key}`] ?? 90, e)}
                               title="Arraste para redimensionar" aria-hidden="true"
                               className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400/50 print:hidden" />
                           </th>
@@ -2172,11 +2211,11 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   <col style={{ width: showAH ? 410 : 490 }} />
                   {meses.map(m => (
                     <>
-                      <col key={`${m.key}-v`} style={{ width: largurasCol[`v:${m.key}`] ?? 115 }} />
+                      <col key={`${m.key}-v`} style={{ width: largurasCol[`v:${m.key}`] ?? largurasAuto[`v:${m.key}`] ?? 115 }} />
                       <col key={`${m.key}-av`} style={{ width: 55 }} />
                     </>
                   ))}
-                  {mostrarTotal && <col style={{ width: largurasCol['v:total'] ?? 125 }} />}
+                  {mostrarTotal && <col style={{ width: largurasCol['v:total'] ?? largurasAuto['v:total'] ?? 125 }} />}
                   {mostrarTotal && <col style={{ width: 55 }} />}
                   {mostrarTotal && showAH && <col style={{ width: 75 }} />}
                 </colgroup>
@@ -2187,7 +2226,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                       <>
                         <th key={`${m.key}-v`} className="relative text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap sticky top-0 z-20 bg-gray-100 print:static">
                           {m.label} (R$)
-                          <span onMouseDown={(e) => iniciarResize(`v:${m.key}`, 115, e)}
+                          <span onMouseDown={(e) => iniciarResize(`v:${m.key}`, largurasAuto[`v:${m.key}`] ?? 115, e)}
                             title="Arraste para redimensionar" aria-hidden="true"
                             className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400/50 print:hidden" />
                         </th>
@@ -2198,7 +2237,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                       <>
                         <th className="relative text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-200 whitespace-nowrap sticky top-0 z-20 print:static">
                           Total (R$)
-                          <span onMouseDown={(e) => iniciarResize('v:total', 125, e)}
+                          <span onMouseDown={(e) => iniciarResize('v:total', largurasAuto['v:total'] ?? 125, e)}
                             title="Arraste para redimensionar" aria-hidden="true"
                             className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400/50 print:hidden" />
                         </th>
@@ -2728,6 +2767,18 @@ function formatCurrencyCompact(value) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+// Mede a largura (px) de um texto de valor no MESMO font das células
+// (Geist Mono ~12px). Reusa um canvas único. Base do auto-fit das colunas.
+let _canvasMedida = null;
+function medirValorPx(txt) {
+  if (typeof document === 'undefined' || !txt) return 0;
+  if (!_canvasMedida) {
+    _canvasMedida = document.createElement('canvas').getContext('2d');
+    _canvasMedida.font = '12px "Geist Mono", ui-monospace, SFMono-Regular, monospace';
+  }
+  return _canvasMedida.measureText(String(txt)).width;
 }
 
 // ─── AH Badge (variacao % vs ano anterior) ──────────────────
