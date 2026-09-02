@@ -40,7 +40,9 @@ export default function ClienteDRE() {
   // Constrói redeContexto sempre — RelatorioDRE entra em modoRede e
   // itera as empresaCodigos selecionadas.
   const redeContexto = useMemo(() => {
-    if (empresasSel.length === 0 || !cliente?.chave_api_id) return null;
+    // Mantém o contexto de rede mesmo com 0 empresas (evita o RelatorioDRE sair
+    // do modo rede e buscar por um id indefinido). Empresas vazias = sem dados.
+    if (!cliente?.chave_api_id) return null;
     return {
       nomeRede:       session?.chaveApi?.nome || cliente?.nome,
       chaveApiId:     cliente.chave_api_id,

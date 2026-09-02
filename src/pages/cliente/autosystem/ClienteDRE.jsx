@@ -40,7 +40,9 @@ export default function ClienteDRE() {
   );
 
   const redeContexto = useMemo(() => {
-    if (!asRede?.id || empresasSel.length === 0) return null;
+    // Mantém o contexto de rede mesmo com 0 empresas selecionadas (evita o
+    // RelatorioDRE sair do modo rede e tentar buscar por um id indefinido).
+    if (!asRede?.id) return null;
     return {
       asRedeId: asRede.id,
       nomeRede: asRede.nome,

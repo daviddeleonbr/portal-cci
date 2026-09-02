@@ -210,6 +210,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           setMascaras(masks || []);
           if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
         } else {
+          // Sem cliente e sem rede (ex.: seleção de empresas ficou vazia) — não
+          // busca nada. Evita buscarCliente(undefined) → "uuid undefined".
+          if (!clienteId) { setLoading(false); return; }
           const c = await clientesService.buscarCliente(clienteId);
           const masks = await dreService.listarMascaras({
             asRedeId: c?.as_rede_id || null,
@@ -224,6 +227,25 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId, modoRede, redeContexto?.chaveApiId, redeContexto?.asRedeId]);
+
+  // Mantém a LISTA de empresas do cliente virtual SINCRONIZADA com a seleção do
+  // wrapper (multi-select). O effect de init acima só roda quando muda a rede
+  // (asRedeId/chaveApiId), então sem isto a seleção de empresas não chegava ao
+  // fetch nem às colunas "Por Empresa".
+  const empresaCodigosKey = (redeContexto?.empresaCodigos || []).join(',');
+  useEffect(() => {
+    if (!modoRede) return;
+    setCliente(prev => {
+      if (!prev || !String(prev.id || '').startsWith('__rede__')) return prev;
+      return {
+        ...prev,
+        empresa_codigo: redeContexto?.empresaCodigos?.[0] ?? null,
+        _empresaCodigos: redeContexto?.empresaCodigos || [],
+        _empresas: redeContexto?.empresas || [],
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modoRede, empresaCodigosKey]);
 
   // ─── Load grupos ────────────────────────────────────────
   useEffect(() => {
