@@ -7,7 +7,7 @@
 
 import { Navigate } from 'react-router-dom';
 import { AlertCircle, Building2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import PageHeader from '../../../components/ui/PageHeader';
 import RelatorioDRE from '../../RelatorioDRE';
 import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
@@ -18,23 +18,29 @@ export default function ClienteDRE() {
   const session = useClienteSession();
   const asRede = session?.asRede;
 
-  const { empresaId, setEmpresaId, empresasDisponiveis } = useEmpresaAtiva();
+  const { empresasDisponiveis } = useEmpresaAtiva();
   const empresas = empresasDisponiveis;
-  const empresaAtual = useMemo(
-    () => empresasDisponiveis.find(c => c.id === empresaId) || null,
-    [empresasDisponiveis, empresaId],
+
+  // Multi-seleção local — DEFAULT: TODAS as empresas marcadas (o DRE já
+  // consolida a rede inteira). O usuário pode desmarcar/remarcar. Se a lista
+  // carregar depois, inicializa em "todas" enquanto a seleção estiver vazia.
+  const [empresasSelIds, setEmpresasSelIds] = useState(
+    () => new Set(empresas.map(e => e.id)),
   );
+  useEffect(() => {
+    setEmpresasSelIds(prev => {
+      if (prev.size === 0 && empresas.length > 0) return new Set(empresas.map(e => e.id));
+      return prev;
+    });
+  }, [empresas]);
+
   const empresasSel = useMemo(
-    () => empresaAtual ? [empresaAtual] : [],
-    [empresaAtual],
-  );
-  const empresasSelIds = useMemo(
-    () => new Set(empresaId ? [empresaId] : []),
-    [empresaId],
+    () => empresas.filter(e => empresasSelIds.has(e.id)),
+    [empresas, empresasSelIds],
   );
 
   const redeContexto = useMemo(() => {
-    if (!asRede?.id) return null;
+    if (!asRede?.id || empresasSel.length === 0) return null;
     return {
       asRedeId: asRede.id,
       nomeRede: asRede.nome,
@@ -89,10 +95,16 @@ export default function ClienteDRE() {
       modoCliente
       seletorEmpresas={empresas.length > 1 ? (
         <EmpresaSeletorCompartilhado
-          single
           clientesRede={empresas}
           selecionadas={empresasSelIds}
-          onToggle={(id) => setEmpresaId(id)}
+          onToggle={(id) => setEmpresasSelIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+          })}
+          onToggleTodas={() => setEmpresasSelIds(prev =>
+            prev.size === empresas.length ? new Set() : new Set(empresas.map(e => e.id))
+          )}
         />
       ) : null}
     />
