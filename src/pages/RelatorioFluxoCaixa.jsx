@@ -17,6 +17,7 @@ import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
 import { nomeEmpresa } from '../utils/nomeEmpresa';
 import { useUsarApelido } from '../lib/apelidoPref';
+import ApelidoToggle from '../components/ui/ApelidoToggle';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -1708,6 +1709,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           </div>
 
           <div className="flex items-center gap-1.5 ml-auto flex-wrap h-8">
+            <ApelidoToggle empresas={redeContexto?.empresas} />
             {/* Filtros de tipo e conta específica ficam só para admin */}
             {!modoCliente && (
               <>

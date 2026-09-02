@@ -19,6 +19,7 @@ import * as qualityApi from '../services/qualityApiService';
 import { formatCurrency } from '../utils/format';
 import { nomeEmpresa } from '../utils/nomeEmpresa';
 import { useUsarApelido } from '../lib/apelidoPref';
+import ApelidoToggle from '../components/ui/ApelidoToggle';
 import { useAnonimizador } from '../services/anonimizarService';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -1802,6 +1803,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
           {/* Toggles — ficam à direita, na mesma linha quando couber */}
           <div className="flex items-center gap-1.5 ml-auto h-8">
+            <ApelidoToggle empresas={redeContexto?.empresas} />
             <button onClick={() => setOcultarZeradas(!ocultarZeradas)}
               title={ocultarZeradas ? 'Mostrar contas zeradas' : 'Ocultar contas zeradas'}
               className={`flex items-center gap-1 h-8 rounded-lg px-2.5 text-[10.5px] font-medium transition-all border ${
