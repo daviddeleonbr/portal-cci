@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -92,6 +92,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Saldos iniciais por empresa (Autosystem) — soma do efeito líquido das contas
   // caixa/banco anteriores à data inicial do período.
   const [saldosIniciaisPorEmpresa, setSaldosIniciaisPorEmpresa] = useState({});
+  // Saldo inicial por empresa+conta (Autosystem) — drill "por empresa → contas".
+  const [saldosIniciaisContaPorEmpresa, setSaldosIniciaisContaPorEmpresa] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
@@ -148,6 +150,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [capExpMes, setCapExpMes] = useState(() => new Set());
   // Grupos expandidos dentro de cada mês (chave `${mesKey}:${grupoId}`) — drill até nível 3.
   const [capExpGrupo, setCapExpGrupo] = useState(() => new Set());
+  // Empresas expandidas na aba "Por Empresa" (mostra as contas caixa/banco).
+  const [empExpandidas, setEmpExpandidas] = useState(() => new Set());
 
   // ─── Meses ────────────────────────────────────────────────
   const meses = useMemo(() => {
@@ -337,6 +341,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     setReportReady(false);
     setDadosPorMes({});
     setSaldosIniciaisPorEmpresa({});
+    setSaldosIniciaisContaPorEmpresa({});
   }, [mesFinal, qtdMeses, mascaraSelecionada]);
 
   // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado.
@@ -397,7 +402,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
         const results = await Promise.all(meses.map(async m => {
           const r = rangeMes(m.ano, m.mes);
-          let lancs = [], saldosIniciais = {};
+          let lancs = [], saldosIniciais = {}, saldosIniciaisConta = {};
           try {
             const out = await autosystemService.buscarFluxoCaixaAutosystem(
               cliente.as_rede_id,
@@ -412,17 +417,19 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             );
             lancs = out.lancamentos || [];
             saldosIniciais = out.saldosIniciais || {};
+            saldosIniciaisConta = out.saldosIniciaisConta || {};
           } catch (e) {
             console.error('[Fluxo Autosystem] Falha no fetch', { mes: m.key, err: e });
           }
           concluidas++;
           setLoadingProgress({ atual: concluidas, total, mensagem: `${m.label}: ${lancs.length} lancamentos` });
-          return { key: m.key, mesIdx: meses.indexOf(m), lancs, saldosIniciais };
+          return { key: m.key, mesIdx: meses.indexOf(m), lancs, saldosIniciais, saldosIniciaisConta };
         }));
 
         // Saldos iniciais do período = do primeiro mês (data mais antiga)
         const primeiroMes = results.find(r => r.mesIdx === 0);
         const saldosIniciaisPeriodo = primeiroMes?.saldosIniciais || {};
+        const saldosIniciaisContaPeriodo = primeiroMes?.saldosIniciaisConta || {};
 
         // Converte lançamentos Autosystem para o formato MOVIMENTO_CONTA que
         // o resto do componente já entende. A conta caixa/banco vira contaCodigo;
@@ -490,6 +497,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
         setDadosPorMes(mapa);
         setSaldosIniciaisPorEmpresa(saldosIniciaisPeriodo);
+        setSaldosIniciaisContaPorEmpresa(saldosIniciaisContaPeriodo);
         setTituloPagarMap(new Map());
         setTitulosPorPagamento(new Map());
         setDadosCarregados(true);
@@ -1254,6 +1262,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const resultadoPorEmpresa = useMemo(() => {
     if (!modoRede || !cliente?._empresas || cliente._empresas.length === 0) return null;
 
+    const contaPermitida = (cod) => {
+      const tc = tipoPorConta.get(String(cod));
+      if (tc !== 'bancaria' && tc !== 'caixa') return false;
+      if (!tiposContaAtivos.has(tc)) return false;
+      if (filtroContas.size > 0 && !filtroContas.has(String(cod))) return false;
+      return true;
+    };
+
     const porEmpresa = {};
     cliente._empresas.forEach(emp => {
       const ec = Number(emp.empresa_codigo);
@@ -1263,7 +1279,18 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         empresa: emp, empresaCodigo: ec,
         saldoInicial,
         entradas: 0, saidas: 0, variacao: 0, saldoFinal: saldoInicial,
+        contasMap: {},
       };
+      // Semeia as contas com o saldo inicial por conta (inclui contas sem
+      // movimento no período, que só têm saldo).
+      const scMap = saldosIniciaisContaPorEmpresa?.[String(ec)] || {};
+      Object.entries(scMap).forEach(([cod, si]) => {
+        if (!contaPermitida(cod)) return;
+        porEmpresa[ec].contasMap[cod] = {
+          contaCodigo: cod, contaNome: descricaoPorConta.get(String(cod)) || `Conta ${cod}`,
+          saldoInicial: Number(si) || 0, entradas: 0, saidas: 0,
+        };
+      });
     });
 
     Object.values(dadosPorMes).forEach(d => {
@@ -1272,19 +1299,23 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         if (!porEmpresa[ec]) return;
         if (m.contaCodigo == null) return;
         const contaCod = String(m.contaCodigo);
-        const tipoConta = tipoPorConta.get(contaCod);
-        if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
-        if (!tiposContaAtivos.has(tipoConta)) return;
-        if (filtroContas.size > 0 && !filtroContas.has(contaCod)) return;
+        if (!contaPermitida(contaCod)) return;
         const valor = Math.abs(Number(m.valor || 0));
-        if (m.tipo === 'Crédito') porEmpresa[ec].entradas += valor;
-        else porEmpresa[ec].saidas += valor;
+        const pe = porEmpresa[ec];
+        if (m.tipo === 'Crédito') pe.entradas += valor; else pe.saidas += valor;
+        let cc = pe.contasMap[contaCod];
+        if (!cc) cc = pe.contasMap[contaCod] = { contaCodigo: contaCod, contaNome: descricaoPorConta.get(contaCod) || `Conta ${contaCod}`, saldoInicial: 0, entradas: 0, saidas: 0 };
+        if (m.tipo === 'Crédito') cc.entradas += valor; else cc.saidas += valor;
       });
     });
 
     const arr = Object.values(porEmpresa).map(p => {
       const variacao = p.entradas - p.saidas;
-      return { ...p, variacao, saldoFinal: p.saldoInicial + variacao };
+      const contas = Object.values(p.contasMap)
+        .map(c => { const v = c.entradas - c.saidas; return { ...c, variacao: v, saldoFinal: c.saldoInicial + v }; })
+        .filter(c => Math.abs(c.saldoInicial) > 0.005 || Math.abs(c.entradas) > 0.005 || Math.abs(c.saidas) > 0.005)
+        .sort((a, b) => String(a.contaNome).localeCompare(String(b.contaNome), undefined, { numeric: true }));
+      return { empresa: p.empresa, empresaCodigo: p.empresaCodigo, saldoInicial: p.saldoInicial, entradas: p.entradas, saidas: p.saidas, variacao, saldoFinal: p.saldoInicial + variacao, contas };
     }).sort((a, b) => b.variacao - a.variacao);
     const somaAbs = arr.reduce((s, p) => s + Math.abs(p.variacao), 0);
     const totalConsolidado = arr.reduce((s, p) => s + p.variacao, 0);
@@ -1297,7 +1328,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       totalSaldoInicial: arr.reduce((s, p) => s + p.saldoInicial, 0),
       totalSaldoFinal:   arr.reduce((s, p) => s + p.saldoFinal, 0),
     };
-  }, [modoRede, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisPorEmpresa]);
+  }, [modoRede, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisPorEmpresa, saldosIniciaisContaPorEmpresa, descricaoPorConta]);
 
   // ─── Evolução do Caixa (saldo acumulado ao longo do período) ────────────
   // Reaproveita: saldo inicial REAL (resultadoPorEmpresa/composicaoSaldo) + os
@@ -2718,10 +2749,21 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {resultadoPorEmpresa.empresas.map((p, i) => (
-                        <tr key={p.empresaCodigo} className="hover:bg-gray-50/60">
+                      {resultadoPorEmpresa.empresas.map((p, i) => {
+                        const aberta = empExpandidas.has(p.empresaCodigo);
+                        const temContas = (p.contas || []).length > 0;
+                        return (
+                        <Fragment key={p.empresaCodigo}>
+                        <tr className={`hover:bg-gray-50/60 ${temContas ? 'cursor-pointer' : ''}`}
+                          onClick={temContas ? () => setEmpExpandidas(prev => { const n = new Set(prev); if (n.has(p.empresaCodigo)) n.delete(p.empresaCodigo); else n.add(p.empresaCodigo); return n; }) : undefined}>
                           <td className="px-4 py-2 text-[11px] text-gray-400 font-mono">{i + 1}</td>
-                          <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">{p.empresa ? labelEmpresa(p.empresa) : `#${p.empresaCodigo}`}</td>
+                          <td className="px-4 py-2 text-[12.5px] font-medium text-gray-800">
+                            <span className="inline-flex items-center gap-1.5">
+                              {temContas ? <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${aberta ? 'rotate-90' : ''}`} /> : <span className="w-3.5 inline-block" />}
+                              {p.empresa ? labelEmpresa(p.empresa) : `#${p.empresaCodigo}`}
+                              {temContas && <span className="text-[10px] text-gray-400">({p.contas.length})</span>}
+                            </span>
+                          </td>
                           <td className="px-4 py-2 text-right font-mono text-[12px] tabular-nums text-gray-700">
                             {formatCurrency(p.saldoInicial)}
                           </td>
@@ -2737,7 +2779,26 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                             {p.participacao.toFixed(1)}%
                           </td>
                         </tr>
-                      ))}
+                        {aberta && p.contas.map(c => (
+                          <tr key={`${p.empresaCodigo}-${c.contaCodigo}`} className="bg-gray-50/40">
+                            <td className="px-4 py-1.5"></td>
+                            <td className="px-4 py-1.5 text-[11.5px] text-gray-600">
+                              <span className="inline-flex items-center gap-1.5 pl-5">
+                                <Wallet className="h-3 w-3 text-gray-300 flex-shrink-0" />
+                                <span className="truncate max-w-[240px]" title={c.contaNome}>{c.contaNome}</span>
+                              </span>
+                            </td>
+                            <td className="px-4 py-1.5 text-right font-mono text-[11.5px] tabular-nums text-gray-600">{formatCurrency(c.saldoInicial)}</td>
+                            <td className="px-4 py-1.5 text-right font-mono text-[11.5px] tabular-nums text-emerald-600">+{formatCurrency(c.entradas)}</td>
+                            <td className="px-4 py-1.5 text-right font-mono text-[11.5px] tabular-nums text-red-600">-{formatCurrency(c.saidas)}</td>
+                            <td className={`px-4 py-1.5 text-right font-mono text-[11.5px] tabular-nums ${c.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{c.variacao > 0 ? '+' : ''}{formatCurrency(c.variacao)}</td>
+                            <td className={`px-4 py-1.5 text-right font-mono text-[11.5px] font-semibold tabular-nums ${c.saldoFinal >= 0 ? 'text-gray-800' : 'text-red-700'}`}>{formatCurrency(c.saldoFinal)}</td>
+                            <td className="px-4 py-1.5"></td>
+                          </tr>
+                        ))}
+                        </Fragment>
+                        );
+                      })}
                     </tbody>
                     <tfoot className="bg-gray-50/60 border-t border-gray-200">
                       <tr className="text-[12px] font-semibold">

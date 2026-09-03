@@ -250,7 +250,39 @@ serve(async (req) => {
       if (Number.isFinite(ec)) saldosIniciaisPorEmpresa[String(ec)] = v;
     });
 
-    return json({ lancamentos: linhas, saldos_iniciais: saldosIniciaisPorEmpresa });
+    // Saldo inicial por empresa + CONTA caixa/banco (mesma lógica do total por
+    // empresa, mas agrupado também pela conta caixa que aparece no lançamento).
+    // Permite o drill "por empresa → contas" na aba Por Empresa.
+    const sqlSaldosConta = `
+      select
+        m.empresa                                       as empresa,
+        case when m.conta_debitar = any($3::text[]) then m.conta_debitar
+             else m.conta_creditar end                  as conta,
+        coalesce(sum(
+          case
+            when m.conta_debitar  = any($3::text[]) then  m.valor
+            when m.conta_creditar = any($3::text[]) then -m.valor
+            else 0
+          end
+        ), 0)                                           as saldo_inicial
+      from movto m
+      where m.empresa = any($1::bigint[])
+        and m.data < $2
+        and (m.conta_debitar = any($3::text[]) or m.conta_creditar = any($3::text[]))
+      group by m.empresa, conta
+    `;
+    const saldosContaResult = await executarQuery(rede, sqlSaldosConta, [empresasNum, data_de, refSet], { encoding: 'SQL_ASCII' });
+    const saldosIniciaisConta: Record<string, Record<string, number>> = {};
+    saldosContaResult.forEach(r => {
+      const ec = Number(r.empresa);
+      if (!Number.isFinite(ec)) return;
+      const conta = String(r.conta ?? '').trim();
+      if (!conta) return;
+      const v = Number(r.saldo_inicial || 0);
+      (saldosIniciaisConta[String(ec)] ||= {})[conta] = v;
+    });
+
+    return json({ lancamentos: linhas, saldos_iniciais: saldosIniciaisPorEmpresa, saldos_iniciais_conta: saldosIniciaisConta });
   } catch (err) {
     return json(
       {

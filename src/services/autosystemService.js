@@ -518,6 +518,7 @@ export async function buscarFluxoCaixaAutosystem(redeId, empresaCodigos, filtros
   return {
     lancamentos: Array.isArray(data?.lancamentos) ? data.lancamentos : [],
     saldosIniciais: data?.saldos_iniciais || {},
+    saldosIniciaisConta: data?.saldos_iniciais_conta || {},
   };
 }
 
