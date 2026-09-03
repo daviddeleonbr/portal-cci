@@ -263,6 +263,56 @@ serve(async (req) => {
     const ini = await saldoAte('<', data_de);
     const fim = await saldoAte('<=', data_ate);
 
+    // Saldo de ABERTURA da conta (coluna conta.saldo_inicial) — parte do saldo que
+    // NÃO está na movto (ex.: lançamento de saldo inicial de uma conta caixa).
+    // É um valor-base presente tanto no saldo inicial quanto no final. Introspecta
+    // a tabela pra descobrir se a coluna existe e se há dimensão por empresa.
+    const abertura: Record<string, Record<string, number>> = {};
+    try {
+      const colsRes = await executarQuery(rede,
+        `select column_name from information_schema.columns where table_name = 'conta'`,
+        [], { encoding: 'SQL_ASCII' });
+      const cols = new Set(colsRes.map((r: Record<string, unknown>) => String(r.column_name ?? '').toLowerCase()));
+      if (cols.has('saldo_inicial')) {
+        if (cols.has('empresa')) {
+          const rows = await executarQuery(rede,
+            `select empresa, codigo, saldo_inicial from conta
+             where empresa = any($1::bigint[]) and codigo = any($2::text[]) and coalesce(saldo_inicial, 0) <> 0`,
+            [empresasNum, refSet], { encoding: 'SQL_ASCII' });
+          rows.forEach((r: Record<string, unknown>) => {
+            const ec = Number(r.empresa); const conta = String(r.codigo ?? '').trim();
+            if (!Number.isFinite(ec) || !conta) return;
+            (abertura[String(ec)] ||= {})[conta] = Number(r.saldo_inicial || 0);
+          });
+        } else if (empresasNum.length === 1) {
+          // conta global (sem empresa) — só atribui com segurança quando a rede
+          // tem uma única empresa (senão não dá pra saber de quem é o saldo).
+          const rows = await executarQuery(rede,
+            `select codigo, saldo_inicial from conta
+             where codigo = any($1::text[]) and coalesce(saldo_inicial, 0) <> 0`,
+            [refSet], { encoding: 'SQL_ASCII' });
+          const ec = String(empresasNum[0]);
+          rows.forEach((r: Record<string, unknown>) => {
+            const conta = String(r.codigo ?? '').trim();
+            if (!conta) return;
+            (abertura[ec] ||= {})[conta] = Number(r.saldo_inicial || 0);
+          });
+        }
+      }
+    } catch (_) { /* tabela conta sem saldo_inicial → ignora */ }
+
+    // Soma a abertura no saldo inicial E final (por empresa e por conta).
+    const aplicarAbertura = (alvo: { porEmpresa: Record<string, number>; porConta: Record<string, Record<string, number>> }) => {
+      Object.entries(abertura).forEach(([ec, contas]) => {
+        Object.entries(contas).forEach(([conta, v]) => {
+          (alvo.porConta[ec] ||= {})[conta] = (alvo.porConta[ec][conta] || 0) + v;
+          alvo.porEmpresa[ec] = (alvo.porEmpresa[ec] || 0) + v;
+        });
+      });
+    };
+    aplicarAbertura(ini);
+    aplicarAbertura(fim);
+
     // Débito (dinheiro que ENTROU) e crédito (que SAIU) reais por empresa+conta
     // no período — como o "Balancete de verificação". Inclui transferências
     // internas (que o fluxo exclui), pra reconciliar com o extrato de cada conta.
