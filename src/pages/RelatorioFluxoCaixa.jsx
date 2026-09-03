@@ -5,7 +5,7 @@ import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, Wallet, Printer,
   EyeOff, Eye, ChevronLeft as ChevLeft, Download,
-  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange,
+  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale,
 } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
@@ -140,6 +140,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // das caixa/banco). Na Evolução, o usuário pode excluí-las da análise do fluxo.
   const [contasAplicacao, setContasAplicacao] = useState(() => new Set());
   const [incluirAplicacoes, setIncluirAplicacoes] = useState(true);
+  // Análise "Capacidade de geração de caixa": grupos escolhidos como
+  // Recebimentos de clientes e Pagamentos a fornecedores (null = auto pelo nome).
+  const [grpRecebId, setGrpRecebId] = useState(null);
+  const [grpFornId, setGrpFornId] = useState(null);
 
   // ─── Meses ────────────────────────────────────────────────
   const meses = useMemo(() => {
@@ -1501,6 +1505,44 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return { lista, perfil, maxMedia, diaMaiorS: perfil[idxMaiorS], diaMaiorE: perfil[idxMaiorE], habitS, habitE, nSemanas: lista.length };
   }, [evolucaoCaixa]);
 
+  // Achata a árvore de grupos do fluxo (com caminho no rótulo) pra o usuário
+  // escolher quais grupos representam Recebimentos de clientes e Pagamentos a
+  // fornecedores na análise de "Capacidade de geração de caixa".
+  const nosFluxo = useMemo(() => {
+    const out = [];
+    const walk = (nodes, prefix) => (nodes || []).forEach(n => {
+      const label = prefix ? `${prefix} › ${n.nome}` : n.nome;
+      out.push({ id: n.id, nome: n.nome, label, valoresPorMes: n.valoresPorMes, totalPeriodo: n.totalPeriodo });
+      if (n.children?.length) walk(n.children, label);
+    });
+    walk(fluxoTree, '');
+    return out;
+  }, [fluxoTree]);
+
+  // Recebimentos de clientes × Pagamentos a fornecedores → capacidade de gerar
+  // caixa pra pagar fornecedores. Grupos detectados pelo nome (ou escolhidos).
+  const capacidadeCaixa = useMemo(() => {
+    // Apenas Autosystem por enquanto.
+    if (!(redeContexto?.asRedeId || cliente?.as_rede_id)) return null;
+    if (nosFluxo.length === 0) return null;
+    const achar = (re) => nosFluxo.find(n => re.test(n.nome || ''));
+    const recNo = nosFluxo.find(n => n.id === grpRecebId) || achar(/client/i) || achar(/receb/i);
+    const fornNo = nosFluxo.find(n => n.id === grpFornId) || achar(/fornecedor/i) || achar(/pagament/i);
+    if (!recNo && !fornNo) return null;
+
+    const porMes = meses.map(m => {
+      const rec = recNo ? Math.abs(recNo.valoresPorMes[m.key] || 0) : 0;
+      const pag = fornNo ? Math.abs(fornNo.valoresPorMes[m.key] || 0) : 0;
+      return { key: m.key, label: m.label, rec, pag, saldo: rec - pag };
+    });
+    const totalRec = porMes.reduce((s, x) => s + x.rec, 0);
+    const totalPag = porMes.reduce((s, x) => s + x.pag, 0);
+    const saldo = totalRec - totalPag;
+    const cobertura = totalPag > 0 ? totalRec / totalPag : null;
+    const maxBar = Math.max(1, ...porMes.map(x => Math.max(x.rec, x.pag)));
+    return { porMes, totalRec, totalPag, saldo, cobertura, maxBar, recNome: recNo?.nome, fornNome: fornNo?.nome, recId: recNo?.id, fornId: fornNo?.id };
+  }, [nosFluxo, grpRecebId, grpFornId, meses, redeContexto?.asRedeId, cliente?.as_rede_id]);
+
   // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
   // quando quiser auditar itens fora da mascara.
 
@@ -2332,6 +2374,93 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                           </table>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {capacidadeCaixa && (
+                  <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Scale className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">Capacidade de geração de caixa</p>
+                          <p className="text-[11px] text-gray-400">Recebimentos de clientes × Pagamentos a fornecedores no período</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] flex-wrap no-print">
+                        <label className="flex items-center gap-1 text-gray-500">Clientes:
+                          <select value={capacidadeCaixa.recId || ''} onChange={e => setGrpRecebId(e.target.value || null)}
+                            className="h-7 rounded-md border border-gray-200 px-1.5 text-[11px] text-gray-700 max-w-[150px] focus:border-blue-400 focus:outline-none">
+                            <option value="">— selecionar —</option>
+                            {nosFluxo.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="flex items-center gap-1 text-gray-500">Fornecedores:
+                          <select value={capacidadeCaixa.fornId || ''} onChange={e => setGrpFornId(e.target.value || null)}
+                            className="h-7 rounded-md border border-gray-200 px-1.5 text-[11px] text-gray-700 max-w-[150px] focus:border-blue-400 focus:outline-none">
+                            <option value="">— selecionar —</option>
+                            {nosFluxo.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="px-5 py-3 bg-blue-50/40 border-b border-blue-100/60 text-[12.5px] text-gray-700 leading-relaxed">
+                      {capacidadeCaixa.cobertura != null ? (
+                        <>Os recebimentos de clientes cobriram <strong>{Math.round(capacidadeCaixa.cobertura * 100)}%</strong> dos
+                          {' '}pagamentos a fornecedores no período
+                          {capacidadeCaixa.saldo >= 0
+                            ? <> — sobraram <strong className="text-emerald-700">{formatCurrency(capacidadeCaixa.saldo)}</strong> de caixa.</>
+                            : <> — faltaram <strong className="text-red-700">{formatCurrency(-capacidadeCaixa.saldo)}</strong>.</>}
+                          {' '}Para cada <strong>R$ 1,00</strong> pago a fornecedores, entraram <strong>{formatCurrency(capacidadeCaixa.cobertura)}</strong> de clientes.</>
+                      ) : 'Sem pagamentos a fornecedores no período para comparar.'}
+                    </div>
+
+                    <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
+                      <div className="p-4 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Recebido de clientes</p>
+                        <p className="text-[15px] font-semibold text-emerald-700 tabular-nums">{formatCurrency(capacidadeCaixa.totalRec)}</p>
+                      </div>
+                      <div className="p-4 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Pago a fornecedores</p>
+                        <p className="text-[15px] font-semibold text-red-600 tabular-nums">{formatCurrency(capacidadeCaixa.totalPag)}</p>
+                      </div>
+                      <div className="p-4 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Sobra de caixa</p>
+                        <p className={`text-[15px] font-semibold tabular-nums ${capacidadeCaixa.saldo >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                          {capacidadeCaixa.saldo >= 0 ? '+' : ''}{formatCurrency(capacidadeCaixa.saldo)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-4 sm:p-5 space-y-3.5">
+                      {capacidadeCaixa.porMes.map(mrow => (
+                        <div key={mrow.key}>
+                          <div className="flex items-center justify-between text-[11px] mb-1">
+                            <span className="font-medium text-gray-600">{mrow.label}</span>
+                            <span className={`font-mono tabular-nums ${mrow.saldo >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                              {mrow.saldo >= 0 ? 'sobra ' : 'falta '}{formatCurrency(Math.abs(mrow.saldo))}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-14 text-[10px] text-emerald-600 text-right flex-shrink-0">recebido</span>
+                            <div className="flex-1 bg-gray-100 rounded-sm h-3 overflow-hidden"><div className="h-full bg-emerald-400 rounded-sm" style={{ width: `${(mrow.rec / capacidadeCaixa.maxBar) * 100}%` }} /></div>
+                            <span className="w-[86px] text-[10px] font-mono text-emerald-600 text-right tabular-nums flex-shrink-0">{fmtEixoCaixa(mrow.rec)}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="w-14 text-[10px] text-red-600 text-right flex-shrink-0">pago</span>
+                            <div className="flex-1 bg-gray-100 rounded-sm h-3 overflow-hidden"><div className="h-full bg-red-400 rounded-sm" style={{ width: `${(mrow.pag / capacidadeCaixa.maxBar) * 100}%` }} /></div>
+                            <span className="w-[86px] text-[10px] font-mono text-red-600 text-right tabular-nums flex-shrink-0">{fmtEixoCaixa(mrow.pag)}</span>
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-[10.5px] text-gray-400 pt-1 border-t border-gray-100">
+                        Grupos usados: <strong>{capacidadeCaixa.recNome || '—'}</strong> (clientes) e
+                        {' '}<strong>{capacidadeCaixa.fornNome || '—'}</strong> (fornecedores). Ajuste nos seletores acima se necessário.
+                      </p>
                     </div>
                   </div>
                 )}
