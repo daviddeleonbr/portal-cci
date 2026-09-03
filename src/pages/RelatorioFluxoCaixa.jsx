@@ -202,20 +202,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 .listarContasCaixaBancoRede(redeContexto.asRedeId)
                 .catch(() => []);
               const classif = (cbList || []).map(c => ({
-                conta_codigo: c.codigo,
+                conta_codigo: String(c.codigo ?? '').trim(),
                 tipo: 'caixa',
                 ativo: true,
               }));
               const ctas = (cbList || []).map(c => ({
-                contaCodigo: c.codigo,
-                descricao: c.nome || `Conta ${c.codigo}`,
+                contaCodigo: String(c.codigo ?? '').trim(),
+                descricao: c.nome || `Conta ${String(c.codigo ?? '').trim()}`,
               }));
               setContasClassificadas(classif);
               setContasMeta(ctas);
               const aplList = await autosystemService
                 .listarContasAplicacaoRede(redeContexto.asRedeId)
                 .catch(() => []);
-              setContasAplicacao(new Set((aplList || []).map(a => String(a.codigo))));
+              setContasAplicacao(new Set((aplList || []).map(a => String(a.codigo ?? '').trim())));
             } else {
               const chavesApi = await mapService.listarChavesApi();
               const chave = chavesApi.find(ch => ch.id === redeContexto.chaveApiId);
@@ -242,20 +242,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 .listarContasCaixaBancoRede(c.as_rede_id)
                 .catch(() => []);
               const classif = (cbList || []).map(cb => ({
-                conta_codigo: cb.codigo,
+                conta_codigo: String(cb.codigo ?? '').trim(),
                 tipo: 'caixa',
                 ativo: true,
               }));
               const ctas = (cbList || []).map(cb => ({
-                contaCodigo: cb.codigo,
-                descricao: cb.nome || `Conta ${cb.codigo}`,
+                contaCodigo: String(cb.codigo ?? '').trim(),
+                descricao: cb.nome || `Conta ${String(cb.codigo ?? '').trim()}`,
               }));
               setContasClassificadas(classif);
               setContasMeta(ctas);
               const aplList = await autosystemService
                 .listarContasAplicacaoRede(c.as_rede_id)
                 .catch(() => []);
-              setContasAplicacao(new Set((aplList || []).map(a => String(a.codigo))));
+              setContasAplicacao(new Set((aplList || []).map(a => String(a.codigo ?? '').trim())));
             } catch (_) { setContasClassificadas([]); setContasMeta([]); }
           } else if (c?.chave_api_id) {
             // Carrega classificacao das contas + catalogo CONTA da rede
@@ -306,7 +306,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           .map(m => ({
             id: m.id,
             grupo_fluxo_id: m.grupo_fluxo_id,
-            plano_conta_codigo: m.plano_conta_codigo || m.conta_codigo,
+            plano_conta_codigo: String(m.plano_conta_codigo || m.conta_codigo || '').trim(),
             plano_conta_descricao: m.plano_conta_descricao || m.conta_descricao,
             // Direção (Autosystem): 'D'=aplica só quando a conta é debitada (saída),
             // 'C'=só quando creditada (entrada), null=ambos (líquido). Webposto = null.
@@ -465,9 +465,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           const movs = (r.lancs || []).map(l => {
             const sinal = Number(l.sinal) || 0;
             const tipo = sinal > 0 ? 'Crédito' : 'Débito';
-            const cpBruto = String(l.contraparte_codigo ?? '');
+            // Códigos vêm da movto (colunas char podem ter espaços) → trim pra
+            // casar com o mapeamento/contas caixa (salvos sem espaço).
+            const cpBruto = String(l.contraparte_codigo ?? '').trim();
             const cpResolv = l.contraparte_resolvida_codigo != null
-              ? String(l.contraparte_resolvida_codigo)
+              ? String(l.contraparte_resolvida_codigo).trim()
               : null;
             const isPonte211 = /^2\.1\.1/.test(cpBruto);
             const naoClassificada = isPonte211 && !cpResolv;
@@ -480,7 +482,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             return {
               codigo: l.lancamento_id != null ? `as-${l.lancamento_id}` : undefined,
               movimentoContaCodigo: l.lancamento_id ?? null,
-              contaCodigo: l.lado_caixa === 'debito' ? String(l.debito_codigo ?? '') : String(l.credito_codigo ?? ''),
+              contaCodigo: (l.lado_caixa === 'debito' ? String(l.debito_codigo ?? '') : String(l.credito_codigo ?? '')).trim(),
               planoContaGerencialCodigo: planoEfetivo,
               planoContaGerencialDescricao: l.contraparte_resolvida_nome || l.contraparte_nome || null,
               // Campos extras pra diagnóstico/badge no front
@@ -1156,24 +1158,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       isSemClassificacao: true,
     };
   }, [totaisPorConta, totaisPorContaLado, lancamentosPorConta, nomesPorPlano, nomePlanoGerencial, mapeamentos, meses]);
-
-  // 🔍 DIAGNÓSTICO TEMPORÁRIO — por que contas mapeadas ainda caem em "não
-  // mapeados". Compara os códigos mapeados × não-mapeados (JSON revela espaços).
-  // REMOVER depois de identificar a causa.
-  useEffect(() => {
-    if (!semClassificacaoNode || !mapeamentos.length) return;
-    const mapCodes = mapeamentos.map(m => String(m.plano_conta_codigo));
-    const mapTrim = new Set(mapCodes.map(c => c.trim()));
-    const naoMap = (semClassificacaoNode.contas || []).map(c => String(c.codigo));
-    console.group('%c🔍 DIAG não-mapeados (temporário)', 'color:#a50;font-weight:bold');
-    console.log('MAPEADOS (raw):', mapCodes.map(c => JSON.stringify(c)));
-    console.log('NÃO-MAPEADOS (raw):', naoMap.map(c => JSON.stringify(c)));
-    const casamSoAposTrim = naoMap.filter(c => !mapCodes.includes(c) && mapTrim.has(c.trim()));
-    console.log('%cNÃO-MAPEADOS que casariam SÓ APÓS TRIM (=problema de espaço):',
-      'color:#c00;font-weight:bold', casamSoAposTrim.map(c => JSON.stringify(c)));
-    console.log('detalhe vínculos:', mapeamentos.map(m => ({ cod: JSON.stringify(String(m.plano_conta_codigo)), lado: m.lado, grupo: m.grupo_fluxo_id })));
-    console.groupEnd();
-  }, [semClassificacaoNode, mapeamentos]);
 
   // Exporta o bloco "não mapeados" para XLSX (resumo por grupo + lançamentos).
   const exportarNaoMapeadosXlsx = useCallback(() => {
