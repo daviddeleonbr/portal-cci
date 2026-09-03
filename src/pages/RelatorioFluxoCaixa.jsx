@@ -5,7 +5,12 @@ import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, Wallet, Printer,
   EyeOff, Eye, ChevronLeft as ChevLeft, Download,
+  LineChart as LineChartIcon, TrendingUp, TrendingDown, ArrowRightLeft, ArrowDownRight,
 } from 'lucide-react';
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as RTooltip, ReferenceDot,
+} from 'recharts';
 import * as clientesService from '../services/clientesService';
 import * as fluxoService from '../services/mascaraFluxoCaixaService';
 import * as mapService from '../services/mapeamentoService';
@@ -1266,6 +1271,105 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     };
   }, [modoRede, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisPorEmpresa]);
 
+  // ─── Evolução do Caixa (saldo acumulado ao longo do período) ────────────
+  // Reaproveita: saldo inicial REAL (resultadoPorEmpresa/composicaoSaldo) + os
+  // MESMOS movimentos filtrados (tipo de conta, contas específicas, empresas da
+  // seleção). Bucketiza por dia/semana/mês conforme o tamanho do período e
+  // acumula: saldo = saldo inicial + Σ(entradas − saídas) até o ponto.
+  const evolucaoCaixa = useMemo(() => {
+    if (!dadosCarregados || !meses.length) return null;
+
+    const saldoInicial = modoRede
+      ? (resultadoPorEmpresa?.totalSaldoInicial ?? 0)
+      : composicaoSaldo.reduce((s, c) => s + (Number(c.saldoInicial) || 0), 0);
+
+    // Em rede, conta só movimentos de empresas da seleção (igual à "Variação por
+    // empresa"), pra o saldo final bater com aquela tabela.
+    const empresasValidas = modoRede
+      ? new Set((cliente?._empresas || []).map(e => Number(e.empresa_codigo)).filter(Number.isFinite))
+      : null;
+
+    const movs = [];
+    Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => {
+      if (m.contaCodigo == null || !m.dataMovimento) return;
+      const cod = String(m.contaCodigo);
+      const tc = tipoPorConta.get(cod);
+      if (tc !== 'bancaria' && tc !== 'caixa') return;
+      if (!tiposContaAtivos.has(tc)) return;
+      if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
+      if (empresasValidas && !empresasValidas.has(Number(m.empresaCodigo))) return;
+      const abs = Math.abs(Number(m.valor || 0));
+      movs.push({
+        data: String(m.dataMovimento).slice(0, 10),
+        entrada: m.tipo === 'Crédito' ? abs : 0,
+        saida: m.tipo === 'Crédito' ? 0 : abs,
+      });
+    }));
+
+    // Período (do range dos meses selecionados) e granularidade automática.
+    const r0 = rangeMes(meses[0].ano, meses[0].mes);
+    const rN = rangeMes(meses[meses.length - 1].ano, meses[meses.length - 1].mes);
+    const dataIni = r0.dataInicial, dataFim = rN.dataFinal;
+    const parse = (s) => { const [y, mo, d] = s.split('-').map(Number); return new Date(y, mo - 1, d); };
+    const iniDate = parse(dataIni);
+    const dias = Math.round((parse(dataFim) - iniDate) / 86400000) + 1;
+    const gran = dias <= 31 ? 'dia' : dias <= 92 ? 'semana' : 'mes';
+    const dd = (n) => String(n).padStart(2, '0');
+
+    const chaveBucket = (dataStr) => {
+      const dt = parse(dataStr);
+      if (gran === 'dia') return { k: dataStr, ord: dt.getTime(), lbl: `${dd(dt.getDate())}/${dd(dt.getMonth() + 1)}` };
+      if (gran === 'semana') {
+        const wk = Math.floor((dt - iniDate) / (7 * 86400000));
+        const ini = new Date(iniDate.getTime() + wk * 7 * 86400000);
+        return { k: `w${wk}`, ord: ini.getTime(), lbl: `${dd(ini.getDate())}/${dd(ini.getMonth() + 1)}` };
+      }
+      return { k: `${dt.getFullYear()}-${dt.getMonth()}`, ord: new Date(dt.getFullYear(), dt.getMonth(), 1).getTime(), lbl: `${MESES_NOMES[dt.getMonth()]}/${String(dt.getFullYear()).slice(2)}` };
+    };
+
+    const buckets = new Map();
+    movs.forEach(m => {
+      const b = chaveBucket(m.data);
+      let cur = buckets.get(b.k);
+      if (!cur) { cur = { ord: b.ord, lbl: b.lbl, entradas: 0, saidas: 0 }; buckets.set(b.k, cur); }
+      cur.entradas += m.entrada; cur.saidas += m.saida;
+    });
+
+    const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const arr = Array.from(buckets.values()).sort((a, b) => a.ord - b.ord);
+    let acum = saldoInicial;
+    const pontos = [{ label: 'Início', saldo: r2(saldoInicial), entradas: 0, saidas: 0, variacao: 0, inicio: true }];
+    arr.forEach(b => {
+      const varP = b.entradas - b.saidas;
+      acum += varP;
+      pontos.push({ label: b.lbl, saldo: r2(acum), entradas: r2(b.entradas), saidas: r2(b.saidas), variacao: r2(varP) });
+    });
+
+    const saldoFinal = pontos[pontos.length - 1].saldo;
+    let menor = pontos[0], maior = pontos[0], idxMenor = 0;
+    pontos.forEach((p, i) => { if (p.saldo < menor.saldo) { menor = p; idxMenor = i; } if (p.saldo > maior.saldo) maior = p; });
+    const variacao = saldoFinal - saldoInicial;
+    const variacaoPct = saldoInicial !== 0 ? (variacao / Math.abs(saldoInicial)) * 100 : null;
+    const amplitude = maior.saldo - menor.saldo;
+
+    // Diagnóstico dinâmico, com números reais.
+    const pctTxt = variacaoPct != null ? ` (${variacaoPct >= 0 ? '+' : ''}${variacaoPct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)` : '';
+    const partes = [];
+    if (variacao > 0) partes.push(`O caixa apresentou evolução positiva no período, com crescimento líquido de ${formatCurrency(variacao)}${pctTxt}, encerrando acima do saldo inicial.`);
+    else if (variacao < 0) partes.push(`O caixa apresentou redução no período, com consumo líquido de ${formatCurrency(Math.abs(variacao))}${pctTxt} de recursos.`);
+    else partes.push('O caixa encerrou o período praticamente no mesmo nível do início.');
+    if (saldoInicial !== 0 && amplitude > Math.abs(saldoInicial) * 0.4) {
+      partes.push(`Houve elevada oscilação, com diferença de ${formatCurrency(amplitude)} entre o maior e o menor saldo.`);
+    }
+    if (!menor.inicio) partes.push(`O menor nível de caixa ocorreu em ${menor.label}, quando o saldo chegou a ${formatCurrency(menor.saldo)}.`);
+
+    return {
+      pontos, saldoInicial, saldoFinal, maiorSaldo: maior.saldo, menorSaldo: menor.saldo,
+      menorLabel: menor.label, idxMenor, variacao, variacaoPct, amplitude,
+      diagnostico: partes.join(' '), granularidade: gran, dataIni, dataFim,
+    };
+  }, [dadosCarregados, modoRede, resultadoPorEmpresa, composicaoSaldo, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, meses]);
+
   // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
   // quando quiser auditar itens fora da mascara.
 
@@ -1777,8 +1881,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       )}
 
 
-      {/* Tabs Fluxo | Por Empresa (so em modoRede, apos relatorio pronto) */}
-      {reportReady && modoRede && colunasEmpresa.length > 0 && (
+      {/* Tabs Fluxo | Por Empresa (rede) | Evolução — após relatório pronto */}
+      {reportReady && (
         <div className="flex items-center gap-0.5 mb-4 bg-gray-100/80 rounded-lg p-0.5 w-fit no-print">
           <button onClick={() => setActiveTab('fluxo')}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
@@ -1786,11 +1890,19 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             }`}>
             <Wallet className="h-3.5 w-3.5" /> Fluxo
           </button>
-          <button onClick={() => setActiveTab('empresa')}
+          {modoRede && colunasEmpresa.length > 0 && (
+            <button onClick={() => setActiveTab('empresa')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+                activeTab === 'empresa' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              <Building2 className="h-3.5 w-3.5" /> Por Empresa
+            </button>
+          )}
+          <button onClick={() => setActiveTab('evolucao')}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
-              activeTab === 'empresa' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              activeTab === 'evolucao' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}>
-            <Building2 className="h-3.5 w-3.5" /> Por Empresa
+            <LineChartIcon className="h-3.5 w-3.5" /> Evolução
           </button>
         </div>
       )}
@@ -1820,6 +1932,67 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             <Layers className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm font-medium text-gray-800 mb-1">Máscara vazia</p>
             <p className="text-xs text-gray-400">Configure a estrutura em Parâmetros &gt; Máscaras Fluxo de Caixa</p>
+          </motion.div>
+        ) : activeTab === 'evolucao' ? (
+          <motion.div key="evolucao" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+            className="space-y-5">
+            {!evolucaoCaixa || evolucaoCaixa.pontos.length <= 1 ? (
+              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-16 text-center">
+                <LineChartIcon className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-800 mb-1">Sem movimentações no período</p>
+                <p className="text-xs text-gray-400">Não há dados suficientes para montar a evolução do caixa.</p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <CardEvol titulo="Saldo inicial" valor={formatCurrency(evolucaoCaixa.saldoInicial)} />
+                  <CardEvol titulo="Saldo final" valor={formatCurrency(evolucaoCaixa.saldoFinal)}
+                    destaque={evolucaoCaixa.saldoFinal >= evolucaoCaixa.saldoInicial ? 'bom' : 'ruim'} />
+                  <CardEvol titulo="Variação" valor={`${evolucaoCaixa.variacao >= 0 ? '+' : ''}${formatCurrency(evolucaoCaixa.variacao)}`}
+                    sub={evolucaoCaixa.variacaoPct != null ? `${evolucaoCaixa.variacaoPct >= 0 ? '+' : ''}${evolucaoCaixa.variacaoPct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : 'saldo inicial zero'}
+                    destaque={evolucaoCaixa.variacao >= 0 ? 'bom' : 'ruim'} />
+                  <CardEvol titulo="Maior saldo" valor={formatCurrency(evolucaoCaixa.maiorSaldo)} />
+                  <CardEvol titulo="Menor saldo" valor={formatCurrency(evolucaoCaixa.menorSaldo)} sub={evolucaoCaixa.menorLabel} destaque="ruim" />
+                </div>
+
+                <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4 sm:p-5">
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <LineChartIcon className="h-4 w-4 text-emerald-500" />
+                    <h3 className="text-sm font-semibold text-gray-800">Evolução do Caixa</h3>
+                    <span className="text-[11px] text-gray-400">
+                      · {formatarDataBr(evolucaoCaixa.dataIni)} — {formatarDataBr(evolucaoCaixa.dataFim)} · visão {evolucaoCaixa.granularidade === 'dia' ? 'diária' : evolucaoCaixa.granularidade === 'semana' ? 'semanal' : 'mensal'}
+                    </span>
+                  </div>
+                  <div className="w-full" style={{ height: 340 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={evolucaoCaixa.pontos} margin={{ top: 10, right: 16, left: 4, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} tickMargin={8} minTickGap={16} />
+                        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} tickFormatter={fmtEixoCaixa} />
+                        <RTooltip content={<TooltipEvol />} />
+                        <Line type="monotone" dataKey="saldo" name="Saldo" stroke="#0d9488" strokeWidth={2} dot={{ r: 2.5 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                        {evolucaoCaixa.idxMenor > 0 && (
+                          <ReferenceDot x={evolucaoCaixa.pontos[evolucaoCaixa.idxMenor].label} y={evolucaoCaixa.menorSaldo}
+                            r={5} fill="#ef4444" stroke="#fff" strokeWidth={1.5} isFront />
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-emerald-50/60 to-white rounded-2xl border border-emerald-100 p-4 sm:p-5">
+                  <div className="flex items-start gap-2.5">
+                    <div className="h-7 w-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                      {evolucaoCaixa.variacao >= 0 ? <TrendingUp className="h-4 w-4 text-emerald-600" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
+                    </div>
+                    <div>
+                      <p className="text-[12px] font-semibold text-gray-800 mb-0.5">Diagnóstico</p>
+                      <p className="text-[13px] text-gray-600 leading-relaxed">{evolucaoCaixa.diagnostico}</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </motion.div>
         ) : activeTab === 'empresa' && modoRede ? (
           <motion.div key="empresa" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
@@ -2698,3 +2871,52 @@ function MultiSelectContas({ contas, selecionadas, onChange, open, setOpen }) {
   );
 }
 
+
+// ─── Helpers da aba "Evolução do Caixa" ───────────────────────────────────
+// Formata a data ISO (YYYY-MM-DD) em DD/MM/YYYY.
+function formatarDataBr(ymd) {
+  if (!ymd) return '—';
+  const [y, m, d] = String(ymd).slice(0, 10).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// Rótulo compacto do eixo Y (evita números gigantes): R$ 1,2M / R$ 850k.
+function fmtEixoCaixa(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return `R$ ${(v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}M`;
+  if (a >= 1e3) return `R$ ${(v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}k`;
+  return formatCurrency(v);
+}
+
+// Cartão de indicador (mesmo estilo dos KPIs do relatório).
+function CardEvol({ titulo, valor, sub, destaque }) {
+  const cor = destaque === 'bom' ? 'text-emerald-700' : destaque === 'ruim' ? 'text-red-600' : 'text-gray-900';
+  return (
+    <div className="bg-white rounded-xl border border-gray-200/60 shadow-sm px-3.5 py-3">
+      <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{titulo}</p>
+      <p className={`text-[15px] font-bold tabular-nums mt-1 ${cor}`}>{valor}</p>
+      {sub != null && <p className="text-[10.5px] text-gray-400 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// Tooltip customizado do gráfico de evolução.
+function TooltipEvol({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-lg px-3 py-2 text-[12px]">
+      <p className="font-semibold text-gray-800 mb-1">{p.inicio ? 'Início do período' : p.label}</p>
+      <p className="text-gray-700">Saldo: <span className="font-mono font-semibold tabular-nums">{formatCurrency(p.saldo)}</span></p>
+      {!p.inicio && (
+        <>
+          <p className="text-emerald-600">Entradas: <span className="font-mono tabular-nums">+{formatCurrency(p.entradas)}</span></p>
+          <p className="text-red-600">Saídas: <span className="font-mono tabular-nums">-{formatCurrency(p.saidas)}</span></p>
+          <p className={p.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}>
+            Variação: <span className="font-mono font-semibold tabular-nums">{p.variacao >= 0 ? '+' : ''}{formatCurrency(p.variacao)}</span>
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
