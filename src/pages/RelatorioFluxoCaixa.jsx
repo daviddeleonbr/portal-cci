@@ -1542,24 +1542,34 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const saldo = totalRec - totalPag;
     const cobertura = totalPag > 0 ? totalRec / totalPag : null;
     const maxBar = Math.max(1, ...porMes.map(x => Math.max(x.rec, x.pag)));
-    // Como a sobra do mês foi consumida pelos DEMAIS grupos — árvore até o nível 3,
-    // em sequência de grupo (1, 2, 3…). Os grupos que contêm clientes/fornecedores
-    // têm esses valores DESCONTADOS (senão a sobra seria contada duas vezes), então
-    // o "Resultado do mês" bate com a variação real de caixa.
+    // Como a sobra do mês foi consumida pelos DEMAIS grupos — árvore em sequência
+    // de grupo (1, 2, 3…) com drill até a CONTA. Os grupos que contêm clientes/
+    // fornecedores têm esses valores DESCONTADOS (senão a sobra seria contada duas
+    // vezes), então o "Resultado do mês" bate com a variação real de caixa.
     const contem = (node, id) => !!id && (node.id === id || (node.children || []).some(ch => contem(ch, id)));
-    const buildOutro = (node, key, nivel) => {
+    const buildOutro = (node, key) => {
       if (node.id === recNo?.id || node.id === fornNo?.id) return null; // podado (é clientes/fornecedores)
       const recV = recNo && contem(node, recNo.id) ? Number(recNo.valoresPorMes[key] || 0) : 0;
       const fornV = fornNo && contem(node, fornNo.id) ? Number(fornNo.valoresPorMes[key] || 0) : 0;
       const valor = Number(node.valoresPorMes[key] || 0) - recV - fornV;
-      const children = nivel < 3
-        ? (node.children || []).map(ch => buildOutro(ch, key, nivel + 1)).filter(Boolean).sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
-        : [];
+      const subgrupos = (node.children || [])
+        .map(ch => buildOutro(ch, key)).filter(Boolean)
+        .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+      const contasLeaf = (node.contas || [])
+        .map(c => ({
+          id: `c:${node.id}:${c.codigo}`,
+          nome: [c.codigo, c.descricao].filter(Boolean).join(' · '),
+          valor: Number(c.valoresPorMes[key] || 0),
+          children: [],
+        }))
+        .filter(c => Math.abs(c.valor) > 0.005)
+        .sort((a, b) => String(a.nome).localeCompare(String(b.nome), undefined, { numeric: true }));
+      const children = [...subgrupos, ...contasLeaf];
       if (Math.abs(valor) < 0.005 && children.length === 0) return null;
       return { id: node.id, nome: node.nome, ordem: node.ordem, valor, children };
     };
     porMes.forEach(row => {
-      const arvore = fluxoTree.map(n => buildOutro(n, row.key, 1)).filter(Boolean).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+      const arvore = fluxoTree.map(n => buildOutro(n, row.key)).filter(Boolean).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
       const consumoOutros = arvore.reduce((s, o) => s + o.valor, 0);
       row.outros = arvore;
       row.resultado = row.saldo + consumoOutros; // sobra + demais grupos = variação real do mês
