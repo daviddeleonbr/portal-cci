@@ -3351,6 +3351,16 @@ function ModalDetalheEvol({ ponto, onClose }) {
     .map(c => ({ ...c, itens: c.itens.slice().sort((a, b) => (a.data || '').localeCompare(b.data || '')) }))
     .sort((a, b) => (b.entradas + b.saidas) - (a.entradas + a.saidas));
 
+  // Contas recolhidas por padrão (árvore) — o usuário expande a que quiser.
+  const [abertas, setAbertas] = useState(() => new Set());
+  const toggleConta = (nome) => setAbertas(prev => {
+    const next = new Set(prev);
+    if (next.has(nome)) next.delete(nome); else next.add(nome);
+    return next;
+  });
+  const todasAbertas = contas.length > 0 && abertas.size === contas.length;
+  const alternarTodas = () => setAbertas(todasAbertas ? new Set() : new Set(contas.map(c => c.nome)));
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 no-print" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -3365,36 +3375,47 @@ function ModalDetalheEvol({ ponto, onClose }) {
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 flex-shrink-0"><X className="h-4 w-4" /></button>
         </div>
-        <div className="overflow-y-auto p-4 space-y-3">
+        <div className="overflow-y-auto p-4 space-y-2">
           {contas.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">Sem lançamentos neste ponto.</p>
           ) : (
             <>
-              {/* Cabeçalho de colunas — alinha com as colunas Entradas/Saídas das linhas. */}
+              {/* Cabeçalho de colunas + expandir/recolher todas. */}
               <div className="flex items-center gap-2 px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                <span className="flex-1">Lançamento</span>
+                <button type="button" onClick={alternarTodas}
+                  className="flex-1 text-left normal-case text-[10px] font-medium text-blue-500 hover:text-blue-700 tracking-normal">
+                  {todasAbertas ? 'Recolher todas' : 'Expandir todas'}
+                </button>
                 <span className="w-[104px] text-right flex-shrink-0">Entradas</span>
                 <span className="w-[104px] text-right flex-shrink-0">Saídas</span>
               </div>
-              {contas.map((c, i) => (
-                <div key={i} className="rounded-xl border border-gray-200/70 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 flex items-center gap-2">
-                    <span className="text-[12.5px] font-semibold text-gray-800 truncate flex-1">{c.nome}</span>
-                    <span className="w-[104px] text-right flex-shrink-0 text-[11.5px] font-mono tabular-nums text-emerald-600">+{formatCurrency(c.entradas)}</span>
-                    <span className="w-[104px] text-right flex-shrink-0 text-[11.5px] font-mono tabular-nums text-red-600">-{formatCurrency(c.saidas)}</span>
-                  </div>
-                  <div className="divide-y divide-gray-50">
-                    {c.itens.map((it, j) => (
-                      <div key={j} className="px-3 py-1.5 flex items-center gap-2 text-[12px]">
-                        <span className="text-gray-400 font-mono text-[10.5px] w-[42px] flex-shrink-0">{formatarDataBr(it.data).slice(0, 5)}</span>
-                        <span className="text-gray-600 truncate flex-1">{it.descricao || '—'}</span>
-                        <span className="w-[104px] text-right flex-shrink-0 font-mono tabular-nums text-emerald-600">{it.entrada > 0 ? `+${formatCurrency(it.entrada)}` : ''}</span>
-                        <span className="w-[104px] text-right flex-shrink-0 font-mono tabular-nums text-red-600">{it.saida > 0 ? `-${formatCurrency(it.saida)}` : ''}</span>
+              {contas.map((c) => {
+                const aberta = abertas.has(c.nome);
+                return (
+                  <div key={c.nome} className="rounded-xl border border-gray-200/70 overflow-hidden">
+                    <button type="button" onClick={() => toggleConta(c.nome)}
+                      className="w-full px-3 py-2 bg-gray-50 hover:bg-gray-100/70 flex items-center gap-2 text-left transition-colors">
+                      <ChevronRight className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberta ? 'rotate-90' : ''}`} />
+                      <span className="text-[12.5px] font-semibold text-gray-800 truncate flex-1">{c.nome}</span>
+                      <span className="text-[10px] text-gray-400 bg-white border border-gray-200 rounded-full px-1.5 py-0.5 flex-shrink-0">{c.itens.length}</span>
+                      <span className="w-[104px] text-right flex-shrink-0 text-[11.5px] font-mono tabular-nums text-emerald-600">{c.entradas > 0 ? `+${formatCurrency(c.entradas)}` : ''}</span>
+                      <span className="w-[104px] text-right flex-shrink-0 text-[11.5px] font-mono tabular-nums text-red-600">{c.saidas > 0 ? `-${formatCurrency(c.saidas)}` : ''}</span>
+                    </button>
+                    {aberta && (
+                      <div className="divide-y divide-gray-50">
+                        {c.itens.map((it, j) => (
+                          <div key={j} className="px-3 py-1.5 flex items-center gap-2 text-[12px]">
+                            <span className="text-gray-400 font-mono text-[10.5px] w-[42px] flex-shrink-0 pl-5">{formatarDataBr(it.data).slice(0, 5)}</span>
+                            <span className="text-gray-600 truncate flex-1">{it.descricao || '—'}</span>
+                            <span className="w-[104px] text-right flex-shrink-0 font-mono tabular-nums text-emerald-600">{it.entrada > 0 ? `+${formatCurrency(it.entrada)}` : ''}</span>
+                            <span className="w-[104px] text-right flex-shrink-0 font-mono tabular-nums text-red-600">{it.saida > 0 ? `-${formatCurrency(it.saida)}` : ''}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </>
           )}
         </div>
