@@ -3364,7 +3364,7 @@ function ModalDetalheEvol({ ponto, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 no-print" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-shrink-0">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900">Detalhamento · {ponto.label}</p>
             <p className="text-[11.5px] text-gray-500">
@@ -3375,7 +3375,7 @@ function ModalDetalheEvol({ ponto, onClose }) {
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 flex-shrink-0"><X className="h-4 w-4" /></button>
         </div>
-        <div className="overflow-y-auto p-4 pb-8 space-y-2">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2">
           {contas.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">Sem lançamentos neste ponto.</p>
           ) : (
@@ -3418,6 +3418,16 @@ function ModalDetalheEvol({ ponto, onClose }) {
               })}
             </>
           )}
+        </div>
+        {/* Rodapé fixo */}
+        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 flex-shrink-0">
+          <span className="text-[11px] text-gray-400">
+            {contas.length} conta(s) · {ponto.movimentos?.length || 0} lançamento(s)
+          </span>
+          <button onClick={onClose}
+            className="rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-[12px] font-medium px-4 py-1.5 transition-colors">
+            Fechar
+          </button>
         </div>
       </div>
     </div>
