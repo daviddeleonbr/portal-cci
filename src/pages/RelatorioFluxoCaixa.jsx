@@ -1898,12 +1898,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           <div>
             <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
             <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
-              {[1, 3].map(q => (
+              {[1, 3, 6].map(q => (
                 <button key={q} onClick={() => setQtdMeses(q)}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
                     qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
-                  {q === 1 ? '1 mês' : '3 meses'}
+                  {q === 1 ? '1 mês' : `${q} meses`}
                 </button>
               ))}
             </div>
