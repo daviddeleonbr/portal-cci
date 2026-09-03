@@ -136,6 +136,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [filtroContasOpen, setFiltroContasOpen] = useState(false);
   // Metadados das contas (descricao) do endpoint CONTA, para exibir nomes no filtro
   const [contasMeta, setContasMeta] = useState([]);
+  // Autosystem: códigos das contas marcadas como "aplicação financeira" (subconjunto
+  // das caixa/banco). Na Evolução, o usuário pode excluí-las da análise do fluxo.
+  const [contasAplicacao, setContasAplicacao] = useState(() => new Set());
+  const [incluirAplicacoes, setIncluirAplicacoes] = useState(true);
 
   // ─── Meses ────────────────────────────────────────────────
   const meses = useMemo(() => {
@@ -194,6 +198,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               }));
               setContasClassificadas(classif);
               setContasMeta(ctas);
+              setContasAplicacao(new Set((cbList || []).filter(c => c.aplicacao_financeira).map(c => String(c.codigo))));
             } else {
               const chavesApi = await mapService.listarChavesApi();
               const chave = chavesApi.find(ch => ch.id === redeContexto.chaveApiId);
@@ -230,6 +235,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               }));
               setContasClassificadas(classif);
               setContasMeta(ctas);
+              setContasAplicacao(new Set((cbList || []).filter(cb => cb.aplicacao_financeira).map(cb => String(cb.codigo))));
             } catch (_) { setContasClassificadas([]); setContasMeta([]); }
           } else if (c?.chave_api_id) {
             // Carrega classificacao das contas + catalogo CONTA da rede
@@ -1287,9 +1293,18 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const evolucaoCaixa = useMemo(() => {
     if (!dadosCarregados || !meses.length) return null;
 
-    const saldoInicialPeriodo = modoRede
+    // Contas de aplicação financeira a EXCLUIR da análise (quando o toggle está off).
+    const excluirApl = !incluirAplicacoes && contasAplicacao.size > 0 ? contasAplicacao : null;
+
+    const saldoInicialPeriodoBruto = modoRede
       ? (resultadoPorEmpresa?.totalSaldoInicial ?? 0)
       : composicaoSaldo.reduce((s, c) => s + (Number(c.saldoInicial) || 0), 0);
+    // Ao excluir aplicações, tira também o saldo de abertura delas (composicaoSaldo
+    // tem o saldo inicial por conta) pra o saldo do gráfico não ficar deslocado.
+    const saldoAplicacao = excluirApl
+      ? composicaoSaldo.reduce((s, c) => s + (excluirApl.has(String(c.contaCodigo)) ? (Number(c.saldoInicial) || 0) : 0), 0)
+      : 0;
+    const saldoInicialPeriodo = saldoInicialPeriodoBruto - saldoAplicacao;
 
     // Em rede, conta só movimentos de empresas da seleção (igual à "Variação por
     // empresa"), pra o saldo final bater com aquela tabela.
@@ -1306,6 +1321,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       if (tc !== 'bancaria' && tc !== 'caixa') return;
       if (!tiposContaAtivos.has(tc)) return;
       if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
+      if (excluirApl && excluirApl.has(cod)) return;
       if (empresasValidas && !empresasValidas.has(Number(m.empresaCodigo))) return;
       const abs = Math.abs(Number(m.valor || 0));
       movsAll.push({
@@ -1434,7 +1450,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       loadedIni, loadedFim, varMin, varMax, offSaldo, offVar,
       tendenciaDir, domSaldo, domVar, movimentos: movs,
     };
-  }, [dadosCarregados, modoRede, resultadoPorEmpresa, composicaoSaldo, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, meses, granEvol, evolRange]);
+  }, [dadosCarregados, modoRede, resultadoPorEmpresa, composicaoSaldo, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, meses, granEvol, evolRange, incluirAplicacoes, contasAplicacao]);
 
   // Giro semanal "de segunda a segunda": agrupa TODOS os movimentos do período em
   // semanas (2ª→dom) e monta o perfil médio por dia da semana, pra revelar a
@@ -2086,7 +2102,19 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                           className="text-[11px] text-blue-500 hover:text-blue-700 ml-0.5">limpar</button>
                       )}
                     </div>
-                    <div className="flex items-center gap-0.5 ml-auto bg-gray-100/80 rounded-lg p-0.5">
+                    {contasAplicacao.size > 0 && (
+                      <button type="button" onClick={() => setIncluirAplicacoes(v => !v)}
+                        title="Incluir ou excluir as contas de aplicação financeira na análise do fluxo"
+                        className={`ml-auto inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                          incluirAplicacoes
+                            ? 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                            : 'border-amber-300 bg-amber-50 text-amber-700'
+                        }`}>
+                        {incluirAplicacoes ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                        Aplicações {incluirAplicacoes ? 'incluídas' : 'excluídas'}
+                      </button>
+                    )}
+                    <div className={`flex items-center gap-0.5 ${contasAplicacao.size > 0 ? '' : 'ml-auto'} bg-gray-100/80 rounded-lg p-0.5`}>
                       {[
                         { v: 'saldo', label: 'Saldo' },
                         { v: 'variacao', label: 'Variação' },

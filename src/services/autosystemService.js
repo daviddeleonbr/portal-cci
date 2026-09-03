@@ -397,6 +397,7 @@ export async function salvarContasCaixaBanco(redeId, contas) {
       as_rede_id: redeId,
       codigo: String(c.codigo),
       nome: c.nome || null,
+      aplicacao_financeira: !!c.aplicacao_financeira,
     }));
 
   const { error: delErr } = await supabase
