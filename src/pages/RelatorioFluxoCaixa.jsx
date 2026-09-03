@@ -144,6 +144,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Recebimentos de clientes e Pagamentos a fornecedores (null = auto pelo nome).
   const [grpRecebId, setGrpRecebId] = useState(null);
   const [grpFornId, setGrpFornId] = useState(null);
+  // Meses expandidos na Capacidade (mostra como a sobra foi consumida).
+  const [capExpMes, setCapExpMes] = useState(() => new Set());
 
   // ─── Meses ────────────────────────────────────────────────
   const meses = useMemo(() => {
@@ -1538,23 +1540,21 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const saldo = totalRec - totalPag;
     const cobertura = totalPag > 0 ? totalRec / totalPag : null;
     const maxBar = Math.max(1, ...porMes.map(x => Math.max(x.rec, x.pag)));
-    return { porMes, totalRec, totalPag, saldo, cobertura, maxBar, recNome: recNo?.nome, fornNome: fornNo?.nome, recId: recNo?.id, fornId: fornNo?.id };
-  }, [nosFluxo, grpRecebId, grpFornId, meses]);
+    // Demais grupos de topo (exceto clientes/fornecedores) — como a sobra do mês
+    // foi consumida. Cada mês expande pra mostrar esses subgrupos e o resultado.
+    const outrosNos = fluxoTree.filter(n => n.id !== recNo?.id && n.id !== fornNo?.id);
+    porMes.forEach(row => {
+      const outros = outrosNos
+        .map(n => ({ id: n.id, nome: n.nome, valor: Number(n.valoresPorMes[row.key] || 0) }))
+        .filter(o => Math.abs(o.valor) > 0.005)
+        .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
+      const consumoOutros = outros.reduce((s, o) => s + o.valor, 0);
+      row.outros = outros;
+      row.resultado = row.saldo + consumoOutros; // sobra + demais grupos = variação do mês
+    });
 
-  // Demais grupos da estrutura do fluxo — todos os grupos de topo, exceto os dois
-  // usados na Capacidade de geração de caixa (clientes e fornecedores).
-  const outrosGrupos = useMemo(() => {
-    if (!fluxoTree.length) return null;
-    const excl = new Set([capacidadeCaixa?.recId, capacidadeCaixa?.fornId].filter(Boolean));
-    const itens = fluxoTree
-      .filter(n => !excl.has(n.id))
-      .map(n => ({ id: n.id, nome: n.nome, total: Number(n.totalPeriodo) || 0 }))
-      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
-    if (itens.length === 0) return null;
-    const maxBar = Math.max(1, ...itens.map(i => Math.abs(i.total)));
-    const totalGeral = itens.reduce((s, i) => s + i.total, 0);
-    return { itens, maxBar, totalGeral };
-  }, [fluxoTree, capacidadeCaixa]);
+    return { porMes, totalRec, totalPag, saldo, cobertura, maxBar, recNome: recNo?.nome, fornNome: fornNo?.nome, recId: recNo?.id, fornId: fornNo?.id };
+  }, [nosFluxo, fluxoTree, grpRecebId, grpFornId, meses]);
 
   // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
   // quando quiser auditar itens fora da mascara.
@@ -2449,71 +2449,61 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       </div>
                     </div>
 
-                    <div className="p-4 sm:p-5 space-y-3.5">
-                      {capacidadeCaixa.porMes.map(mrow => (
-                        <div key={mrow.key}>
-                          <div className="flex items-center justify-between text-[11px] mb-1">
-                            <span className="font-medium text-gray-600">{mrow.label}</span>
-                            <span className={`font-mono tabular-nums ${mrow.saldo >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                              {mrow.saldo >= 0 ? 'sobra ' : 'falta '}{formatCurrency(Math.abs(mrow.saldo))}
-                            </span>
+                    <div className="p-4 sm:p-5 space-y-2">
+                      <p className="text-[10.5px] text-gray-400 -mt-1 mb-1">Clique num mês para ver como a sobra foi consumida pelos demais grupos.</p>
+                      {capacidadeCaixa.porMes.map(mrow => {
+                        const aberto = capExpMes.has(mrow.key);
+                        return (
+                          <div key={mrow.key} className="rounded-lg border border-gray-100 overflow-hidden">
+                            <button type="button"
+                              onClick={() => setCapExpMes(prev => { const n = new Set(prev); if (n.has(mrow.key)) n.delete(mrow.key); else n.add(mrow.key); return n; })}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-50/60 transition-colors">
+                              <div className="flex items-center gap-2 mb-1">
+                                <ChevronRight className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-90' : ''}`} />
+                                <span className="font-medium text-gray-700 text-[11.5px] flex-1">{mrow.label}</span>
+                                <span className={`font-mono text-[11px] tabular-nums ${mrow.saldo >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                  {mrow.saldo >= 0 ? 'sobra ' : 'falta '}{formatCurrency(Math.abs(mrow.saldo))}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 pl-5">
+                                <span className="w-14 text-[10px] text-emerald-600 text-right flex-shrink-0">recebido</span>
+                                <div className="flex-1 bg-gray-100 rounded-sm h-3 overflow-hidden"><div className="h-full bg-emerald-400 rounded-sm" style={{ width: `${(mrow.rec / capacidadeCaixa.maxBar) * 100}%` }} /></div>
+                                <span className="w-[86px] text-[10px] font-mono text-emerald-600 text-right tabular-nums flex-shrink-0">{fmtEixoCaixa(mrow.rec)}</span>
+                              </div>
+                              <div className="flex items-center gap-2 pl-5 mt-0.5">
+                                <span className="w-14 text-[10px] text-red-600 text-right flex-shrink-0">pago</span>
+                                <div className="flex-1 bg-gray-100 rounded-sm h-3 overflow-hidden"><div className="h-full bg-red-400 rounded-sm" style={{ width: `${(mrow.pag / capacidadeCaixa.maxBar) * 100}%` }} /></div>
+                                <span className="w-[86px] text-[10px] font-mono text-red-600 text-right tabular-nums flex-shrink-0">{fmtEixoCaixa(mrow.pag)}</span>
+                              </div>
+                            </button>
+                            {aberto && (
+                              <div className="border-t border-gray-100 px-3 py-2.5 bg-gray-50/50 space-y-1.5">
+                                <div className="flex items-center justify-between text-[11.5px]">
+                                  <span className="text-gray-500">Sobra de caixa (clientes − fornecedores)</span>
+                                  <span className={`font-mono tabular-nums font-medium ${mrow.saldo >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{mrow.saldo >= 0 ? '+' : ''}{formatCurrency(mrow.saldo)}</span>
+                                </div>
+                                <p className="text-[10px] uppercase tracking-wider text-gray-400 pt-0.5">Consumo pelos demais grupos</p>
+                                {mrow.outros.length === 0 ? (
+                                  <p className="text-[11px] text-gray-400 pl-2">Nenhum outro grupo com movimento neste mês.</p>
+                                ) : mrow.outros.map(o => (
+                                  <div key={o.id} className="flex items-center justify-between text-[11.5px] pl-2">
+                                    <span className="text-gray-600 truncate pr-2">{o.nome}</span>
+                                    <span className={`font-mono tabular-nums flex-shrink-0 ${o.valor >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{o.valor >= 0 ? '+' : ''}{formatCurrency(o.valor)}</span>
+                                  </div>
+                                ))}
+                                <div className="flex items-center justify-between text-[12px] pt-1.5 mt-1 border-t border-gray-200">
+                                  <span className="font-semibold text-gray-700">Resultado do mês (variação de caixa)</span>
+                                  <span className={`font-mono tabular-nums font-semibold ${mrow.resultado >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{mrow.resultado >= 0 ? '+' : ''}{formatCurrency(mrow.resultado)}</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="w-14 text-[10px] text-emerald-600 text-right flex-shrink-0">recebido</span>
-                            <div className="flex-1 bg-gray-100 rounded-sm h-3 overflow-hidden"><div className="h-full bg-emerald-400 rounded-sm" style={{ width: `${(mrow.rec / capacidadeCaixa.maxBar) * 100}%` }} /></div>
-                            <span className="w-[86px] text-[10px] font-mono text-emerald-600 text-right tabular-nums flex-shrink-0">{fmtEixoCaixa(mrow.rec)}</span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="w-14 text-[10px] text-red-600 text-right flex-shrink-0">pago</span>
-                            <div className="flex-1 bg-gray-100 rounded-sm h-3 overflow-hidden"><div className="h-full bg-red-400 rounded-sm" style={{ width: `${(mrow.pag / capacidadeCaixa.maxBar) * 100}%` }} /></div>
-                            <span className="w-[86px] text-[10px] font-mono text-red-600 text-right tabular-nums flex-shrink-0">{fmtEixoCaixa(mrow.pag)}</span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       <p className="text-[10.5px] text-gray-400 pt-1 border-t border-gray-100">
                         Grupos usados: <strong>{capacidadeCaixa.recNome || '—'}</strong> (clientes) e
                         {' '}<strong>{capacidadeCaixa.fornNome || '—'}</strong> (fornecedores). Ajuste nos seletores acima se necessário.
                       </p>
-                    </div>
-                  </div>
-                )}
-
-                {outrosGrupos && (
-                  <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-                    <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                        <Layers className="h-4 w-4 text-slate-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-800">Demais grupos do fluxo</p>
-                        <p className="text-[11px] text-gray-400">Outros grupos da estrutura (fora clientes e fornecedores) no período</p>
-                      </div>
-                    </div>
-
-                    <div className="p-4 sm:p-5 space-y-2.5">
-                      {outrosGrupos.itens.map(g => (
-                        <div key={g.id} className="flex items-center gap-3">
-                          <span className="text-[12px] text-gray-700 truncate w-[38%] flex-shrink-0" title={g.nome}>{g.nome}</span>
-                          <div className="flex-1 flex items-center">
-                            <div className="flex-1 flex justify-end">
-                              {g.total < 0 && <div className="h-3 bg-red-400 rounded-l-sm" style={{ width: `${(Math.abs(g.total) / outrosGrupos.maxBar) * 100}%` }} />}
-                            </div>
-                            <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
-                            <div className="flex-1">
-                              {g.total >= 0 && <div className="h-3 bg-emerald-400 rounded-r-sm" style={{ width: `${(Math.abs(g.total) / outrosGrupos.maxBar) * 100}%` }} />}
-                            </div>
-                          </div>
-                          <span className={`w-[104px] text-right flex-shrink-0 text-[12px] font-mono tabular-nums font-medium ${g.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                            {g.total >= 0 ? '+' : ''}{formatCurrency(g.total)}
-                          </span>
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between pt-2.5 mt-1 border-t border-gray-100">
-                        <span className="text-[11.5px] font-semibold text-gray-600">Total dos demais grupos</span>
-                        <span className={`text-[13px] font-mono tabular-nums font-semibold ${outrosGrupos.totalGeral >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                          {outrosGrupos.totalGeral >= 0 ? '+' : ''}{formatCurrency(outrosGrupos.totalGeral)}
-                        </span>
-                      </div>
                     </div>
                   </div>
                 )}
