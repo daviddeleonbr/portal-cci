@@ -521,6 +521,7 @@ export async function buscarFluxoCaixaAutosystem(redeId, empresaCodigos, filtros
     saldosIniciaisConta: data?.saldos_iniciais_conta || {},
     saldosFinais: data?.saldos_finais || {},
     saldosFinaisConta: data?.saldos_finais_conta || {},
+    movimentacaoConta: data?.movimentacao_conta || {},
   };
 }
 

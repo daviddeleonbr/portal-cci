@@ -263,12 +263,41 @@ serve(async (req) => {
     const ini = await saldoAte('<', data_de);
     const fim = await saldoAte('<=', data_ate);
 
+    // Débito (dinheiro que ENTROU) e crédito (que SAIU) reais por empresa+conta
+    // no período — como o "Balancete de verificação". Inclui transferências
+    // internas (que o fluxo exclui), pra reconciliar com o extrato de cada conta.
+    const sqlMov = `
+      select empresa, conta, coalesce(sum(deb), 0) as debito, coalesce(sum(cred), 0) as credito
+      from (
+        select m.empresa as empresa, m.conta_debitar  as conta, m.valor as deb, 0::numeric as cred
+        from movto m
+        where m.empresa = any($1::bigint[]) and m.data between $2 and $3 and m.conta_debitar  = any($4::text[])
+        union all
+        select m.empresa as empresa, m.conta_creditar as conta, 0::numeric as deb, m.valor as cred
+        from movto m
+        where m.empresa = any($1::bigint[]) and m.data between $2 and $3 and m.conta_creditar = any($4::text[])
+      ) t
+      group by empresa, conta
+    `;
+    const movRows = await executarQuery(rede, sqlMov, [empresasNum, data_de, data_ate, refSet], { encoding: 'SQL_ASCII' });
+    const movimentacaoConta: Record<string, Record<string, { debito: number; credito: number }>> = {};
+    movRows.forEach(r => {
+      const ec = Number(r.empresa);
+      if (!Number.isFinite(ec)) return;
+      const conta = String(r.conta ?? '').trim();
+      if (!conta) return;
+      (movimentacaoConta[String(ec)] ||= {})[conta] = {
+        debito: Number(r.debito || 0), credito: Number(r.credito || 0),
+      };
+    });
+
     return json({
       lancamentos: linhas,
       saldos_iniciais: ini.porEmpresa,
       saldos_iniciais_conta: ini.porConta,
       saldos_finais: fim.porEmpresa,
       saldos_finais_conta: fim.porConta,
+      movimentacao_conta: movimentacaoConta,
     });
   } catch (err) {
     return json(

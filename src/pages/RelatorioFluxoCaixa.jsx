@@ -94,6 +94,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Saldo inicial/final por empresa+conta (Autosystem) — drill "por empresa → contas".
   const [saldosIniciaisContaPorEmpresa, setSaldosIniciaisContaPorEmpresa] = useState({});
   const [saldosFinaisContaPorEmpresa, setSaldosFinaisContaPorEmpresa] = useState({});
+  // Débito/crédito reais (movto) por empresa+conta no período — como o balancete.
+  const [movimentacaoContaPorEmpresa, setMovimentacaoContaPorEmpresa] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
@@ -342,6 +344,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     setDadosPorMes({});
     setSaldosIniciaisContaPorEmpresa({});
     setSaldosFinaisContaPorEmpresa({});
+    setMovimentacaoContaPorEmpresa({});
   }, [mesFinal, qtdMeses, mascaraSelecionada]);
 
   // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado.
@@ -402,7 +405,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
         const results = await Promise.all(meses.map(async m => {
           const r = rangeMes(m.ano, m.mes);
-          let lancs = [], saldosIniciaisConta = {}, saldosFinaisConta = {};
+          let lancs = [], saldosIniciaisConta = {}, saldosFinaisConta = {}, movimentacaoConta = {};
           try {
             const out = await autosystemService.buscarFluxoCaixaAutosystem(
               cliente.as_rede_id,
@@ -418,12 +421,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             lancs = out.lancamentos || [];
             saldosIniciaisConta = out.saldosIniciaisConta || {};
             saldosFinaisConta = out.saldosFinaisConta || {};
+            movimentacaoConta = out.movimentacaoConta || {};
           } catch (e) {
             console.error('[Fluxo Autosystem] Falha no fetch', { mes: m.key, err: e });
           }
           concluidas++;
           setLoadingProgress({ atual: concluidas, total, mensagem: `${m.label}: ${lancs.length} lancamentos` });
-          return { key: m.key, mesIdx: meses.indexOf(m), lancs, saldosIniciaisConta, saldosFinaisConta };
+          return { key: m.key, mesIdx: meses.indexOf(m), lancs, saldosIniciaisConta, saldosFinaisConta, movimentacaoConta };
         }));
 
         // Saldo INICIAL do período = do primeiro mês (antes da data mais antiga);
@@ -432,6 +436,18 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const ultimoMes = results.reduce((a, b) => (b.mesIdx > (a?.mesIdx ?? -1) ? b : a), null);
         const saldosIniciaisContaPeriodo = primeiroMes?.saldosIniciaisConta || {};
         const saldosFinaisContaPeriodo = ultimoMes?.saldosFinaisConta || {};
+        // Débito/crédito reais somados por empresa+conta ao longo de todos os meses.
+        const movimentacaoAcc = {};
+        results.forEach(r => {
+          Object.entries(r.movimentacaoConta || {}).forEach(([ec, contas]) => {
+            const emp = (movimentacaoAcc[ec] ||= {});
+            Object.entries(contas).forEach(([cod, v]) => {
+              const cur = (emp[cod] ||= { debito: 0, credito: 0 });
+              cur.debito += Number(v.debito || 0);
+              cur.credito += Number(v.credito || 0);
+            });
+          });
+        });
 
         // Converte lançamentos Autosystem para o formato MOVIMENTO_CONTA que
         // o resto do componente já entende. A conta caixa/banco vira contaCodigo;
@@ -500,6 +516,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         setDadosPorMes(mapa);
         setSaldosIniciaisContaPorEmpresa(saldosIniciaisContaPeriodo);
         setSaldosFinaisContaPorEmpresa(saldosFinaisContaPeriodo);
+        setMovimentacaoContaPorEmpresa(movimentacaoAcc);
         setTituloPagarMap(new Map());
         setTitulosPorPagamento(new Map());
         setDadosCarregados(true);
@@ -1276,37 +1293,26 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     cliente._empresas.forEach(emp => {
       const ec = Number(emp.empresa_codigo);
       if (!Number.isFinite(ec)) return;
-      porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, entradas: 0, saidas: 0, contasMap: {} };
-      // Semeia as contas com saldo INICIAL e FINAL reais (da tabela movto, via
-      // Edge Function) — inclui contas que só têm saldo, sem movimento no período.
+      // Saldo inicial/final e débito/crédito REAIS por conta (da tabela movto,
+      // via Edge Function) — inclui transferências internas, batendo com o
+      // balancete de verificação. Entradas = débito (dinheiro que entrou na
+      // conta), Saídas = crédito (que saiu).
       const iniMap = saldosIniciaisContaPorEmpresa?.[String(ec)] || {};
       const fimMap = saldosFinaisContaPorEmpresa?.[String(ec)] || {};
-      const codigos = new Set([...Object.keys(iniMap), ...Object.keys(fimMap)]);
+      const movMap = movimentacaoContaPorEmpresa?.[String(ec)] || {};
+      const codigos = new Set([...Object.keys(iniMap), ...Object.keys(fimMap), ...Object.keys(movMap)]);
+      const contasMap = {};
       codigos.forEach(cod => {
         if (!contaPermitida(cod)) return;
         const si = Number(iniMap[cod] || 0);
         const sf = fimMap[cod] != null ? Number(fimMap[cod]) : si;
-        porEmpresa[ec].contasMap[cod] = {
+        contasMap[cod] = {
           contaCodigo: cod, contaNome: descricaoPorConta.get(String(cod)) || `Conta ${cod}`,
-          saldoInicial: si, saldoFinal: sf, entradas: 0, saidas: 0,
+          saldoInicial: si, saldoFinal: sf,
+          entradas: Number(movMap[cod]?.debito || 0), saidas: Number(movMap[cod]?.credito || 0),
         };
       });
-    });
-
-    Object.values(dadosPorMes).forEach(d => {
-      (d.movimentos || []).forEach(m => {
-        const ec = Number(m.empresaCodigo);
-        if (!porEmpresa[ec]) return;
-        if (m.contaCodigo == null) return;
-        const contaCod = String(m.contaCodigo);
-        if (!contaPermitida(contaCod)) return;
-        const valor = Math.abs(Number(m.valor || 0));
-        const pe = porEmpresa[ec];
-        if (m.tipo === 'Crédito') pe.entradas += valor; else pe.saidas += valor;
-        let cc = pe.contasMap[contaCod];
-        if (!cc) cc = pe.contasMap[contaCod] = { contaCodigo: contaCod, contaNome: descricaoPorConta.get(contaCod) || `Conta ${contaCod}`, saldoInicial: 0, saldoFinal: 0, entradas: 0, saidas: 0 };
-        if (m.tipo === 'Crédito') cc.entradas += valor; else cc.saidas += valor;
-      });
+      porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, contasMap };
     });
 
     const arr = Object.values(porEmpresa).map(p => {
@@ -1314,10 +1320,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         .map(c => ({ ...c, variacao: c.saldoFinal - c.saldoInicial }))
         .filter(c => Math.abs(c.saldoInicial) > 0.005 || Math.abs(c.saldoFinal) > 0.005 || Math.abs(c.entradas) > 0.005 || Math.abs(c.saidas) > 0.005)
         .sort((a, b) => String(a.contaNome).localeCompare(String(b.contaNome), undefined, { numeric: true }));
-      // Totais da empresa = soma das contas (saldo real inicial/final da movto).
+      // Totais da empresa = soma das contas.
       const saldoInicial = contas.reduce((s, c) => s + c.saldoInicial, 0);
       const saldoFinal = contas.reduce((s, c) => s + c.saldoFinal, 0);
-      return { empresa: p.empresa, empresaCodigo: p.empresaCodigo, saldoInicial, saldoFinal, entradas: p.entradas, saidas: p.saidas, variacao: saldoFinal - saldoInicial, contas };
+      const entradas = contas.reduce((s, c) => s + c.entradas, 0);
+      const saidas = contas.reduce((s, c) => s + c.saidas, 0);
+      return { empresa: p.empresa, empresaCodigo: p.empresaCodigo, saldoInicial, saldoFinal, entradas, saidas, variacao: saldoFinal - saldoInicial, contas };
     }).sort((a, b) => b.variacao - a.variacao);
     const somaAbs = arr.reduce((s, p) => s + Math.abs(p.variacao), 0);
     const totalConsolidado = arr.reduce((s, p) => s + p.variacao, 0);
@@ -1330,7 +1338,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       totalSaldoInicial: arr.reduce((s, p) => s + p.saldoInicial, 0),
       totalSaldoFinal:   arr.reduce((s, p) => s + p.saldoFinal, 0),
     };
-  }, [modoRede, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, descricaoPorConta]);
+  }, [modoRede, cliente, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa, descricaoPorConta]);
 
   // ─── Evolução do Caixa (saldo acumulado ao longo do período) ────────────
   // Reaproveita: saldo inicial REAL (resultadoPorEmpresa/composicaoSaldo) + os
