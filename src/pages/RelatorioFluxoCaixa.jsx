@@ -1075,6 +1075,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const mapNull = new Set(mapeamentos.filter(m => !m.lado).map(m => String(m.plano_conta_codigo)));
     const mapC = new Set(mapeamentos.filter(m => m.lado === 'C').map(m => String(m.plano_conta_codigo)));
     const mapD = new Set(mapeamentos.filter(m => m.lado === 'D').map(m => String(m.plano_conta_codigo)));
+    // Códigos marcados como conta caixa/banco (refSet) — se um deles aparece aqui
+    // como contrapartida, é uma transferência que deveria ter sido excluída.
+    const caixaSet = new Set(contasClassificadas.filter(c => c.ativo !== false).map(c => String(c.conta_codigo)));
     const contas = [];
     Object.entries(totaisPorConta).forEach(([codigo, valoresPorMesAll]) => {
       if (codigo === TRANSFER_CODE) return; // vai pro grupo "Transferências", não aqui
@@ -1122,6 +1125,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         ? [(tipoDoc || 'OUTROS').replace(/_/g, ' ')]
         : [...new Set(lancs.map(l => l.tipoDoc).filter(Boolean))];
 
+      // Motivo (diagnóstico): por que caiu no "não mapeado".
+      const motivo = caixaSet.has(codigo)
+        ? 'É conta caixa/banco — deveria ser transferência (código não bate com a lista de caixa)'
+        : (mapC.has(codigo) || mapD.has(codigo))
+          ? `Mapeada só no lado ${mapC.has(codigo) ? 'crédito' : 'débito'} — o outro lado fica sem classificação`
+          : 'Sem vínculo nesta máscara (código não encontrado no mapeamento)';
+
       contas.push({
         id: `sc-${codigo}`,
         codigo,
@@ -1129,6 +1139,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         nomeConta,
         tiposDoc,
         descricao,
+        motivo,
         valoresPorMes,
         totalPeriodo,
         lancamentos: lancs,
@@ -1157,7 +1168,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       totalPeriodo,
       isSemClassificacao: true,
     };
-  }, [totaisPorConta, totaisPorContaLado, lancamentosPorConta, nomesPorPlano, nomePlanoGerencial, mapeamentos, meses]);
+  }, [totaisPorConta, totaisPorContaLado, lancamentosPorConta, nomesPorPlano, nomePlanoGerencial, mapeamentos, meses, contasClassificadas]);
 
   // Exporta o bloco "não mapeados" para XLSX (resumo por grupo + lançamentos).
   const exportarNaoMapeadosXlsx = useCallback(() => {
@@ -3025,6 +3036,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                                     <span className="block text-[11.5px] text-gray-800 truncate" title={conta.descricao}>{conta.descricao}</span>
                                     {subtitulo && (
                                       <span className="block text-[9.5px] text-gray-400 truncate" title={subtitulo}>{subtitulo}</span>
+                                    )}
+                                    {conta.motivo && (
+                                      <span className="block text-[9.5px] text-amber-600 truncate" title={conta.motivo}>⚠ {conta.motivo}</span>
                                     )}
                                   </div>
                                   {temLancs && (
