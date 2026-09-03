@@ -5,11 +5,11 @@ import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, Wallet, Printer,
   EyeOff, Eye, ChevronLeft as ChevLeft, Download,
-  LineChart as LineChartIcon, TrendingUp, TrendingDown, ArrowRightLeft, ArrowDownRight,
+  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange,
 } from 'lucide-react';
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip as RTooltip, ReferenceDot,
+  ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as RTooltip, ReferenceLine, Layer, useXAxisScale, usePlotArea,
 } from 'recharts';
 import * as clientesService from '../services/clientesService';
 import * as fluxoService from '../services/mascaraFluxoCaixaService';
@@ -105,7 +105,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [tempoGeracao, setTempoGeracao] = useState(null); // ms
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
-  const [activeTab, setActiveTab] = useState('fluxo'); // 'fluxo' | 'empresa'
+  const [activeTab, setActiveTab] = useState('fluxo'); // 'fluxo' | 'empresa' | 'evolucao'
+  // Granularidade do gráfico de Evolução: 'auto' (pelo período) | 'dia' | 'semana' | 'mes'.
+  const [granEvol, setGranEvol] = useState('auto');
+  // Modo do gráfico de Evolução: 'saldo' (saldo acumulado) | 'variacao' (variação por período).
+  const [modoGrafico, setModoGrafico] = useState('saldo');
+  // Período específico da Evolução (recorte dentro do período carregado). Vazio = todo o período.
+  const [evolRange, setEvolRange] = useState({ ini: '', fim: '' });
+  // Modal de detalhamento ao clicar num marcador do gráfico de evolução.
+  const [modalEvol, setModalEvol] = useState(null); // ponto clicado | null
   // Mes selecionado da aba "Por Empresa" (so modoRede). Default: ultimo mes do periodo.
   const [mesEmpresaKey, setMesEmpresaKey] = useState(null);
   // Modal de inspecao de movimentos de um tipoDocumentoOrigem especifico
@@ -1279,7 +1287,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const evolucaoCaixa = useMemo(() => {
     if (!dadosCarregados || !meses.length) return null;
 
-    const saldoInicial = modoRede
+    const saldoInicialPeriodo = modoRede
       ? (resultadoPorEmpresa?.totalSaldoInicial ?? 0)
       : composicaoSaldo.reduce((s, c) => s + (Number(c.saldoInicial) || 0), 0);
 
@@ -1289,7 +1297,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       ? new Set((cliente?._empresas || []).map(e => Number(e.empresa_codigo)).filter(Number.isFinite))
       : null;
 
-    const movs = [];
+    // Todos os movimentos do período CARREGADO (data + entrada + saída).
+    const movsAll = [];
     Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => {
       if (m.contaCodigo == null || !m.dataMovimento) return;
       const cod = String(m.contaCodigo);
@@ -1299,26 +1308,42 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
       if (empresasValidas && !empresasValidas.has(Number(m.empresaCodigo))) return;
       const abs = Math.abs(Number(m.valor || 0));
-      movs.push({
+      movsAll.push({
         data: String(m.dataMovimento).slice(0, 10),
+        contaCodigo: cod,
+        contaNome: descricaoPorConta.get(cod) || `Conta #${cod}`,
+        descricao: (m.descricao || '').trim(),
         entrada: m.tipo === 'Crédito' ? abs : 0,
         saida: m.tipo === 'Crédito' ? 0 : abs,
       });
     }));
 
-    // Período (do range dos meses selecionados) e granularidade automática.
-    const r0 = rangeMes(meses[0].ano, meses[0].mes);
-    const rN = rangeMes(meses[meses.length - 1].ano, meses[meses.length - 1].mes);
-    const dataIni = r0.dataInicial, dataFim = rN.dataFinal;
+    // Limites do período carregado (dos meses selecionados no relatório).
+    const loadedIni = rangeMes(meses[0].ano, meses[0].mes).dataInicial;
+    const loadedFim = rangeMes(meses[meses.length - 1].ano, meses[meses.length - 1].mes).dataFinal;
+    // Recorte específico da Evolução (seleção do usuário), clampado aos limites.
+    const clampD = (d, lo, hi) => (d < lo ? lo : d > hi ? hi : d);
+    const dataIni = evolRange.ini ? clampD(evolRange.ini, loadedIni, loadedFim) : loadedIni;
+    const dataFim = evolRange.fim ? clampD(evolRange.fim, dataIni, loadedFim) : loadedFim;
+
+    // Saldo no INÍCIO do recorte = abertura do período + Σ(net) antes do recorte.
+    const netAntes = movsAll.reduce((s, m) => s + (m.data < dataIni ? (m.entrada - m.saida) : 0), 0);
+    const saldoInicial = saldoInicialPeriodo + netAntes;
+    // Movimentos dentro do recorte.
+    const movs = movsAll.filter(m => m.data >= dataIni && m.data <= dataFim);
+
     const parse = (s) => { const [y, mo, d] = s.split('-').map(Number); return new Date(y, mo - 1, d); };
     const iniDate = parse(dataIni);
     const dias = Math.round((parse(dataFim) - iniDate) / 86400000) + 1;
-    const gran = dias <= 31 ? 'dia' : dias <= 92 ? 'semana' : 'mes';
+    // Granularidade: escolha do usuário, ou automática pelo tamanho do período.
+    const gran = granEvol !== 'auto' ? granEvol : (dias <= 31 ? 'dia' : dias <= 92 ? 'semana' : 'mes');
     const dd = (n) => String(n).padStart(2, '0');
+    const DIAS_SEM = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
     const chaveBucket = (dataStr) => {
       const dt = parse(dataStr);
-      if (gran === 'dia') return { k: dataStr, ord: dt.getTime(), lbl: `${dd(dt.getDate())}/${dd(dt.getMonth() + 1)}` };
+      // Diário: inclui o dia da semana (Seg, Ter…) pra ver o padrão do fluxo.
+      if (gran === 'dia') return { k: dataStr, ord: dt.getTime(), lbl: `${DIAS_SEM[dt.getDay()]} ${dd(dt.getDate())}/${dd(dt.getMonth() + 1)}` };
       if (gran === 'semana') {
         const wk = Math.floor((dt - iniDate) / (7 * 86400000));
         const ini = new Date(iniDate.getTime() + wk * 7 * 86400000);
@@ -1331,18 +1356,21 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     movs.forEach(m => {
       const b = chaveBucket(m.data);
       let cur = buckets.get(b.k);
-      if (!cur) { cur = { ord: b.ord, lbl: b.lbl, entradas: 0, saidas: 0 }; buckets.set(b.k, cur); }
-      cur.entradas += m.entrada; cur.saidas += m.saida;
+      if (!cur) { cur = { ord: b.ord, lbl: b.lbl, entradas: 0, saidas: 0, movs: [] }; buckets.set(b.k, cur); }
+      cur.entradas += m.entrada; cur.saidas += m.saida; cur.movs.push(m);
     });
 
     const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
     const arr = Array.from(buckets.values()).sort((a, b) => a.ord - b.ord);
     let acum = saldoInicial;
-    const pontos = [{ label: 'Início', saldo: r2(saldoInicial), entradas: 0, saidas: 0, variacao: 0, inicio: true }];
+    const pontos = [{ label: 'Início', saldo: r2(saldoInicial), entradas: 0, saidas: 0, variacao: 0, varAcum: 0, inicio: true, movimentos: [], fds: false }];
     arr.forEach(b => {
       const varP = b.entradas - b.saidas;
       acum += varP;
-      pontos.push({ label: b.lbl, saldo: r2(acum), entradas: r2(b.entradas), saidas: r2(b.saidas), variacao: r2(varP) });
+      // Fim de semana (só faz sentido na visão diária) → coluna amarela no gráfico.
+      const fds = gran === 'dia' && [0, 6].includes(new Date(b.ord).getDay());
+      // varAcum = soma das variações desde o início do recorte (= saldo − saldo inicial).
+      pontos.push({ label: b.lbl, saldo: r2(acum), entradas: r2(b.entradas), saidas: r2(b.saidas), variacao: r2(varP), varAcum: r2(acum - saldoInicial), movimentos: b.movs, fds });
     });
 
     const saldoFinal = pontos[pontos.length - 1].saldo;
@@ -1351,6 +1379,38 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const variacao = saldoFinal - saldoInicial;
     const variacaoPct = saldoInicial !== 0 ? (variacao / Math.abs(saldoInicial)) * 100 : null;
     const amplitude = maior.saldo - menor.saldo;
+    // Min/max de cada série (pro gradiente verde-acima / vermelho-abaixo do zero).
+    const varMin = Math.min(0, ...pontos.map(p => p.variacao));
+    const varMax = Math.max(0, ...pontos.map(p => p.variacao));
+    // Offset (fração do topo até o zero) pro gradiente de cor da área.
+    const calcOff = (mn, mx) => (mn >= 0 ? 1 : mx <= 0 ? 0 : mx / (mx - mn));
+    const offSaldo = calcOff(menor.saldo, maior.saldo);
+    const offVar = calcOff(varMin, varMax);
+
+    // Linha de tendência (regressão linear por mínimos quadrados) da variação
+    // acumulada — mostra se, no geral, o caixa está subindo ou caindo no período.
+    const N = pontos.length;
+    let tendenciaDir = 'estavel';
+    if (N >= 2) {
+      const sx = (N - 1) * N / 2;                       // Σi
+      const sxx = (N - 1) * N * (2 * N - 1) / 6;         // Σi²
+      let sy = 0, sxy = 0;
+      pontos.forEach((p, i) => { sy += p.varAcum; sxy += i * p.varAcum; });
+      const denom = N * sxx - sx * sx;
+      const slope = denom !== 0 ? (N * sxy - sx * sy) / denom : 0;
+      const intercept = (sy - slope * sx) / N;
+      pontos.forEach((p, i) => { p.tendencia = r2(intercept + slope * i); });
+      tendenciaDir = slope > 0.0001 ? 'alta' : slope < -0.0001 ? 'queda' : 'estavel';
+    } else {
+      pontos.forEach((p) => { p.tendencia = p.varAcum; });
+    }
+
+    // Domínios fixos do eixo Y (usados nos dois gráficos: o do eixo fixo e o
+    // rolável — assim os ticks alinham na vertical). Com uma folga de 8%.
+    const padDom = (mn, mx) => { const r = (mx - mn) || Math.abs(mx) || 1; return [mn - r * 0.08, mx + r * 0.08]; };
+    const domSaldo = padDom(Math.min(...pontos.map((p) => p.saldo)), Math.max(...pontos.map((p) => p.saldo)));
+    const varTodos = [0, ...pontos.map((p) => p.variacao), ...pontos.map((p) => p.varAcum), ...pontos.map((p) => p.tendencia)];
+    const domVar = padDom(Math.min(...varTodos), Math.max(...varTodos));
 
     // Diagnóstico dinâmico, com números reais.
     const pctTxt = variacaoPct != null ? ` (${variacaoPct >= 0 ? '+' : ''}${variacaoPct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)` : '';
@@ -1363,12 +1423,62 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     }
     if (!menor.inicio) partes.push(`O menor nível de caixa ocorreu em ${menor.label}, quando o saldo chegou a ${formatCurrency(menor.saldo)}.`);
 
+    // Com muitos pontos (ex.: diário em 3 meses), o gráfico fica largo e o
+    // container rola na horizontal, mostrando cada dia legível.
+    const larguraPx = pontos.length > 16 ? Math.max(720, pontos.length * 46) : null;
+
     return {
       pontos, saldoInicial, saldoFinal, maiorSaldo: maior.saldo, menorSaldo: menor.saldo,
       menorLabel: menor.label, idxMenor, variacao, variacaoPct, amplitude,
-      diagnostico: partes.join(' '), granularidade: gran, dataIni, dataFim,
+      diagnostico: partes.join(' '), granularidade: gran, dataIni, dataFim, larguraPx,
+      loadedIni, loadedFim, varMin, varMax, offSaldo, offVar,
+      tendenciaDir, domSaldo, domVar, movimentos: movs,
     };
-  }, [dadosCarregados, modoRede, resultadoPorEmpresa, composicaoSaldo, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, meses]);
+  }, [dadosCarregados, modoRede, resultadoPorEmpresa, composicaoSaldo, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, meses, granEvol, evolRange]);
+
+  // Giro semanal "de segunda a segunda": agrupa TODOS os movimentos do período em
+  // semanas (2ª→dom) e monta o perfil médio por dia da semana, pra revelar a
+  // habitualidade (ex.: compras concentradas na sexta, pagamentos na segunda).
+  const giroSemanal = useMemo(() => {
+    const movs = evolucaoCaixa?.movimentos || [];
+    if (movs.length === 0) return null;
+    const NOMES = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+    const dowSeg = (ymd) => (new Date(ymd + 'T00:00:00').getDay() + 6) % 7; // 0=segunda … 6=domingo
+    const segundaDa = (ymd) => { const d = new Date(ymd + 'T00:00:00'); d.setDate(d.getDate() - dowSeg(ymd)); return d.toISOString().slice(0, 10); };
+
+    const semanas = new Map();
+    movs.forEach((m) => {
+      const key = segundaDa(m.data);
+      if (!semanas.has(key)) {
+        const fim = new Date(key + 'T00:00:00'); fim.setDate(fim.getDate() + 6);
+        semanas.set(key, { ini: key, fim: fim.toISOString().slice(0, 10), entradas: 0, saidas: 0, dia: Array.from({ length: 7 }, () => ({ e: 0, s: 0 })) });
+      }
+      const w = semanas.get(key); const dow = dowSeg(m.data);
+      w.entradas += m.entrada; w.saidas += m.saida;
+      w.dia[dow].e += m.entrada; w.dia[dow].s += m.saida;
+    });
+    const lista = [...semanas.values()].sort((a, b) => a.ini.localeCompare(b.ini))
+      .map((w) => ({ ...w, variacao: w.entradas - w.saidas }));
+    const n = lista.length || 1;
+
+    // Perfil médio por dia da semana (média sobre o total de semanas do período).
+    const perfil = NOMES.map((nome, i) => {
+      let e = 0, s = 0, oc = 0;
+      lista.forEach((w) => { e += w.dia[i].e; s += w.dia[i].s; if (w.dia[i].e || w.dia[i].s) oc++; });
+      return { nome, mediaE: e / n, mediaS: s / n, totalE: e, totalS: s, semanasComMov: oc };
+    });
+    const maxMedia = Math.max(1, ...perfil.map((p) => Math.max(p.mediaE, p.mediaS)));
+    const idxMaiorS = perfil.reduce((mi, p, i, a) => (p.mediaS > a[mi].mediaS ? i : mi), 0);
+    const idxMaiorE = perfil.reduce((mi, p, i, a) => (p.mediaE > a[mi].mediaE ? i : mi), 0);
+
+    // Habitualidade: em quantas semanas o dia de pico coincidiu com o pico geral.
+    const topS = lista.filter((w) => w.saidas > 0).map((w) => w.dia.reduce((mi, d, i, a) => (d.s > a[mi].s ? i : mi), 0));
+    const topE = lista.filter((w) => w.entradas > 0).map((w) => w.dia.reduce((mi, d, i, a) => (d.e > a[mi].e ? i : mi), 0));
+    const habitS = topS.length ? topS.filter((i) => i === idxMaiorS).length / topS.length : 0;
+    const habitE = topE.length ? topE.filter((i) => i === idxMaiorE).length / topE.length : 0;
+
+    return { lista, perfil, maxMedia, diaMaiorS: perfil[idxMaiorS], diaMaiorE: perfil[idxMaiorE], habitS, habitE, nSemanas: lista.length };
+  }, [evolucaoCaixa]);
 
   // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
   // quando quiser auditar itens fora da mascara.
@@ -1959,24 +2069,142 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   <div className="flex items-center gap-2 mb-3 flex-wrap">
                     <LineChartIcon className="h-4 w-4 text-emerald-500" />
                     <h3 className="text-sm font-semibold text-gray-800">Evolução do Caixa</h3>
-                    <span className="text-[11px] text-gray-400">
-                      · {formatarDataBr(evolucaoCaixa.dataIni)} — {formatarDataBr(evolucaoCaixa.dataFim)} · visão {evolucaoCaixa.granularidade === 'dia' ? 'diária' : evolucaoCaixa.granularidade === 'semana' ? 'semanal' : 'mensal'}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <input type="date" value={evolRange.ini || evolucaoCaixa.dataIni}
+                        min={evolucaoCaixa.loadedIni} max={evolucaoCaixa.loadedFim}
+                        onChange={(e) => setEvolRange(r => ({ ...r, ini: e.target.value }))}
+                        title="Início do recorte da evolução"
+                        className="h-7 rounded-md border border-gray-200 px-1.5 text-[11px] text-gray-600 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                      <span className="text-[11px] text-gray-400">—</span>
+                      <input type="date" value={evolRange.fim || evolucaoCaixa.dataFim}
+                        min={evolRange.ini || evolucaoCaixa.loadedIni} max={evolucaoCaixa.loadedFim}
+                        onChange={(e) => setEvolRange(r => ({ ...r, fim: e.target.value }))}
+                        title="Fim do recorte da evolução"
+                        className="h-7 rounded-md border border-gray-200 px-1.5 text-[11px] text-gray-600 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                      {(evolRange.ini || evolRange.fim) && (
+                        <button type="button" onClick={() => setEvolRange({ ini: '', fim: '' })}
+                          className="text-[11px] text-blue-500 hover:text-blue-700 ml-0.5">limpar</button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-0.5 ml-auto bg-gray-100/80 rounded-lg p-0.5">
+                      {[
+                        { v: 'saldo', label: 'Saldo' },
+                        { v: 'variacao', label: 'Variação' },
+                      ].map(op => (
+                        <button key={op.v} type="button" onClick={() => setModoGrafico(op.v)}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
+                            modoGrafico === op.v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                          }`}>
+                          {op.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5">
+                      {[
+                        { v: 'dia', label: 'Dia' },
+                        { v: 'semana', label: 'Semana' },
+                        { v: 'mes', label: 'Mês' },
+                      ].map(op => (
+                        <button key={op.v} type="button" onClick={() => setGranEvol(op.v)}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
+                            evolucaoCaixa.granularidade === op.v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                          }`}>
+                          {op.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="w-full" style={{ height: 340 }}>
+                  <div className="flex">
+                    {/* Eixo Y fixo — não acompanha o scroll horizontal. Renderiza só o
+                        eixo (mesmo domínio do gráfico ao lado), pra rótulos ficarem visíveis. */}
+                    <div style={{ width: 74, flexShrink: 0 }}>
+                      <ResponsiveContainer width="100%" height={360}>
+                        {/* Sem XAxis: a margem inferior replica (altura do XAxis + margem)
+                            do gráfico ao lado, pra área de plotagem alinhar na vertical. */}
+                        <ComposedChart data={evolucaoCaixa.pontos} margin={{ top: 10, right: 0, left: 4, bottom: evolucaoCaixa.larguraPx ? 80 : 34 }}>
+                          <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} tickFormatter={fmtEixoCaixa}
+                            domain={modoGrafico === 'variacao' ? evolucaoCaixa.domVar : evolucaoCaixa.domSaldo} allowDataOverflow />
+                          <Area dataKey={modoGrafico === 'variacao' ? 'variacao' : 'saldo'} stroke="none" fill="none" isAnimationActive={false} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {/* Gráfico rolável (eixo Y oculto — quem mostra os rótulos é o fixo à esquerda). */}
+                    <div className="overflow-x-auto flex-1">
+                      <div style={{ height: 360, width: evolucaoCaixa.larguraPx || '100%', minWidth: '100%' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={evolucaoCaixa.pontos} margin={{ top: 10, right: 16, left: 4, bottom: 4 }}>
+                      <ComposedChart data={evolucaoCaixa.pontos} margin={{ top: 10, right: 16, left: 0, bottom: evolucaoCaixa.larguraPx ? 24 : 4 }}
+                        style={{ cursor: 'pointer' }}>
+                        <defs>
+                          <linearGradient id="evolFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" stopColor="#10b981" stopOpacity={0.35} />
+                            <stop offset={modoGrafico === 'variacao' ? evolucaoCaixa.offVar : evolucaoCaixa.offSaldo} stopColor="#10b981" stopOpacity={0.06} />
+                            <stop offset={modoGrafico === 'variacao' ? evolucaoCaixa.offVar : evolucaoCaixa.offSaldo} stopColor="#ef4444" stopOpacity={0.06} />
+                            <stop offset="1" stopColor="#ef4444" stopOpacity={0.35} />
+                          </linearGradient>
+                          <linearGradient id="evolStroke" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" stopColor="#059669" />
+                            <stop offset={modoGrafico === 'variacao' ? evolucaoCaixa.offVar : evolucaoCaixa.offSaldo} stopColor="#059669" />
+                            <stop offset={modoGrafico === 'variacao' ? evolucaoCaixa.offVar : evolucaoCaixa.offSaldo} stopColor="#dc2626" />
+                            <stop offset="1" stopColor="#dc2626" />
+                          </linearGradient>
+                        </defs>
+                        {/* Colunas amarelas dos fins de semana (visão Dia) — desenhadas por trás
+                            via hooks do recharts v3 (Customized foi deprecado e não injeta escala). */}
+                        {evolucaoCaixa.granularidade === 'dia' && <BandasFimDeSemana pontos={evolucaoCaixa.pontos} />}
                         <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} tickMargin={8} minTickGap={16} />
-                        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} tickFormatter={fmtEixoCaixa} />
+                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} tickMargin={8}
+                          interval={evolucaoCaixa.larguraPx ? 0 : 'preserveStartEnd'} minTickGap={evolucaoCaixa.larguraPx ? 0 : 16}
+                          angle={evolucaoCaixa.larguraPx ? -40 : 0} textAnchor={evolucaoCaixa.larguraPx ? 'end' : 'middle'}
+                          height={evolucaoCaixa.larguraPx ? 56 : 30} />
+                        <YAxis hide width={0} tickFormatter={fmtEixoCaixa}
+                          domain={modoGrafico === 'variacao' ? evolucaoCaixa.domVar : evolucaoCaixa.domSaldo} allowDataOverflow />
                         <RTooltip content={<TooltipEvol />} />
-                        <Line type="monotone" dataKey="saldo" name="Saldo" stroke="#0d9488" strokeWidth={2} dot={{ r: 2.5 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-                        {evolucaoCaixa.idxMenor > 0 && (
-                          <ReferenceDot x={evolucaoCaixa.pontos[evolucaoCaixa.idxMenor].label} y={evolucaoCaixa.menorSaldo}
-                            r={5} fill="#ef4444" stroke="#fff" strokeWidth={1.5} isFront />
+                        {modoGrafico === 'variacao' && <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="4 4" />}
+                        <Area type="monotone" dataKey={modoGrafico === 'variacao' ? 'variacao' : 'saldo'}
+                          name={modoGrafico === 'variacao' ? 'Variação' : 'Saldo'} baseValue={0}
+                          stroke="url(#evolStroke)" strokeWidth={2} fill="url(#evolFill)"
+                          dot={<DotEvol mode={modoGrafico} />}
+                          activeDot={<DotEvol mode={modoGrafico} active />}
+                          style={{ pointerEvents: 'none' }} isAnimationActive={false} />
+                        {modoGrafico === 'variacao' && (
+                          <Line type="monotone" dataKey="varAcum" name="Variação acumulada"
+                            stroke="#2563eb" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={{ r: 4 }} style={{ pointerEvents: 'none' }} isAnimationActive={false} />
                         )}
-                      </LineChart>
+                        {modoGrafico === 'variacao' && (
+                          <Line type="monotone" dataKey="tendencia" name="Tendência"
+                            stroke="#eab308" strokeWidth={2} strokeDasharray="2 4" dot={false} activeDot={false} style={{ pointerEvents: 'none' }} isAnimationActive={false} />
+                        )}
+                        {/* Áreas de clique (coluna inteira do dia) — por cima de tudo. */}
+                        <ColunasClicaveis pontos={evolucaoCaixa.pontos} onSelect={setModalEvol} />
+                      </ComposedChart>
                     </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Legenda das séries e da coluna de fim de semana. */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 pt-3 text-[11px] text-gray-600">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-block h-2.5 w-4 rounded-sm" style={{ background: 'linear-gradient(90deg,#10b981,#ef4444)' }} />
+                      {modoGrafico === 'variacao' ? 'Variação do período (verde +, vermelho −)' : 'Saldo acumulado (verde +, vermelho −)'}
+                    </span>
+                    {modoGrafico === 'variacao' && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#2563eb" strokeWidth="2" strokeDasharray="6 4" /></svg>
+                        Variação acumulada
+                      </span>
+                    )}
+                    {modoGrafico === 'variacao' && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#eab308" strokeWidth="2" strokeDasharray="2 4" /></svg>
+                        Tendência {evolucaoCaixa.tendenciaDir === 'alta' ? '(alta)' : evolucaoCaixa.tendenciaDir === 'queda' ? '(queda)' : '(estável)'}
+                      </span>
+                    )}
+                    {evolucaoCaixa.granularidade === 'dia' && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: '#fde047', opacity: 0.6 }} />
+                        Fim de semana
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1991,6 +2219,89 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     </div>
                   </div>
                 </div>
+
+                {giroSemanal && (
+                  <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                        <CalendarRange className="h-4 w-4 text-indigo-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Giro semanal (segunda a segunda)</p>
+                        <p className="text-[11px] text-gray-400">{giroSemanal.nSemanas} semana(s) no período · padrão por dia e habitualidade</p>
+                      </div>
+                    </div>
+
+                    {/* Conclusão de habitualidade */}
+                    <div className="px-5 py-3 bg-indigo-50/40 border-b border-indigo-100/60 text-[12.5px] text-gray-700 leading-relaxed">
+                      As <strong className="text-red-700">saídas</strong> se concentram na <strong>{giroSemanal.diaMaiorS.nome}</strong>{' '}
+                      (~{formatCurrency(giroSemanal.diaMaiorS.mediaS)}/semana), padrão que se repetiu em <strong>{Math.round(giroSemanal.habitS * 100)}%</strong> das semanas.
+                      {' '}As <strong className="text-emerald-700">entradas</strong> se concentram na <strong>{giroSemanal.diaMaiorE.nome}</strong>{' '}
+                      (~{formatCurrency(giroSemanal.diaMaiorE.mediaE)}/semana), em <strong>{Math.round(giroSemanal.habitE * 100)}%</strong> das semanas.
+                      {' '}{(giroSemanal.habitS >= 0.6 || giroSemanal.habitE >= 0.6)
+                        ? 'Há uma habitualidade semanal clara.'
+                        : 'O padrão varia entre as semanas — habitualidade fraca.'}
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+                      {/* Perfil médio por dia da semana */}
+                      <div className="p-4 sm:p-5">
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Padrão por dia da semana (média/semana)</p>
+                        <div className="space-y-2.5">
+                          {giroSemanal.perfil.map((p) => {
+                            const destaqueS = p.nome === giroSemanal.diaMaiorS.nome;
+                            const destaqueE = p.nome === giroSemanal.diaMaiorE.nome;
+                            return (
+                              <div key={p.nome} className="flex items-center gap-2.5">
+                                <span className={`w-16 text-[11.5px] flex-shrink-0 ${destaqueS || destaqueE ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>{p.nome}</span>
+                                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                                  <div className="h-2 rounded-sm bg-emerald-400" style={{ width: `${Math.max(p.mediaE > 0 ? 3 : 0, (p.mediaE / giroSemanal.maxMedia) * 100)}%` }} />
+                                  <div className="h-2 rounded-sm bg-red-400" style={{ width: `${Math.max(p.mediaS > 0 ? 3 : 0, (p.mediaS / giroSemanal.maxMedia) * 100)}%` }} />
+                                </div>
+                                <span className="text-[10px] font-mono w-[120px] text-right flex-shrink-0 tabular-nums">
+                                  <span className="text-emerald-600">+{fmtEixoCaixa(p.mediaE)}</span>
+                                  <span className="text-gray-300"> / </span>
+                                  <span className="text-red-600">-{fmtEixoCaixa(p.mediaS)}</span>
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex items-center gap-4 mt-3 text-[10px] text-gray-400">
+                          <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-emerald-400" />entradas</span>
+                          <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-red-400" />saídas</span>
+                        </div>
+                      </div>
+
+                      {/* Semanas do período */}
+                      <div className="p-4 sm:p-5">
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">Semanas do período</p>
+                        <div className="overflow-y-auto max-h-[280px] pr-3">
+                          <table className="w-full text-[12px]">
+                            <thead className="text-gray-400 text-[10px] uppercase tracking-wider sticky top-0 bg-white">
+                              <tr>
+                                <th className="text-left py-1.5 font-medium">Semana</th>
+                                <th className="text-right py-1.5 font-medium">Entradas</th>
+                                <th className="text-right py-1.5 font-medium">Saídas</th>
+                                <th className="text-right py-1.5 pr-1 font-medium">Variação</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {giroSemanal.lista.map((w) => (
+                                <tr key={w.ini} className="hover:bg-gray-50/50">
+                                  <td className="py-1.5 text-gray-600 whitespace-nowrap">{formatarDataBr(w.ini).slice(0, 5)}–{formatarDataBr(w.fim).slice(0, 5)}</td>
+                                  <td className="py-1.5 text-right font-mono text-emerald-600 tabular-nums">+{fmtEixoCaixa(w.entradas)}</td>
+                                  <td className="py-1.5 text-right font-mono text-red-600 tabular-nums">-{fmtEixoCaixa(w.saidas)}</td>
+                                  <td className={`py-1.5 pr-1 text-right font-mono tabular-nums font-semibold ${w.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{w.variacao >= 0 ? '+' : ''}{fmtEixoCaixa(w.variacao)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </motion.div>
@@ -2424,6 +2735,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           </motion.div>
         )}
       </AnimatePresence>
+
+      {modalEvol && <ModalDetalheEvol ponto={modalEvol} onClose={() => setModalEvol(null)} />}
     </div>
   );
 }
@@ -2915,8 +3228,138 @@ function TooltipEvol({ active, payload }) {
           <p className={p.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}>
             Variação: <span className="font-mono font-semibold tabular-nums">{p.variacao >= 0 ? '+' : ''}{formatCurrency(p.variacao)}</span>
           </p>
+          {p.varAcum != null && (
+            <p className="text-blue-600 mt-0.5 pt-0.5 border-t border-gray-100">
+              Acumulado: <span className="font-mono font-semibold tabular-nums">{p.varAcum >= 0 ? '+' : ''}{formatCurrency(p.varAcum)}</span>
+            </p>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+// Colunas amarelas de fim de semana desenhadas ATRÁS do gráfico. Usa os hooks
+// do recharts v3 (useXAxisScale/usePlotArea) pra pegar a escala e a área de
+// plotagem — o antigo <Customized> não injeta mais essas infos no v3.
+function BandasFimDeSemana({ pontos }) {
+  const scale = useXAxisScale(0);
+  const plot = usePlotArea();
+  if (!scale || !plot) return null;
+  const cxDe = (lbl) => { const v = scale(lbl); return typeof v === 'number' && !Number.isNaN(v) ? v : null; };
+  let step = plot.width;
+  if (pontos.length > 1) {
+    const a = cxDe(pontos[0].label), b = cxDe(pontos[1].label);
+    if (a != null && b != null && Math.abs(b - a) > 0) step = Math.abs(b - a);
+  }
+  return (
+    <Layer className="recharts-fds">
+      {pontos.map((p, i) => {
+        if (!p.fds) return null;
+        const cx = cxDe(p.label);
+        if (cx == null) return null;
+        return <rect key={i} x={cx - step / 2} y={plot.y} width={step} height={plot.height} fill="#fde047" fillOpacity={0.3} />;
+      })}
+    </Layer>
+  );
+}
+
+// Áreas de clique de coluna inteira: um retângulo transparente de altura total
+// por dia/bucket. Clicar em qualquer ponto da coluna abre o modal do dia — não
+// precisa acertar o marcador. Fica por cima das séries (mas deixa o tooltip
+// funcionar, pois os eventos de mouse sobem pro container do gráfico).
+function ColunasClicaveis({ pontos, onSelect }) {
+  const scale = useXAxisScale(0);
+  const plot = usePlotArea();
+  if (!scale || !plot) return null;
+  const cxDe = (lbl) => { const v = scale(lbl); return typeof v === 'number' && !Number.isNaN(v) ? v : null; };
+  let step = plot.width;
+  if (pontos.length > 1) {
+    const a = cxDe(pontos[0].label), b = cxDe(pontos[1].label);
+    if (a != null && b != null && Math.abs(b - a) > 0) step = Math.abs(b - a);
+  }
+  return (
+    <Layer className="recharts-col-click">
+      {pontos.map((p, i) => {
+        if (p.inicio || !p.movimentos?.length) return null;
+        const cx = cxDe(p.label);
+        if (cx == null) return null;
+        return (
+          <rect key={i} x={cx - step / 2} y={plot.y} width={step} height={plot.height}
+            fill="transparent" style={{ cursor: 'pointer' }}
+            onClick={(e) => { e.stopPropagation(); onSelect(p); }} />
+        );
+      })}
+    </Layer>
+  );
+}
+
+// Marcador colorido do gráfico de evolução: verde se o valor do ponto é >= 0,
+// vermelho se < 0. `mode` decide qual série lê (saldo x variação).
+function DotEvol({ cx, cy, payload, mode, active }) {
+  const d = payload?.payload ?? payload;
+  if (cx == null || cy == null || !d || d.inicio) return null;
+  const val = mode === 'variacao' ? d.variacao : d.saldo;
+  const fill = val >= 0 ? '#059669' : '#dc2626';
+  return <circle cx={cx} cy={cy} r={active ? 5.5 : 3.4} fill={fill} stroke="#fff" strokeWidth={active ? 1.5 : 1} pointerEvents="none" />;
+}
+
+// Modal de detalhamento de um ponto: entradas/saídas separadas por CONTA de fluxo.
+function ModalDetalheEvol({ ponto, onClose }) {
+  const porConta = {};
+  (ponto.movimentos || []).forEach(m => {
+    const k = m.contaNome || '—';
+    if (!porConta[k]) porConta[k] = { nome: k, entradas: 0, saidas: 0, itens: [] };
+    porConta[k].entradas += m.entrada;
+    porConta[k].saidas += m.saida;
+    porConta[k].itens.push(m);
+  });
+  const contas = Object.values(porConta)
+    .map(c => ({ ...c, itens: c.itens.slice().sort((a, b) => (a.data || '').localeCompare(b.data || '')) }))
+    .sort((a, b) => (b.entradas + b.saidas) - (a.entradas + a.saidas));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 no-print" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900">Detalhamento · {ponto.label}</p>
+            <p className="text-[11.5px] text-gray-500">
+              Entradas <span className="text-emerald-600 font-medium">+{formatCurrency(ponto.entradas)}</span>
+              {' · '}Saídas <span className="text-red-600 font-medium">-{formatCurrency(ponto.saidas)}</span>
+              {' · '}Variação <span className={`font-medium ${ponto.variacao >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{ponto.variacao >= 0 ? '+' : ''}{formatCurrency(ponto.variacao)}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 flex-shrink-0"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="overflow-y-auto p-4 space-y-3">
+          {contas.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">Sem lançamentos neste ponto.</p>
+          ) : contas.map((c, i) => (
+            <div key={i} className="rounded-xl border border-gray-200/70 overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-semibold text-gray-800 truncate">{c.nome}</span>
+                <span className="text-[11.5px] font-mono tabular-nums flex-shrink-0">
+                  <span className="text-emerald-600">+{formatCurrency(c.entradas)}</span>
+                  <span className="text-gray-300 mx-1">·</span>
+                  <span className="text-red-600">-{formatCurrency(c.saidas)}</span>
+                </span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {c.itens.map((it, j) => (
+                  <div key={j} className="px-3 py-1.5 flex items-center gap-2 text-[12px]">
+                    <span className="text-gray-400 font-mono text-[10.5px] w-[42px] flex-shrink-0">{formatarDataBr(it.data).slice(0, 5)}</span>
+                    <span className="text-gray-600 truncate flex-1">{it.descricao || '—'}</span>
+                    <span className={`font-mono tabular-nums flex-shrink-0 ${it.entrada > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {it.entrada > 0 ? `+${formatCurrency(it.entrada)}` : `-${formatCurrency(it.saida)}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
