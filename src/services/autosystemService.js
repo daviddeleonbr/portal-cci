@@ -397,7 +397,6 @@ export async function salvarContasCaixaBanco(redeId, contas) {
       as_rede_id: redeId,
       codigo: String(c.codigo),
       nome: c.nome || null,
-      aplicacao_financeira: !!c.aplicacao_financeira,
     }));
 
   const { error: delErr } = await supabase
@@ -410,6 +409,48 @@ export async function salvarContasCaixaBanco(redeId, contas) {
 
   const { error: insErr } = await supabase
     .from('as_rede_conta_caixa_banco')
+    .insert(validas);
+  if (insErr) throw insErr;
+}
+
+// ─── Contas de "aplicação financeira" (contrapartidas) ────────
+// São as contas do OUTRO lado do lançamento caixa/banco (a contrapartida
+// classificada na máscara). Na Evolução do Caixa, o usuário pode excluir da
+// análise os lançamentos cuja contrapartida é uma dessas contas (ex.: uma
+// transferência para aplicação de R$ 1.000.000 some do fluxo).
+
+export async function listarContasAplicacaoRede(redeId) {
+  if (!redeId) return [];
+  const { data, error } = await supabase
+    .from('as_rede_conta_aplicacao')
+    .select('*')
+    .eq('as_rede_id', redeId)
+    .order('codigo', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// Replace-all: apaga as contas de aplicação atuais da rede e insere a nova lista.
+export async function salvarContasAplicacao(redeId, contas) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const validas = (contas || [])
+    .filter(c => c && c.codigo)
+    .map(c => ({
+      as_rede_id: redeId,
+      codigo: String(c.codigo),
+      nome: c.nome || null,
+    }));
+
+  const { error: delErr } = await supabase
+    .from('as_rede_conta_aplicacao')
+    .delete()
+    .eq('as_rede_id', redeId);
+  if (delErr) throw delErr;
+
+  if (validas.length === 0) return;
+
+  const { error: insErr } = await supabase
+    .from('as_rede_conta_aplicacao')
     .insert(validas);
   if (insErr) throw insErr;
 }

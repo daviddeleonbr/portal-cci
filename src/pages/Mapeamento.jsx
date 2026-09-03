@@ -4,7 +4,7 @@ import {
   Plus, Trash2, ChevronRight, ChevronDown, Layers, Key,
   Loader2, AlertCircle, Search, Link2, Unlink, Building2,
   ArrowLeft, RefreshCw, FolderOpen, Check, GripVertical,
-  Zap, Pencil, FileBarChart, Wallet, Filter,
+  Zap, Pencil, FileBarChart, Wallet, Filter, Landmark,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
@@ -1030,6 +1030,8 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
   const [mapeamentoVendas, setMapeamentoVendas] = useState([]);
   // Contas caixa/banco da rede (só usado quando modo Fluxo)
   const [contasCaixaBanco, setContasCaixaBanco] = useState([]);
+  // Contas de "aplicação financeira" (contrapartidas a ignorar na Evolução)
+  const [contasAplicacao, setContasAplicacao] = useState([]);
   const [loadingApi, setLoadingApi] = useState(false);
   const [loadingMascaras, setLoadingMascaras] = useState(true);
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
@@ -1062,12 +1064,14 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
   const carregarPlanoContas = useCallback(async () => {
     try {
       setLoadingApi(true);
-      const [plano, caixaBanco] = await Promise.all([
+      const [plano, caixaBanco, aplicacao] = await Promise.all([
         autosystemService.buscarContasAutosystem(rede.id),
         autosystemService.listarContasCaixaBancoRede(rede.id).catch(() => []),
+        autosystemService.listarContasAplicacaoRede(rede.id).catch(() => []),
       ]);
       setPlanoContas(plano || []);
       setContasCaixaBanco(caixaBanco || []);
+      setContasAplicacao(aplicacao || []);
       // Auto-expande primeiro nível (1 segmento na hierarquia do código)
       const raizes = (plano || []).filter(c => String(c.codigo || '').split('.').length === 1);
       setPlanoExpanded(new Set(raizes.map(r => String(r.codigo))));
@@ -1203,24 +1207,24 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
     const jaIncluida = contasCaixaBanco.some(c => String(c.codigo) === codigo);
     const proxima = jaIncluida
       ? contasCaixaBanco.filter(c => String(c.codigo) !== codigo)
-      : [...contasCaixaBanco, { codigo, nome: conta.nome || '', aplicacao_financeira: false }];
+      : [...contasCaixaBanco, { codigo, nome: conta.nome || '' }];
     try {
       await autosystemService.salvarContasCaixaBanco(rede.id, proxima);
       setContasCaixaBanco(proxima);
     } catch (err) { showToast('error', err.message); }
   };
 
-  // Marca/desmarca uma conta caixa/banco como "aplicação financeira" (só faz
-  // sentido em contas já marcadas como caixa/banco).
-  const toggleAplicacaoFinanceira = async (conta) => {
+  // Marca/desmarca uma conta do plano como "aplicação financeira" (contrapartida
+  // a ignorar na Evolução do Caixa). Independe de ser caixa/banco.
+  const toggleContaAplicacao = async (conta) => {
     const codigo = String(conta.codigo);
-    if (!contasCaixaBanco.some(c => String(c.codigo) === codigo)) return;
-    const proxima = contasCaixaBanco.map(c =>
-      String(c.codigo) === codigo ? { ...c, aplicacao_financeira: !c.aplicacao_financeira } : c
-    );
+    const jaIncluida = contasAplicacao.some(c => String(c.codigo) === codigo);
+    const proxima = jaIncluida
+      ? contasAplicacao.filter(c => String(c.codigo) !== codigo)
+      : [...contasAplicacao, { codigo, nome: conta.nome || '' }];
     try {
-      await autosystemService.salvarContasCaixaBanco(rede.id, proxima);
-      setContasCaixaBanco(proxima);
+      await autosystemService.salvarContasAplicacao(rede.id, proxima);
+      setContasAplicacao(proxima);
     } catch (err) { showToast('error', err.message); }
   };
 
@@ -1386,7 +1390,15 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
               planoContas={planoContas}
               contasCaixaBanco={contasCaixaBanco}
               onToggle={toggleContaCaixaBanco}
-              onToggleAplicacao={toggleAplicacaoFinanceira}
+            />
+          )}
+
+          {/* Contas de Aplicação Financeira — contrapartidas a ignorar na Evolução */}
+          {isFluxo && (
+            <ContasAplicacaoSection
+              planoContas={planoContas}
+              contasAplicacao={contasAplicacao}
+              onToggle={toggleContaAplicacao}
             />
           )}
 
@@ -2096,16 +2108,12 @@ function MapeamentoVendasSection({ grupos, mapeamentoVendas, onSave }) {
 // Marca quais contas do plano Autosystem são caixa/banco.
 // O relatório de fluxo só considera lançamentos onde uma delas
 // aparece em debito ou credito; a contraparte é classificada na máscara.
-function ContasCaixaBancoSection({ planoContas, contasCaixaBanco, onToggle, onToggleAplicacao }) {
+function ContasCaixaBancoSection({ planoContas, contasCaixaBanco, onToggle }) {
   const [expanded, setExpanded] = useState(false);
   const [search, setSearch] = useState('');
 
   const selecionadasSet = useMemo(
     () => new Set((contasCaixaBanco || []).map(c => String(c.codigo))),
-    [contasCaixaBanco],
-  );
-  const aplicacaoSet = useMemo(
-    () => new Set((contasCaixaBanco || []).filter(c => c.aplicacao_financeira).map(c => String(c.codigo))),
     [contasCaixaBanco],
   );
 
@@ -2134,7 +2142,6 @@ function ContasCaixaBancoSection({ planoContas, contasCaixaBanco, onToggle, onTo
             <p className="text-sm font-semibold text-gray-900">Contas Caixa / Banco</p>
             <p className="text-[11px] text-gray-400">
               {selecionadasSet.size} conta(s) marcada(s)
-              {aplicacaoSet.size > 0 ? ` · ${aplicacaoSet.size} aplicação(ões)` : ''}
               {' · '}
               base do fluxo de caixa (a contraparte do lançamento é classificada na máscara)
             </p>
@@ -2177,7 +2184,6 @@ function ContasCaixaBancoSection({ planoContas, contasCaixaBanco, onToggle, onTo
                 <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-100">
                   {planoFiltrado.map(c => {
                     const marcada = selecionadasSet.has(c.codigo);
-                    const ehAplicacao = aplicacaoSet.has(c.codigo);
                     return (
                       <label key={c.codigo}
                         className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 ${
@@ -2190,19 +2196,7 @@ function ContasCaixaBancoSection({ planoContas, contasCaixaBanco, onToggle, onTo
                         <span className="font-mono text-[10px] text-gray-500 bg-white border border-gray-200 rounded px-1.5 py-0.5 flex-shrink-0">
                           {c.codigo}
                         </span>
-                        <span className="text-[12px] text-gray-700 truncate flex-1">{c.nome}</span>
-                        {marcada && (
-                          <button type="button"
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleAplicacao(c); }}
-                            title="Marcar como aplicação financeira (poderá ser excluída da Evolução do Caixa)"
-                            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium flex-shrink-0 transition-colors ${
-                              ehAplicacao
-                                ? 'border-amber-300 bg-amber-100 text-amber-800'
-                                : 'border-gray-200 bg-white text-gray-400 hover:text-gray-600 hover:border-gray-300'
-                            }`}>
-                            {ehAplicacao ? '✓ ' : ''}Aplicação
-                          </button>
-                        )}
+                        <span className="text-[12px] text-gray-700 truncate">{c.nome}</span>
                       </label>
                     );
                   })}
@@ -2218,9 +2212,110 @@ function ContasCaixaBancoSection({ planoContas, contasCaixaBanco, onToggle, onTo
                 Quando uma conta marcada aparece em <strong>conta_debitar</strong> ou
                 {' '}<strong>conta_creditar</strong> de um lançamento, a outra conta (contraparte)
                 {' '}é classificada na máscara de fluxo. Transferências entre duas contas
-                {' '}caixa/banco são ignoradas. Marque <strong>Aplicação</strong> nas contas de
-                {' '}aplicação financeira — na <strong>Evolução do Caixa</strong> elas podem ser
-                {' '}excluídas da análise do fluxo.
+                {' '}caixa/banco são ignoradas.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Contas de Aplicação Financeira (contrapartidas a ignorar)
+// ═══════════════════════════════════════════════════════════
+// Marca contas do plano que são aplicação financeira. Essas contas aparecem
+// como CONTRAPARTIDA de lançamentos caixa/banco (ex.: transferência p/ aplicação).
+// Na Evolução do Caixa o usuário pode excluir da análise os lançamentos cuja
+// contrapartida é uma dessas contas.
+function ContasAplicacaoSection({ planoContas, contasAplicacao, onToggle }) {
+  const [expanded, setExpanded] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const selecionadasSet = useMemo(
+    () => new Set((contasAplicacao || []).map(c => String(c.codigo))),
+    [contasAplicacao],
+  );
+
+  const planoFiltrado = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const lista = (planoContas || []).map(c => ({ codigo: String(c.codigo), nome: c.nome || '—' }));
+    if (!q) return lista;
+    return lista.filter(c => c.codigo.toLowerCase().includes(q) || c.nome.toLowerCase().includes(q));
+  }, [planoContas, search]);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+      className="bg-white rounded-xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <button onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50/60 transition-colors">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+            <Landmark className="h-4 w-4 text-white" />
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-semibold text-gray-900">Contas de Aplicação Financeira</p>
+            <p className="text-[11px] text-gray-400">
+              {selecionadasSet.size} conta(s) marcada(s)
+              {' · '}
+              contrapartidas que podem ser excluídas da Evolução do Caixa
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {selecionadasSet.size > 0 && (
+            <span className="text-[10px] font-medium text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 border border-amber-200">
+              {selecionadasSet.size}
+            </span>
+          )}
+          <motion.div animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.15 }}>
+            <ChevronDown className="h-4 w-4 text-gray-400" />
+          </motion.div>
+        </div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+            <div className="border-t border-gray-100 p-4 space-y-3">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Filtrar por código ou nome..."
+                  className="w-full h-8 rounded-lg border border-gray-200 pl-8 pr-3 text-xs focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" />
+              </div>
+
+              {planoContas.length === 0 ? (
+                <p className="text-xs text-gray-400 py-3 text-center">Plano de contas ainda não carregado.</p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-100">
+                  {planoFiltrado.map(c => {
+                    const marcada = selecionadasSet.has(c.codigo);
+                    return (
+                      <label key={c.codigo}
+                        className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 ${marcada ? 'bg-amber-50/40' : ''}`}>
+                        <input type="checkbox" checked={marcada} onChange={() => onToggle(c)}
+                          className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-400" />
+                        <span className="font-mono text-[10px] text-gray-500 bg-white border border-gray-200 rounded px-1.5 py-0.5 flex-shrink-0">
+                          {c.codigo}
+                        </span>
+                        <span className="text-[12px] text-gray-700 truncate">{c.nome}</span>
+                      </label>
+                    );
+                  })}
+                  {planoFiltrado.length === 0 && (
+                    <p className="text-xs text-gray-400 py-3 text-center">Nenhuma conta encontrada.</p>
+                  )}
+                </div>
+              )}
+
+              <p className="text-[11px] text-gray-400 pt-2 border-t border-gray-100">
+                Marque as contas de aplicação financeira. No relatório de Fluxo de Caixa, na aba
+                {' '}<strong>Evolução</strong>, o botão <strong>&quot;Aplicações&quot;</strong> permite excluir da análise
+                {' '}os lançamentos cuja contrapartida é uma dessas contas (ex.: uma transferência para
+                {' '}aplicação some do fluxo), para ver o caixa operacional sem esses aportes/resgates.
               </p>
             </div>
           </motion.div>

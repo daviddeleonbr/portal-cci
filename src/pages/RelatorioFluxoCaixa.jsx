@@ -198,7 +198,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               }));
               setContasClassificadas(classif);
               setContasMeta(ctas);
-              setContasAplicacao(new Set((cbList || []).filter(c => c.aplicacao_financeira).map(c => String(c.codigo))));
+              const aplList = await autosystemService
+                .listarContasAplicacaoRede(redeContexto.asRedeId)
+                .catch(() => []);
+              setContasAplicacao(new Set((aplList || []).map(a => String(a.codigo))));
             } else {
               const chavesApi = await mapService.listarChavesApi();
               const chave = chavesApi.find(ch => ch.id === redeContexto.chaveApiId);
@@ -235,7 +238,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               }));
               setContasClassificadas(classif);
               setContasMeta(ctas);
-              setContasAplicacao(new Set((cbList || []).filter(cb => cb.aplicacao_financeira).map(cb => String(cb.codigo))));
+              const aplList = await autosystemService
+                .listarContasAplicacaoRede(c.as_rede_id)
+                .catch(() => []);
+              setContasAplicacao(new Set((aplList || []).map(a => String(a.codigo))));
             } catch (_) { setContasClassificadas([]); setContasMeta([]); }
           } else if (c?.chave_api_id) {
             // Carrega classificacao das contas + catalogo CONTA da rede
@@ -1293,18 +1299,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const evolucaoCaixa = useMemo(() => {
     if (!dadosCarregados || !meses.length) return null;
 
-    // Contas de aplicação financeira a EXCLUIR da análise (quando o toggle está off).
+    // Contas de aplicação financeira a EXCLUIR (quando o toggle está off). O filtro
+    // é pela CONTRAPARTIDA do lançamento — planoContaGerencialCodigo (contraparte
+    // resolvida) ou _contraparteBruta (crua, ex.: transferência p/ aplicação).
     const excluirApl = !incluirAplicacoes && contasAplicacao.size > 0 ? contasAplicacao : null;
+    const ehAplicacao = (m) => !!excluirApl && (
+      excluirApl.has(String(m.planoContaGerencialCodigo)) || excluirApl.has(String(m._contraparteBruta))
+    );
 
-    const saldoInicialPeriodoBruto = modoRede
+    const saldoInicialPeriodo = modoRede
       ? (resultadoPorEmpresa?.totalSaldoInicial ?? 0)
       : composicaoSaldo.reduce((s, c) => s + (Number(c.saldoInicial) || 0), 0);
-    // Ao excluir aplicações, tira também o saldo de abertura delas (composicaoSaldo
-    // tem o saldo inicial por conta) pra o saldo do gráfico não ficar deslocado.
-    const saldoAplicacao = excluirApl
-      ? composicaoSaldo.reduce((s, c) => s + (excluirApl.has(String(c.contaCodigo)) ? (Number(c.saldoInicial) || 0) : 0), 0)
-      : 0;
-    const saldoInicialPeriodo = saldoInicialPeriodoBruto - saldoAplicacao;
 
     // Em rede, conta só movimentos de empresas da seleção (igual à "Variação por
     // empresa"), pra o saldo final bater com aquela tabela.
@@ -1321,7 +1326,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       if (tc !== 'bancaria' && tc !== 'caixa') return;
       if (!tiposContaAtivos.has(tc)) return;
       if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
-      if (excluirApl && excluirApl.has(cod)) return;
+      if (ehAplicacao(m)) return;
       if (empresasValidas && !empresasValidas.has(Number(m.empresaCodigo))) return;
       const abs = Math.abs(Number(m.valor || 0));
       movsAll.push({
