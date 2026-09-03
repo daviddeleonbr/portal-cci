@@ -1522,8 +1522,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Recebimentos de clientes × Pagamentos a fornecedores → capacidade de gerar
   // caixa pra pagar fornecedores. Grupos detectados pelo nome (ou escolhidos).
   const capacidadeCaixa = useMemo(() => {
-    // Apenas Autosystem por enquanto.
-    if (!(redeContexto?.asRedeId || cliente?.as_rede_id)) return null;
     if (nosFluxo.length === 0) return null;
     const achar = (re) => nosFluxo.find(n => re.test(n.nome || ''));
     const recNo = nosFluxo.find(n => n.id === grpRecebId) || achar(/client/i) || achar(/receb/i);
@@ -1541,7 +1539,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const cobertura = totalPag > 0 ? totalRec / totalPag : null;
     const maxBar = Math.max(1, ...porMes.map(x => Math.max(x.rec, x.pag)));
     return { porMes, totalRec, totalPag, saldo, cobertura, maxBar, recNome: recNo?.nome, fornNome: fornNo?.nome, recId: recNo?.id, fornId: fornNo?.id };
-  }, [nosFluxo, grpRecebId, grpFornId, meses, redeContexto?.asRedeId, cliente?.as_rede_id]);
+  }, [nosFluxo, grpRecebId, grpFornId, meses]);
 
   // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
   // quando quiser auditar itens fora da mascara.
