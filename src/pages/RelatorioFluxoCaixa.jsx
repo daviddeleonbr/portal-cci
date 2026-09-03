@@ -3335,29 +3335,35 @@ function ModalDetalheEvol({ ponto, onClose }) {
         <div className="overflow-y-auto p-4 space-y-3">
           {contas.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">Sem lançamentos neste ponto.</p>
-          ) : contas.map((c, i) => (
-            <div key={i} className="rounded-xl border border-gray-200/70 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 flex items-center justify-between gap-2">
-                <span className="text-[12.5px] font-semibold text-gray-800 truncate">{c.nome}</span>
-                <span className="text-[11.5px] font-mono tabular-nums flex-shrink-0">
-                  <span className="text-emerald-600">+{formatCurrency(c.entradas)}</span>
-                  <span className="text-gray-300 mx-1">·</span>
-                  <span className="text-red-600">-{formatCurrency(c.saidas)}</span>
-                </span>
+          ) : (
+            <>
+              {/* Cabeçalho de colunas — alinha com as colunas Entradas/Saídas das linhas. */}
+              <div className="flex items-center gap-2 px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                <span className="flex-1">Lançamento</span>
+                <span className="w-[104px] text-right flex-shrink-0">Entradas</span>
+                <span className="w-[104px] text-right flex-shrink-0">Saídas</span>
               </div>
-              <div className="divide-y divide-gray-50">
-                {c.itens.map((it, j) => (
-                  <div key={j} className="px-3 py-1.5 flex items-center gap-2 text-[12px]">
-                    <span className="text-gray-400 font-mono text-[10.5px] w-[42px] flex-shrink-0">{formatarDataBr(it.data).slice(0, 5)}</span>
-                    <span className="text-gray-600 truncate flex-1">{it.descricao || '—'}</span>
-                    <span className={`font-mono tabular-nums flex-shrink-0 ${it.entrada > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {it.entrada > 0 ? `+${formatCurrency(it.entrada)}` : `-${formatCurrency(it.saida)}`}
-                    </span>
+              {contas.map((c, i) => (
+                <div key={i} className="rounded-xl border border-gray-200/70 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 flex items-center gap-2">
+                    <span className="text-[12.5px] font-semibold text-gray-800 truncate flex-1">{c.nome}</span>
+                    <span className="w-[104px] text-right flex-shrink-0 text-[11.5px] font-mono tabular-nums text-emerald-600">+{formatCurrency(c.entradas)}</span>
+                    <span className="w-[104px] text-right flex-shrink-0 text-[11.5px] font-mono tabular-nums text-red-600">-{formatCurrency(c.saidas)}</span>
                   </div>
-                ))}
-              </div>
-            </div>
-          ))}
+                  <div className="divide-y divide-gray-50">
+                    {c.itens.map((it, j) => (
+                      <div key={j} className="px-3 py-1.5 flex items-center gap-2 text-[12px]">
+                        <span className="text-gray-400 font-mono text-[10.5px] w-[42px] flex-shrink-0">{formatarDataBr(it.data).slice(0, 5)}</span>
+                        <span className="text-gray-600 truncate flex-1">{it.descricao || '—'}</span>
+                        <span className="w-[104px] text-right flex-shrink-0 font-mono tabular-nums text-emerald-600">{it.entrada > 0 ? `+${formatCurrency(it.entrada)}` : ''}</span>
+                        <span className="w-[104px] text-right flex-shrink-0 font-mono tabular-nums text-red-600">{it.saida > 0 ? `-${formatCurrency(it.saida)}` : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>
