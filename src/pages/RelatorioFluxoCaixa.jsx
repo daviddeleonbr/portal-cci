@@ -146,6 +146,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [grpFornId, setGrpFornId] = useState(null);
   // Meses expandidos na Capacidade (mostra como a sobra foi consumida).
   const [capExpMes, setCapExpMes] = useState(() => new Set());
+  // Grupos expandidos dentro de cada mês (chave `${mesKey}:${grupoId}`) — drill até nível 3.
+  const [capExpGrupo, setCapExpGrupo] = useState(() => new Set());
 
   // ─── Meses ────────────────────────────────────────────────
   const meses = useMemo(() => {
@@ -1540,17 +1542,27 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const saldo = totalRec - totalPag;
     const cobertura = totalPag > 0 ? totalRec / totalPag : null;
     const maxBar = Math.max(1, ...porMes.map(x => Math.max(x.rec, x.pag)));
-    // Demais grupos de topo (exceto clientes/fornecedores) — como a sobra do mês
-    // foi consumida. Cada mês expande pra mostrar esses subgrupos e o resultado.
-    const outrosNos = fluxoTree.filter(n => n.id !== recNo?.id && n.id !== fornNo?.id);
+    // Como a sobra do mês foi consumida pelos DEMAIS grupos — árvore até o nível 3,
+    // em sequência de grupo (1, 2, 3…). Os grupos que contêm clientes/fornecedores
+    // têm esses valores DESCONTADOS (senão a sobra seria contada duas vezes), então
+    // o "Resultado do mês" bate com a variação real de caixa.
+    const contem = (node, id) => !!id && (node.id === id || (node.children || []).some(ch => contem(ch, id)));
+    const buildOutro = (node, key, nivel) => {
+      if (node.id === recNo?.id || node.id === fornNo?.id) return null; // podado (é clientes/fornecedores)
+      const recV = recNo && contem(node, recNo.id) ? Number(recNo.valoresPorMes[key] || 0) : 0;
+      const fornV = fornNo && contem(node, fornNo.id) ? Number(fornNo.valoresPorMes[key] || 0) : 0;
+      const valor = Number(node.valoresPorMes[key] || 0) - recV - fornV;
+      const children = nivel < 3
+        ? (node.children || []).map(ch => buildOutro(ch, key, nivel + 1)).filter(Boolean).sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+        : [];
+      if (Math.abs(valor) < 0.005 && children.length === 0) return null;
+      return { id: node.id, nome: node.nome, ordem: node.ordem, valor, children };
+    };
     porMes.forEach(row => {
-      const outros = outrosNos
-        .map(n => ({ id: n.id, nome: n.nome, valor: Number(n.valoresPorMes[row.key] || 0) }))
-        .filter(o => Math.abs(o.valor) > 0.005)
-        .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
-      const consumoOutros = outros.reduce((s, o) => s + o.valor, 0);
-      row.outros = outros;
-      row.resultado = row.saldo + consumoOutros; // sobra + demais grupos = variação do mês
+      const arvore = fluxoTree.map(n => buildOutro(n, row.key, 1)).filter(Boolean).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+      const consumoOutros = arvore.reduce((s, o) => s + o.valor, 0);
+      row.outros = arvore;
+      row.resultado = row.saldo + consumoOutros; // sobra + demais grupos = variação real do mês
     });
 
     return { porMes, totalRec, totalPag, saldo, cobertura, maxBar, recNome: recNo?.nome, fornNome: fornNo?.nome, recId: recNo?.id, fornId: fornNo?.id };
@@ -2485,12 +2497,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                                 <p className="text-[10px] uppercase tracking-wider text-gray-400 pt-0.5">Consumo pelos demais grupos</p>
                                 {mrow.outros.length === 0 ? (
                                   <p className="text-[11px] text-gray-400 pl-2">Nenhum outro grupo com movimento neste mês.</p>
-                                ) : mrow.outros.map(o => (
-                                  <div key={o.id} className="flex items-center justify-between text-[11.5px] pl-2">
-                                    <span className="text-gray-600 truncate pr-2">{o.nome}</span>
-                                    <span className={`font-mono tabular-nums flex-shrink-0 ${o.valor >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{o.valor >= 0 ? '+' : ''}{formatCurrency(o.valor)}</span>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {mrow.outros.map(o => (
+                                      <GrupoConsumo key={o.id} node={o} mesKey={mrow.key} nivel={0}
+                                        expandidos={capExpGrupo} onToggle={(k) => setCapExpGrupo(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; })} />
+                                    ))}
                                   </div>
-                                ))}
+                                )}
                                 <div className="flex items-center justify-between text-[12px] pt-1.5 mt-1 border-t border-gray-200">
                                   <span className="font-semibold text-gray-700">Resultado do mês (variação de caixa)</span>
                                   <span className={`font-mono tabular-nums font-semibold ${mrow.resultado >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{mrow.resultado >= 0 ? '+' : ''}{formatCurrency(mrow.resultado)}</span>
@@ -3389,6 +3403,37 @@ function MultiSelectContas({ contas, selecionadas, onChange, open, setOpen }) {
   );
 }
 
+
+// Linha (recursiva) de um grupo no consumo da sobra — drill até o nível 3.
+function GrupoConsumo({ node, mesKey, nivel, expandidos, onToggle }) {
+  const temFilhos = node.children && node.children.length > 0;
+  const chave = `${mesKey}:${node.id}`;
+  const aberto = expandidos.has(chave);
+  return (
+    <div>
+      <div className="flex items-center justify-between text-[11.5px]" style={{ paddingLeft: 8 + nivel * 16 }}>
+        <span className="flex items-center gap-1 min-w-0 pr-2">
+          {temFilhos ? (
+            <button type="button" onClick={() => onToggle(chave)} className="flex-shrink-0 -ml-0.5">
+              <ChevronRight className={`h-3 w-3 text-gray-400 transition-transform ${aberto ? 'rotate-90' : ''}`} />
+            </button>
+          ) : <span className="w-3 flex-shrink-0" />}
+          <span className={`truncate ${nivel === 0 ? 'text-gray-700 font-medium' : 'text-gray-600'}`}>{node.nome}</span>
+        </span>
+        <span className={`font-mono tabular-nums flex-shrink-0 ${node.valor >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+          {node.valor >= 0 ? '+' : ''}{formatCurrency(node.valor)}
+        </span>
+      </div>
+      {aberto && temFilhos && (
+        <div className="space-y-1 mt-1">
+          {node.children.map(ch => (
+            <GrupoConsumo key={ch.id} node={ch} mesKey={mesKey} nivel={nivel + 1} expandidos={expandidos} onToggle={onToggle} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Helpers da aba "Evolução do Caixa" ───────────────────────────────────
 // Formata a data ISO (YYYY-MM-DD) em DD/MM/YYYY.
