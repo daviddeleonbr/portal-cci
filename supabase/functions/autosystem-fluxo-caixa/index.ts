@@ -222,67 +222,54 @@ serve(async (req) => {
 
     const linhas = result.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
 
-    // Saldo inicial por empresa: soma o efeito líquido de TODOS os lançamentos
-    // das contas caixa/banco anteriores à data_de.
-    //   debit em caixa  → entrada (+ valor)
-    //   credit em caixa → saída   (- valor)
-    const sqlSaldos = `
-      select
-        m.empresa                                       as empresa,
-        coalesce(sum(
-          case
-            when m.conta_debitar  = any($3::text[]) then  m.valor
-            when m.conta_creditar = any($3::text[]) then -m.valor
-            else 0
-          end
-        ), 0)                                           as saldo_inicial
-      from movto m
-      where m.empresa = any($1::bigint[])
-        and m.data < $2
-        and (m.conta_debitar = any($3::text[]) or m.conta_creditar = any($3::text[]))
-      group by m.empresa
-    `;
-    const saldosResult = await executarQuery(rede, sqlSaldos, [empresasNum, data_de, refSet], { encoding: 'SQL_ASCII' });
-    const saldosIniciaisPorEmpresa: Record<string, number> = {};
-    saldosResult.forEach(r => {
-      const ec = Number(r.empresa);
-      const v = Number(r.saldo_inicial || 0);
-      if (Number.isFinite(ec)) saldosIniciaisPorEmpresa[String(ec)] = v;
-    });
+    // Saldo de caixa/banco por empresa+conta acumulado até uma data de corte.
+    // Cada lançamento afeta a(s) conta(s) caixa que aparece(m) nele:
+    //   débito  numa conta caixa → +valor  (entra dinheiro na conta)
+    //   crédito numa conta caixa → -valor  (sai dinheiro da conta)
+    // Como uma transferência entre 2 contas caixa afeta AMBAS, somamos os dois
+    // lados (union): a conta debitada recebe +valor e a creditada -valor. Assim
+    // o saldo por conta fica correto e a soma por empresa também.
+    //   corte '<'  + data_de  → saldo INICIAL (antes do período)
+    //   corte '<=' + data_ate → saldo FINAL   (até o fim do período)
+    const saldoAte = async (op: '<' | '<=', dataCorte: string) => {
+      const sql = `
+        select empresa, conta, coalesce(sum(v), 0) as saldo
+        from (
+          select m.empresa as empresa, m.conta_debitar  as conta,  m.valor as v
+          from movto m
+          where m.empresa = any($1::bigint[]) and m.data ${op} $2 and m.conta_debitar  = any($3::text[])
+          union all
+          select m.empresa as empresa, m.conta_creditar as conta, -m.valor as v
+          from movto m
+          where m.empresa = any($1::bigint[]) and m.data ${op} $2 and m.conta_creditar = any($3::text[])
+        ) t
+        group by empresa, conta
+      `;
+      const rows = await executarQuery(rede, sql, [empresasNum, dataCorte, refSet], { encoding: 'SQL_ASCII' });
+      const porEmpresa: Record<string, number> = {};
+      const porConta: Record<string, Record<string, number>> = {};
+      rows.forEach(r => {
+        const ec = Number(r.empresa);
+        if (!Number.isFinite(ec)) return;
+        const conta = String(r.conta ?? '').trim();
+        if (!conta) return;
+        const v = Number(r.saldo || 0);
+        porEmpresa[String(ec)] = (porEmpresa[String(ec)] || 0) + v;
+        (porConta[String(ec)] ||= {})[conta] = v;
+      });
+      return { porEmpresa, porConta };
+    };
 
-    // Saldo inicial por empresa + CONTA caixa/banco (mesma lógica do total por
-    // empresa, mas agrupado também pela conta caixa que aparece no lançamento).
-    // Permite o drill "por empresa → contas" na aba Por Empresa.
-    const sqlSaldosConta = `
-      select
-        m.empresa                                       as empresa,
-        case when m.conta_debitar = any($3::text[]) then m.conta_debitar
-             else m.conta_creditar end                  as conta,
-        coalesce(sum(
-          case
-            when m.conta_debitar  = any($3::text[]) then  m.valor
-            when m.conta_creditar = any($3::text[]) then -m.valor
-            else 0
-          end
-        ), 0)                                           as saldo_inicial
-      from movto m
-      where m.empresa = any($1::bigint[])
-        and m.data < $2
-        and (m.conta_debitar = any($3::text[]) or m.conta_creditar = any($3::text[]))
-      group by m.empresa, conta
-    `;
-    const saldosContaResult = await executarQuery(rede, sqlSaldosConta, [empresasNum, data_de, refSet], { encoding: 'SQL_ASCII' });
-    const saldosIniciaisConta: Record<string, Record<string, number>> = {};
-    saldosContaResult.forEach(r => {
-      const ec = Number(r.empresa);
-      if (!Number.isFinite(ec)) return;
-      const conta = String(r.conta ?? '').trim();
-      if (!conta) return;
-      const v = Number(r.saldo_inicial || 0);
-      (saldosIniciaisConta[String(ec)] ||= {})[conta] = v;
-    });
+    const ini = await saldoAte('<', data_de);
+    const fim = await saldoAte('<=', data_ate);
 
-    return json({ lancamentos: linhas, saldos_iniciais: saldosIniciaisPorEmpresa, saldos_iniciais_conta: saldosIniciaisConta });
+    return json({
+      lancamentos: linhas,
+      saldos_iniciais: ini.porEmpresa,
+      saldos_iniciais_conta: ini.porConta,
+      saldos_finais: fim.porEmpresa,
+      saldos_finais_conta: fim.porConta,
+    });
   } catch (err) {
     return json(
       {
