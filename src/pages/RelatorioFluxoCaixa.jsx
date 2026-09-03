@@ -5,7 +5,7 @@ import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, Wallet, Printer,
   EyeOff, Eye, ChevronLeft as ChevLeft, Download,
-  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale,
+  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale, Activity,
 } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
@@ -1578,6 +1578,48 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return { porMes, totalRec, totalPag, saldo, cobertura, maxBar, recNome: recNo?.nome, fornNome: fornNo?.nome, recId: recNo?.id, fornId: fornNo?.id };
   }, [nosFluxo, fluxoTree, grpRecebId, grpFornId, meses]);
 
+  // Projeção estatística: a partir do fluxo líquido diário do período selecionado,
+  // projeta o saldo pra frente e estima SE e QUANDO o caixa pode faltar, mantido o
+  // padrão atual. Cenário central (média) + pessimista (limite inferior 95% da média).
+  const projecaoCaixa = useMemo(() => {
+    const ev = evolucaoCaixa;
+    if (!ev || !ev.dataIni || !ev.dataFim) return null;
+    const ini = ev.dataIni, fim = ev.dataFim;
+    const d0 = new Date(ini + 'T00:00:00'), d1 = new Date(fim + 'T00:00:00');
+    const dias = Math.max(1, Math.round((d1 - d0) / 86400000) + 1);
+    if (dias < 7) return null; // período curto demais pra projetar
+
+    // Net (entradas − saídas) por dia calendário do recorte (0 nos dias sem movimento).
+    const netPorDia = new Map();
+    (ev.movimentos || []).forEach(m => {
+      if (m.data >= ini && m.data <= fim) netPorDia.set(m.data, (netPorDia.get(m.data) || 0) + (m.entrada - m.saida));
+    });
+    const nets = [];
+    for (let i = 0; i < dias; i++) { const d = new Date(d0); d.setDate(d.getDate() + i); nets.push(netPorDia.get(d.toISOString().slice(0, 10)) || 0); }
+
+    const totalVar = nets.reduce((s, x) => s + x, 0);
+    const mu = totalVar / dias;                                   // média diária (R$/dia)
+    const variancia = nets.reduce((s, x) => s + (x - mu) * (x - mu), 0) / Math.max(1, dias - 1);
+    const sigma = Math.sqrt(variancia);
+    const se = sigma / Math.sqrt(dias);                           // erro padrão da média
+    const ratePess = mu - 1.65 * se;                             // limite inferior ~95% da média diária
+
+    const saldoAtual = ev.saldoFinal;
+    const projs = [30, 60, 90].map(n => ({ dias: n, saldo: saldoAtual + mu * n }));
+    const diasZero = (rate) => (rate < 0 && saldoAtual > 0) ? saldoAtual / (-rate) : null;
+    const addDias = (n) => { const d = new Date(fim + 'T00:00:00'); d.setDate(d.getDate() + Math.round(n)); return d.toISOString().slice(0, 10); };
+    const dCentral = diasZero(mu);
+    const dPess = diasZero(ratePess);
+
+    return {
+      dias, mu, sigma, muMensal: mu * 30, saldoAtual, projs,
+      crescente: mu >= 0,
+      diasZeroCentral: dCentral, dataZeroCentral: dCentral != null ? addDias(dCentral) : null,
+      diasZeroPess: dPess, dataZeroPess: dPess != null ? addDias(dPess) : null,
+      ini, fim,
+    };
+  }, [evolucaoCaixa]);
+
   // Nao auto-expande o bloco "Sem classificacao" — usuario abre manualmente
   // quando quiser auditar itens fora da mascara.
 
@@ -2510,7 +2552,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                                 ) : (
                                   <div className="space-y-1">
                                     {mrow.outros.map(o => (
-                                      <GrupoConsumo key={o.id} node={o} mesKey={mrow.key} nivel={0}
+                                      <GrupoConsumo key={o.id} node={o} mesKey={mrow.key} nivel={0} base={mrow.saldo}
                                         expandidos={capExpGrupo} onToggle={(k) => setCapExpGrupo(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; })} />
                                     ))}
                                   </div>
@@ -2529,6 +2571,50 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         {' '}<strong>{capacidadeCaixa.fornNome || '—'}</strong> (fornecedores). Ajuste nos seletores acima se necessário.
                       </p>
                     </div>
+                  </div>
+                )}
+
+                {projecaoCaixa && (
+                  <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                        <Activity className="h-4 w-4 text-violet-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Projeção de caixa</p>
+                        <p className="text-[11px] text-gray-400">Estimativa estatística mantido o padrão dos últimos {projecaoCaixa.dias} dias</p>
+                      </div>
+                    </div>
+
+                    <div className={`px-5 py-3 border-b text-[12.5px] leading-relaxed ${projecaoCaixa.crescente ? 'bg-emerald-50/50 border-emerald-100/60 text-gray-700' : 'bg-amber-50/50 border-amber-100/60 text-gray-700'}`}>
+                      {projecaoCaixa.crescente ? (
+                        <>No padrão atual o caixa gera em média <strong className="text-emerald-700">+{formatCurrency(projecaoCaixa.mu)}/dia</strong> ({formatCurrency(projecaoCaixa.muMensal)}/mês) — <strong>sem previsão de falta de caixa</strong>.</>
+                      ) : (
+                        <>No padrão atual o caixa consome em média <strong className="text-red-700">{formatCurrency(projecaoCaixa.mu)}/dia</strong> ({formatCurrency(projecaoCaixa.muMensal)}/mês).{' '}
+                          {projecaoCaixa.dataZeroCentral
+                            ? <>Mantido o ritmo, o caixa deve <strong className="text-red-700">zerar em ~{Math.round(projecaoCaixa.diasZeroCentral)} dias</strong> ({formatarDataBr(projecaoCaixa.dataZeroCentral)}).
+                                {projecaoCaixa.dataZeroPess ? <> No cenário pessimista, em ~{Math.round(projecaoCaixa.diasZeroPess)} dias ({formatarDataBr(projecaoCaixa.dataZeroPess)}).</> : ''}</>
+                            : <>O saldo atual já está zerado ou negativo.</>}
+                        </>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100">
+                      <div className="p-4 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Saldo atual</p>
+                        <p className="text-[14px] font-semibold text-gray-900 tabular-nums">{formatCurrency(projecaoCaixa.saldoAtual)}</p>
+                      </div>
+                      {projecaoCaixa.projs.map(p => (
+                        <div key={p.dias} className="p-4 text-center">
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Em {p.dias} dias</p>
+                          <p className={`text-[14px] font-semibold tabular-nums ${p.saldo >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatCurrency(p.saldo)}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="px-5 py-2.5 text-[10.5px] text-gray-400 border-t border-gray-100">
+                      Projeção linear pela média diária do período (variação típica ±{fmtEixoCaixa(projecaoCaixa.sigma)}/dia). É uma estimativa estatística — não uma previsão garantida — e muda conforme o período, os filtros e as contas de aplicação selecionados.
+                    </p>
                   </div>
                 )}
               </>
@@ -3414,11 +3500,13 @@ function MultiSelectContas({ contas, selecionadas, onChange, open, setOpen }) {
 }
 
 
-// Linha (recursiva) de um grupo no consumo da sobra — drill até o nível 3.
-function GrupoConsumo({ node, mesKey, nivel, expandidos, onToggle }) {
+// Linha (recursiva) de um grupo no consumo da sobra — drill até a conta.
+// `base` = sobra do mês (análise vertical: participação de cada item na sobra).
+function GrupoConsumo({ node, mesKey, nivel, base, expandidos, onToggle }) {
   const temFilhos = node.children && node.children.length > 0;
   const chave = `${mesKey}:${node.id}`;
   const aberto = expandidos.has(chave);
+  const pct = base ? (node.valor / base) * 100 : null;
   return (
     <div>
       <div className="flex items-center justify-between text-[11.5px]" style={{ paddingLeft: 8 + nivel * 16 }}>
@@ -3430,14 +3518,19 @@ function GrupoConsumo({ node, mesKey, nivel, expandidos, onToggle }) {
           ) : <span className="w-3 flex-shrink-0" />}
           <span className={`truncate ${nivel === 0 ? 'text-gray-700 font-medium' : 'text-gray-600'}`}>{node.nome}</span>
         </span>
-        <span className={`font-mono tabular-nums flex-shrink-0 ${node.valor >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-          {node.valor >= 0 ? '+' : ''}{formatCurrency(node.valor)}
+        <span className="flex items-center gap-2 flex-shrink-0">
+          {pct != null && (
+            <span className="text-[10px] text-gray-400 tabular-nums w-10 text-right" title="Participação na sobra do mês">{Math.round(Math.abs(pct))}%</span>
+          )}
+          <span className={`font-mono tabular-nums ${node.valor >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            {node.valor >= 0 ? '+' : ''}{formatCurrency(node.valor)}
+          </span>
         </span>
       </div>
       {aberto && temFilhos && (
         <div className="space-y-1 mt-1">
           {node.children.map(ch => (
-            <GrupoConsumo key={ch.id} node={ch} mesKey={mesKey} nivel={nivel + 1} expandidos={expandidos} onToggle={onToggle} />
+            <GrupoConsumo key={ch.id} node={ch} mesKey={mesKey} nivel={nivel + 1} base={base} expandidos={expandidos} onToggle={onToggle} />
           ))}
         </div>
       )}
