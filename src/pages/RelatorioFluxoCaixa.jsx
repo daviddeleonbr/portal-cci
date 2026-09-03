@@ -3375,7 +3375,7 @@ function ModalDetalheEvol({ ponto, onClose }) {
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 flex-shrink-0"><X className="h-4 w-4" /></button>
         </div>
-        <div className="overflow-y-auto p-4 space-y-2">
+        <div className="overflow-y-auto p-4 pb-8 space-y-2">
           {contas.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">Sem lançamentos neste ponto.</p>
           ) : (
