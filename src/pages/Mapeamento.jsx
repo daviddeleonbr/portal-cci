@@ -1263,6 +1263,15 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
 
   // Mapa codigo→registro (chave normalizada string)
   const contasVinculadasMap = new Map(contas.map(c => [String(c.conta_codigo), c]));
+  // Mapa GLOBAL: código da conta -> Set de nomes de grupos onde ela está mapeada
+  // (independe do grupo ativo). Marca as contas já mapeadas na árvore do plano.
+  const contasMapeadasGlobal = new Map();
+  contas.forEach(c => {
+    const cod = String(c.conta_codigo);
+    if (!contasMapeadasGlobal.has(cod)) contasMapeadasGlobal.set(cod, new Set());
+    const nome = c[grupoRelField]?.nome;
+    if (nome) contasMapeadasGlobal.get(cod).add(nome);
+  });
   // No Fluxo (Autosystem) a MESMA conta pode ser vinculada a grupos diferentes por
   // direção (débito/crédito). Então, na árvore do plano, "já vinculada" passa a ser
   // relativa ao GRUPO ATIVO: clicar a conta com outro grupo selecionado cria um novo
@@ -1471,6 +1480,7 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
                         expanded={planoExpanded}
                         onToggle={togglePlanoNode}
                         contasVinculadasMap={contasVinculadasMapNode}
+                        contasMapeadasGlobal={contasMapeadasGlobal}
                         grupoAtivo={grupoAtivo}
                         grupoRelField={grupoRelField}
                         onVincular={vincularConta}
@@ -1832,10 +1842,13 @@ function buildPlanoTree(flatList) {
   return roots;
 }
 
-function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasMap, grupoAtivo, grupoRelField = 'grupos_dre', onVincular, onDesvincular, somenteFolhas = false, contasComFilhos = null }) {
+function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasMap, contasMapeadasGlobal = null, grupoAtivo, grupoRelField = 'grupos_dre', onVincular, onDesvincular, somenteFolhas = false, contasComFilhos = null }) {
   const codigo = String(node.planoContaCodigo || node.codigo);
   const mapExistente = contasVinculadasMap.get(codigo);
   const jaVinculada = !!mapExistente;
+  // Mapeada em QUALQUER grupo (independe do grupo ativo) — pra o usuário ver de
+  // relance o que já foi vinculado, mesmo sem grupo selecionado.
+  const mapeadaGlobal = !jaVinculada && !!contasMapeadasGlobal?.has(codigo);
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expanded.has(node.hierarquia);
   // Tem filhas no plano COMPLETO? (não só na árvore filtrada — o filtro "Não
@@ -1854,8 +1867,9 @@ function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasM
       <div
         className={`relative flex items-center gap-1.5 pr-3 group/conta transition-all ${
           jaVinculada ? 'bg-emerald-50/60 hover:bg-red-50/60'
-            : grupoAtivo ? 'hover:bg-blue-50'
-              : 'opacity-70'
+            : mapeadaGlobal ? 'bg-emerald-50/30 hover:bg-blue-50'
+              : grupoAtivo ? 'hover:bg-blue-50'
+                : 'opacity-70'
         }`}
         style={{ paddingLeft: 8 + depth * 16 }}>
         {/* Chevron expand/collapse */}
@@ -1887,11 +1901,14 @@ function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasM
             <div className={`h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
               jaVinculada
                 ? 'bg-emerald-500 border-emerald-500'
-                : grupoAtivo
-                  ? 'border-gray-300 group-hover/conta:border-blue-400'
-                  : 'border-gray-200'
+                : mapeadaGlobal
+                  ? 'bg-emerald-100 border-emerald-400'
+                  : grupoAtivo
+                    ? 'border-gray-300 group-hover/conta:border-blue-400'
+                    : 'border-gray-200'
             }`}>
               {jaVinculada && <Check className="h-2.5 w-2.5 text-white" />}
+              {mapeadaGlobal && <Check className="h-2.5 w-2.5 text-emerald-600" />}
             </div>
           )}
 
@@ -1918,12 +1935,23 @@ function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasM
             {node.natureza}
           </span>
 
-          {/* Grupo destino (quando vinculada) */}
+          {/* Grupo destino (quando vinculada ao grupo ativo) */}
           {jaVinculada && mapExistente[grupoRelField] && (
             <span className="text-[9px] text-emerald-600 bg-emerald-50 rounded px-1.5 py-0.5 flex-shrink-0 truncate max-w-[110px]">
               {mapExistente[grupoRelField].nome}
             </span>
           )}
+
+          {/* Já mapeada em outro(s) grupo(s) — mostra onde */}
+          {mapeadaGlobal && (() => {
+            const gs = [...(contasMapeadasGlobal.get(codigo) || [])];
+            if (gs.length === 0) return <span className="text-[9px] text-emerald-600 bg-emerald-50 rounded px-1.5 py-0.5 flex-shrink-0">mapeada</span>;
+            return (
+              <span className="text-[9px] text-emerald-600 bg-emerald-50 rounded px-1.5 py-0.5 flex-shrink-0 truncate max-w-[140px]" title={gs.join(', ')}>
+                {gs.length > 1 ? `${gs[0]} +${gs.length - 1}` : gs[0]}
+              </span>
+            );
+          })()}
 
           {/* Contador de descendentes vinculadas */}
           {!jaVinculada && temVinculadoAbaixo && (
@@ -1945,6 +1973,7 @@ function PlanoContaTreeNode({ node, depth, expanded, onToggle, contasVinculadasM
               expanded={expanded}
               onToggle={onToggle}
               contasVinculadasMap={contasVinculadasMap}
+              contasMapeadasGlobal={contasMapeadasGlobal}
               grupoAtivo={grupoAtivo}
               grupoRelField={grupoRelField}
               onVincular={onVincular}
