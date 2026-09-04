@@ -474,10 +474,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             const isPonte211 = /^2\.1\.1/.test(cpBruto);
             const naoClassificada = isPonte211 && !cpResolv;
             if (naoClassificada) naoClassificadas211++;
-            // Transferência entre contas próprias (a contraparte também é
-            // caixa/banco). Sobrevive só quando cruza a fronteira da seleção →
-            // vai pro grupo "Transferências entre contas" (contado na variação).
-            const ehTransferencia = !!l.contraparte_eh_caixa;
+            // Transferência entre contas próprias: a contraparte é caixa/banco —
+            // seja diretamente, seja RESOLVIDA via provisão (pagamento roteado por
+            // conta-ponte 2.1.1 que na origem debita outra conta caixa). Vai pro
+            // grupo "Transferências entre contas" (não vira despesa/receita).
+            const ehTransferencia = !!l.contraparte_eh_caixa || !!l.contraparte_resolvida_eh_caixa;
             const planoEfetivo = ehTransferencia ? null : (cpResolv || cpBruto);
             return {
               codigo: l.lancamento_id != null ? `as-${l.lancamento_id}` : undefined,

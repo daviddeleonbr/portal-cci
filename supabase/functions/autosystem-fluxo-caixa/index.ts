@@ -212,7 +212,10 @@ serve(async (req) => {
         (pv.despesa_codigo is not null)                       as via_provisao,
         -- true = a contraparte também é conta caixa/banco → transferência entre
         -- contas (só sobrevive quando a outra ponta está FORA da seleção).
-        (f.contraparte_codigo = any($4::text[]))              as contraparte_eh_caixa
+        (f.contraparte_codigo = any($4::text[]))              as contraparte_eh_caixa,
+        -- true = a contraparte RESOLVIDA via provisão é conta caixa/banco →
+        -- é transferência interna roteada por conta-ponte (2.1.1), não despesa.
+        (pv.despesa_codigo is not null and trim(pv.despesa_codigo) = any($4::text[])) as contraparte_resolvida_eh_caixa
       from fluxo f
       left join conta         cd on cd.codigo = f.conta_debitar
       left join conta         cc on cc.codigo = f.conta_creditar
