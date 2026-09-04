@@ -2830,6 +2830,47 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 </div>
               </div>
             )}
+
+            {modoRede && resultadoPorEmpresa && (() => {
+              const real = resultadoPorEmpresa.totalConsolidado;      // variação pelo extrato (movto)
+              const masc = totalGeral;                                // variação da máscara (grupos + transferências)
+              const transf = transferenciasNode?.totalPeriodo || 0;
+              const naoMap = semClassificacaoNode?.totalPeriodo || 0; // fora da máscara
+              const dif = real - masc - naoMap;
+              const bate = Math.abs(dif) < 0.5;
+              const linha = (label, v, opts = {}) => (
+                <div className={`flex items-center justify-between ${opts.muted ? 'text-gray-400 text-[11.5px]' : 'text-gray-700'}`}>
+                  <span className={opts.strong ? 'font-semibold' : ''}>{label}</span>
+                  <span className={`font-mono tabular-nums ${opts.strong ? 'font-semibold' : ''} ${v >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{v >= 0 ? '+' : ''}{formatCurrency(v)}</span>
+                </div>
+              );
+              return (
+                <div className={`rounded-2xl border p-4 sm:p-5 ${bate ? 'bg-emerald-50/40 border-emerald-100' : 'bg-amber-50/50 border-amber-200'}`}>
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <Scale className={`h-4 w-4 ${bate ? 'text-emerald-600' : 'text-amber-600'}`} />
+                    <h3 className="text-sm font-semibold text-gray-800">Reconciliação da variação</h3>
+                    <span className="text-[11px] text-gray-400">extrato real × máscara do fluxo</span>
+                  </div>
+                  <div className="space-y-1 max-w-md text-[12.5px]">
+                    {linha('Variação real (extrato)', real, { strong: true })}
+                    {linha('(−) Variação da máscara', -masc)}
+                    {Math.abs(transf) > 0.005 && linha('das quais Transferências', transf, { muted: true })}
+                    {Math.abs(naoMap) > 0.005 && linha('(−) Não mapeado (fora da máscara)', -naoMap)}
+                    <div className="border-t border-gray-200 pt-1 mt-1">
+                      {linha(bate ? '= Reconciliado' : '= Diferença a investigar', dif, { strong: true })}
+                    </div>
+                  </div>
+                  {!bate && (
+                    <p className="text-[11px] text-amber-700 mt-2 max-w-2xl">
+                      Há <strong>{formatCurrency(Math.abs(dif))}</strong> no extrato real que não está na máscara nem no "não mapeado".
+                      Normalmente são lançamentos numa conta caixa/banco com <strong>contrapartida vazia/nula</strong> (ex.: saldo de abertura, ajuste),
+                      que ficam de fora do fluxo classificado. Me avise que eu incluo esses lançamentos no fluxo.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             {!modoRede && composicaoSaldo.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
