@@ -292,18 +292,31 @@ serve(async (req) => {
             if (!Number.isFinite(ec) || !conta) return;
             (abertura[String(ec)] ||= {})[conta] = Number(r.saldo_inicial || 0);
           });
-        } else if (empresasNum.length === 1) {
-          // conta global (sem empresa) — só atribui com segurança quando a rede
-          // tem uma única empresa (senão não dá pra saber de quem é o saldo).
+        } else {
+          // conta global (sem coluna empresa) — atribui a abertura à empresa DONA
+          // da conta (a que tem movimento nela). Assim o saldo de uma empresa fica
+          // IGUAL vendo ela sozinha ou dentro da rede (antes só aplicava com 1
+          // empresa, então divergia entre a empresa isolada e a rede toda).
           const rows = await executarQuery(rede,
             `select codigo, saldo_inicial from conta
              where trim(codigo) = any($1::text[]) and coalesce(saldo_inicial, 0) <> 0`,
             [refSet], { encoding: 'SQL_ASCII' });
-          const ec = String(empresasNum[0]);
+          const donoDaConta = (conta: string): string[] => {
+            const donos = new Set<string>();
+            for (const ec of Object.keys(ini.porConta)) if (conta in ini.porConta[ec]) donos.add(ec);
+            for (const ec of Object.keys(fim.porConta)) if (conta in fim.porConta[ec]) donos.add(ec);
+            return [...donos];
+          };
           rows.forEach((r: Record<string, unknown>) => {
             const conta = String(r.codigo ?? '').trim();
             if (!conta) return;
-            (abertura[ec] ||= {})[conta] = Number(r.saldo_inicial || 0);
+            const v = Number(r.saldo_inicial || 0);
+            const donos = donoDaConta(conta);
+            let ec: string | null = null;
+            if (donos.length === 1) ec = donos[0];                              // dona única
+            else if (donos.length === 0 && empresasNum.length === 1) ec = String(empresasNum[0]); // sem movimento + 1 empresa
+            // donos.length > 1 (conta compartilhada) → ambíguo, ignora
+            if (ec) (abertura[ec] ||= {})[conta] = v;
           });
         }
       }
