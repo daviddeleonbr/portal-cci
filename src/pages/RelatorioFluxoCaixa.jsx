@@ -1293,6 +1293,36 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return out.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
   }, [grupos, mapeamentos, totaisPorConta, meses]);
 
+  // Ids de todos os grupos que REALMENTE aparecem na árvore do fluxo.
+  const idsNaArvore = useMemo(() => {
+    const set = new Set();
+    const walk = (nodes) => (nodes || []).forEach(n => { set.add(n.id); if (n.children?.length) walk(n.children); });
+    walk(fluxoTree);
+    return set;
+  }, [fluxoTree]);
+
+  // Contas mapeadas em grupos que NÃO estão na árvore (grupo órfão: pai ausente/
+  // de outra máscara). Ficam "mapeadas" (fora do não-mapeado) mas o valor some do total.
+  const mapeadosOrfaos = useMemo(() => {
+    if (!grupos.length || !mapeamentos.length) return [];
+    const byId = new Map(grupos.map(g => [g.id, g]));
+    const out = [];
+    mapeamentos.forEach(m => {
+      if (idsNaArvore.has(m.grupo_fluxo_id)) return;
+      const g = byId.get(m.grupo_fluxo_id);
+      const cod = String(m.plano_conta_codigo);
+      const valores = totaisPorConta[cod];
+      let total = 0;
+      if (valores) meses.forEach(mm => { total += (valores[mm.key] || 0); });
+      out.push({
+        codigo: cod, descricao: m.plano_conta_descricao || cod, lado: m.lado, total,
+        grupo: g ? g.nome : `(grupo ausente #${m.grupo_fluxo_id})`,
+        motivo: g ? `pai fora da máscara (parent #${g.parent_id ?? '—'})` : 'grupo não existe nesta máscara',
+      });
+    });
+    return out.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+  }, [grupos, mapeamentos, idsNaArvore, totaisPorConta, meses]);
+
 
   // ─── Resultado por empresa (apenas em modo rede) ─────────
   // Soma a variacao de caixa (entradas − saidas) por empresa, respeitando os
@@ -2898,6 +2928,35 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       </div>
                     )}
                   </div>
+                  {mapeadosOrfaos.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-[11px] text-gray-600 mb-1.5">
+                        ⚠ Conta(s) mapeada(s) num <strong>grupo fora da árvore da máscara</strong> (pai ausente/de outra máscara) — o valor some do total. Corrija o grupo no Mapeamento:
+                      </p>
+                      <div className="rounded-lg border border-amber-200 bg-white/60 overflow-hidden max-w-3xl">
+                        <table className="w-full text-[11px]">
+                          <thead className="text-gray-400 text-[9.5px] uppercase tracking-wider bg-gray-50/60">
+                            <tr>
+                              <th className="text-left px-3 py-1.5">Conta</th>
+                              <th className="text-left px-3 py-1.5">Grupo (problema)</th>
+                              <th className="text-right px-3 py-1.5">Valor no período</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {mapeadosOrfaos.map((c, i) => (
+                              <tr key={`${c.codigo}-${i}`}>
+                                <td className="px-3 py-1 text-gray-700 truncate max-w-[240px]" title={`${c.codigo} · ${c.descricao}`}>
+                                  <span className="font-mono text-[10px] text-gray-400">{c.codigo}</span> · {c.descricao}{c.lado ? ` (${c.lado})` : ''}
+                                </td>
+                                <td className="px-3 py-1 text-amber-700 truncate max-w-[240px]" title={c.motivo}>{c.grupo} <span className="text-[9px] text-gray-400">· {c.motivo}</span></td>
+                                <td className={`px-3 py-1 text-right font-mono tabular-nums font-semibold ${c.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{c.total >= 0 ? '+' : ''}{formatCurrency(c.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                   {mapeadosEmSubtotal.length > 0 && (
                     <div className="mt-3">
                       <p className="text-[11px] text-gray-600 mb-1.5">
