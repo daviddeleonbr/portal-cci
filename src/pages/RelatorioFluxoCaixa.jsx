@@ -152,6 +152,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [capExpMes, setCapExpMes] = useState(() => new Set());
   // Grupos expandidos dentro de cada mês (chave `${mesKey}:${grupoId}`) — drill até nível 3.
   const [capExpGrupo, setCapExpGrupo] = useState(() => new Set());
+  // Linhas marcadas (destaque) no consumo da sobra — clica pra marcar/desmarcar.
+  const [capMarcados, setCapMarcados] = useState(() => new Set());
   // Empresas expandidas na aba "Por Empresa" (mostra as contas caixa/banco).
   const [empExpandidas, setEmpExpandidas] = useState(() => new Set());
 
@@ -2671,7 +2673,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                                   <div className="space-y-1">
                                     {mrow.outros.map(o => (
                                       <GrupoConsumo key={o.id} node={o} mesKey={mrow.key} nivel={0} base={mrow.saldo}
-                                        expandidos={capExpGrupo} onToggle={(k) => setCapExpGrupo(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; })} />
+                                        expandidos={capExpGrupo} onToggle={(k) => setCapExpGrupo(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; })}
+                                        marcados={capMarcados} onMarcar={(k) => setCapMarcados(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; })} />
                                     ))}
                                   </div>
                                 )}
@@ -3654,23 +3657,31 @@ function MultiSelectContas({ contas, selecionadas, onChange, open, setOpen }) {
 
 // Linha (recursiva) de um grupo no consumo da sobra — drill até a conta.
 // `base` = sobra do mês (análise vertical: participação de cada item na sobra).
-function GrupoConsumo({ node, mesKey, nivel, base, expandidos, onToggle }) {
+function GrupoConsumo({ node, mesKey, nivel, base, expandidos, onToggle, marcados, onMarcar }) {
   const temFilhos = node.children && node.children.length > 0;
   const chave = `${mesKey}:${node.id}`;
   const aberto = expandidos.has(chave);
+  const marcado = !!marcados?.has(chave);
   const pct = base ? (node.valor / base) * 100 : null;
   return (
     <div>
-      <div className="flex items-center justify-between text-[11.5px]" style={{ paddingLeft: 8 + nivel * 16 }}>
+      {/* Clique na linha marca/desmarca (destaque). O chevron continua expandindo. */}
+      <div
+        onClick={() => onMarcar?.(chave)}
+        title="Clique para marcar/desmarcar esta linha"
+        className={`flex items-center justify-between text-[11.5px] rounded-md cursor-pointer transition-colors py-0.5 ${
+          marcado ? 'bg-amber-100 ring-1 ring-amber-300' : 'hover:bg-gray-50'
+        }`}
+        style={{ paddingLeft: 8 + nivel * 16 }}>
         <span className="flex items-center gap-1 min-w-0 pr-2">
           {temFilhos ? (
-            <button type="button" onClick={() => onToggle(chave)} className="flex-shrink-0 -ml-0.5">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(chave); }} className="flex-shrink-0 -ml-0.5">
               <ChevronRight className={`h-3 w-3 text-gray-400 transition-transform ${aberto ? 'rotate-90' : ''}`} />
             </button>
           ) : <span className="w-3 flex-shrink-0" />}
-          <span className={`truncate ${nivel === 0 ? 'text-gray-700 font-medium' : 'text-gray-600'}`}>{node.nome}</span>
+          <span className={`truncate ${marcado ? 'text-amber-900 font-semibold' : nivel === 0 ? 'text-gray-700 font-medium' : 'text-gray-600'}`}>{node.nome}</span>
         </span>
-        <span className="flex items-center gap-2 flex-shrink-0">
+        <span className="flex items-center gap-2 flex-shrink-0 pr-1">
           {pct != null && (
             <span className="text-[10px] text-gray-400 tabular-nums w-10 text-right" title="Participação na sobra do mês">{Math.round(Math.abs(pct))}%</span>
           )}
@@ -3682,7 +3693,7 @@ function GrupoConsumo({ node, mesKey, nivel, base, expandidos, onToggle }) {
       {aberto && temFilhos && (
         <div className="space-y-1 mt-1">
           {node.children.map(ch => (
-            <GrupoConsumo key={ch.id} node={ch} mesKey={mesKey} nivel={nivel + 1} base={base} expandidos={expandidos} onToggle={onToggle} />
+            <GrupoConsumo key={ch.id} node={ch} mesKey={mesKey} nivel={nivel + 1} base={base} expandidos={expandidos} onToggle={onToggle} marcados={marcados} onMarcar={onMarcar} />
           ))}
         </div>
       )}
