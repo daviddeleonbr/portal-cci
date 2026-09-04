@@ -510,6 +510,16 @@ export async function excluirContaManual(id) {
 // onde o mapeamento é por `chave_api_id`). Uma configuração serve todas
 // as empresas da rede.
 
+// Apaga TODO o mapeamento de uma rede Autosystem numa máscara (botão "Limpar").
+export async function limparMapeamentoPorRede(asRedeId, mascaraId) {
+  const { error } = await supabase
+    .from('mapeamento_manual_contas_fluxo')
+    .delete()
+    .eq('as_rede_id', asRedeId)
+    .eq('mascara_id', mascaraId);
+  if (error) throw error;
+}
+
 export async function listarContasManualPorRede(asRedeId, mascaraId) {
   const { data, error } = await supabase
     .from('mapeamento_manual_contas_fluxo')

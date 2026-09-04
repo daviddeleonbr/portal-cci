@@ -42,6 +42,7 @@ function makeAdapter(tipoMapeamento) {
       criarContaManualPorRede: fluxoService.criarContaManualPorRede,
       atualizarContaManual: fluxoService.atualizarContaManual,
       excluirContaManual: fluxoService.excluirContaManual,
+      limparMapeamentoPorRede: fluxoService.limparMapeamentoPorRede,
     };
   }
   return {
@@ -1174,6 +1175,27 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
     } catch (err) { showToast('error', err.message); }
   };
 
+  const [limpando, setLimpando] = useState(false);
+  const limparTudo = async () => {
+    if (!adapter.limparMapeamentoPorRede || !rede?.id || !mascaraSelecionada?.id) return;
+    const ok = window.confirm(
+      `Limpar TODO o mapeamento da máscara "${mascaraSelecionada.nome}"?\n\n`
+      + `Isso remove os ${contas.length} vínculo(s) desta rede nesta máscara. Não pode ser desfeito.`
+    );
+    if (!ok) return;
+    setLimpando(true);
+    try {
+      await adapter.limparMapeamentoPorRede(rede.id, mascaraSelecionada.id);
+      setGrupoAtivo(null);
+      await refreshContas();
+      showToast('success', 'Mapeamento limpo');
+    } catch (err) {
+      showToast('error', err.message);
+    } finally {
+      setLimpando(false);
+    }
+  };
+
   const salvarConta = async (form) => {
     try {
       if (form.id) {
@@ -1503,8 +1525,18 @@ function MapeamentoManualWorkspace({ rede, onBack, showToast, adapter }) {
                   <span className="text-sm font-semibold text-gray-800">{mascaraSelecionada.nome}</span>
                   <span className="text-[10px] text-gray-400 bg-gray-50 rounded-full px-2 py-0.5">{contas.length} vinculadas</span>
                 </div>
-                <button onClick={() => { setMascaraSelecionada(null); setGrupoAtivo(null); }}
-                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors">Trocar</button>
+                <div className="flex items-center gap-3">
+                  {contas.length > 0 && (
+                    <button onClick={limparTudo} disabled={limpando}
+                      title="Remove todos os vínculos desta máscara"
+                      className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition-colors">
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {limpando ? 'Limpando…' : 'Limpar mapeamento'}
+                    </button>
+                  )}
+                  <button onClick={() => { setMascaraSelecionada(null); setGrupoAtivo(null); }}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors">Trocar</button>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto">
                 <div className="py-1">
