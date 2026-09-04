@@ -135,9 +135,12 @@ serve(async (req) => {
         where m.empresa = any($1::bigint[])
           and m.data between $2 and $3
           and (
-            (trim(m.conta_debitar)  = any($5::text[]) and not (trim(m.conta_creditar) = any($5::text[])))
+            -- coalesce: contrapartida NULL/vazia conta como "fora do caixa" (senão
+            -- a comparação vira NULL e o lançamento some do fluxo, mas segue no
+            -- extrato → gera diferença invisível na reconciliação).
+            (trim(m.conta_debitar)  = any($5::text[]) and not coalesce(trim(m.conta_creditar) = any($5::text[]), false))
             or
-            (trim(m.conta_creditar) = any($5::text[]) and not (trim(m.conta_debitar)  = any($5::text[])))
+            (trim(m.conta_creditar) = any($5::text[]) and not coalesce(trim(m.conta_debitar)  = any($5::text[]), false))
           )
       ),
       -- Provisão match 1: empresa + documento + pessoa
