@@ -1309,28 +1309,41 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       if (!mapPorCod.has(cod)) mapPorCod.set(cod, []);
       mapPorCod.get(cod).push({ grupo: byId.get(m.grupo_fluxo_id)?.nome, naArvore: idsNaArvore.has(m.grupo_fluxo_id), lado: m.lado });
     });
+    const somaLado = (obj) => { let s = 0; if (obj) meses.forEach(m => { s += (obj[m.key] || 0); }); return s; };
     const problemas = [];
     Object.entries(totaisPorConta).forEach(([cod, vals]) => {
       if (cod === TRANSFER_CODE) return;
-      let total = 0;
-      meses.forEach(m => { total += (vals[m.key] || 0); });
-      if (Math.abs(total) < 0.005) return;
+      let net = 0;
+      meses.forEach(m => { net += (vals[m.key] || 0); });
+      const lado = totaisPorContaLado[cod] || {};
+      const valC = somaLado(lado.C); // crédito (entrada)
+      const valD = somaLado(lado.D); // débito (saída)
       const maps = mapPorCod.get(cod) || [];
-      const validos = maps.filter(x => x.naArvore);
+      const validos = maps.filter(x => x.naArvore); // vínculos que realmente entram na árvore
+      // Valor COBERTO pela classificação, respeitando a direção do vínculo.
+      let coberto = 0;
+      if (validos.some(x => !x.lado)) coberto = net;      // vínculo "ambos" cobre tudo
+      else {
+        if (validos.some(x => x.lado === 'C')) coberto += valC;
+        if (validos.some(x => x.lado === 'D')) coberto += valD;
+      }
+      const naoClassificado = net - coberto;
+      if (Math.abs(naoClassificado) < 0.005) return;      // tudo classificado → ok
+      // Situação: sem vínculo, vinculada a grupo órfão, ou só num lado.
       let status;
       if (maps.length === 0) status = 'nao-vinculada';
       else if (validos.length === 0) status = 'orfa';
-      else return; // ok — entra no total
+      else status = 'parcial';
       const semPlano = cod.startsWith(SEM_PLANO_PREFIX);
       const nome = semPlano
         ? cod.slice(SEM_PLANO_PREFIX.length).replace(/_/g, ' ')
         : (nomesPorPlano[cod] || nomePlanoGerencial.get(cod) || `Conta ${cod}`);
-      problemas.push({ codigo: cod, nome, total, status, grupo: maps[0]?.grupo || null });
+      problemas.push({ codigo: cod, nome, total: naoClassificado, status, grupo: (validos[0] || maps[0])?.grupo || null });
     });
     problemas.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
     const totalProblemas = problemas.reduce((s, p) => s + p.total, 0);
     return { problemas, totalProblemas };
-  }, [grupos, mapeamentos, idsNaArvore, totaisPorConta, meses, nomesPorPlano, nomePlanoGerencial]);
+  }, [grupos, mapeamentos, idsNaArvore, totaisPorConta, totaisPorContaLado, meses, nomesPorPlano, nomePlanoGerencial]);
 
 
   // ─── Resultado por empresa (apenas em modo rede) ─────────
@@ -2960,8 +2973,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   {analiseVinculos.problemas.length > 0 && (
                     <div className="mt-3">
                       <p className="text-[11px] text-gray-600 mb-1.5">
-                        Contrapartidas com <strong>movimento</strong> que <strong>não entram no total</strong> da máscara
-                        (soma <strong>{formatCurrency(analiseVinculos.totalProblemas)}</strong>). Corrija o vínculo em <strong>Parâmetros → Mapeamento Fluxo de Caixa</strong>:
+                        Contrapartidas (das contas caixa/banco) com <strong>movimento ainda não classificado</strong>
+                        {' '}— {analiseVinculos.problemas.length} conta(s), soma <strong>{formatCurrency(analiseVinculos.totalProblemas)}</strong>.
+                        Vincule/corrija em <strong>Parâmetros → Mapeamento Fluxo de Caixa</strong>:
                       </p>
                       <div className="rounded-lg border border-amber-200 bg-white/60 overflow-hidden max-w-3xl">
                         <table className="w-full text-[11px]">
@@ -2981,7 +2995,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                                 <td className="px-3 py-1 truncate max-w-[220px]">
                                   {c.status === 'nao-vinculada'
                                     ? <span className="text-red-600 font-medium">Não vinculada (sem grupo)</span>
-                                    : <span className="text-amber-700">Grupo órfão: <span title={c.grupo}>{c.grupo || '(ausente)'}</span></span>}
+                                    : c.status === 'parcial'
+                                      ? <span className="text-amber-700">Só num lado <span className="text-gray-400" title={c.grupo}>({c.grupo}) — falta a outra direção</span></span>
+                                      : <span className="text-amber-700">Grupo órfão: <span title={c.grupo}>{c.grupo || '(ausente)'}</span></span>}
                                 </td>
                                 <td className={`px-3 py-1 text-right font-mono tabular-nums font-semibold ${c.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{c.total >= 0 ? '+' : ''}{formatCurrency(c.total)}</td>
                               </tr>
