@@ -1275,24 +1275,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     ?? (fluxoTree.reduce((s, n) => s + n.totalPeriodo, 0) + (transferenciasNode?.totalPeriodo || 0))
   , [fluxoComCalculos, fluxoTree, transferenciasNode]);
 
-  // Contas vinculadas por engano a linhas de SUBTOTAL/RESULTADO (deveriam ir a um
-  // grupo normal). O valor delas some da variação — usado no diagnóstico.
-  const mapeadosEmSubtotal = useMemo(() => {
-    if (!grupos.length || !mapeamentos.length) return [];
-    const byId = new Map(grupos.map(g => [g.id, g]));
-    const out = [];
-    mapeamentos.forEach(m => {
-      const g = byId.get(m.grupo_fluxo_id);
-      if (!g || (g.tipo !== 'subtotal' && g.tipo !== 'resultado')) return;
-      const cod = String(m.plano_conta_codigo);
-      const valores = totaisPorConta[cod];
-      let total = 0;
-      if (valores) meses.forEach(mm => { total += (valores[mm.key] || 0); });
-      out.push({ codigo: cod, descricao: m.plano_conta_descricao || cod, grupo: g.nome, tipo: g.tipo, lado: m.lado, total });
-    });
-    return out.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
-  }, [grupos, mapeamentos, totaisPorConta, meses]);
-
   // Ids de todos os grupos que REALMENTE aparecem na árvore do fluxo.
   const idsNaArvore = useMemo(() => {
     const set = new Set();
@@ -1301,27 +1283,41 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return set;
   }, [fluxoTree]);
 
-  // Contas mapeadas em grupos que NÃO estão na árvore (grupo órfão: pai ausente/
-  // de outra máscara). Ficam "mapeadas" (fora do não-mapeado) mas o valor some do total.
-  const mapeadosOrfaos = useMemo(() => {
-    if (!grupos.length || !mapeamentos.length) return [];
+  // ── Análise de vínculos ────────────────────────────────────────────────
+  // Para CADA contrapartida (o outro lado dos movimentos das contas caixa/banco),
+  // verifica se ela entra no total da máscara. Lista as que têm MOVIMENTO mas
+  // NÃO estão bem vinculadas: sem vínculo, ou vinculadas a grupo órfão (pai fora
+  // da máscara) — nesse caso "somem" do total sem cair no não-mapeado.
+  const analiseVinculos = useMemo(() => {
     const byId = new Map(grupos.map(g => [g.id, g]));
-    const out = [];
+    const mapPorCod = new Map();
     mapeamentos.forEach(m => {
-      if (idsNaArvore.has(m.grupo_fluxo_id)) return;
-      const g = byId.get(m.grupo_fluxo_id);
       const cod = String(m.plano_conta_codigo);
-      const valores = totaisPorConta[cod];
-      let total = 0;
-      if (valores) meses.forEach(mm => { total += (valores[mm.key] || 0); });
-      out.push({
-        codigo: cod, descricao: m.plano_conta_descricao || cod, lado: m.lado, total,
-        grupo: g ? g.nome : `(grupo ausente #${m.grupo_fluxo_id})`,
-        motivo: g ? `pai fora da máscara (parent #${g.parent_id ?? '—'})` : 'grupo não existe nesta máscara',
-      });
+      if (!mapPorCod.has(cod)) mapPorCod.set(cod, []);
+      mapPorCod.get(cod).push({ grupo: byId.get(m.grupo_fluxo_id)?.nome, naArvore: idsNaArvore.has(m.grupo_fluxo_id), lado: m.lado });
     });
-    return out.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
-  }, [grupos, mapeamentos, idsNaArvore, totaisPorConta, meses]);
+    const problemas = [];
+    Object.entries(totaisPorConta).forEach(([cod, vals]) => {
+      if (cod === TRANSFER_CODE) return;
+      let total = 0;
+      meses.forEach(m => { total += (vals[m.key] || 0); });
+      if (Math.abs(total) < 0.005) return;
+      const maps = mapPorCod.get(cod) || [];
+      const validos = maps.filter(x => x.naArvore);
+      let status;
+      if (maps.length === 0) status = 'nao-vinculada';
+      else if (validos.length === 0) status = 'orfa';
+      else return; // ok — entra no total
+      const semPlano = cod.startsWith(SEM_PLANO_PREFIX);
+      const nome = semPlano
+        ? cod.slice(SEM_PLANO_PREFIX.length).replace(/_/g, ' ')
+        : (nomesPorPlano[cod] || nomePlanoGerencial.get(cod) || `Conta ${cod}`);
+      problemas.push({ codigo: cod, nome, total, status, grupo: maps[0]?.grupo || null });
+    });
+    problemas.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+    const totalProblemas = problemas.reduce((s, p) => s + p.total, 0);
+    return { problemas, totalProblemas };
+  }, [grupos, mapeamentos, idsNaArvore, totaisPorConta, meses, nomesPorPlano, nomePlanoGerencial]);
 
 
   // ─── Resultado por empresa (apenas em modo rede) ─────────
@@ -2928,57 +2924,32 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       </div>
                     )}
                   </div>
-                  {mapeadosOrfaos.length > 0 && (
+                  {analiseVinculos.problemas.length > 0 && (
                     <div className="mt-3">
                       <p className="text-[11px] text-gray-600 mb-1.5">
-                        ⚠ Conta(s) mapeada(s) num <strong>grupo fora da árvore da máscara</strong> (pai ausente/de outra máscara) — o valor some do total. Corrija o grupo no Mapeamento:
+                        Contrapartidas com <strong>movimento</strong> que <strong>não entram no total</strong> da máscara
+                        (soma <strong>{formatCurrency(analiseVinculos.totalProblemas)}</strong>). Corrija o vínculo em <strong>Parâmetros → Mapeamento Fluxo de Caixa</strong>:
                       </p>
                       <div className="rounded-lg border border-amber-200 bg-white/60 overflow-hidden max-w-3xl">
                         <table className="w-full text-[11px]">
                           <thead className="text-gray-400 text-[9.5px] uppercase tracking-wider bg-gray-50/60">
                             <tr>
-                              <th className="text-left px-3 py-1.5">Conta</th>
-                              <th className="text-left px-3 py-1.5">Grupo (problema)</th>
+                              <th className="text-left px-3 py-1.5">Contrapartida</th>
+                              <th className="text-left px-3 py-1.5">Situação</th>
                               <th className="text-right px-3 py-1.5">Valor no período</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {mapeadosOrfaos.map((c, i) => (
+                            {analiseVinculos.problemas.map((c, i) => (
                               <tr key={`${c.codigo}-${i}`}>
-                                <td className="px-3 py-1 text-gray-700 truncate max-w-[240px]" title={`${c.codigo} · ${c.descricao}`}>
-                                  <span className="font-mono text-[10px] text-gray-400">{c.codigo}</span> · {c.descricao}{c.lado ? ` (${c.lado})` : ''}
+                                <td className="px-3 py-1 text-gray-700 truncate max-w-[260px]" title={`${c.codigo} · ${c.nome}`}>
+                                  <span className="font-mono text-[10px] text-gray-400">{c.codigo}</span> · {c.nome}
                                 </td>
-                                <td className="px-3 py-1 text-amber-700 truncate max-w-[240px]" title={c.motivo}>{c.grupo} <span className="text-[9px] text-gray-400">· {c.motivo}</span></td>
-                                <td className={`px-3 py-1 text-right font-mono tabular-nums font-semibold ${c.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{c.total >= 0 ? '+' : ''}{formatCurrency(c.total)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                  {mapeadosEmSubtotal.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-[11px] text-gray-600 mb-1.5">
-                        ⚠ Conta(s) vinculada(s) a uma linha de <strong>subtotal/resultado</strong> (o certo é vincular a um grupo normal).
-                        Corrija em <strong>Parâmetros → Mapeamento Fluxo de Caixa</strong>:
-                      </p>
-                      <div className="rounded-lg border border-amber-200 bg-white/60 overflow-hidden max-w-3xl">
-                        <table className="w-full text-[11px]">
-                          <thead className="text-gray-400 text-[9.5px] uppercase tracking-wider bg-gray-50/60">
-                            <tr>
-                              <th className="text-left px-3 py-1.5">Conta</th>
-                              <th className="text-left px-3 py-1.5">Vinculada em (linha)</th>
-                              <th className="text-right px-3 py-1.5">Valor no período</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {mapeadosEmSubtotal.map((c, i) => (
-                              <tr key={`${c.codigo}-${i}`}>
-                                <td className="px-3 py-1 text-gray-700 truncate max-w-[260px]" title={`${c.codigo} · ${c.descricao}`}>
-                                  <span className="font-mono text-[10px] text-gray-400">{c.codigo}</span> · {c.descricao}{c.lado ? ` (${c.lado})` : ''}
+                                <td className="px-3 py-1 truncate max-w-[220px]">
+                                  {c.status === 'nao-vinculada'
+                                    ? <span className="text-red-600 font-medium">Não vinculada (sem grupo)</span>
+                                    : <span className="text-amber-700">Grupo órfão: <span title={c.grupo}>{c.grupo || '(ausente)'}</span></span>}
                                 </td>
-                                <td className="px-3 py-1 text-amber-700 truncate max-w-[200px]" title={c.grupo}>{c.grupo} <span className="text-[9px] text-gray-400 uppercase">({c.tipo})</span></td>
                                 <td className={`px-3 py-1 text-right font-mono tabular-nums font-semibold ${c.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{c.total >= 0 ? '+' : ''}{formatCurrency(c.total)}</td>
                               </tr>
                             ))}
