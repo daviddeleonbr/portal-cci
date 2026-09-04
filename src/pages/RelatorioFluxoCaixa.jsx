@@ -2861,6 +2861,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               const masc = totalGeral;                                // variação da máscara (grupos + transferências)
               const transf = transferenciasNode?.totalPeriodo || 0;
               const naoMap = semClassificacaoNode?.totalPeriodo || 0; // fora da máscara
+              // Soma de TODOS os movimentos do fluxo (por contraparte) — decompõe
+              // se a diferença está entre as queries (extrato × fluxo) ou na classificação.
+              let somaFluxo = 0;
+              Object.values(totaisPorConta).forEach(vals => meses.forEach(m => { somaFluxo += (vals[m.key] || 0); }));
+              const gapQuery = real - somaFluxo;                      // extrato × soma dos movimentos do fluxo
+              const gapClassif = somaFluxo - masc - naoMap;           // movimentos × (máscara + não mapeado)
               const dif = real - masc - naoMap;
               const bate = Math.abs(dif) < 0.5;
               const linha = (label, v, opts = {}) => (
@@ -2884,6 +2890,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     <div className="border-t border-gray-200 pt-1 mt-1">
                       {linha(bate ? '= Reconciliado' : '= Diferença a investigar', dif, { strong: true })}
                     </div>
+                    {!bate && (
+                      <div className="border-t border-gray-200 pt-1 mt-1 text-[11px] text-gray-500 space-y-0.5">
+                        {linha('Soma dos movimentos do fluxo', somaFluxo, { muted: true })}
+                        {linha('• Gap extrato × movimentos (queries)', gapQuery, { muted: true })}
+                        {linha('• Gap movimentos × classificação', gapClassif, { muted: true })}
+                      </div>
+                    )}
                   </div>
                   {mapeadosEmSubtotal.length > 0 && (
                     <div className="mt-3">
