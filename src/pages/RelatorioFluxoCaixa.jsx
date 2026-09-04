@@ -1275,6 +1275,24 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     ?? (fluxoTree.reduce((s, n) => s + n.totalPeriodo, 0) + (transferenciasNode?.totalPeriodo || 0))
   , [fluxoComCalculos, fluxoTree, transferenciasNode]);
 
+  // Contas vinculadas por engano a linhas de SUBTOTAL/RESULTADO (deveriam ir a um
+  // grupo normal). O valor delas some da variação — usado no diagnóstico.
+  const mapeadosEmSubtotal = useMemo(() => {
+    if (!grupos.length || !mapeamentos.length) return [];
+    const byId = new Map(grupos.map(g => [g.id, g]));
+    const out = [];
+    mapeamentos.forEach(m => {
+      const g = byId.get(m.grupo_fluxo_id);
+      if (!g || (g.tipo !== 'subtotal' && g.tipo !== 'resultado')) return;
+      const cod = String(m.plano_conta_codigo);
+      const valores = totaisPorConta[cod];
+      let total = 0;
+      if (valores) meses.forEach(mm => { total += (valores[mm.key] || 0); });
+      out.push({ codigo: cod, descricao: m.plano_conta_descricao || cod, grupo: g.nome, tipo: g.tipo, lado: m.lado, total });
+    });
+    return out.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+  }, [grupos, mapeamentos, totaisPorConta, meses]);
+
 
   // ─── Resultado por empresa (apenas em modo rede) ─────────
   // Soma a variacao de caixa (entradas − saidas) por empresa, respeitando os
@@ -2867,6 +2885,36 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       {linha(bate ? '= Reconciliado' : '= Diferença a investigar', dif, { strong: true })}
                     </div>
                   </div>
+                  {mapeadosEmSubtotal.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-[11px] text-gray-600 mb-1.5">
+                        ⚠ Conta(s) vinculada(s) a uma linha de <strong>subtotal/resultado</strong> (o certo é vincular a um grupo normal).
+                        Corrija em <strong>Parâmetros → Mapeamento Fluxo de Caixa</strong>:
+                      </p>
+                      <div className="rounded-lg border border-amber-200 bg-white/60 overflow-hidden max-w-3xl">
+                        <table className="w-full text-[11px]">
+                          <thead className="text-gray-400 text-[9.5px] uppercase tracking-wider bg-gray-50/60">
+                            <tr>
+                              <th className="text-left px-3 py-1.5">Conta</th>
+                              <th className="text-left px-3 py-1.5">Vinculada em (linha)</th>
+                              <th className="text-right px-3 py-1.5">Valor no período</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {mapeadosEmSubtotal.map((c, i) => (
+                              <tr key={`${c.codigo}-${i}`}>
+                                <td className="px-3 py-1 text-gray-700 truncate max-w-[260px]" title={`${c.codigo} · ${c.descricao}`}>
+                                  <span className="font-mono text-[10px] text-gray-400">{c.codigo}</span> · {c.descricao}{c.lado ? ` (${c.lado})` : ''}
+                                </td>
+                                <td className="px-3 py-1 text-amber-700 truncate max-w-[200px]" title={c.grupo}>{c.grupo} <span className="text-[9px] text-gray-400 uppercase">({c.tipo})</span></td>
+                                <td className={`px-3 py-1 text-right font-mono tabular-nums font-semibold ${c.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{c.total >= 0 ? '+' : ''}{formatCurrency(c.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                   {!bate && (() => {
                     // Onde está a diferença: variação do extrato (por conta) × soma
                     // dos movimentos que entraram no fluxo (por conta caixa/banco).
