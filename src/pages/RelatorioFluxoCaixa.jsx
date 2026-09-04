@@ -1251,6 +1251,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
     return nodes.map(node => {
       if (node.tipo === 'subtotal' || node.tipo === 'resultado') {
+        // Linhas de subtotal/resultado normalmente NÃO têm contas próprias (são
+        // só cálculo). Mas se alguma conta estiver mapeada direto numa delas, o
+        // valor precisa entrar no acumulado — senão some do total sem aparecer
+        // no "não mapeado" (fica tecnicamente mapeada, mas fora da soma).
+        meses.forEach(m => { acumPorMes[m.key] += (node.valoresPorMes[m.key] || 0); });
+        acumTotal += node.totalPeriodo;
         return {
           ...node,
           isCalc: true,
