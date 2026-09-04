@@ -98,9 +98,7 @@ serve(async (req) => {
   try {
     const rede = await obterRede(supabase, redeId, req);
 
-    // Trim: os códigos na movto (colunas char) podem vir com espaços; normaliza
-    // dos dois lados pra a comparação com as contas caixa/banco não falhar.
-    const codigosCaixa = (contas_caixa_banco || []).map(c => String(c).trim());
+    const codigosCaixa = (contas_caixa_banco || []).map(c => String(c));
     const empresasNum = (empresaCodigos || []).map(e => Number(e)).filter(n => Number.isFinite(n));
     // Conjunto de REFERÊNCIA do fluxo: quando o usuário seleciona um subconjunto
     // de contas, o "caixa" do cálculo passa a ser SÓ essas contas — assim uma
@@ -108,7 +106,7 @@ serve(async (req) => {
     // entrada real (bate com o extrato). Sem seleção → todas as contas caixa/banco
     // (comportamento consolidado idêntico ao anterior).
     const refSet = Array.isArray(contas_selecionadas) && contas_selecionadas.length > 0
-      ? contas_selecionadas.map(c => String(c).trim())
+      ? contas_selecionadas.map(c => String(c))
       : codigosCaixa;
 
     // Filtra: (caixa em debit XOR credit). Exclui transferências internas
@@ -127,10 +125,10 @@ serve(async (req) => {
     const sql = `
       with fluxo as (
         select m.*,
-          case when trim(m.conta_debitar)  = any($5::text[]) then 'debito' else 'credito' end as lado_caixa,
-          case when trim(m.conta_debitar)  = any($5::text[]) then  1 else -1 end               as sinal,
-          case when trim(m.conta_debitar)  = any($5::text[]) then trim(m.conta_creditar)
-                                                             else trim(m.conta_debitar) end    as contraparte_codigo
+          case when m.conta_debitar  = any($5::text[]) then 'debito' else 'credito' end as lado_caixa,
+          case when m.conta_debitar  = any($5::text[]) then  1 else -1 end             as sinal,
+          case when m.conta_debitar  = any($5::text[]) then m.conta_creditar
+                                                       else m.conta_debitar end        as contraparte_codigo
         from movto m
         where m.empresa = any($1::bigint[])
           and m.data between $2 and $3
@@ -138,9 +136,9 @@ serve(async (req) => {
             -- coalesce: contrapartida NULL/vazia conta como "fora do caixa" (senão
             -- a comparação vira NULL e o lançamento some do fluxo, mas segue no
             -- extrato → gera diferença invisível na reconciliação).
-            (trim(m.conta_debitar)  = any($5::text[]) and not coalesce(trim(m.conta_creditar) = any($5::text[]), false))
+            (m.conta_debitar  = any($5::text[]) and not coalesce(m.conta_creditar = any($5::text[]), false))
             or
-            (trim(m.conta_creditar) = any($5::text[]) and not coalesce(trim(m.conta_debitar)  = any($5::text[]), false))
+            (m.conta_creditar = any($5::text[]) and not coalesce(m.conta_debitar  = any($5::text[]), false))
           )
       ),
       -- Provisão match 1: empresa + documento + pessoa
@@ -215,7 +213,7 @@ serve(async (req) => {
         (f.contraparte_codigo = any($4::text[]))              as contraparte_eh_caixa,
         -- true = a contraparte RESOLVIDA via provisão é conta caixa/banco →
         -- é transferência interna roteada por conta-ponte (2.1.1), não despesa.
-        (pv.despesa_codigo is not null and trim(pv.despesa_codigo) = any($4::text[])) as contraparte_resolvida_eh_caixa
+        (pv.despesa_codigo is not null and pv.despesa_codigo = any($4::text[])) as contraparte_resolvida_eh_caixa
       from fluxo f
       left join conta         cd on cd.codigo = f.conta_debitar
       left join conta         cc on cc.codigo = f.conta_creditar
@@ -243,13 +241,13 @@ serve(async (req) => {
       const sql = `
         select empresa, conta, coalesce(sum(v), 0) as saldo
         from (
-          select m.empresa as empresa, trim(m.conta_debitar)  as conta,  m.valor as v
+          select m.empresa as empresa, m.conta_debitar  as conta,  m.valor as v
           from movto m
-          where m.empresa = any($1::bigint[]) and m.data ${op} $2 and trim(m.conta_debitar)  = any($3::text[])
+          where m.empresa = any($1::bigint[]) and m.data ${op} $2 and m.conta_debitar  = any($3::text[])
           union all
-          select m.empresa as empresa, trim(m.conta_creditar) as conta, -m.valor as v
+          select m.empresa as empresa, m.conta_creditar as conta, -m.valor as v
           from movto m
-          where m.empresa = any($1::bigint[]) and m.data ${op} $2 and trim(m.conta_creditar) = any($3::text[])
+          where m.empresa = any($1::bigint[]) and m.data ${op} $2 and m.conta_creditar = any($3::text[])
         ) t
         group by empresa, conta
       `;
@@ -268,8 +266,15 @@ serve(async (req) => {
       return { porEmpresa, porConta };
     };
 
-    const ini = await saldoAte('<', data_de);
-    const fim = await saldoAte('<=', data_ate);
+    // Enriquecimento de saldos/movimentação — resiliente: se qualquer query aqui
+    // falhar ou der timeout (redes grandes), retornamos os LANÇAMENTOS mesmo assim
+    // (o fluxo/máscara ainda monta; só os saldos por conta ficam vazios).
+    let ini: { porEmpresa: Record<string, number>; porConta: Record<string, Record<string, number>> } = { porEmpresa: {}, porConta: {} };
+    let fim: { porEmpresa: Record<string, number>; porConta: Record<string, Record<string, number>> } = { porEmpresa: {}, porConta: {} };
+    const movimentacaoConta: Record<string, Record<string, { debito: number; credito: number }>> = {};
+    try {
+    ini = await saldoAte('<', data_de);
+    fim = await saldoAte('<=', data_ate);
 
     // Saldo de ABERTURA da conta (coluna conta.saldo_inicial) — parte do saldo que
     // NÃO está na movto (ex.: lançamento de saldo inicial de uma conta caixa).
@@ -285,7 +290,7 @@ serve(async (req) => {
         if (cols.has('empresa')) {
           const rows = await executarQuery(rede,
             `select empresa, codigo, saldo_inicial from conta
-             where empresa = any($1::bigint[]) and trim(codigo) = any($2::text[]) and coalesce(saldo_inicial, 0) <> 0`,
+             where empresa = any($1::bigint[]) and codigo = any($2::text[]) and coalesce(saldo_inicial, 0) <> 0`,
             [empresasNum, refSet], { encoding: 'SQL_ASCII' });
           rows.forEach((r: Record<string, unknown>) => {
             const ec = Number(r.empresa); const conta = String(r.codigo ?? '').trim();
@@ -299,7 +304,7 @@ serve(async (req) => {
           // empresa, então divergia entre a empresa isolada e a rede toda).
           const rows = await executarQuery(rede,
             `select codigo, saldo_inicial from conta
-             where trim(codigo) = any($1::text[]) and coalesce(saldo_inicial, 0) <> 0`,
+             where codigo = any($1::text[]) and coalesce(saldo_inicial, 0) <> 0`,
             [refSet], { encoding: 'SQL_ASCII' });
           const donoDaConta = (conta: string): string[] => {
             const donos = new Set<string>();
@@ -340,18 +345,17 @@ serve(async (req) => {
     const sqlMov = `
       select empresa, conta, coalesce(sum(deb), 0) as debito, coalesce(sum(cred), 0) as credito
       from (
-        select m.empresa as empresa, trim(m.conta_debitar)  as conta, m.valor as deb, 0::numeric as cred
+        select m.empresa as empresa, m.conta_debitar  as conta, m.valor as deb, 0::numeric as cred
         from movto m
-        where m.empresa = any($1::bigint[]) and m.data between $2 and $3 and trim(m.conta_debitar)  = any($4::text[])
+        where m.empresa = any($1::bigint[]) and m.data between $2 and $3 and m.conta_debitar  = any($4::text[])
         union all
-        select m.empresa as empresa, trim(m.conta_creditar) as conta, 0::numeric as deb, m.valor as cred
+        select m.empresa as empresa, m.conta_creditar as conta, 0::numeric as deb, m.valor as cred
         from movto m
-        where m.empresa = any($1::bigint[]) and m.data between $2 and $3 and trim(m.conta_creditar) = any($4::text[])
+        where m.empresa = any($1::bigint[]) and m.data between $2 and $3 and m.conta_creditar = any($4::text[])
       ) t
       group by empresa, conta
     `;
     const movRows = await executarQuery(rede, sqlMov, [empresasNum, data_de, data_ate, refSet], { encoding: 'SQL_ASCII' });
-    const movimentacaoConta: Record<string, Record<string, { debito: number; credito: number }>> = {};
     movRows.forEach(r => {
       const ec = Number(r.empresa);
       if (!Number.isFinite(ec)) return;
@@ -361,6 +365,10 @@ serve(async (req) => {
         debito: Number(r.debito || 0), credito: Number(r.credito || 0),
       };
     });
+    } catch (e) {
+      console.error('[autosystem-fluxo-caixa] saldos/movimentação falharam — retornando só lançamentos:',
+        e instanceof Error ? e.message : String(e));
+    }
 
     return json({
       lancamentos: linhas,
