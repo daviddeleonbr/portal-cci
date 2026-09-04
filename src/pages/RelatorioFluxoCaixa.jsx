@@ -2860,13 +2860,56 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       {linha(bate ? '= Reconciliado' : '= Diferença a investigar', dif, { strong: true })}
                     </div>
                   </div>
-                  {!bate && (
-                    <p className="text-[11px] text-amber-700 mt-2 max-w-2xl">
-                      Há <strong>{formatCurrency(Math.abs(dif))}</strong> no extrato real que não está na máscara nem no "não mapeado".
-                      Normalmente são lançamentos numa conta caixa/banco com <strong>contrapartida vazia/nula</strong> (ex.: saldo de abertura, ajuste),
-                      que ficam de fora do fluxo classificado. Me avise que eu incluo esses lançamentos no fluxo.
-                    </p>
-                  )}
+                  {!bate && (() => {
+                    // Onde está a diferença: variação do extrato (por conta) × soma
+                    // dos movimentos que entraram no fluxo (por conta caixa/banco).
+                    const fluxoNet = {};
+                    Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => {
+                      if (m.contaCodigo == null) return;
+                      const cod = String(m.contaCodigo);
+                      const tc = tipoPorConta.get(cod);
+                      if (tc !== 'bancaria' && tc !== 'caixa') return;
+                      if (!tiposContaAtivos.has(tc)) return;
+                      if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
+                      fluxoNet[cod] = (fluxoNet[cod] || 0) + (m.tipo === 'Crédito' ? 1 : -1) * Math.abs(Number(m.valor || 0));
+                    }));
+                    const linhasDif = [];
+                    resultadoPorEmpresa.empresas.forEach(e => (e.contas || []).forEach(c => {
+                      const fn = fluxoNet[String(c.contaCodigo)] || 0;
+                      const d2 = c.variacao - fn;
+                      if (Math.abs(d2) > 0.5) linhasDif.push({ nome: c.contaNome, codigo: c.contaCodigo, saldoVar: c.variacao, fluxoNet: fn, dif: d2 });
+                    }));
+                    linhasDif.sort((a, b) => Math.abs(b.dif) - Math.abs(a.dif));
+                    return (
+                      <div className="mt-3">
+                        <p className="text-[11px] text-amber-700 mb-1.5">
+                          Contas onde a variação do <strong>extrato</strong> difere do que entrou no <strong>fluxo</strong>:
+                        </p>
+                        <div className="rounded-lg border border-amber-200 bg-white/60 overflow-hidden max-w-3xl">
+                          <table className="w-full text-[11px]">
+                            <thead className="text-gray-400 text-[9.5px] uppercase tracking-wider bg-gray-50/60">
+                              <tr>
+                                <th className="text-left px-3 py-1.5">Conta</th>
+                                <th className="text-right px-3 py-1.5">Extrato</th>
+                                <th className="text-right px-3 py-1.5">Fluxo</th>
+                                <th className="text-right px-3 py-1.5">Diferença</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {linhasDif.map(l => (
+                                <tr key={l.codigo}>
+                                  <td className="px-3 py-1 text-gray-700 truncate max-w-[220px]" title={l.nome}>{l.nome}</td>
+                                  <td className="px-3 py-1 text-right font-mono tabular-nums text-gray-600">{formatCurrency(l.saldoVar)}</td>
+                                  <td className="px-3 py-1 text-right font-mono tabular-nums text-gray-600">{formatCurrency(l.fluxoNet)}</td>
+                                  <td className={`px-3 py-1 text-right font-mono tabular-nums font-semibold ${l.dif >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{l.dif >= 0 ? '+' : ''}{formatCurrency(l.dif)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
