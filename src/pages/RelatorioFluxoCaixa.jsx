@@ -956,6 +956,38 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       return v != null ? Number(v) : null;
     };
 
+    const permitida = (cod) => {
+      const tc = tipoPorConta.get(String(cod));
+      if (tc !== 'bancaria' && tc !== 'caixa') return false;
+      if (!tiposContaAtivos.has(tc)) return false;
+      if (filtroContas.size > 0 && !filtroContas.has(String(cod))) return false;
+      return true;
+    };
+
+    // Autosystem: usa os saldos REAIS por conta da Edge Function (calculados da
+    // tabela movto por empresa+conta), somando as empresas selecionadas — o mesmo
+    // dado da aba "Por Empresa" da rede. Assim a empresa isolada bate com a rede.
+    const temSaldosEdge = Object.keys(saldosIniciaisContaPorEmpresa || {}).length > 0
+      || Object.keys(saldosFinaisContaPorEmpresa || {}).length > 0
+      || Object.keys(movimentacaoContaPorEmpresa || {}).length > 0;
+    if (temSaldosEdge) {
+      const porContaEdge = new Map();
+      const getC = (cod) => {
+        let c = porContaEdge.get(cod);
+        if (!c) { c = { contaCodigo: cod, contaNome: descricaoPorConta.get(cod) || `Conta #${cod}`, saldoInicial: 0, saldoAtual: 0, entradas: 0, saidas: 0 }; porContaEdge.set(cod, c); }
+        return c;
+      };
+      Object.values(saldosIniciaisContaPorEmpresa || {}).forEach(cs => Object.entries(cs).forEach(([cod, v]) => { if (permitida(cod)) getC(cod).saldoInicial += Number(v) || 0; }));
+      Object.values(saldosFinaisContaPorEmpresa || {}).forEach(cs => Object.entries(cs).forEach(([cod, v]) => { if (permitida(cod)) getC(cod).saldoAtual += Number(v) || 0; }));
+      Object.values(movimentacaoContaPorEmpresa || {}).forEach(cs => Object.entries(cs).forEach(([cod, v]) => {
+        if (!permitida(cod)) return;
+        const c = getC(cod); c.entradas += Number(v.debito) || 0; c.saidas += Number(v.credito) || 0;
+      }));
+      return Array.from(porContaEdge.values())
+        .filter(c => Math.abs(c.saldoInicial) > 0.005 || Math.abs(c.saldoAtual) > 0.005 || Math.abs(c.entradas) > 0.005 || Math.abs(c.saidas) > 0.005)
+        .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
+    }
+
     const todos = [];
     Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => todos.push(m)));
     todos.sort((a, b) => (a.dataMovimento || '').localeCompare(b.dataMovimento || ''));
@@ -1004,7 +1036,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     });
     return Array.from(porConta.values())
       .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, aberturaPorConta]);
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, aberturaPorConta, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa]);
 
   // ─── Build Fluxo tree ─────────────────────────────────────
   const fluxoTree = useMemo(() => {
