@@ -820,6 +820,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // ─── Indexar movimentos por conta + mes ───────────────────
   // Crédito = +valor (entrou caixa). Débito = -valor (saiu caixa).
   // Aplica filtros: tipo de conta + contas especificas.
+  // Códigos mapeados diretamente na máscara atual — usados pra priorizar o
+  // mapeamento direto sobre a resolução por provisão (ex.: empréstimos 2.1.1.7.x).
+  const mapCodesSet = useMemo(
+    () => new Set(mapeamentos.map(m => String(m.plano_conta_codigo || '').trim())),
+    [mapeamentos],
+  );
+
   const { totaisPorConta, totaisPorContaLado, lancamentosPorConta, nomesPorPlano } = useMemo(() => {
     const totais = {};
     // Totais SEPARADOS por direção (crédito/entrada 'C' vs débito/saída 'D') por
@@ -850,6 +857,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         // caixa, suprimento etc) sao agrupados por tipoDocumentoOrigem num
         // bucket "Sem classificacao" para nao sumirem do relatorio.
         let planoBruto = m.planoContaGerencialCodigo;
+        // Prioridade do mapeamento DIRETO: se a contrapartida CRUA (ex.: uma conta
+        // 2.1.1.7.x de empréstimo a pagar) foi mapeada na máscara, ela vence a
+        // resolução por provisão — que poderia levar o pagamento pro grupo errado
+        // (ex.: casar por valor/pessoa com uma provisão de tarifas).
+        const cpBruta = m._contraparteBruta != null ? String(m._contraparteBruta).trim() : null;
+        if (cpBruta && cpBruta !== String(planoBruto ?? '').trim() && mapCodesSet.has(cpBruta)) {
+          planoBruto = cpBruta;
+        }
         let temPlano = planoBruto != null && planoBruto !== 0 && planoBruto !== '';
 
         const sinal = m.tipo === 'Crédito' ? 1 : -1;
@@ -941,7 +956,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       });
     });
     return { totaisPorConta: totais, totaisPorContaLado: totaisLado, lancamentosPorConta: lancs, nomesPorPlano: nomes };
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento]);
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento, mapCodesSet]);
 
   // ─── Composicao do saldo por conta (saldo inicial + movs = saldo atual) ─
   // Respeita os mesmos filtros aplicados ao fluxo (bancaria/caixa + multi-select).
@@ -1797,6 +1812,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       if (!empKey) return;
 
       let planoBruto = m.planoContaGerencialCodigo;
+      // Mesma prioridade do mapeamento direto sobre a resolução por provisão.
+      const cpBrutaE = m._contraparteBruta != null ? String(m._contraparteBruta).trim() : null;
+      if (cpBrutaE && cpBrutaE !== String(planoBruto ?? '').trim() && mapCodesSet.has(cpBrutaE)) {
+        planoBruto = cpBrutaE;
+      }
       const temPlano = planoBruto != null && planoBruto !== 0 && planoBruto !== '';
       const sinal = m.tipo === 'Crédito' ? 1 : -1;
       const valorAbs = Math.abs(Number(m.valor || 0));
@@ -1868,7 +1888,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       });
     });
     return { totaisPorContaEmpresa: totais, totaisPorContaLadoEmpresa: totaisLado, lancamentosPorContaEmpresa: lancs };
-  }, [mesEmpresa, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento]);
+  }, [mesEmpresa, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento, mapCodesSet]);
 
   // Arvore Fluxo com empresas como colunas (espelha fluxoTree com colunasEmpresa)
   const fluxoTreeEmpresa = useMemo(() => {
