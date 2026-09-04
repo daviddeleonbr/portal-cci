@@ -1331,28 +1331,66 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const porEmpresa = {};
     cliente._empresas.forEach(emp => {
       const ec = Number(emp.empresa_codigo);
-      if (!Number.isFinite(ec)) return;
-      // Saldo inicial/final e débito/crédito REAIS por conta (da tabela movto,
-      // via Edge Function) — inclui transferências internas, batendo com o
-      // balancete de verificação. Entradas = débito (dinheiro que entrou na
-      // conta), Saídas = crédito (que saiu).
-      const iniMap = saldosIniciaisContaPorEmpresa?.[String(ec)] || {};
-      const fimMap = saldosFinaisContaPorEmpresa?.[String(ec)] || {};
-      const movMap = movimentacaoContaPorEmpresa?.[String(ec)] || {};
-      const codigos = new Set([...Object.keys(iniMap), ...Object.keys(fimMap), ...Object.keys(movMap)]);
-      const contasMap = {};
-      codigos.forEach(cod => {
-        if (!contaPermitida(cod)) return;
-        const si = Number(iniMap[cod] || 0);
-        const sf = fimMap[cod] != null ? Number(fimMap[cod]) : si;
-        contasMap[cod] = {
-          contaCodigo: cod, contaNome: descricaoPorConta.get(String(cod)) || `Conta ${cod}`,
-          saldoInicial: si, saldoFinal: sf,
-          entradas: Number(movMap[cod]?.debito || 0), saidas: Number(movMap[cod]?.credito || 0),
-        };
-      });
-      porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, contasMap };
+      if (Number.isFinite(ec)) porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, contasMap: {} };
     });
+
+    // Autosystem: saldos REAIS por conta (da tabela movto, via Edge Function).
+    // Webposto: não tem esses mapas → usa movimentos + aberturaPorConta (Quality).
+    const temEdge = Object.keys(saldosIniciaisContaPorEmpresa || {}).length > 0
+      || Object.keys(saldosFinaisContaPorEmpresa || {}).length > 0
+      || Object.keys(movimentacaoContaPorEmpresa || {}).length > 0;
+
+    if (temEdge) {
+      Object.values(porEmpresa).forEach(pe => {
+        const ec = String(pe.empresaCodigo);
+        const iniMap = saldosIniciaisContaPorEmpresa?.[ec] || {};
+        const fimMap = saldosFinaisContaPorEmpresa?.[ec] || {};
+        const movMap = movimentacaoContaPorEmpresa?.[ec] || {};
+        const codigos = new Set([...Object.keys(iniMap), ...Object.keys(fimMap), ...Object.keys(movMap)]);
+        codigos.forEach(cod => {
+          if (!contaPermitida(cod)) return;
+          const si = Number(iniMap[cod] || 0);
+          const sf = fimMap[cod] != null ? Number(fimMap[cod]) : si;
+          pe.contasMap[cod] = {
+            contaCodigo: cod, contaNome: descricaoPorConta.get(String(cod)) || `Conta ${cod}`,
+            saldoInicial: si, saldoFinal: sf,
+            entradas: Number(movMap[cod]?.debito || 0), saidas: Number(movMap[cod]?.credito || 0),
+          };
+        });
+      });
+    } else {
+      // Webposto: agrupa os movimentos por empresa+conta; saldo inicial = abertura
+      // real (aberturaPorConta), saldo atual = último saldoPosterior do movimento.
+      const saldoDepois = (mm) => {
+        const v = mm.saldoPosterior ?? mm.saldoApos ?? mm.saldoAtual ?? mm.saldo ?? mm.saldoConta;
+        return v != null ? Number(v) : null;
+      };
+      Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => {
+        const ec = Number(m.empresaCodigo);
+        const pe = porEmpresa[ec];
+        if (!pe || m.contaCodigo == null) return;
+        const cod = String(m.contaCodigo);
+        if (!contaPermitida(cod)) return;
+        let cc = pe.contasMap[cod];
+        if (!cc) {
+          const ini = aberturaPorConta.get(cod);
+          cc = pe.contasMap[cod] = {
+            contaCodigo: cod, contaNome: descricaoPorConta.get(cod) || `Conta ${cod}`,
+            saldoInicial: ini != null ? Number(ini) : 0, saldoFinal: 0, entradas: 0, saidas: 0,
+            _saldoAtual: null, _ultKey: '',
+          };
+        }
+        const valor = Math.abs(Number(m.valor || 0));
+        if (m.tipo === 'Crédito') cc.entradas += valor; else cc.saidas += valor;
+        const sd = saldoDepois(m);
+        const key = `${m.dataMovimento || ''}|${String(m.movimentoContaCodigo || 0).padStart(20, '0')}`;
+        if (sd != null && key >= cc._ultKey) { cc._saldoAtual = sd; cc._ultKey = key; }
+      }));
+      Object.values(porEmpresa).forEach(pe => Object.values(pe.contasMap).forEach(cc => {
+        cc.saldoFinal = cc._saldoAtual != null ? cc._saldoAtual : (cc.saldoInicial + cc.entradas - cc.saidas);
+        delete cc._saldoAtual; delete cc._ultKey;
+      }));
+    }
 
     const arr = Object.values(porEmpresa).map(p => {
       const contas = Object.values(p.contasMap)
@@ -1377,7 +1415,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       totalSaldoInicial: arr.reduce((s, p) => s + p.saldoInicial, 0),
       totalSaldoFinal:   arr.reduce((s, p) => s + p.saldoFinal, 0),
     };
-  }, [modoRede, cliente, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa, descricaoPorConta]);
+  }, [modoRede, cliente, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa, descricaoPorConta, dadosPorMes, aberturaPorConta]);
 
   // ─── Evolução do Caixa (saldo acumulado ao longo do período) ────────────
   // Reaproveita: saldo inicial REAL (resultadoPorEmpresa/composicaoSaldo) + os
