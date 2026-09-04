@@ -1249,20 +1249,24 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       else nodes.splice(idx, 0, transferenciasNode);
     }
 
+    // Total GERAL = todos os grupos (não as linhas de cálculo), INDEPENDENTE da
+    // posição. Se um grupo estiver posicionado depois da linha de resultado, o
+    // valor ainda entra no total (senão sumiria — era a causa da diferença).
+    const ehCalc = (n) => n.tipo === 'subtotal' || n.tipo === 'resultado';
+    const grandTotal = nodes.reduce((s, n) => s + (ehCalc(n) ? 0 : n.totalPeriodo), 0);
+    const grandPorMes = {};
+    meses.forEach(m => { grandPorMes[m.key] = nodes.reduce((s, n) => s + (ehCalc(n) ? 0 : (n.valoresPorMes[m.key] || 0)), 0); });
+
     return nodes.map(node => {
-      if (node.tipo === 'subtotal' || node.tipo === 'resultado') {
-        // Linhas de subtotal/resultado normalmente NÃO têm contas próprias (são
-        // só cálculo). Mas se alguma conta estiver mapeada direto numa delas, o
-        // valor precisa entrar no acumulado — senão some do total sem aparecer
-        // no "não mapeado" (fica tecnicamente mapeada, mas fora da soma).
+      if (node.tipo === 'resultado') {
+        // Resultado final = total de TODOS os grupos (independe da ordem).
+        return { ...node, isCalc: true, valoresPorMes: { ...grandPorMes }, totalPeriodo: grandTotal };
+      }
+      if (node.tipo === 'subtotal') {
+        // Subtotal = acumulado até aqui (inclui contas próprias, se houver).
         meses.forEach(m => { acumPorMes[m.key] += (node.valoresPorMes[m.key] || 0); });
         acumTotal += node.totalPeriodo;
-        return {
-          ...node,
-          isCalc: true,
-          valoresPorMes: { ...acumPorMes },
-          totalPeriodo: acumTotal,
-        };
+        return { ...node, isCalc: true, valoresPorMes: { ...acumPorMes }, totalPeriodo: acumTotal };
       }
       meses.forEach(m => { acumPorMes[m.key] += (node.valoresPorMes[m.key] || 0); });
       acumTotal += node.totalPeriodo;
@@ -1272,8 +1276,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
   const totalGeral = useMemo(() =>
     fluxoComCalculos.find(n => n.tipo === 'resultado')?.totalPeriodo
-    ?? (fluxoTree.reduce((s, n) => s + n.totalPeriodo, 0) + (transferenciasNode?.totalPeriodo || 0))
+    ?? (fluxoTree.reduce((s, n) => s + ((n.tipo === 'subtotal' || n.tipo === 'resultado') ? 0 : n.totalPeriodo), 0) + (transferenciasNode?.totalPeriodo || 0))
   , [fluxoComCalculos, fluxoTree, transferenciasNode]);
+
+  // Grupos posicionados DEPOIS da linha de resultado na máscara (layout errado).
+  const gruposAposResultado = useMemo(() => {
+    const idx = fluxoComCalculos.findIndex(n => n.tipo === 'resultado');
+    if (idx === -1) return [];
+    return fluxoComCalculos.slice(idx + 1)
+      .filter(n => n.tipo !== 'subtotal' && n.tipo !== 'resultado' && Math.abs(n.totalPeriodo) > 0.005)
+      .map(n => ({ nome: n.nome, total: n.totalPeriodo }));
+  }, [fluxoComCalculos]);
 
   // Ids de todos os grupos que REALMENTE aparecem na árvore do fluxo.
   const idsNaArvore = useMemo(() => {
@@ -2924,6 +2937,26 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       </div>
                     )}
                   </div>
+                  {gruposAposResultado.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-[11px] text-amber-700 mb-1.5">
+                        ⚠ Grupo(s) posicionado(s) <strong>depois</strong> da linha "= Variação de Caixa" na máscara — o valor já foi
+                        reincluído no total, mas <strong>reordene na máscara</strong> pra ficar antes do resultado:
+                      </p>
+                      <div className="rounded-lg border border-amber-200 bg-white/60 overflow-hidden max-w-2xl">
+                        <table className="w-full text-[11px]">
+                          <tbody className="divide-y divide-gray-100">
+                            {gruposAposResultado.map((g, i) => (
+                              <tr key={i}>
+                                <td className="px-3 py-1 text-gray-700 truncate">{g.nome}</td>
+                                <td className={`px-3 py-1 text-right font-mono tabular-nums font-semibold ${g.total >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{g.total >= 0 ? '+' : ''}{formatCurrency(g.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                   {analiseVinculos.problemas.length > 0 && (
                     <div className="mt-3">
                       <p className="text-[11px] text-gray-600 mb-1.5">
