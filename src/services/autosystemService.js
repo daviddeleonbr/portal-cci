@@ -517,6 +517,9 @@ export async function buscarFluxoCaixaAutosystem(redeId, empresaCodigos, filtros
   if (data?.error) throw new Error(data.detail || data.error);
   return {
     lancamentos: Array.isArray(data?.lancamentos) ? data.lancamentos : [],
+    // Rateio de baixa em lote: por pagamento (contra 2.1.1), as despesas reais das
+    // provisões ligadas via movto.child/parent. O front distribui o valor entre elas.
+    rateioProvisao: Array.isArray(data?.rateio_provisao) ? data.rateio_provisao : [],
     saldosIniciais: data?.saldos_iniciais || {},
     saldosIniciaisConta: data?.saldos_iniciais_conta || {},
     saldosFinais: data?.saldos_finais || {},

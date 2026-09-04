@@ -228,6 +228,91 @@ serve(async (req) => {
 
     const linhas = result.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
 
+    // ── Rateio de baixa em lote ──────────────────────────────────────────────
+    // Um único pagamento (contra 2.1.1) pode ter baixado VÁRIAS provisões de uma
+    // vez (ex.: 1 PIX quitando N títulos de fornecedor). Nesse caso o valor total
+    // não bate com nenhuma provisão individual → a resolução por documento/valor
+    // (CTEs prov_doc/prov_val) falha e a despesa fica "2.1.1 sem provisão".
+    //
+    // O ERP liga a baixa às provisões pela coluna `movto.child` (cada provisão
+    // aponta child = grid da baixa) ou, no 1:1, por `movto.parent` (a baixa aponta
+    // parent = grid da provisão) — o MESMO mecanismo do de/para contábil
+    // (autosystem-movto-export). Aqui retornamos, por pagamento, a lista de
+    // despesas reais (conta debitada da provisão) somadas por conta. O front
+    // distribui o valor do pagamento entre elas. É a resolução PRIMÁRIA (mais
+    // confiável que doc/valor); só cai no fallback quando não há link child/parent.
+    //
+    // Resiliente: se a query falhar (schema sem child/parent, timeout em rede
+    // grande), retornamos rateio vazio e o front usa o fallback doc/valor.
+    const rateioProvisao: Record<string, unknown>[] = [];
+    try {
+      const sqlRateio = `
+        with baixa as (
+          select m.grid, m.parent,
+            case when m.conta_debitar = any($4::text[]) then m.conta_creditar
+                                                        else m.conta_debitar end as contraparte_codigo
+          from movto m
+          where m.empresa = any($1::bigint[])
+            and m.data between $2 and $3
+            and (
+              (m.conta_debitar  = any($4::text[]) and not coalesce(m.conta_creditar = any($4::text[]), false))
+              or
+              (m.conta_creditar = any($4::text[]) and not coalesce(m.conta_debitar  = any($4::text[]), false))
+            )
+        )
+        -- Primário: provisões ligadas pela baixa via child (1 ou N → baixa em lote)
+        select
+          b.grid                                         as lancamento_id,
+          p.conta_debitar                                as despesa_codigo,
+          convert_to(coalesce(c.nome, ''), 'LATIN1')     as despesa_nome,
+          sum(p.valor)                                   as despesa_valor
+        from baixa b
+        join movto p
+          on p.child   = b.grid
+         and p.empresa = any($1::bigint[])
+         and p.conta_creditar like '2.1.1%'
+         and p.conta_debitar  not like '2.1.1%'
+        left join conta c on c.codigo = p.conta_debitar
+        where b.contraparte_codigo like '2.1.1%'
+        group by b.grid, p.conta_debitar, c.nome
+        union all
+        -- Fallback 1:1: a baixa aponta a provisão via parent (só quando não há child)
+        select
+          b.grid                                         as lancamento_id,
+          pp.conta_debitar                               as despesa_codigo,
+          convert_to(coalesce(c.nome, ''), 'LATIN1')     as despesa_nome,
+          sum(pp.valor)                                  as despesa_valor
+        from baixa b
+        join movto pp
+          on b.parent > 0
+         and pp.grid = b.parent
+         and pp.conta_creditar like '2.1.1%'
+         and pp.conta_debitar  not like '2.1.1%'
+        left join conta c on c.codigo = pp.conta_debitar
+        where b.contraparte_codigo like '2.1.1%'
+          and not exists (
+            select 1 from movto x
+            where x.child = b.grid
+              and x.conta_creditar like '2.1.1%'
+              and x.conta_debitar  not like '2.1.1%'
+          )
+        group by b.grid, pp.conta_debitar, c.nome
+      `;
+      const rateioRows = await executarQuery(rede, sqlRateio, [empresasNum, data_de, data_ate, refSet], { encoding: 'SQL_ASCII' });
+      rateioRows.forEach((row) => {
+        const dec = decodeRowText(row, new Set(['despesa_nome']), 'windows-1252');
+        rateioProvisao.push({
+          lancamento_id: dec.lancamento_id,
+          codigo: String(dec.despesa_codigo ?? '').trim(),
+          nome: dec.despesa_nome ?? '',
+          valor: Number(dec.despesa_valor || 0),
+        });
+      });
+    } catch (e) {
+      console.error('[autosystem-fluxo-caixa] rateio (child/parent) falhou — usando fallback doc/valor:',
+        e instanceof Error ? e.message : String(e));
+    }
+
     // Saldo de caixa/banco por empresa+conta acumulado até uma data de corte.
     // Cada lançamento afeta a(s) conta(s) caixa que aparece(m) nele:
     //   débito  numa conta caixa → +valor  (entra dinheiro na conta)
@@ -372,6 +457,7 @@ serve(async (req) => {
 
     return json({
       lancamentos: linhas,
+      rateio_provisao: rateioProvisao,
       saldos_iniciais: ini.porEmpresa,
       saldos_iniciais_conta: ini.porConta,
       saldos_finais: fim.porEmpresa,

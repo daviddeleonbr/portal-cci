@@ -407,7 +407,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
         const results = await Promise.all(meses.map(async m => {
           const r = rangeMes(m.ano, m.mes);
-          let lancs = [], saldosIniciaisConta = {}, saldosFinaisConta = {}, movimentacaoConta = {};
+          let lancs = [], saldosIniciaisConta = {}, saldosFinaisConta = {}, movimentacaoConta = {}, rateio = [];
           try {
             const out = await autosystemService.buscarFluxoCaixaAutosystem(
               cliente.as_rede_id,
@@ -424,12 +424,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             saldosIniciaisConta = out.saldosIniciaisConta || {};
             saldosFinaisConta = out.saldosFinaisConta || {};
             movimentacaoConta = out.movimentacaoConta || {};
+            rateio = out.rateioProvisao || [];
           } catch (e) {
             console.error('[Fluxo Autosystem] Falha no fetch', { mes: m.key, err: e });
           }
           concluidas++;
           setLoadingProgress({ atual: concluidas, total, mensagem: `${m.label}: ${lancs.length} lancamentos` });
-          return { key: m.key, mesIdx: meses.indexOf(m), lancs, saldosIniciaisConta, saldosFinaisConta, movimentacaoConta };
+          return { key: m.key, mesIdx: meses.indexOf(m), lancs, saldosIniciaisConta, saldosFinaisConta, movimentacaoConta, rateio };
         }));
 
         // Saldo INICIAL do período = do primeiro mês (antes da data mais antiga);
@@ -464,6 +465,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         let totalConvertidos = 0;
         let naoClassificadas211 = 0;
         results.forEach(r => {
+          // Rateio de baixa em lote por lançamento (chave = lancamento_id/grid da baixa).
+          // Cada entrada é uma despesa real (conta debitada da provisão ligada via
+          // movto.child/parent) com seu valor. Presente só p/ pagamentos contra 2.1.1
+          // que baixaram provisões — resolve o caso "N títulos num pagamento só".
+          const rateioPorLanc = new Map();
+          (r.rateio || []).forEach(x => {
+            const id = x?.lancamento_id;
+            if (id == null) return;
+            const cod = String(x.codigo ?? '').trim();
+            if (!cod) return;
+            const key = String(id);
+            if (!rateioPorLanc.has(key)) rateioPorLanc.set(key, []);
+            rateioPorLanc.get(key).push({ codigo: cod, nome: x.nome || '', valor: Math.abs(Number(x.valor || 0)) });
+          });
           const movs = (r.lancs || []).map(l => {
             const sinal = Number(l.sinal) || 0;
             const tipo = sinal > 0 ? 'Crédito' : 'Débito';
@@ -474,7 +489,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               ? String(l.contraparte_resolvida_codigo).trim()
               : null;
             const isPonte211 = /^2\.1\.1/.test(cpBruto);
-            const naoClassificada = isPonte211 && !cpResolv;
+            // Provisões da baixa em lote deste lançamento (via child/parent).
+            const rateioLanc = l.lancamento_id != null ? rateioPorLanc.get(String(l.lancamento_id)) : null;
+            const temRateio = Array.isArray(rateioLanc) && rateioLanc.length > 0;
+            // "Não classificada" só quando é ponte 2.1.1 SEM resolução alguma —
+            // nem doc/valor (cpResolv) nem rateio child/parent.
+            const naoClassificada = isPonte211 && !cpResolv && !temRateio;
             if (naoClassificada) naoClassificadas211++;
             // Transferência entre contas próprias: a contraparte é caixa/banco —
             // seja diretamente, seja RESOLVIDA via provisão (pagamento roteado por
@@ -489,9 +509,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               planoContaGerencialCodigo: planoEfetivo,
               planoContaGerencialDescricao: l.contraparte_resolvida_nome || l.contraparte_nome || null,
               // Campos extras pra diagnóstico/badge no front
-              _viaProvisao: !!l.via_provisao,
+              _viaProvisao: !!l.via_provisao || temRateio,
               _naoClassificada211: naoClassificada,
               _contraparteBruta: cpBruto,
+              // Baixa em lote: despesas reais das provisões ligadas via child/parent.
+              // Não aplica a transferências (elas vão pro grupo de transferências).
+              _rateioProvisao: ehTransferencia ? null : (temRateio ? rateioLanc : null),
               tipo,
               valor: Math.abs(Number(l.valor || 0)),
               dataMovimento: String(l.data ?? '').slice(0, 10),
@@ -871,6 +894,47 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const valorAbs = Math.abs(Number(m.valor || 0));
         const valor = valorAbs * sinal;
         const idBase = m.codigo || `${m.movimentoContaCodigo}`;
+
+        // ─ BAIXA EM LOTE (Autosystem): 1 pagamento (contra 2.1.1) baixou N provisões ─
+        //   O ERP liga a baixa às provisões via movto.child/parent → `_rateioProvisao`
+        //   traz a despesa real de cada título. Distribui o valor do pagamento entre
+        //   elas (proporcional ao valor de cada provisão; resíduo na última parte pra
+        //   a soma bater EXATAMENTE com o pagamento → preserva a reconciliação).
+        //   EXCEÇÃO: se a própria conta-ponte foi mapeada na máscara (cpBruta em
+        //   mapCodesSet), ela vence e NÃO rateamos (respeita o mapeamento direto).
+        const pontePropriaMapeada = !!(cpBruta && mapCodesSet.has(cpBruta));
+        const rateio = m._rateioProvisao;
+        if (!pontePropriaMapeada && Array.isArray(rateio) && rateio.length > 0) {
+          const somaR = rateio.reduce((s, x) => s + Math.abs(Number(x.valor || 0)), 0);
+          if (somaR > 0) {
+            let acumuladoAbs = 0;
+            rateio.forEach((x, idx) => {
+              const planoKey = String(x.codigo);
+              const parcelaAbs = idx === rateio.length - 1
+                ? valorAbs - acumuladoAbs
+                : Math.round(valorAbs * (Math.abs(Number(x.valor || 0)) / somaR) * 100) / 100;
+              acumuladoAbs += parcelaAbs;
+              const parcela = parcelaAbs * sinal;
+              if (x.nome && !nomes[planoKey]) nomes[planoKey] = x.nome;
+              if (!totais[planoKey]) totais[planoKey] = {};
+              totais[planoKey][mesKey] = (totais[planoKey][mesKey] || 0) + parcela;
+              addLado(planoKey, mesKey, parcela, sinal);
+              if (!lancs[planoKey]) lancs[planoKey] = [];
+              const parte = rateio.length > 1 ? ` · parte da baixa em lote (${idx + 1}/${rateio.length})` : '';
+              lancs[planoKey].push({
+                id: rateio.length > 1 ? `${idBase}-r${idx}` : idBase,
+                mesKey,
+                data: m.dataMovimento,
+                descricao: `${(m.descricao || '').trim() || '—'}${parte}`,
+                tipoDoc: m.tipoDocumentoOrigem,
+                movimentoContaCodigo: m.movimentoContaCodigo ?? null,
+                valor: parcelaAbs,
+                sinal,
+              });
+            });
+            return; // pagamento distribuído via rateio child/parent, pula o push normal
+          }
+        }
 
         // ─ TITULO_PAGAR_PAGAMENTO: liga via titulo.pagamento[].codigoDocumento ─
         //   codigoDocumento == MOVIMENTO_CONTA.movimentoContaCodigo.
@@ -1822,6 +1886,40 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const valorAbs = Math.abs(Number(m.valor || 0));
       const valor = valorAbs * sinal;
       const idBase = m.codigo || `${m.movimentoContaCodigo}`;
+
+      // Baixa em lote Autosystem (via child/parent) — mesmo tratamento do memo principal.
+      const pontePropriaMapeada = !!(cpBrutaE && mapCodesSet.has(cpBrutaE));
+      const rateio = m._rateioProvisao;
+      if (!pontePropriaMapeada && Array.isArray(rateio) && rateio.length > 0) {
+        const somaR = rateio.reduce((s, x) => s + Math.abs(Number(x.valor || 0)), 0);
+        if (somaR > 0) {
+          let acumuladoAbs = 0;
+          rateio.forEach((x, idx) => {
+            const planoKey = String(x.codigo);
+            const parcelaAbs = idx === rateio.length - 1
+              ? valorAbs - acumuladoAbs
+              : Math.round(valorAbs * (Math.abs(Number(x.valor || 0)) / somaR) * 100) / 100;
+            acumuladoAbs += parcelaAbs;
+            const parcela = parcelaAbs * sinal;
+            if (!totais[planoKey]) totais[planoKey] = {};
+            totais[planoKey][empKey] = (totais[planoKey][empKey] || 0) + parcela;
+            addLado(planoKey, empKey, parcela, sinal);
+            if (!lancs[planoKey]) lancs[planoKey] = [];
+            const parte = rateio.length > 1 ? ` · parte da baixa em lote (${idx + 1}/${rateio.length})` : '';
+            lancs[planoKey].push({
+              id: rateio.length > 1 ? `${idBase}-r${idx}-e${empKey}` : `${idBase}-e${empKey}`,
+              mesKey: empKey,
+              data: m.dataMovimento,
+              descricao: `${(m.descricao || '').trim() || '—'}${parte}`,
+              tipoDoc: m.tipoDocumentoOrigem,
+              movimentoContaCodigo: m.movimentoContaCodigo ?? null,
+              valor: parcelaAbs,
+              sinal,
+            });
+          });
+          return;
+        }
+      }
 
       // Distribuicao TITULO_PAGAR_PAGAMENTO em lote (mesmo tratamento do memo principal).
       if (m.tipoDocumentoOrigem === 'TITULO_PAGAR_PAGAMENTO' && m.movimentoContaCodigo != null) {
