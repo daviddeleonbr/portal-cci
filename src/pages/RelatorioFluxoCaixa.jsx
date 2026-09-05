@@ -2157,7 +2157,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           /* Tamanhos reduzidos pra impressao A4 retrato (~194mm utiles).
              IMPORTANTE: nao usar "padding" curto com !important porque isso
              sobrescreve paddingLeft inline usado pra indentacao hierarquica. */
-          html, body { font-size: 9pt; }
+          html, body { font-size: 9pt; color: #191a1c; }
           table { font-size: 8pt !important; border-collapse: collapse; width: 100% !important; min-width: 0 !important; table-layout: auto !important; }
           table colgroup col { width: auto !important; }
           table th, table td { padding-top: 1.5px !important; padding-bottom: 1.5px !important; padding-right: 3px !important; line-height: 1.15 !important; white-space: normal !important; }
@@ -2170,9 +2170,29 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           .overflow-x-auto { overflow: visible !important; }
           /* Impede quebra de pagina dentro de cards */
           .print-no-break { page-break-inside: avoid; break-inside: avoid; }
-          @page { size: A4 portrait; margin: 8mm; }
+
+          /* ── Identidade CCI na impressão ─────────────────────────────────
+             Bandas de cor da marca nas linhas de hierarquia (seção/subtotal/
+             resultado) — reafirmadas com !important + print-color-adjust pra
+             sobrepor o "background: transparent" acima e imprimir de fato.
+             Classe (esp. maior) vence o seletor "html *". */
+          tr.print-row-section > td { background: #f0fdfa !important; border-top: 0.7pt solid #0f766e !important; }
+          tr.print-row-subtotal > td { background: #f1f5f9 !important; }
+          tr.print-row-total > td { background: #ccfbf1 !important; border-top: 0.7pt solid #0f766e !important; border-bottom: 0.7pt solid #0f766e !important; }
+          /* Cabeçalho de tabela com faixa teal suave */
+          thead th { background: #f0fdfa !important; color: #0f766e !important; border-bottom: 0.7pt solid #0f766e !important; }
+
+          /* Elementos de marca do header/rodapé do PDF */
+          .pdf-accent-sq { background: #fcb619 !important; }
+          .pdf-rule { background: #e2dfd7 !important; }
+          .pdf-rule-amber { background: #fcb619 !important; }
+          .pdf-footer { display: block !important; position: fixed; left: 0; right: 0; bottom: 0; }
+
+          /* Margem inferior maior reserva espaço pro rodapé fixo. */
+          @page { size: A4 portrait; margin: 9mm 8mm 16mm 8mm; }
         }
         .print-only { display: none; }
+        .pdf-footer { display: none; }
       `}</style>
 
       {/* Header */}
@@ -2219,21 +2239,53 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         </div>
       </motion.div>
 
-      {/* Print header */}
-      <div className="print-only" style={{ display: 'none', marginBottom: 16, borderBottom: '2px solid #000', paddingBottom: 10 }}>
+      {/* Print header — identidade CCI (logo autêntico + régua-assinatura teal/âmbar) */}
+      <div className="print-only" style={{ display: 'none', marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 style={{ fontSize: '16pt', fontWeight: 'bold', margin: 0 }}>Fluxo de Caixa</h1>
-            <p style={{ fontSize: '10pt', margin: '4px 0' }}>{labelEmpresa(cliente)}{cliente.cnpj ? ` - CNPJ ${labelCnpj(cliente.cnpj)}` : ''}</p>
-            <p style={{ fontSize: '10pt', margin: '4px 0', color: '#666' }}>Período: {periodoLabel} &middot; Máscara: {mascaraSelecionada?.nome}</p>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
+            {/* Logo CCI (paths extraídos do papel timbrado da marca) */}
+            <svg viewBox="150 155 405 158" style={{ height: '34px', width: 'auto', flexShrink: 0, marginTop: 1 }} xmlns="http://www.w3.org/2000/svg" aria-label="CCI">
+              <path fill="#0f766e" d="M367.3,279.6c-8,0-14.9-1.4-20.6-4.2-5.7-2.8-10.5-6.5-14.2-11-3.7-4.6-6.5-9.5-8.3-14.9-1.8-5.3-2.7-10.5-2.7-15.5v-2.7c0-5.6.9-11.1,2.7-16.4,1.8-5.4,4.6-10.3,8.4-14.6,3.8-4.4,8.5-7.8,14.1-10.4,5.7-2.6,12.3-3.9,19.9-3.9s15.3,1.5,21.5,4.6c6.3,3,11.3,7.3,15.1,12.7,3.8,5.4,6,11.6,6.6,18.7s-.1.3-.3.3h-22.1c-.1,0-.2,0-.2-.2-.6-3-1.8-5.6-3.6-7.8-1.9-2.3-4.2-4-7.2-5.3-2.9-1.3-6.2-1.9-10-1.9s-6.6.6-9.4,1.8c-2.8,1.2-5.1,2.9-7,5.2-1.9,2.2-3.4,4.9-4.4,8.1-1,3.2-1.5,6.7-1.5,10.7s.5,7.5,1.5,10.7c1,3.2,2.5,5.9,4.5,8.1,2,2.3,4.4,4,7.2,5.2,2.8,1.2,6.1,1.8,9.7,1.8,5.7,0,10.5-1.4,14.4-4.1,3.9-2.7,6.2-6.3,7.1-10.8s.1-.2.2-.2h22.1c.2,0,.3.1.3.3-.8,6.5-3,12.5-6.6,17.9-3.7,5.5-8.7,9.9-15,13.2-6.3,3.3-13.8,4.9-22.3,4.9Z"/>
+              <path fill="#0f766e" d="M464.7,279.6c-8,0-14.9-1.4-20.6-4.2-5.7-2.8-10.5-6.5-14.2-11-3.7-4.6-6.5-9.5-8.3-14.9-1.8-5.3-2.7-10.5-2.7-15.5v-2.7c0-5.6.9-11.1,2.7-16.4,1.8-5.4,4.6-10.3,8.4-14.6,3.8-4.4,8.5-7.8,14.1-10.4,5.7-2.6,12.3-3.9,19.9-3.9s15.3,1.5,21.5,4.6c6.3,3,11.3,7.3,15.1,12.7,3.8,5.4,6,11.6,6.6,18.7s-.1.3-.3.3h-22.1c-.1,0-.2,0-.2-.2-.6-3-1.8-5.6-3.6-7.8-1.9-2.3-4.2-4-7.2-5.3-2.9-1.3-6.2-1.9-10-1.9s-6.6.6-9.4,1.8c-2.8,1.2-5.1,2.9-7,5.2-1.9,2.2-3.4,4.9-4.4,8.1-1,3.2-1.5,6.7-1.5,10.7s.5,7.5,1.5,10.7c1,3.2,2.5,5.9,4.5,8.1,2,2.3,4.4,4,7.2,5.2,2.8,1.2,6.1,1.8,9.7,1.8,5.7,0,10.5-1.4,14.4-4.1,3.9-2.7,6.2-6.3,7.1-10.8s.1-.2.2-.2h22.1c.2,0,.3.1.3.3-.8,6.5-3,12.5-6.6,17.9-3.7,5.5-8.7,9.9-15,13.2-6.3,3.3-13.8,4.9-22.3,4.9Z"/>
+              <path fill="#0f766e" d="M520.3,191.1v88.3c0,.1.1.3.3.3h23.1c.1,0,.3-.1.3-.3v-65.1c0,0,0-.1,0-.2l-23.1-23.1c-.2-.2-.5,0-.5.2Z"/>
+              <path fill="#fcb619" d="M520.6,185.9h23.1c.1,0,.3.1.3.3v23.1c0,.2-.3.3-.4.2l-23.1-23.1c-.2-.2,0-.4.2-.4Z"/>
+              <path fill="#0f766e" d="M217.5,162.5h80.2c.2,0,.4.2.4.4v80.2c0,.4-.4.5-.7.3l-80.2-80.2c-.3-.3,0-.7.3-.7Z"/>
+              <path fill="#fcb619" d="M159.5,172.5h55.2c.2,0,.4.2.4.4v55.2c0,.3-.4.5-.6.3l-55.2-55.2c-.2-.2,0-.6.3-.6Z"/>
+              <path fill="#0f766e" d="M211,235.2h67.4c.2,0,.4.2.4.4v67.4c0,.3-.4.5-.7.3l-67.4-67.4c-.2-.2,0-.7.3-.7Z"/>
+            </svg>
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ fontSize: '16pt', fontWeight: 700, margin: 0, color: '#0f766e', letterSpacing: '-0.2px' }}>Fluxo de Caixa</h1>
+              <p style={{ fontSize: '10pt', margin: '3px 0 0 0', color: '#191a1c', fontWeight: 600 }}>{labelEmpresa(cliente)}{cliente.cnpj ? ` · CNPJ ${labelCnpj(cliente.cnpj)}` : ''}</p>
+              <p style={{ fontSize: '9pt', margin: '2px 0 0 0', color: '#8a9199' }}>Período: {periodoLabel} &middot; Máscara: {mascaraSelecionada?.nome}</p>
+            </div>
           </div>
-          <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#444', lineHeight: 1.25, flexShrink: 0 }}>
-            <p style={{ margin: 0, fontSize: '9pt', fontWeight: 600, color: '#000' }}>CCI ASSESSORIA E CONSULTORIA INTELIGENTE LTDA</p>
-            <p style={{ margin: '2px 0 0 0', fontFamily: 'monospace' }}>CNPJ 57.268.175/0001-00</p>
-            <p style={{ margin: '4px 0 0 0', fontSize: '7.5pt', color: '#888' }}>
+          <div style={{ textAlign: 'right', fontSize: '8.5pt', color: '#8a9199', lineHeight: 1.3, flexShrink: 0 }}>
+            <p style={{ margin: 0, fontSize: '8.5pt', fontWeight: 600, color: '#191a1c' }}>CCI ASSESSORIA E CONSULTORIA INTELIGENTE LTDA</p>
+            <p style={{ margin: '2px 0 0 0', color: '#8a9199' }}>CNPJ 57.268.175/0001-00</p>
+            <p style={{ margin: '1px 0 0 0', color: '#8a9199' }}>Vila Velha · ES · 29.107-250</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: '7.5pt', color: '#a8adb3' }}>
               Impresso em {new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
             </p>
           </div>
+        </div>
+        {/* Régua-assinatura da marca: linha clara com segmento âmbar à esquerda */}
+        <div style={{ position: 'relative', height: '2px', marginTop: 8 }}>
+          <div className="pdf-rule" style={{ position: 'absolute', inset: 0, background: '#e2dfd7' }} />
+          <div className="pdf-rule-amber" style={{ position: 'absolute', left: 0, top: 0, width: '56px', height: '2px', background: '#fcb619' }} />
+        </div>
+      </div>
+
+      {/* Print footer fixo — contato da marca (repete em todas as páginas) */}
+      <div className="pdf-footer" style={{ display: 'none' }}>
+        <div style={{ position: 'relative', height: '1px' }}>
+          <div className="pdf-rule" style={{ position: 'absolute', inset: 0, background: '#e2dfd7' }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 2px 0 2px', fontSize: '7pt', color: '#8a9199' }}>
+          <span>Rua Humaitá, Divino Espírito Santo · Vila Velha · ES</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            +55 (27) 99925-0088 · cci.app.br
+            <span className="pdf-accent-sq" style={{ display: 'inline-block', width: '14px', height: '3px', background: '#fcb619' }} />
+          </span>
         </div>
       </div>
 
@@ -3356,9 +3408,15 @@ function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onT
       ? 'bg-slate-50'
       : depth === 0 ? 'bg-gray-50/60' : '';
 
+  // Classe de banda pra impressão (marca CCI): reafirma a hierarquia visual no
+  // PDF, onde os fundos do app são removidos. Ver CSS @media print.
+  const printRow = isResultado ? 'print-row-total'
+    : isCalc ? 'print-row-subtotal'
+      : depth === 0 ? 'print-row-section' : '';
+
   return (
     <>
-      <tr className={`border-b border-gray-50 ${rowBg} ${!isCalc ? 'hover:bg-emerald-50/30' : ''}`}>
+      <tr className={`border-b border-gray-50 ${rowBg} ${printRow} ${!isCalc ? 'hover:bg-emerald-50/30' : ''}`}>
         <td className="px-4 py-2 overflow-hidden" style={{ paddingLeft: 12 + indent }}>
           <div className="flex items-center gap-1.5 min-w-0">
             {hasChildren && !isCalc ? (
