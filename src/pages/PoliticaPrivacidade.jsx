@@ -11,7 +11,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ShieldCheck, ArrowLeft, Mail, Phone, MapPin, ArrowUpRight, ChevronRight,
+  ShieldCheck, ArrowLeft, ArrowUpRight, ChevronRight,
 } from 'lucide-react';
 
 const ATUALIZADO_EM = '5 de setembro de 2026';
@@ -29,7 +29,6 @@ const SECOES = [
   { id: 'seguranca', titulo: 'Segurança da informação' },
   { id: 'retencao', titulo: 'Retenção e descarte' },
   { id: 'direitos', titulo: 'Seus direitos como titular' },
-  { id: 'encarregado', titulo: 'Como exercer seus direitos e falar com o Encarregado' },
   { id: 'menores', titulo: 'Menores de idade' },
   { id: 'alteracoes', titulo: 'Alterações desta política' },
   { id: 'contato', titulo: 'Contato' },
@@ -58,7 +57,7 @@ export default function PoliticaPrivacidade() {
           <div className="mt-14 space-y-12">
             <Quem /> <Papeis /> <Dados /> <Finalidades /> <Compartilhamento />
             <IA /> <Transferencia /> <Cookies /> <Seguranca /> <Retencao />
-            <Direitos /> <Encarregado /> <Menores /> <Alteracoes /> <Contato />
+            <Direitos /> <Menores /> <Alteracoes /> <Contato />
           </div>
         </div>
       </main>
@@ -387,40 +386,9 @@ function Direitos() {
   );
 }
 
-function Encarregado() {
-  return (
-    <Secao id="encarregado" n={12} titulo="Como exercer seus direitos e falar com o Encarregado">
-      <p>
-        Para exercer seus direitos ou esclarecer dúvidas sobre privacidade, fale com o nosso Encarregado
-        pelo Tratamento de Dados (DPO):
-      </p>
-      <div className="not-prose rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
-        <div className="flex flex-col gap-3 text-[14px]">
-          <a href="mailto:contato@cci.app.br?subject=Privacidade%20-%20Direitos%20do%20titular"
-            className="inline-flex items-center gap-2.5 text-slate-200 hover:text-white transition-colors">
-            <Mail className="h-4 w-4 text-blue-400" /> contato@cci.app.br
-          </a>
-          <a href="https://wa.me/5527999250088" target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-2.5 text-slate-200 hover:text-white transition-colors">
-            <Phone className="h-4 w-4 text-blue-400" /> +55 (27) 99925-0088
-          </a>
-          <span className="inline-flex items-center gap-2.5 text-slate-400">
-            <MapPin className="h-4 w-4 text-blue-400" /> Vila Velha · ES · 29.107-250
-          </span>
-        </div>
-      </div>
-      <p>
-        Responderemos no menor prazo possível. Podemos precisar confirmar sua identidade antes de
-        atender a solicitação, para proteger seus próprios dados. Você também pode apresentar reclamação
-        à Autoridade Nacional de Proteção de Dados (ANPD).
-      </p>
-    </Secao>
-  );
-}
-
 function Menores() {
   return (
-    <Secao id="menores" n={13} titulo="Menores de idade">
+    <Secao id="menores" n={12} titulo="Menores de idade">
       <p>
         A plataforma é destinada a uso profissional por empresas e seus colaboradores. Não coletamos
         intencionalmente dados de menores de 18 anos. Caso identifiquemos esse tipo de dado sem a devida
@@ -432,7 +400,7 @@ function Menores() {
 
 function Alteracoes() {
   return (
-    <Secao id="alteracoes" n={14} titulo="Alterações desta política">
+    <Secao id="alteracoes" n={13} titulo="Alterações desta política">
       <p>
         Podemos atualizar esta política para refletir mudanças em nossos serviços ou na legislação. A
         versão vigente é sempre a publicada nesta página, com a data de última atualização indicada no
@@ -444,7 +412,7 @@ function Alteracoes() {
 
 function Contato() {
   return (
-    <Secao id="contato" n={15} titulo="Contato">
+    <Secao id="contato" n={14} titulo="Contato">
       <p>
         Ficou com dúvidas sobre esta Política de Privacidade ou sobre como tratamos seus dados? Fale com
         a gente pelo e-mail <a href="mailto:contato@cci.app.br" className="text-blue-300 hover:text-blue-200 underline underline-offset-4 decoration-blue-400/40">contato@cci.app.br</a> ou
