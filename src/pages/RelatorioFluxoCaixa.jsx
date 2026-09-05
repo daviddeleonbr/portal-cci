@@ -898,21 +898,16 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const valor = valorAbs * sinal;
         const idBase = m.codigo || `${m.movimentoContaCodigo}`;
 
-        // ─ BAIXA EM LOTE / CONTRAPARTIDA (Autosystem): pagamento com contra 2.1.1 ─
+        // ─ BAIXA EM LOTE (Autosystem): 1 pagamento (contra 2.1.1) baixou N provisões ─
         //   O ERP liga a baixa às provisões via movto.child/parent → `_rateioProvisao`
-        //   traz a despesa REAL de cada título (contas a pagar → despesa de fornecedor,
-        //   etc). Distribui o valor do pagamento entre elas (proporcional ao valor de
-        //   cada provisão; resíduo na última parte pra a soma bater EXATAMENTE com o
-        //   pagamento → preserva a reconciliação).
-        //
-        //   PRIORIDADE: a resolução por child/parent é a mais confiável e é o PADRÃO
-        //   pra todo Autosystem — ela VENCE inclusive o mapeamento direto da conta-ponte.
-        //   Assim, mapear "CONTAS A PAGAR"/"FORNECEDORES" (2.1.1.x) numa estrutura mostra
-        //   as CONTRAPARTIDAS (despesas reais), não a conta-ponte genérica.
-        //   O mapeamento direto da ponte só prevalece quando NÃO há rateio (ex.: pagamento
-        //   de empréstimo, que não tem provisão de despesa) — tratado no bloco acima.
+        //   traz a despesa real de cada título. Distribui o valor do pagamento entre
+        //   elas (proporcional ao valor de cada provisão; resíduo na última parte pra
+        //   a soma bater EXATAMENTE com o pagamento → preserva a reconciliação).
+        //   EXCEÇÃO: se a própria conta-ponte foi mapeada na máscara (cpBruta em
+        //   mapCodesSet), ela vence e NÃO rateamos (respeita o mapeamento direto).
+        const pontePropriaMapeada = !!(cpBruta && mapCodesSet.has(cpBruta));
         const rateio = m._rateioProvisao;
-        if (Array.isArray(rateio) && rateio.length > 0) {
+        if (!pontePropriaMapeada && Array.isArray(rateio) && rateio.length > 0) {
           const somaR = rateio.reduce((s, x) => s + Math.abs(Number(x.valor || 0)), 0);
           if (somaR > 0) {
             let acumuladoAbs = 0;
@@ -1895,11 +1890,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const valor = valorAbs * sinal;
       const idBase = m.codigo || `${m.movimentoContaCodigo}`;
 
-      // Baixa em lote / contrapartida Autosystem (via child/parent) — mesmo tratamento
-      // do memo principal: a resolução por child/parent é o PADRÃO e vence o mapeamento
-      // direto da conta-ponte (contrapartidas aparecem, não "CONTAS A PAGAR"/"FORNECEDORES").
+      // Baixa em lote Autosystem (via child/parent) — mesmo tratamento do memo principal.
+      const pontePropriaMapeada = !!(cpBrutaE && mapCodesSet.has(cpBrutaE));
       const rateio = m._rateioProvisao;
-      if (Array.isArray(rateio) && rateio.length > 0) {
+      if (!pontePropriaMapeada && Array.isArray(rateio) && rateio.length > 0) {
         const somaR = rateio.reduce((s, x) => s + Math.abs(Number(x.valor || 0)), 0);
         if (somaR > 0) {
           let acumuladoAbs = 0;
