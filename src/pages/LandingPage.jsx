@@ -909,7 +909,7 @@ function Footer() {
             © {new Date().getFullYear()} CCI Assessoria e Consultoria Inteligente Ltda · CNPJ 57.268.175/0001-00
           </p>
           <div className="flex items-center gap-5">
-            <a href="#" className="hover:text-slate-300 transition-colors">Privacidade</a>
+            <Link to="/politica-privacidade" className="hover:text-slate-300 transition-colors">Privacidade</Link>
             <a href="#" className="hover:text-slate-300 transition-colors">Termos</a>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />

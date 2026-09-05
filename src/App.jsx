@@ -5,6 +5,7 @@ import LandingPage from './pages/LandingPage';
 import LandingPortal from './pages/LandingPortal';
 import LandingVisor360 from './pages/LandingVisor360';
 import LandingBpoFinanceiro from './pages/LandingBpoFinanceiro';
+import PoliticaPrivacidade from './pages/PoliticaPrivacidade';
 // import SolicitarOrcamento from './pages/SolicitarOrcamento'; // INATIVO — uso futuro
 
 // Admin
@@ -118,6 +119,9 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         {/* Landing de vendas — BPO Financeiro (campanha) */}
         <Route path="/bpo-financeiro" element={<LandingBpoFinanceiro />} />
+        {/* Política de Privacidade (pública, LGPD) — alias /privacidade */}
+        <Route path="/politica-privacidade" element={<PoliticaPrivacidade />} />
+        <Route path="/privacidade" element={<Navigate to="/politica-privacidade" replace />} />
         {/* Rota /solicitar-orcamento desativada temporariamente — uso futuro */}
         {/* <Route path="/solicitar-orcamento" element={<SolicitarOrcamento />} /> */}
         {/* Seletor de portais (admin / cliente) */}
