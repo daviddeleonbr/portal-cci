@@ -18,6 +18,9 @@ import * as qualityApi from '../services/qualityApiService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
 import * as autosystemService from '../services/autosystemService';
 import * as XLSX from 'xlsx';
+// Design system dos PDFs da marca CCI — traz o @font-face da fonte Sora
+// (base64) e os tokens :root. Usado na impressão pra emissão com a fonte oficial.
+import '../components/ia/relatorioImpressao.css';
 import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
 import { nomeEmpresa } from '../utils/nomeEmpresa';
@@ -2157,13 +2160,19 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           /* Tamanhos reduzidos pra impressao A4 retrato (~194mm utiles).
              IMPORTANTE: nao usar "padding" curto com !important porque isso
              sobrescreve paddingLeft inline usado pra indentacao hierarquica. */
-          html, body { font-size: 9pt; color: #191a1c; }
+          html, body { font-size: 9pt; color: #191a1c; font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; }
           table { font-size: 8pt !important; border-collapse: collapse; width: 100% !important; min-width: 0 !important; table-layout: auto !important; }
           table colgroup col { width: auto !important; }
-          table th, table td { padding-top: 1.5px !important; padding-bottom: 1.5px !important; padding-right: 3px !important; line-height: 1.15 !important; white-space: normal !important; }
+          table th, table td { padding-top: 2px !important; padding-bottom: 2px !important; padding-right: 3px !important; line-height: 1.2 !important; white-space: normal !important; }
           table th { font-size: 6.5pt !important; }
           table td { font-size: 8pt !important; }
           h1, h2, h3 { font-size: 10pt !important; margin: 3px 0 !important; }
+          /* Tipografia da marca CCI: Sora nos títulos e rótulos de hierarquia;
+             corpo e números na fonte de sistema (mesma convenção do design system). */
+          h1, h2, h3, thead th,
+          tr.print-row-section > td:first-child,
+          tr.print-row-subtotal > td:first-child,
+          tr.print-row-total > td:first-child { font-family: 'Sora', system-ui, sans-serif !important; }
           .rounded-2xl, .rounded-xl, .rounded-lg { border-radius: 3px !important; }
           .border { border-width: 0.4pt !important; }
           .font-mono, .tabular-nums { font-size: 8.5pt !important; letter-spacing: -0.15px; }
@@ -2181,6 +2190,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           tr.print-row-total > td { background: #ccfbf1 !important; border-top: 0.7pt solid #0f766e !important; border-bottom: 0.7pt solid #0f766e !important; }
           /* Cabeçalho de tabela com faixa teal suave */
           thead th { background: #f0fdfa !important; color: #0f766e !important; border-bottom: 0.7pt solid #0f766e !important; }
+
+          /* Tabela "Variação de caixa por empresa": 8 colunas + números grandes
+             (+16.698.533,04) não cabem em A4 na largura padrão (px-4 = 16px/lado)
+             e, com overflow visível na impressão, as colunas da direita eram
+             cortadas. Compacta padding e fonte SÓ nessa tabela pra caber tudo. */
+          .print-emp-table th, .print-emp-table td { padding-left: 4px !important; padding-right: 4px !important; }
+          .print-emp-table td { font-size: 7.3pt !important; }
+          .print-emp-table .font-mono, .print-emp-table .tabular-nums { font-size: 7.3pt !important; letter-spacing: -0.2px; }
+          .print-emp-table th { font-size: 6pt !important; }
 
           /* Elementos de marca do header/rodapé do PDF */
           .pdf-accent-sq { background: #fcb619 !important; }
@@ -2995,7 +3013,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   </span>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm print-emp-table">
                     <thead className="bg-gray-50/80 border-b border-gray-100">
                       <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                         <th className="px-4 py-2.5">#</th>
