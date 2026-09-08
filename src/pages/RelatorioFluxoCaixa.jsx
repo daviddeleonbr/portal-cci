@@ -646,6 +646,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       // Trocamos o valor no próprio movimento pra que TODO o fluxo (composição, grupos,
       // totais, não mapeados) use o líquido. Best-effort: se falhar, mantém o bruto.
       const liquidoPorRemessa = new Map(); // cartaoRemessaCodigo -> valorLiquido
+      const remessaDiag = new Map();       // cartaoRemessaCodigo -> {valorRemessa, valorLiquido, taxasDespesas, acrescimos} (diagnóstico)
       try {
         const primeiroMes = meses[0];
         const ultimoMes = meses[meses.length - 1];
@@ -665,8 +666,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             const cod = rm.cartaoRemessaCodigo ?? rm.codigo;
             // Leitura defensiva do líquido (nomes alternativos conforme o schema).
             const vl = rm.valorLiquido ?? rm.valor_liquido ?? rm.liquido ?? rm.valorLiquidoTotal;
-            if (cod == null || vl == null) return;
-            liquidoPorRemessa.set(Number(cod), Number(vl));
+            if (cod == null) return;
+            if (vl != null) liquidoPorRemessa.set(Number(cod), Number(vl));
+            remessaDiag.set(Number(cod), {
+              valorRemessa: Number(rm.valorRemessa ?? 0),
+              valorLiquido: rm.valorLiquido != null ? Number(rm.valorLiquido) : null,
+              taxasDespesas: Number(rm.taxasDespesas ?? 0),
+              acrescimos: Number(rm.acrescimos ?? 0),
+            });
           });
         }
       } catch (_) { /* mantém o valor bruto se a busca falhar */ }
@@ -759,19 +766,37 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             const base = { conta: descricaoPorConta.get(cod) || cod, movs: movs.length, entradas: +ent.toFixed(2), saidas: +sai.toFixed(2), net: +(ent - sai).toFixed(2), saldoIni: ini, saldoFim: fim, varSaldo: varSaldo != null ? +varSaldo.toFixed(2) : null, gap: gap != null ? +gap.toFixed(2) : null };
             if (gap != null && Math.abs(gap) > 0.01) {
               console.warn('[Composição/diag] GAP', base, 'entradas por tipoDoc:', porDoc);
-              let prev = ini; const anom = [];
-              movs.forEach(m => {
-                const s = sdMov(m);
-                const vSin = Math.abs(Number(m.valor || 0)) * (m.tipo === 'Crédito' ? 1 : -1);
-                const imp = (s != null && prev != null) ? s - prev : null;
-                if (imp != null && Math.abs(imp - vSin) > 0.01) {
-                  anom.push({ data: m.dataMovimento, tipo: m.tipo, tipoDoc: m.tipoDocumentoOrigem, doc: m.documentoOrigemCodigo, valor: +vSin.toFixed(2), impactoSaldo: +imp.toFixed(2), dif: +(imp - vSin).toFixed(2), saldo: s });
-                }
-                if (s != null) prev = s;
+              // Cartão: compara o VALOR do movimento (o que entra em "entradas") com os
+              // campos da REMESSA, pra decidir se `valorLiquido` desconta a taxa ou vem
+              // = bruto. Se "movimento_menos_liquido" ~ o gap E valorLiquido < valorRemessa
+              // → é casamento falhando. Se valorLiquido == valorRemessa E taxas+acr ~ gap
+              // → valorLiquido NÃO é líquido e o certo é bruto − (taxas + acrescimos).
+              const cards = movs.filter(m => m.tipoDocumentoOrigem === 'CARTAO_REMESSA');
+              let somaMov = 0, somaRemBruto = 0, somaRemLiq = 0, somaTaxas = 0, somaAcr = 0, casados = 0, semRemessa = 0;
+              const amostra = [];
+              cards.forEach(m => {
+                const v = Math.abs(Number(m.valor || 0));
+                somaMov += v;
+                const r = remessaDiag.get(Number(m.documentoOrigemCodigo));
+                if (!r) { semRemessa++; return; }
+                casados++;
+                somaRemBruto += r.valorRemessa || 0;
+                somaRemLiq += (r.valorLiquido != null ? r.valorLiquido : r.valorRemessa) || 0;
+                somaTaxas += r.taxasDespesas || 0;
+                somaAcr += r.acrescimos || 0;
+                if (amostra.length < 10) amostra.push({ doc: m.documentoOrigemCodigo, mov_valor: +v.toFixed(2), rem_bruto: +(r.valorRemessa || 0).toFixed(2), rem_liquido: r.valorLiquido != null ? +r.valorLiquido.toFixed(2) : null, taxas: +(r.taxasDespesas || 0).toFixed(2), acrescimos: +(r.acrescimos || 0).toFixed(2) });
               });
-              const somaDif = anom.reduce((a, x) => a + x.dif, 0);
-              console.warn(`[Composição/diag] ${anom.length} mov. com valor≠impacto-saldo · soma das difs ${somaDif.toFixed(2)}`);
-              if (anom.length) (console.table ? console.table(anom) : console.warn(anom));
+              console.warn('[Composição/diag] CARTÃO', {
+                movimentos: cards.length, casados, semRemessa,
+                soma_valor_movimento: +somaMov.toFixed(2),
+                soma_valorRemessa: +somaRemBruto.toFixed(2),
+                soma_valorLiquido: +somaRemLiq.toFixed(2),
+                soma_taxas: +somaTaxas.toFixed(2),
+                soma_acrescimos: +somaAcr.toFixed(2),
+                movimento_menos_liquido: +(somaMov - somaRemLiq).toFixed(2),
+                taxas_mais_acrescimos: +(somaTaxas + somaAcr).toFixed(2),
+              });
+              if (amostra.length && console.table) console.table(amostra);
             } else {
               console.info('[Composição/diag] OK', base);
             }
