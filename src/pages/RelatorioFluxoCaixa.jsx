@@ -725,6 +725,58 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const mapAbertura = new Map();
         ultimoPorConta.forEach((v, cod) => mapAbertura.set(cod, v.saldo));
         setAberturaPorConta(mapAbertura);
+
+        // ─── DIAGNÓSTICO: reconcilia entradas/saídas/saldo por conta ───────────
+        // Usa MOVIMENTO_CONTA.valor (entrada/saída conforme `tipo`) e .saldo (saldo
+        // corrente). Loga cada conta e, quando a variação do saldo não bate com
+        // (entradas−saídas), lista os movimentos onde o VALOR ≠ variação do SALDO —
+        // é aí que está o erro (ex.: cartão no bruto, tipo mal interpretado, etc.).
+        try {
+          const sdMov = (m) => { const v = m.saldoPosterior ?? m.saldoApos ?? m.saldoAtual ?? m.saldo ?? m.saldoConta; return v != null ? Number(v) : null; };
+          const chaveOrd = (m) => `${m.dataMovimento || ''}|${String(m.movimentoContaCodigo || 0).padStart(20, '0')}`;
+          const tipos = new Set();
+          const porC = new Map();
+          Object.values(mapa).forEach(d => (d.movimentos || []).forEach(m => {
+            const cod = String(m.contaCodigo ?? ''); if (!cod) return;
+            if (m.tipo != null) tipos.add(m.tipo);
+            (porC.get(cod) || porC.set(cod, []).get(cod)).push(m);
+          }));
+          console.info('[Composição/diag] valores de `tipo` vistos:', [...tipos]);
+          porC.forEach((movs, cod) => {
+            movs.sort((a, b) => chaveOrd(a).localeCompare(chaveOrd(b)));
+            let ent = 0, sai = 0; const porDoc = {};
+            movs.forEach(m => {
+              const v = Math.abs(Number(m.valor || 0));
+              const cred = m.tipo === 'Crédito';
+              if (cred) ent += v; else sai += v;
+              const k = m.tipoDocumentoOrigem || '—';
+              (porDoc[k] ||= { ent: 0, sai: 0 })[cred ? 'ent' : 'sai'] += v;
+            });
+            const ini = mapAbertura.get(cod);
+            const fim = sdMov(movs[movs.length - 1]);
+            const varSaldo = (fim != null && ini != null) ? fim - ini : null;
+            const gap = varSaldo != null ? varSaldo - (ent - sai) : null;
+            const base = { conta: descricaoPorConta.get(cod) || cod, movs: movs.length, entradas: +ent.toFixed(2), saidas: +sai.toFixed(2), net: +(ent - sai).toFixed(2), saldoIni: ini, saldoFim: fim, varSaldo: varSaldo != null ? +varSaldo.toFixed(2) : null, gap: gap != null ? +gap.toFixed(2) : null };
+            if (gap != null && Math.abs(gap) > 0.01) {
+              console.warn('[Composição/diag] GAP', base, 'entradas por tipoDoc:', porDoc);
+              let prev = ini; const anom = [];
+              movs.forEach(m => {
+                const s = sdMov(m);
+                const vSin = Math.abs(Number(m.valor || 0)) * (m.tipo === 'Crédito' ? 1 : -1);
+                const imp = (s != null && prev != null) ? s - prev : null;
+                if (imp != null && Math.abs(imp - vSin) > 0.01) {
+                  anom.push({ data: m.dataMovimento, tipo: m.tipo, tipoDoc: m.tipoDocumentoOrigem, doc: m.documentoOrigemCodigo, valor: +vSin.toFixed(2), impactoSaldo: +imp.toFixed(2), dif: +(imp - vSin).toFixed(2), saldo: s });
+                }
+                if (s != null) prev = s;
+              });
+              const somaDif = anom.reduce((a, x) => a + x.dif, 0);
+              console.warn(`[Composição/diag] ${anom.length} mov. com valor≠impacto-saldo · soma das difs ${somaDif.toFixed(2)}`);
+              if (anom.length) (console.table ? console.table(anom) : console.warn(anom));
+            } else {
+              console.info('[Composição/diag] OK', base);
+            }
+          });
+        } catch (e) { console.warn('[Composição/diag] falhou', e); }
       } catch (_) {
         setAberturaPorConta(new Map());
       }
