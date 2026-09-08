@@ -50,6 +50,11 @@ function rangeMes(ano, mes) {
   };
 }
 
+// Índice absoluto de mês (ano*12 + mes0) e volta — pra somar/comparar meses.
+function idxMes(ano, mes) { return ano * 12 + (mes - 1); }
+function deIdxMes(idx) { const y = Math.floor(idx / 12); return { ano: y, mes: idx - y * 12 + 1 }; }
+function labelMesAno(ano, mes) { return `${MESES_NOMES[mes - 1]}/${String(ano).slice(2)}`; }
+
 // Formata uma duracao em ms em algo curto e legivel (ex: "850 ms", "12,3s", "1m 23s")
 function formatDuracao(ms) {
   if (ms == null || !Number.isFinite(ms)) return '';
@@ -85,6 +90,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const today = new Date();
   const [mesFinal, setMesFinal] = useState({ ano: today.getFullYear(), mes: today.getMonth() + 1 });
   const [qtdMeses, setQtdMeses] = useState(3);
+  // Início manual do período (mês) — sobrepõe o "Análise" relativo (1/3/6). null =
+  // automático. Limitado a no máximo 6 meses antes do mês final (mesFinal).
+  const [mesInicioManual, setMesInicioManual] = useState(null);
 
   const [dadosPorMes, setDadosPorMes] = useState({});
   // Saldo de abertura REAL por conta (código -> saldo), obtido do último movimento
@@ -161,16 +169,36 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [empExpandidas, setEmpExpandidas] = useState(() => new Set());
 
   // ─── Meses ────────────────────────────────────────────────
+  // Período = intervalo [início .. mesFinal]. O início vem do "Análise" relativo
+  // (mesFinal − (qtd−1)) ou, se houver seleção manual, do mês escolhido — sempre
+  // limitado a no máx. 6 meses e sem passar do mês final.
   const meses = useMemo(() => {
+    const aFim = idxMes(mesFinal.ano, mesFinal.mes);
+    let aIni = mesInicioManual
+      ? idxMes(mesInicioManual.ano, mesInicioManual.mes)
+      : aFim - (qtdMeses - 1);
+    if (aIni > aFim) aIni = aFim;          // início não passa do fim
+    if (aFim - aIni > 5) aIni = aFim - 5;  // no máximo 6 meses
     const arr = [];
-    for (let i = qtdMeses - 1; i >= 0; i--) {
-      let y = mesFinal.ano;
-      let m = mesFinal.mes - i;
-      while (m < 1) { m += 12; y--; }
-      arr.push({ ano: y, mes: m, key: `${y}-${String(m).padStart(2, '0')}`, label: `${MESES_NOMES[m - 1]}/${String(y).slice(2)}` });
+    for (let a = aIni; a <= aFim; a++) {
+      const { ano: y, mes: m } = deIdxMes(a);
+      arr.push({ ano: y, mes: m, key: `${y}-${String(m).padStart(2, '0')}`, label: labelMesAno(y, m) });
     }
     return arr;
-  }, [mesFinal, qtdMeses]);
+  }, [mesFinal, qtdMeses, mesInicioManual]);
+
+  // Mantém o início manual válido quando o mês final muda (dentro de 6 meses).
+  useEffect(() => {
+    setMesInicioManual(prev => {
+      if (!prev) return prev;
+      const aFim = idxMes(mesFinal.ano, mesFinal.mes);
+      let a = idxMes(prev.ano, prev.mes);
+      if (a > aFim) a = aFim;
+      if (aFim - a > 5) a = aFim - 5;
+      const { ano, mes } = deIdxMes(a);
+      return (ano === prev.ano && mes === prev.mes) ? prev : { ano, mes };
+    });
+  }, [mesFinal]);
 
   // ─── Init: cliente + mascaras ────────────────────────────
   // Em modo rede monta cliente virtual com chave_api_id e lista de empresas.
@@ -350,7 +378,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     setSaldosIniciaisContaPorEmpresa({});
     setSaldosFinaisContaPorEmpresa({});
     setMovimentacaoContaPorEmpresa({});
-  }, [mesFinal, qtdMeses, mascaraSelecionada]);
+  }, [mesFinal, qtdMeses, mesInicioManual, mascaraSelecionada]);
 
   // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado.
   useEffect(() => {
@@ -2358,14 +2386,36 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
             <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
               {[1, 3, 6].map(q => (
-                <button key={q} onClick={() => setQtdMeses(q)}
+                <button key={q} onClick={() => { setQtdMeses(q); setMesInicioManual(null); }}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
-                    qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    !mesInicioManual && qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
                   {q === 1 ? '1 mês' : `${q} meses`}
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Início manual do período — sobrepõe os atalhos 1/3/6; o dropdown só
+              oferece os 6 meses anteriores ao mês final (limite de 6 meses). */}
+          <div>
+            <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Início manual (máx. 6 meses)</label>
+            <select
+              value={mesInicioManual ? `${mesInicioManual.ano}-${mesInicioManual.mes}` : ''}
+              onChange={(e) => {
+                if (!e.target.value) { setMesInicioManual(null); return; }
+                const [y, m] = e.target.value.split('-').map(Number);
+                setMesInicioManual({ ano: y, mes: m });
+              }}
+              className={`h-8 rounded-lg border px-2 text-[11px] bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 ${
+                mesInicioManual ? 'border-emerald-400 text-gray-900 font-medium' : 'border-gray-200 text-gray-500'
+              }`}>
+              <option value="">Automático (início {meses[0]?.label ?? '—'})</option>
+              {Array.from({ length: 6 }, (_, k) => {
+                const { ano, mes } = deIdxMes(idxMes(mesFinal.ano, mesFinal.mes) - (5 - k));
+                return <option key={`${ano}-${mes}`} value={`${ano}-${mes}`}>{labelMesAno(ano, mes)}</option>;
+              })}
+            </select>
           </div>
 
           {/* Seletor de empresas (injetado pelo wrapper cliente) */}
