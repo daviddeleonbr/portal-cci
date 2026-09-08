@@ -762,43 +762,30 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             const ini = mapAbertura.get(cod);
             const fim = sdMov(movs[movs.length - 1]);
             const varSaldo = (fim != null && ini != null) ? fim - ini : null;
-            const gap = varSaldo != null ? varSaldo - (ent - sai) : null;
-            const base = { conta: descricaoPorConta.get(cod) || cod, movs: movs.length, entradas: +ent.toFixed(2), saidas: +sai.toFixed(2), net: +(ent - sai).toFixed(2), saldoIni: ini, saldoFim: fim, varSaldo: varSaldo != null ? +varSaldo.toFixed(2) : null, gap: gap != null ? +gap.toFixed(2) : null };
-            if (gap != null && Math.abs(gap) > 0.01) {
-              console.warn('[Composição/diag] GAP', base, 'entradas por tipoDoc:', porDoc);
-              // Cartão: compara o VALOR do movimento (o que entra em "entradas") com os
-              // campos da REMESSA, pra decidir se `valorLiquido` desconta a taxa ou vem
-              // = bruto. Se "movimento_menos_liquido" ~ o gap E valorLiquido < valorRemessa
-              // → é casamento falhando. Se valorLiquido == valorRemessa E taxas+acr ~ gap
-              // → valorLiquido NÃO é líquido e o certo é bruto − (taxas + acrescimos).
-              const cards = movs.filter(m => m.tipoDocumentoOrigem === 'CARTAO_REMESSA');
-              let somaMov = 0, somaRemBruto = 0, somaRemLiq = 0, somaTaxas = 0, somaAcr = 0, casados = 0, semRemessa = 0;
-              const amostra = [];
+            const porDocFmt = Object.fromEntries(Object.entries(porDoc)
+              .map(([k, v]) => [k, { ent: +v.ent.toFixed(2), sai: +v.sai.toFixed(2) }]));
+            // SEMPRE loga (o `gap` do saldo é retro-datado e instável → não confiável).
+            console.info('[Composição/diag]', descricaoPorConta.get(cod) || cod, {
+              movs: movs.length, entradas: +ent.toFixed(2), saidas: +sai.toFixed(2), net: +(ent - sai).toFixed(2),
+              saldoIni: ini, saldoFim: fim, varSaldo: varSaldo != null ? +varSaldo.toFixed(2) : null,
+              entradasPorTipoDoc: porDocFmt,
+            });
+            // Cartão: confirma que o líquido está aplicado (movimento_menos_liquido ~ 0).
+            const cards = movs.filter(m => m.tipoDocumentoOrigem === 'CARTAO_REMESSA');
+            if (cards.length) {
+              let somaMov = 0, somaRemLiq = 0, semRemessa = 0;
               cards.forEach(m => {
-                const v = Math.abs(Number(m.valor || 0));
-                somaMov += v;
+                somaMov += Math.abs(Number(m.valor || 0));
                 const r = remessaDiag.get(Number(m.documentoOrigemCodigo));
                 if (!r) { semRemessa++; return; }
-                casados++;
-                somaRemBruto += r.valorRemessa || 0;
                 somaRemLiq += (r.valorLiquido != null ? r.valorLiquido : r.valorRemessa) || 0;
-                somaTaxas += r.taxasDespesas || 0;
-                somaAcr += r.acrescimos || 0;
-                if (amostra.length < 10) amostra.push({ doc: m.documentoOrigemCodigo, mov_valor: +v.toFixed(2), rem_bruto: +(r.valorRemessa || 0).toFixed(2), rem_liquido: r.valorLiquido != null ? +r.valorLiquido.toFixed(2) : null, taxas: +(r.taxasDespesas || 0).toFixed(2), acrescimos: +(r.acrescimos || 0).toFixed(2) });
               });
-              console.warn('[Composição/diag] CARTÃO', {
-                movimentos: cards.length, casados, semRemessa,
+              console.info('[Composição/diag]  ↳ cartão', descricaoPorConta.get(cod) || cod, {
+                movimentos: cards.length, semRemessa,
                 soma_valor_movimento: +somaMov.toFixed(2),
-                soma_valorRemessa: +somaRemBruto.toFixed(2),
                 soma_valorLiquido: +somaRemLiq.toFixed(2),
-                soma_taxas: +somaTaxas.toFixed(2),
-                soma_acrescimos: +somaAcr.toFixed(2),
                 movimento_menos_liquido: +(somaMov - somaRemLiq).toFixed(2),
-                taxas_mais_acrescimos: +(somaTaxas + somaAcr).toFixed(2),
               });
-              if (amostra.length && console.table) console.table(amostra);
-            } else {
-              console.info('[Composição/diag] OK', base);
             }
           });
         } catch (e) { console.warn('[Composição/diag] falhou', e); }
