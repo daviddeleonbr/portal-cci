@@ -646,7 +646,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       // Trocamos o valor no próprio movimento pra que TODO o fluxo (composição, grupos,
       // totais, não mapeados) use o líquido. Best-effort: se falhar, mantém o bruto.
       const liquidoPorRemessa = new Map(); // cartaoRemessaCodigo -> valorLiquido
-      const remessaDiag = new Map();       // cartaoRemessaCodigo -> {valorRemessa, valorLiquido, taxasDespesas, acrescimos} (diagnóstico)
       try {
         const primeiroMes = meses[0];
         const ultimoMes = meses[meses.length - 1];
@@ -666,14 +665,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             const cod = rm.cartaoRemessaCodigo ?? rm.codigo;
             // Leitura defensiva do líquido (nomes alternativos conforme o schema).
             const vl = rm.valorLiquido ?? rm.valor_liquido ?? rm.liquido ?? rm.valorLiquidoTotal;
-            if (cod == null) return;
-            if (vl != null) liquidoPorRemessa.set(Number(cod), Number(vl));
-            remessaDiag.set(Number(cod), {
-              valorRemessa: Number(rm.valorRemessa ?? 0),
-              valorLiquido: rm.valorLiquido != null ? Number(rm.valorLiquido) : null,
-              taxasDespesas: Number(rm.taxasDespesas ?? 0),
-              acrescimos: Number(rm.acrescimos ?? 0),
-            });
+            if (cod == null || vl == null) return;
+            liquidoPorRemessa.set(Number(cod), Number(vl));
           });
         }
       } catch (_) { /* mantém o valor bruto se a busca falhar */ }
@@ -732,74 +725,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const mapAbertura = new Map();
         ultimoPorConta.forEach((v, cod) => mapAbertura.set(cod, v.saldo));
         setAberturaPorConta(mapAbertura);
-
-        // ─── DIAGNÓSTICO: reconcilia entradas/saídas/saldo por conta ───────────
-        // Usa MOVIMENTO_CONTA.valor (entrada/saída conforme `tipo`) e .saldo (saldo
-        // corrente). Loga cada conta e, quando a variação do saldo não bate com
-        // (entradas−saídas), lista os movimentos onde o VALOR ≠ variação do SALDO —
-        // é aí que está o erro (ex.: cartão no bruto, tipo mal interpretado, etc.).
-        try {
-          const sdMov = (m) => { const v = m.saldoPosterior ?? m.saldoApos ?? m.saldoAtual ?? m.saldo ?? m.saldoConta; return v != null ? Number(v) : null; };
-          const chaveOrd = (m) => `${m.dataMovimento || ''}|${String(m.movimentoContaCodigo || 0).padStart(20, '0')}`;
-          const tipos = new Set();
-          const porC = new Map();
-          Object.values(mapa).forEach(d => (d.movimentos || []).forEach(m => {
-            const cod = String(m.contaCodigo ?? ''); if (!cod) return;
-            if (m.tipo != null) tipos.add(m.tipo);
-            (porC.get(cod) || porC.set(cod, []).get(cod)).push(m);
-          }));
-          console.info('[Composição/diag] valores de `tipo` vistos:', [...tipos]);
-          porC.forEach((movs, cod) => {
-            movs.sort((a, b) => chaveOrd(a).localeCompare(chaveOrd(b)));
-            let ent = 0, sai = 0; const porDoc = {};
-            movs.forEach(m => {
-              const v = Math.abs(Number(m.valor || 0));
-              const cred = m.tipo === 'Crédito';
-              if (cred) ent += v; else sai += v;
-              const k = m.tipoDocumentoOrigem || '—';
-              (porDoc[k] ||= { ent: 0, sai: 0 })[cred ? 'ent' : 'sai'] += v;
-            });
-            const ini = mapAbertura.get(cod);
-            const fim = sdMov(movs[movs.length - 1]);
-            const varSaldo = (fim != null && ini != null) ? fim - ini : null;
-            const porDocFmt = Object.fromEntries(Object.entries(porDoc)
-              .map(([k, v]) => [k, { ent: +v.ent.toFixed(2), sai: +v.sai.toFixed(2) }]));
-            // SEMPRE loga (o `gap` do saldo é retro-datado e instável → não confiável).
-            console.info('[Composição/diag]', descricaoPorConta.get(cod) || cod, {
-              movs: movs.length, entradas: +ent.toFixed(2), saidas: +sai.toFixed(2), net: +(ent - sai).toFixed(2),
-              saldoIni: ini, saldoFim: fim, varSaldo: varSaldo != null ? +varSaldo.toFixed(2) : null,
-              entradasPorTipoDoc: porDocFmt,
-            });
-            // Cartão: confirma que o líquido está aplicado (movimento_menos_liquido ~ 0).
-            const cards = movs.filter(m => m.tipoDocumentoOrigem === 'CARTAO_REMESSA');
-            if (cards.length) {
-              let somaMov = 0, somaRemLiq = 0, semRemessa = 0;
-              cards.forEach(m => {
-                somaMov += Math.abs(Number(m.valor || 0));
-                const r = remessaDiag.get(Number(m.documentoOrigemCodigo));
-                if (!r) { semRemessa++; return; }
-                somaRemLiq += (r.valorLiquido != null ? r.valorLiquido : r.valorRemessa) || 0;
-              });
-              console.info('[Composição/diag]  ↳ cartão', descricaoPorConta.get(cod) || cod, {
-                movimentos: cards.length, semRemessa,
-                soma_valor_movimento: +somaMov.toFixed(2),
-                soma_valorLiquido: +somaRemLiq.toFixed(2),
-                movimento_menos_liquido: +(somaMov - somaRemLiq).toFixed(2),
-              });
-            }
-            // Entradas NÃO-cartão por movimento (data · tipoDoc · valor · descrição),
-            // ordenadas por valor — pra localizar o(s) lançamento(s) do descasamento
-            // (ex.: transferência interna contada como entrada). Só p/ contas com cartão.
-            if (cards.length) {
-              const naoCartao = movs
-                .filter(m => m.tipo === 'Crédito' && m.tipoDocumentoOrigem !== 'CARTAO_REMESSA')
-                .map(m => ({ data: m.dataMovimento, tipoDoc: m.tipoDocumentoOrigem, valor: +Math.abs(Number(m.valor || 0)).toFixed(2), doc: m.documentoOrigemCodigo, desc: String(m.descricao || '').slice(0, 40) }))
-                .sort((a, b) => b.valor - a.valor);
-              console.info('[Composição/diag]  ↳ entradas NÃO-cartão', descricaoPorConta.get(cod) || cod, `(${naoCartao.length} mov.)`);
-              if (naoCartao.length && console.table) console.table(naoCartao.slice(0, 50));
-            }
-          });
-        } catch (e) { console.warn('[Composição/diag] falhou', e); }
       } catch (_) {
         setAberturaPorConta(new Map());
       }
@@ -3335,15 +3260,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               </div>
             )}
 
-            {!modoRede && composicaoSaldo.length > 0 && (() => {
-              // "Não explicado" = variação REAL do saldo − (entradas − saídas capturadas).
-              // Quando ≠ 0, os movimentos capturados não explicam a mudança de saldo da
-              // conta (ex.: lançamento faltando no extrato) → esse valor NÃO entra no
-              // fluxo mapeado e é a origem da diferença fluxo × composição.
-              const gaps = composicaoSaldo.map(c => (c.saldoAtual - c.saldoInicial) - (c.entradas - c.saidas));
-              const totalGap = gaps.reduce((s, v) => s + v, 0);
-              const contasGap = composicaoSaldo.filter((_, i) => Math.abs(gaps[i]) > 0.01);
-              return (
+            {!modoRede && composicaoSaldo.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                   <Wallet className="h-4 w-4 text-blue-500" />
@@ -3352,18 +3269,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     · Saldo inicial (dia anterior ao período) + movimentos = Saldo atual (fim do período)
                   </span>
                 </div>
-                {contasGap.length > 0 && (
-                  <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 flex items-start gap-2 print-no-break">
-                    <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-[11.5px] text-amber-800 leading-relaxed">
-                      <strong>{formatCurrency(Math.abs(totalGap))} não explicado.</strong> A variação real do saldo não é
-                      totalmente explicada pelos movimentos capturados em{' '}
-                      <strong>{contasGap.map(c => c.contaNome).join(', ')}</strong>. Provável lançamento faltando no
-                      extrato dessas contas — esse valor <strong>não entra no fluxo mapeado</strong> (é a diferença entre a
-                      variação da composição e a do fluxo). Confira o extrato dessas contas no ERP.
-                    </p>
-                  </div>
-                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm print-comp-table">
                     <thead className="bg-gray-50/80 border-b border-gray-100">
@@ -3374,22 +3279,19 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         <th className="px-3 py-2.5 text-right">Saídas</th>
                         <th className="px-3 py-2.5 text-right">Variação</th>
                         <th className="px-3 py-2.5 text-right">Saldo atual</th>
-                        <th className="px-3 py-2.5 text-right" title="Variação real do saldo − (entradas − saídas). Diferente de 0 = movimento faltando no extrato.">Não explicado</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {composicaoSaldo.map(c => {
-                        // Variação = diferença REAL entre abertura e fechamento (ambos do extrato).
-                        // Não usamos entradas−saídas porque movimentos contábeis (desconto/
-                        // acréscimo/taxa de cartão) têm valor mas não mexem no saldo do banco.
+                        // Variação = saldo atual − saldo inicial. No Webposto o saldo inicial
+                        // é derivado do fechamento (saldo atual − (entradas − saídas)), então
+                        // aqui a variação equivale a entradas − saídas (ver composicaoSaldo).
                         const variacao = c.saldoAtual - c.saldoInicial;
-                        const naoExplicado = variacao - (c.entradas - c.saidas);
-                        const temGap = Math.abs(naoExplicado) > 0.01;
                         const movs = detalheComposicaoPorConta.get(String(c.contaCodigo)) || [];
                         const aberta = compExpandida.has(String(c.contaCodigo));
                         return (
                           <Fragment key={c.contaCodigo}>
-                          <tr className={`hover:bg-gray-50/60 h-9 ${temGap ? 'bg-amber-50/40' : ''} ${movs.length ? 'cursor-pointer' : ''}`}
+                          <tr className={`hover:bg-gray-50/60 h-9 ${movs.length ? 'cursor-pointer' : ''}`}
                             onClick={movs.length ? () => setCompExpandida(prev => { const n = new Set(prev); const k = String(c.contaCodigo); n.has(k) ? n.delete(k) : n.add(k); return n; }) : undefined}>
                             <td className="px-4 py-2">
                               {/* nome dentro de um div: truncate confiável em tabela
@@ -3418,20 +3320,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                             <td className="px-3 py-2 text-right font-mono text-[11px] font-bold text-gray-900 tabular-nums whitespace-nowrap">
                               {formatCurrency(c.saldoAtual)}
                             </td>
-                            <td className="px-3 py-2 text-right font-mono text-[11px] tabular-nums whitespace-nowrap">
-                              {temGap ? (
-                                <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
-                                  <AlertCircle className="h-3 w-3 flex-shrink-0" />
-                                  {naoExplicado > 0 ? '+' : ''}{formatCurrency(naoExplicado)}
-                                </span>
-                              ) : (
-                                <span className="text-gray-300">—</span>
-                              )}
-                            </td>
                           </tr>
                           {aberta && movs.length > 0 && (
                             <tr className="no-print bg-gray-50/40">
-                              <td colSpan={7} className="px-4 py-3">
+                              <td colSpan={6} className="px-4 py-3">
                                 <DetalheContaComposicao movs={movs} conta={c} />
                               </td>
                             </tr>
@@ -3447,7 +3339,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         const tSai = composicaoSaldo.reduce((s, c) => s + c.saidas, 0);
                         const tAtu = composicaoSaldo.reduce((s, c) => s + c.saldoAtual, 0);
                         const tVar = tAtu - tIni;
-                        const tGap = tVar - (tEnt - tSai);
                         return (
                           <tr className="text-[11px] font-semibold h-9">
                             <td className="px-4 py-2.5 text-gray-700 truncate max-w-[220px]">Consolidado</td>
@@ -3460,11 +3351,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                               {tVar > 0 ? '+' : ''}{formatCurrency(tVar)}
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono text-gray-900 tabular-nums whitespace-nowrap">{formatCurrency(tAtu)}</td>
-                            <td className={`px-3 py-2.5 text-right font-mono tabular-nums whitespace-nowrap ${
-                              Math.abs(tGap) < 0.01 ? 'text-gray-400' : 'text-amber-700'
-                            }`}>
-                              {Math.abs(tGap) < 0.01 ? '—' : `${tGap > 0 ? '+' : ''}${formatCurrency(tGap)}`}
-                            </td>
                           </tr>
                         );
                       })()}
@@ -3472,8 +3358,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   </table>
                 </div>
               </div>
-              );
-            })()}
+            )}
 
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between no-print">
