@@ -650,10 +650,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const primeiroMes = meses[0];
         const ultimoMes = meses[meses.length - 1];
         const fmtR = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-        // Janela ampliada (1 mês antes até 1 mês depois): a data que o endpoint filtra
-        // (remessa/recebimento) pode cair fora do mês do movimento no banco.
-        const rIni = fmtR(new Date(primeiroMes.ano, primeiroMes.mes - 1 - 1, 1));
-        const rFim = fmtR(new Date(ultimoMes.ano, ultimoMes.mes - 1 + 2, 0));
+        // Janela AMPLA (3 meses antes até 3 meses depois): a data que o endpoint filtra
+        // (remessa/recebimento) pode cair bem fora do mês em que o crédito bate no banco
+        // (liquidação de cartão atrasa). Se a remessa não é encontrada, o movimento fica
+        // no BRUTO e infla as entradas — então cobrimos uma janela generosa.
+        const rIni = fmtR(new Date(primeiroMes.ano, primeiroMes.mes - 1 - 3, 1));
+        const rFim = fmtR(new Date(ultimoMes.ano, ultimoMes.mes - 1 + 4, 0));
         setLoadingProgress({ atual: total, total, mensagem: 'Buscando remessas de cartão (valor líquido)...' });
         for (const ec of empresaCodigos) {
           const remessas = await qualityApi.buscarCartaoRemessa(chave.chave, {
@@ -661,7 +663,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           });
           (remessas || []).forEach(rm => {
             const cod = rm.cartaoRemessaCodigo ?? rm.codigo;
-            const vl = rm.valorLiquido;
+            // Leitura defensiva do líquido (nomes alternativos conforme o schema).
+            const vl = rm.valorLiquido ?? rm.valor_liquido ?? rm.liquido ?? rm.valorLiquidoTotal;
             if (cod == null || vl == null) return;
             liquidoPorRemessa.set(Number(cod), Number(vl));
           });
