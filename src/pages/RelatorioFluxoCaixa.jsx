@@ -706,9 +706,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             const cod = String(m.contaCodigo);
             const sd = saldoDepois(m);
             if (sd == null) return;
-            const key = `${m.dataMovimento || ''}|${String(m.movimentoContaCodigo || 0).padStart(20, '0')}`;
+            // IMPORTANTE: mesma regra do FECHAMENTO (que bate com a Quality ao centavo):
+            // ordena por DATA e pega o ÚLTIMO movimento na ordem original da API. NÃO
+            // desempatar por movimentoContaCodigo — com lançamento em lote/retro-datado
+            // o código não segue a ordem do saldo, e o max-código pegava o `saldo` de um
+            // movimento ANTERIOR (abertura inflada; ex.: 219.386,55 em vez de 182.374,24).
+            // `>=` faz o último movimento da data mais recente (ordem da API) prevalecer.
+            const key = m.dataMovimento || '';
             const prev = ultimoPorConta.get(cod);
-            if (!prev || key > prev.key) ultimoPorConta.set(cod, { key, saldo: sd });
+            if (!prev || key >= prev.key) ultimoPorConta.set(cod, { key, saldo: sd });
           });
         }
         const mapAbertura = new Map();
