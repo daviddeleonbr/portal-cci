@@ -708,8 +708,27 @@ export async function buscarVendaItensHibrido(apiKey, params = {}, urlBase = DEF
 // mostraSaldo=true faz a API retornar o saldo (anterior/posterior) por movimento,
 // usado na "Composição do saldo" (saldo inicial e saldo atual reais do extrato).
 export async function buscarMovimentoConta(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
-  return fetchPagParalelo(urlBase, 'MOVIMENTO_CONTA', apiKey, {
+  const raw = await fetchPagParalelo(urlBase, 'MOVIMENTO_CONTA', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo, mostraSaldo: true,
+  });
+  // O período é buscado em CHUNKS paralelos (DIAS_POR_CHUNK). A API devolve certos
+  // lançamentos — ex.: recebíveis com data FUTURA — em TODO chunk, então o mesmo
+  // movimento vinha repetido N vezes (N = nº de chunks; agosto = 7×), inflando as
+  // entradas. Corrige em duas frentes:
+  //  1) dedup por movimentoContaCodigo (PK do movimento — nunca pode repetir);
+  //  2) filtra por dataMovimento dentro do range pedido (a API vaza fora do range).
+  const vistos = new Set();
+  return (raw || []).filter(m => {
+    const id = m?.movimentoContaCodigo;
+    if (id != null) {
+      if (vistos.has(id)) return false;
+      vistos.add(id);
+    }
+    if (dataInicial && dataFinal && m?.dataMovimento) {
+      const d = String(m.dataMovimento).slice(0, 10);
+      if (d < dataInicial || d > dataFinal) return false;
+    }
+    return true;
   });
 }
 
