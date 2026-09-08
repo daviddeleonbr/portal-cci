@@ -55,6 +55,13 @@ function idxMes(ano, mes) { return ano * 12 + (mes - 1); }
 function deIdxMes(idx) { const y = Math.floor(idx / 12); return { ano: y, mes: idx - y * 12 + 1 }; }
 function labelMesAno(ano, mes) { return `${MESES_NOMES[mes - 1]}/${String(ano).slice(2)}`; }
 
+// Soma meses/dias a uma data ISO (YYYY-MM-DD) em horário LOCAL (sem shift de UTC).
+function isoSoma(iso, { meses = 0, dias = 0 } = {}) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  const dt = new Date(y, (m - 1) + meses, d + dias);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
 // Formata uma duracao em ms em algo curto e legivel (ex: "850 ms", "12,3s", "1m 23s")
 function formatDuracao(ms) {
   if (ms == null || !Number.isFinite(ms)) return '';
@@ -90,9 +97,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const today = new Date();
   const [mesFinal, setMesFinal] = useState({ ano: today.getFullYear(), mes: today.getMonth() + 1 });
   const [qtdMeses, setQtdMeses] = useState(3);
-  // Início manual do período (mês) — sobrepõe o "Análise" relativo (1/3/6). null =
-  // automático. Limitado a no máximo 6 meses antes do mês final (mesFinal).
-  const [mesInicioManual, setMesInicioManual] = useState(null);
+  // Período manual por DATA (início/fim, precisão de dia) — sobrepõe o "Análise"
+  // relativo (1/3/6). null = automático. Limitado a no máximo 6 meses de intervalo.
+  // Formato: { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' }.
+  const [periodoData, setPeriodoData] = useState(null);
 
   const [dadosPorMes, setDadosPorMes] = useState({});
   // Saldo de abertura REAL por conta (código -> saldo), obtido do último movimento
@@ -169,36 +177,37 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [empExpandidas, setEmpExpandidas] = useState(() => new Set());
 
   // ─── Meses ────────────────────────────────────────────────
-  // Período = intervalo [início .. mesFinal]. O início vem do "Análise" relativo
-  // (mesFinal − (qtd−1)) ou, se houver seleção manual, do mês escolhido — sempre
-  // limitado a no máx. 6 meses e sem passar do mês final.
+  // Cada entrada é um MÊS (coluna do relatório) e carrega o range de datas a
+  // buscar (dataInicial/dataFinal). No modo automático (atalhos 1/3/6) o range é
+  // o mês cheio; no período MANUAL por data, o primeiro/último mês são recortados
+  // nas datas escolhidas (precisão de dia). Limite de 6 meses em ambos os modos.
   const meses = useMemo(() => {
-    const aFim = idxMes(mesFinal.ano, mesFinal.mes);
-    let aIni = mesInicioManual
-      ? idxMes(mesInicioManual.ano, mesInicioManual.mes)
-      : aFim - (qtdMeses - 1);
+    let aIni, aFim, isoIni = null, isoFim = null;
+    if (periodoData) {
+      const [y1, m1] = periodoData.inicio.split('-').map(Number);
+      const [y2, m2] = periodoData.fim.split('-').map(Number);
+      aIni = idxMes(y1, m1); aFim = idxMes(y2, m2);
+      isoIni = periodoData.inicio; isoFim = periodoData.fim;
+    } else {
+      aFim = idxMes(mesFinal.ano, mesFinal.mes);
+      aIni = aFim - (qtdMeses - 1);
+    }
     if (aIni > aFim) aIni = aFim;          // início não passa do fim
     if (aFim - aIni > 5) aIni = aFim - 5;  // no máximo 6 meses
     const arr = [];
     for (let a = aIni; a <= aFim; a++) {
       const { ano: y, mes: m } = deIdxMes(a);
-      arr.push({ ano: y, mes: m, key: `${y}-${String(m).padStart(2, '0')}`, label: labelMesAno(y, m) });
+      const full = rangeMes(y, m);
+      arr.push({
+        ano: y, mes: m,
+        key: `${y}-${String(m).padStart(2, '0')}`,
+        label: labelMesAno(y, m),
+        dataInicial: (a === aIni && isoIni) ? isoIni : full.dataInicial,
+        dataFinal: (a === aFim && isoFim) ? isoFim : full.dataFinal,
+      });
     }
     return arr;
-  }, [mesFinal, qtdMeses, mesInicioManual]);
-
-  // Mantém o início manual válido quando o mês final muda (dentro de 6 meses).
-  useEffect(() => {
-    setMesInicioManual(prev => {
-      if (!prev) return prev;
-      const aFim = idxMes(mesFinal.ano, mesFinal.mes);
-      let a = idxMes(prev.ano, prev.mes);
-      if (a > aFim) a = aFim;
-      if (aFim - a > 5) a = aFim - 5;
-      const { ano, mes } = deIdxMes(a);
-      return (ano === prev.ano && mes === prev.mes) ? prev : { ano, mes };
-    });
-  }, [mesFinal]);
+  }, [mesFinal, qtdMeses, periodoData]);
 
   // ─── Init: cliente + mascaras ────────────────────────────
   // Em modo rede monta cliente virtual com chave_api_id e lista de empresas.
@@ -378,7 +387,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     setSaldosIniciaisContaPorEmpresa({});
     setSaldosFinaisContaPorEmpresa({});
     setMovimentacaoContaPorEmpresa({});
-  }, [mesFinal, qtdMeses, mesInicioManual, mascaraSelecionada]);
+  }, [mesFinal, qtdMeses, periodoData, mascaraSelecionada]);
 
   // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado.
   useEffect(() => {
@@ -437,7 +446,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         setLoadingProgress({ atual: 0, total, mensagem: `Buscando fluxo Autosystem (${meses.length} mês(es))...` });
 
         const results = await Promise.all(meses.map(async m => {
-          const r = rangeMes(m.ano, m.mes);
+          const r = { dataInicial: m.dataInicial, dataFinal: m.dataFinal };
           let lancs = [], saldosIniciaisConta = {}, saldosFinaisConta = {}, movimentacaoConta = {}, rateio = [];
           try {
             const out = await autosystemService.buscarFluxoCaixaAutosystem(
@@ -614,7 +623,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         : [cliente.empresa_codigo];
 
       const results = await Promise.all(meses.map(async m => {
-        const r = rangeMes(m.ano, m.mes);
+        const r = { dataInicial: m.dataInicial, dataFinal: m.dataFinal };
         const todos = [];
         for (const ec of empresaCodigos) {
           const filtros = { dataInicial: r.dataInicial, dataFinal: r.dataFinal, empresaCodigo: ec };
@@ -730,7 +739,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const primeiroMes = meses[0];
         const ultimoMes = meses[meses.length - 1];
         const rInicio = rangeMes(primeiroMes.ano - 1, primeiroMes.mes);
-        const rFim = rangeMes(ultimoMes.ano, ultimoMes.mes);
+        const rFim = { dataFinal: ultimoMes.dataFinal };
         setLoadingProgress({ atual: total, total, mensagem: 'Buscando títulos a pagar para resolver pagamentos...' });
         // Em modo rede concatena titulos de todas as empresas da rede.
         const allTitulos = [];
@@ -1578,8 +1587,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     }));
 
     // Limites do período carregado (dos meses selecionados no relatório).
-    const loadedIni = rangeMes(meses[0].ano, meses[0].mes).dataInicial;
-    const loadedFim = rangeMes(meses[meses.length - 1].ano, meses[meses.length - 1].mes).dataFinal;
+    const loadedIni = meses[0].dataInicial;
+    const loadedFim = meses[meses.length - 1].dataFinal;
     // Recorte específico da Evolução (seleção do usuário), clampado aos limites.
     const clampD = (d, lo, hi) => (d < lo ? lo : d > hi ? hi : d);
     const dataIni = evolRange.ini ? clampD(evolRange.ini, loadedIni, loadedFim) : loadedIni;
@@ -2171,9 +2180,26 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return <div className="text-center py-20 text-gray-500">Cliente não encontrado</div>;
   }
 
-  const periodoLabel = meses.length === 1
-    ? meses[0].label
-    : `${meses[0].label} - ${meses[meses.length - 1].label}`;
+  const fmtDia = (iso) => { const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}`; };
+  const periodoLabel = periodoData
+    ? `${fmtDia(periodoData.inicio)} a ${fmtDia(periodoData.fim)}`
+    : (meses.length === 1 ? meses[0].label : `${meses[0].label} - ${meses[meses.length - 1].label}`);
+
+  // Datas exibidas nos inputs de período: a seleção manual, ou o range efetivo
+  // atual (do modo automático) como ponto de partida pra edição.
+  const inicioAtual = periodoData?.inicio ?? meses[0]?.dataInicial ?? '';
+  const fimAtual = periodoData?.fim ?? meses[meses.length - 1]?.dataFinal ?? '';
+  // Aplica uma data (início/fim), validando: fim ≥ início e intervalo ≤ 6 meses.
+  const aplicarData = (campo, valor) => {
+    if (!valor) return;
+    let inicio = campo === 'inicio' ? valor : inicioAtual;
+    let fim = campo === 'fim' ? valor : fimAtual;
+    if (!inicio || !fim) return;
+    if (inicio > fim) { if (campo === 'inicio') fim = inicio; else inicio = fim; }
+    const limiteInicio = isoSoma(fim, { meses: -6 }); // no máximo 6 meses de intervalo
+    if (inicio < limiteInicio) inicio = limiteInicio;
+    setPeriodoData({ inicio, fim });
+  };
 
   return (
     <div>
@@ -2386,9 +2412,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
             <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
               {[1, 3, 6].map(q => (
-                <button key={q} onClick={() => { setQtdMeses(q); setMesInicioManual(null); }}
+                <button key={q} onClick={() => { setQtdMeses(q); setPeriodoData(null); }}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
-                    !mesInicioManual && qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    !periodoData && qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}>
                   {q === 1 ? '1 mês' : `${q} meses`}
                 </button>
@@ -2396,26 +2422,33 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             </div>
           </div>
 
-          {/* Início manual do período — sobrepõe os atalhos 1/3/6; o dropdown só
-              oferece os 6 meses anteriores ao mês final (limite de 6 meses). */}
+          {/* Período manual por DATA — sobrepõe os atalhos 1/3/6. Limite de 6 meses
+              garantido por min/max nos inputs e revalidado em aplicarData(). */}
           <div>
-            <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Início manual (máx. 6 meses)</label>
-            <select
-              value={mesInicioManual ? `${mesInicioManual.ano}-${mesInicioManual.mes}` : ''}
-              onChange={(e) => {
-                if (!e.target.value) { setMesInicioManual(null); return; }
-                const [y, m] = e.target.value.split('-').map(Number);
-                setMesInicioManual({ ano: y, mes: m });
-              }}
-              className={`h-8 rounded-lg border px-2 text-[11px] bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 ${
-                mesInicioManual ? 'border-emerald-400 text-gray-900 font-medium' : 'border-gray-200 text-gray-500'
-              }`}>
-              <option value="">Automático (início {meses[0]?.label ?? '—'})</option>
-              {Array.from({ length: 6 }, (_, k) => {
-                const { ano, mes } = deIdxMes(idxMes(mesFinal.ano, mesFinal.mes) - (5 - k));
-                return <option key={`${ano}-${mes}`} value={`${ano}-${mes}`}>{labelMesAno(ano, mes)}</option>;
-              })}
-            </select>
+            <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+              Período (data) {periodoData && <span className="text-emerald-600 normal-case">· manual</span>}
+            </label>
+            <div className={`flex items-center gap-1 h-8 rounded-lg border bg-white px-1.5 ${periodoData ? 'border-emerald-400' : 'border-gray-200'}`}>
+              <input type="date" aria-label="Data início"
+                value={inicioAtual}
+                min={fimAtual ? isoSoma(fimAtual, { meses: -6 }) : undefined}
+                max={fimAtual || undefined}
+                onChange={(e) => aplicarData('inicio', e.target.value)}
+                className="text-[11px] border-0 focus:outline-none bg-transparent text-gray-700 w-[104px]" />
+              <span className="text-[11px] text-gray-400">até</span>
+              <input type="date" aria-label="Data fim"
+                value={fimAtual}
+                min={inicioAtual || undefined}
+                max={inicioAtual ? isoSoma(inicioAtual, { meses: 6 }) : undefined}
+                onChange={(e) => aplicarData('fim', e.target.value)}
+                className="text-[11px] border-0 focus:outline-none bg-transparent text-gray-700 w-[104px]" />
+              {periodoData && (
+                <button onClick={() => setPeriodoData(null)} title="Voltar ao período automático"
+                  className="rounded p-0.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Seletor de empresas (injetado pelo wrapper cliente) */}
