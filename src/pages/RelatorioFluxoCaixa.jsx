@@ -175,6 +175,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [capMarcados, setCapMarcados] = useState(() => new Set());
   // Empresas expandidas na aba "Por Empresa" (mostra as contas caixa/banco).
   const [empExpandidas, setEmpExpandidas] = useState(() => new Set());
+  // Contas expandidas na "Composição do saldo" (drill dos movimentos da conta).
+  const [compExpandida, setCompExpandida] = useState(() => new Set());
 
   // ─── Meses ────────────────────────────────────────────────
   // Cada entrada é um MÊS (coluna do relatório) e carrega o range de datas a
@@ -1164,6 +1166,46 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return Array.from(porConta.values())
       .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
   }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, aberturaPorConta, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa]);
+
+  // ─── Drill da Composição: movimentos por conta ────────────
+  // Lista os movimentos de cada conta caixa/banco no período (data · valor · saldo
+  // corrente), pra investigar descasamentos (ex.: cartão no BRUTO em vez do LÍQUIDO
+  // inflando entradas, ou salto de saldo sem lançamento). Ordenado por data.
+  const detalheComposicaoPorConta = useMemo(() => {
+    const permitida = (cod) => {
+      const tc = tipoPorConta.get(String(cod));
+      if (tc !== 'bancaria' && tc !== 'caixa') return false;
+      if (!tiposContaAtivos.has(tc)) return false;
+      if (filtroContas.size > 0 && !filtroContas.has(String(cod))) return false;
+      return true;
+    };
+    const saldoDepois = (mm) => {
+      const v = mm.saldoPosterior ?? mm.saldoApos ?? mm.saldoAtual ?? mm.saldo ?? mm.saldoConta;
+      return v != null ? Number(v) : null;
+    };
+    const porConta = new Map();
+    Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => {
+      if (m.contaCodigo == null) return;
+      const cod = String(m.contaCodigo);
+      if (!permitida(cod)) return;
+      if (!porConta.has(cod)) porConta.set(cod, []);
+      const valorAbs = Math.abs(Number(m.valor || 0));
+      const sinal = m.tipo === 'Crédito' ? 1 : -1;
+      porConta.get(cod).push({
+        data: String(m.dataMovimento || '').slice(0, 10),
+        valor: valorAbs * sinal,
+        saldo: saldoDepois(m),
+        label: [m.tipoDocumentoOrigem, m.documento, m.documentoOrigemCodigo != null ? `#${m.documentoOrigemCodigo}` : null, m.pessoa_nome, (m.descricao || m.historico || m.obs)]
+          .filter(Boolean).join(' · ') || '—',
+        ehCartao: m.valorBrutoCartao != null,                 // cartão JÁ ajustado p/ líquido
+        bruto: m.valorBrutoCartao != null ? Number(m.valorBrutoCartao) : null,
+        // cartão que ficou no BRUTO (remessa/líquido não encontrado) → suspeito de inflar entradas
+        cartaoBruto: m.tipoDocumentoOrigem === 'CARTAO_REMESSA' && m.valorBrutoCartao == null,
+      });
+    }));
+    porConta.forEach(arr => arr.sort((a, b) => (a.data || '').localeCompare(b.data || '')));
+    return porConta;
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas]);
 
   // ─── Build Fluxo tree ─────────────────────────────────────
   const fluxoTree = useMemo(() => {
@@ -3254,12 +3296,21 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         const variacao = c.saldoAtual - c.saldoInicial;
                         const naoExplicado = variacao - (c.entradas - c.saidas);
                         const temGap = Math.abs(naoExplicado) > 0.01;
+                        const movs = detalheComposicaoPorConta.get(String(c.contaCodigo)) || [];
+                        const aberta = compExpandida.has(String(c.contaCodigo));
                         return (
-                          <tr key={c.contaCodigo} className={`hover:bg-gray-50/60 h-9 ${temGap ? 'bg-amber-50/40' : ''}`}>
+                          <Fragment key={c.contaCodigo}>
+                          <tr className={`hover:bg-gray-50/60 h-9 ${temGap ? 'bg-amber-50/40' : ''} ${movs.length ? 'cursor-pointer' : ''}`}
+                            onClick={movs.length ? () => setCompExpandida(prev => { const n = new Set(prev); const k = String(c.contaCodigo); n.has(k) ? n.delete(k) : n.add(k); return n; }) : undefined}>
                             <td className="px-4 py-2">
                               {/* nome dentro de um div: truncate confiável em tabela
                                   auto-layout (max-width em <td> é ignorado pelo browser). */}
-                              <div className="text-[12px] text-gray-800 truncate max-w-[220px]" title={c.contaNome}>{c.contaNome}</div>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {movs.length > 0
+                                  ? <ChevronRight className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform no-print ${aberta ? 'rotate-90' : ''}`} />
+                                  : <span className="w-3.5 flex-shrink-0" />}
+                                <div className="text-[12px] text-gray-800 truncate max-w-[220px]" title={c.contaNome}>{c.contaNome}</div>
+                              </div>
                             </td>
                             <td className="px-3 py-2 text-right font-mono text-[11px] text-gray-700 tabular-nums whitespace-nowrap">
                               {formatCurrency(c.saldoInicial)}
@@ -3289,6 +3340,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                               )}
                             </td>
                           </tr>
+                          {aberta && movs.length > 0 && (
+                            <tr className="no-print bg-gray-50/40">
+                              <td colSpan={7} className="px-4 py-3">
+                                <DetalheContaComposicao movs={movs} conta={c} />
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>
@@ -4056,6 +4115,73 @@ function fmtEixoCaixa(v) {
 }
 
 // Cartão de indicador (mesmo estilo dos KPIs do relatório).
+// Drill dos movimentos de uma conta na Composição do saldo. Mostra cada movimento
+// (data · descrição · valor · saldo corrente) pra investigar descasamentos, com
+// resumo de entradas/saídas e destaque de cartão no BRUTO (suspeito de inflar entradas).
+function DetalheContaComposicao({ movs, conta }) {
+  const totalEnt = movs.reduce((s, m) => s + (m.valor > 0 ? m.valor : 0), 0);
+  const totalSai = movs.reduce((s, m) => s + (m.valor < 0 ? -m.valor : 0), 0);
+  const cartaoBrutoMovs = movs.filter(m => m.cartaoBruto && m.valor > 0);
+  const totalCartaoBruto = cartaoBrutoMovs.reduce((s, m) => s + m.valor, 0);
+  const cartaoLiqMovs = movs.filter(m => m.ehCartao);
+  const economiaLiq = cartaoLiqMovs.reduce((s, m) => s + ((m.bruto || 0) - Math.abs(m.valor)), 0);
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 border-b border-gray-100 bg-gray-50/60 text-[11px]">
+        <span className="font-semibold text-gray-700">{movs.length} movimento(s)</span>
+        <span className="text-emerald-700">Entradas <span className="font-mono tabular-nums">+{formatCurrency(totalEnt)}</span></span>
+        <span className="text-red-600">Saídas <span className="font-mono tabular-nums">-{formatCurrency(totalSai)}</span></span>
+        {cartaoBrutoMovs.length > 0 && (
+          <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
+            <AlertCircle className="h-3.5 w-3.5" />
+            {cartaoBrutoMovs.length} cartão no BRUTO (líquido não aplicado): <span className="font-mono tabular-nums">+{formatCurrency(totalCartaoBruto)}</span>
+          </span>
+        )}
+        {economiaLiq > 0.01 && (
+          <span className="text-gray-400">líquido de cartão aplicado: −{formatCurrency(economiaLiq)}</span>
+        )}
+      </div>
+      <div className="max-h-80 overflow-y-auto">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 bg-white border-b border-gray-100">
+            <tr className="text-left text-[9px] font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="px-3 py-1.5">Data</th>
+              <th className="px-3 py-1.5">Movimento</th>
+              <th className="px-3 py-1.5 text-right">Valor</th>
+              <th className="px-3 py-1.5 text-right">Saldo corrente</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {movs.map((m, i) => (
+              <tr key={i} className={m.cartaoBruto ? 'bg-amber-50/50' : ''}>
+                <td className="px-3 py-1 font-mono text-gray-500 whitespace-nowrap">{m.data ? m.data.split('-').reverse().join('/') : '—'}</td>
+                <td className="px-3 py-1 text-gray-700">
+                  <div className="truncate max-w-[420px]" title={m.label}>
+                    {m.cartaoBruto && <span className="text-amber-700 font-semibold">[cartão bruto] </span>}
+                    {m.ehCartao && <span className="text-gray-400">[líq.] </span>}
+                    {m.label}
+                  </div>
+                </td>
+                <td className={`px-3 py-1 text-right font-mono tabular-nums whitespace-nowrap font-medium ${m.valor >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {m.valor > 0 ? '+' : ''}{formatCurrency(m.valor)}
+                  {m.ehCartao && m.bruto != null && <span className="text-gray-400 font-normal"> (bruto {formatCurrency(m.bruto)})</span>}
+                </td>
+                <td className="px-3 py-1 text-right font-mono tabular-nums whitespace-nowrap text-gray-600">
+                  {m.saldo != null ? formatCurrency(m.saldo) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-3 py-1.5 border-t border-gray-100 text-[10px] text-gray-400">
+        Saldo inicial {formatCurrency(conta.saldoInicial)} · entradas − saídas = {formatCurrency(totalEnt - totalSai)} · saldo atual {formatCurrency(conta.saldoAtual)}
+      </div>
+    </div>
+  );
+}
+
 function CardEvol({ titulo, valor, sub, destaque }) {
   const cor = destaque === 'bom' ? 'text-emerald-700' : destaque === 'ruim' ? 'text-red-600' : 'text-gray-900';
   return (
