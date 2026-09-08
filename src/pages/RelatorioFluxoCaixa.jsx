@@ -1237,9 +1237,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const sd = saldoDepois(m); // o último (mais recente) prevalece = saldo atual
       if (sd != null) atual.saldoAtual = sd;
     });
-    // Fallback: se nenhum movimento trouxe saldoPosterior, calcula pela variacao.
     porConta.forEach(c => {
-      if (c.saldoAtual == null) c.saldoAtual = c.saldoInicial + c.entradas - c.saidas;
+      if (c.saldoAtual == null) {
+        // Sem saldo do extrato → best-effort: abertura (aberturaPorConta) + movimentos.
+        c.saldoAtual = c.saldoInicial + c.entradas - c.saidas;
+      } else {
+        // O saldo ATUAL (último movimento do período) é confiável e bate com o
+        // extrato. Já o saldo INICIAL vindo do campo `saldo` é retro-datado/instável
+        // (pega o saldo de um movimento anterior errado). Como entradas e saídas
+        // agora batem ao centavo com o ERP, derivamos o inicial do fechamento:
+        //   saldo inicial = saldo atual − (entradas − saídas)
+        // Assim a variação = entradas − saídas (o que o usuário espera) e o saldo
+        // inicial fica correto (ex.: SICOOB 59.947,48 − (−122.426,76) = 182.374,24).
+        c.saldoInicial = c.saldoAtual - (c.entradas - c.saidas);
+      }
     });
     return Array.from(porConta.values())
       .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
