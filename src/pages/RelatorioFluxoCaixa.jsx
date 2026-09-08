@@ -3198,7 +3198,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               </div>
             )}
 
-            {!modoRede && composicaoSaldo.length > 0 && (
+            {!modoRede && composicaoSaldo.length > 0 && (() => {
+              // "Não explicado" = variação REAL do saldo − (entradas − saídas capturadas).
+              // Quando ≠ 0, os movimentos capturados não explicam a mudança de saldo da
+              // conta (ex.: lançamento faltando no extrato) → esse valor NÃO entra no
+              // fluxo mapeado e é a origem da diferença fluxo × composição.
+              const gaps = composicaoSaldo.map(c => (c.saldoAtual - c.saldoInicial) - (c.entradas - c.saidas));
+              const totalGap = gaps.reduce((s, v) => s + v, 0);
+              const contasGap = composicaoSaldo.filter((_, i) => Math.abs(gaps[i]) > 0.01);
+              return (
               <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                   <Wallet className="h-4 w-4 text-blue-500" />
@@ -3207,6 +3215,18 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     · Saldo inicial (dia anterior ao período) + movimentos = Saldo atual (fim do período)
                   </span>
                 </div>
+                {contasGap.length > 0 && (
+                  <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 flex items-start gap-2 print-no-break">
+                    <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-[11.5px] text-amber-800 leading-relaxed">
+                      <strong>{formatCurrency(Math.abs(totalGap))} não explicado.</strong> A variação real do saldo não é
+                      totalmente explicada pelos movimentos capturados em{' '}
+                      <strong>{contasGap.map(c => c.contaNome).join(', ')}</strong>. Provável lançamento faltando no
+                      extrato dessas contas — esse valor <strong>não entra no fluxo mapeado</strong> (é a diferença entre a
+                      variação da composição e a do fluxo). Confira o extrato dessas contas no ERP.
+                    </p>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm print-comp-table">
                     <thead className="bg-gray-50/80 border-b border-gray-100">
@@ -3217,6 +3237,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         <th className="px-3 py-2.5 text-right">Saídas</th>
                         <th className="px-3 py-2.5 text-right">Variação</th>
                         <th className="px-3 py-2.5 text-right">Saldo atual</th>
+                        <th className="px-3 py-2.5 text-right" title="Variação real do saldo − (entradas − saídas). Diferente de 0 = movimento faltando no extrato.">Não explicado</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -3225,8 +3246,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         // Não usamos entradas−saídas porque movimentos contábeis (desconto/
                         // acréscimo/taxa de cartão) têm valor mas não mexem no saldo do banco.
                         const variacao = c.saldoAtual - c.saldoInicial;
+                        const naoExplicado = variacao - (c.entradas - c.saidas);
+                        const temGap = Math.abs(naoExplicado) > 0.01;
                         return (
-                          <tr key={c.contaCodigo} className="hover:bg-gray-50/60 h-9">
+                          <tr key={c.contaCodigo} className={`hover:bg-gray-50/60 h-9 ${temGap ? 'bg-amber-50/40' : ''}`}>
                             <td className="px-4 py-2">
                               {/* nome dentro de um div: truncate confiável em tabela
                                   auto-layout (max-width em <td> é ignorado pelo browser). */}
@@ -3249,6 +3272,16 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                             <td className="px-3 py-2 text-right font-mono text-[11px] font-bold text-gray-900 tabular-nums whitespace-nowrap">
                               {formatCurrency(c.saldoAtual)}
                             </td>
+                            <td className="px-3 py-2 text-right font-mono text-[11px] tabular-nums whitespace-nowrap">
+                              {temGap ? (
+                                <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
+                                  <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                                  {naoExplicado > 0 ? '+' : ''}{formatCurrency(naoExplicado)}
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}
@@ -3260,6 +3293,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         const tSai = composicaoSaldo.reduce((s, c) => s + c.saidas, 0);
                         const tAtu = composicaoSaldo.reduce((s, c) => s + c.saldoAtual, 0);
                         const tVar = tAtu - tIni;
+                        const tGap = tVar - (tEnt - tSai);
                         return (
                           <tr className="text-[11px] font-semibold h-9">
                             <td className="px-4 py-2.5 text-gray-700 truncate max-w-[220px]">Consolidado</td>
@@ -3272,6 +3306,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                               {tVar > 0 ? '+' : ''}{formatCurrency(tVar)}
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono text-gray-900 tabular-nums whitespace-nowrap">{formatCurrency(tAtu)}</td>
+                            <td className={`px-3 py-2.5 text-right font-mono tabular-nums whitespace-nowrap ${
+                              Math.abs(tGap) < 0.01 ? 'text-gray-400' : 'text-amber-700'
+                            }`}>
+                              {Math.abs(tGap) < 0.01 ? '—' : `${tGap > 0 ? '+' : ''}${formatCurrency(tGap)}`}
+                            </td>
                           </tr>
                         );
                       })()}
@@ -3279,7 +3318,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   </table>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between no-print">
