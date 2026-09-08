@@ -787,6 +787,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 movimento_menos_liquido: +(somaMov - somaRemLiq).toFixed(2),
               });
             }
+            // Entradas NÃO-cartão por movimento (data · tipoDoc · valor · descrição),
+            // ordenadas por valor — pra localizar o(s) lançamento(s) do descasamento
+            // (ex.: transferência interna contada como entrada). Só p/ contas com cartão.
+            if (cards.length) {
+              const naoCartao = movs
+                .filter(m => m.tipo === 'Crédito' && m.tipoDocumentoOrigem !== 'CARTAO_REMESSA')
+                .map(m => ({ data: m.dataMovimento, tipoDoc: m.tipoDocumentoOrigem, valor: +Math.abs(Number(m.valor || 0)).toFixed(2), doc: m.documentoOrigemCodigo, desc: String(m.descricao || '').slice(0, 40) }))
+                .sort((a, b) => b.valor - a.valor);
+              console.info('[Composição/diag]  ↳ entradas NÃO-cartão', descricaoPorConta.get(cod) || cod, `(${naoCartao.length} mov.)`);
+              if (naoCartao.length && console.table) console.table(naoCartao.slice(0, 50));
+            }
           });
         } catch (e) { console.warn('[Composição/diag] falhou', e); }
       } catch (_) {
