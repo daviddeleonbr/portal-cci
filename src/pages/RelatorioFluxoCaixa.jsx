@@ -2200,6 +2200,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           .print-emp-table .font-mono, .print-emp-table .tabular-nums { font-size: 7.3pt !important; letter-spacing: -0.2px; }
           .print-emp-table th { font-size: 6pt !important; }
 
+          /* Tabela "Composição do saldo": nomes de conta CORTAM (nunca quebram) e
+             os valores — que podem chegar à casa dos 100 milhões — também não
+             quebram; fonte reduzida pra caber tudo na largura do A4. O reset geral
+             força white-space:normal, então reafirmamos nowrap com escopo. */
+          .print-comp-table th, .print-comp-table td { white-space: nowrap !important; padding-left: 4px !important; padding-right: 4px !important; }
+          .print-comp-table th:first-child, .print-comp-table td:first-child { max-width: 44mm; overflow: hidden; text-overflow: ellipsis; }
+          .print-comp-table td:first-child > div { max-width: 44mm !important; }
+          .print-comp-table td { font-size: 7pt !important; }
+          .print-comp-table .font-mono, .print-comp-table .tabular-nums { font-size: 7pt !important; letter-spacing: -0.2px; }
+          .print-comp-table th { font-size: 6pt !important; }
+
           /* Elementos de marca do header/rodapé do PDF */
           .pdf-accent-sq { background: #fcb619 !important; }
           .pdf-rule { background: #e2dfd7 !important; }
@@ -3114,15 +3125,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   </span>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm print-comp-table">
                     <thead className="bg-gray-50/80 border-b border-gray-100">
-                      <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                      <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         <th className="px-4 py-2.5">Conta bancária</th>
-                        <th className="px-4 py-2.5 text-right">Saldo inicial</th>
-                        <th className="px-4 py-2.5 text-right">Entradas</th>
-                        <th className="px-4 py-2.5 text-right">Saídas</th>
-                        <th className="px-4 py-2.5 text-right">Variação</th>
-                        <th className="px-4 py-2.5 text-right">Saldo atual</th>
+                        <th className="px-3 py-2.5 text-right">Saldo inicial</th>
+                        <th className="px-3 py-2.5 text-right">Entradas</th>
+                        <th className="px-3 py-2.5 text-right">Saídas</th>
+                        <th className="px-3 py-2.5 text-right">Variação</th>
+                        <th className="px-3 py-2.5 text-right">Saldo atual</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -3132,23 +3143,27 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         // acréscimo/taxa de cartão) têm valor mas não mexem no saldo do banco.
                         const variacao = c.saldoAtual - c.saldoInicial;
                         return (
-                          <tr key={c.contaCodigo} className="hover:bg-gray-50/60">
-                            <td className="px-4 py-2 text-[12px] text-gray-800 truncate max-w-[260px]">{c.contaNome}</td>
-                            <td className="px-4 py-2 text-right font-mono text-[12px] text-gray-700 tabular-nums">
+                          <tr key={c.contaCodigo} className="hover:bg-gray-50/60 h-9">
+                            <td className="px-4 py-2">
+                              {/* nome dentro de um div: truncate confiável em tabela
+                                  auto-layout (max-width em <td> é ignorado pelo browser). */}
+                              <div className="text-[12px] text-gray-800 truncate max-w-[220px]" title={c.contaNome}>{c.contaNome}</div>
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-[11px] text-gray-700 tabular-nums whitespace-nowrap">
                               {formatCurrency(c.saldoInicial)}
                             </td>
-                            <td className="px-4 py-2 text-right font-mono text-[12px] text-emerald-600 tabular-nums">
+                            <td className="px-3 py-2 text-right font-mono text-[11px] text-emerald-600 tabular-nums whitespace-nowrap">
                               +{formatCurrency(c.entradas)}
                             </td>
-                            <td className="px-4 py-2 text-right font-mono text-[12px] text-red-600 tabular-nums">
+                            <td className="px-3 py-2 text-right font-mono text-[11px] text-red-600 tabular-nums whitespace-nowrap">
                               -{formatCurrency(c.saidas)}
                             </td>
-                            <td className={`px-4 py-2 text-right font-mono text-[12px] tabular-nums font-semibold ${
+                            <td className={`px-3 py-2 text-right font-mono text-[11px] tabular-nums whitespace-nowrap font-semibold ${
                               Math.abs(variacao) < 0.01 ? 'text-gray-500' : variacao > 0 ? 'text-emerald-700' : 'text-red-700'
                             }`}>
                               {variacao > 0 ? '+' : ''}{formatCurrency(variacao)}
                             </td>
-                            <td className="px-4 py-2 text-right font-mono text-sm font-bold text-gray-900 tabular-nums">
+                            <td className="px-3 py-2 text-right font-mono text-[11px] font-bold text-gray-900 tabular-nums whitespace-nowrap">
                               {formatCurrency(c.saldoAtual)}
                             </td>
                           </tr>
@@ -3163,17 +3178,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         const tAtu = composicaoSaldo.reduce((s, c) => s + c.saldoAtual, 0);
                         const tVar = tAtu - tIni;
                         return (
-                          <tr className="text-[12px] font-semibold">
-                            <td className="px-4 py-3 text-gray-700">Consolidado</td>
-                            <td className="px-4 py-3 text-right font-mono text-gray-800 tabular-nums">{formatCurrency(tIni)}</td>
-                            <td className="px-4 py-3 text-right font-mono text-emerald-700 tabular-nums">+{formatCurrency(tEnt)}</td>
-                            <td className="px-4 py-3 text-right font-mono text-red-700 tabular-nums">-{formatCurrency(tSai)}</td>
-                            <td className={`px-4 py-3 text-right font-mono tabular-nums ${
+                          <tr className="text-[11px] font-semibold h-9">
+                            <td className="px-4 py-2.5 text-gray-700 truncate max-w-[220px]">Consolidado</td>
+                            <td className="px-3 py-2.5 text-right font-mono text-gray-800 tabular-nums whitespace-nowrap">{formatCurrency(tIni)}</td>
+                            <td className="px-3 py-2.5 text-right font-mono text-emerald-700 tabular-nums whitespace-nowrap">+{formatCurrency(tEnt)}</td>
+                            <td className="px-3 py-2.5 text-right font-mono text-red-700 tabular-nums whitespace-nowrap">-{formatCurrency(tSai)}</td>
+                            <td className={`px-3 py-2.5 text-right font-mono tabular-nums whitespace-nowrap ${
                               Math.abs(tVar) < 0.01 ? 'text-gray-500' : tVar > 0 ? 'text-emerald-700' : 'text-red-700'
                             }`}>
                               {tVar > 0 ? '+' : ''}{formatCurrency(tVar)}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono text-gray-900 tabular-nums">{formatCurrency(tAtu)}</td>
+                            <td className="px-3 py-2.5 text-right font-mono text-gray-900 tabular-nums whitespace-nowrap">{formatCurrency(tAtu)}</td>
                           </tr>
                         );
                       })()}
