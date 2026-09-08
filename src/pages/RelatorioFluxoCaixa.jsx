@@ -3931,9 +3931,9 @@ function CardEvol({ titulo, valor, sub, destaque }) {
   const cor = destaque === 'bom' ? 'text-emerald-700' : destaque === 'ruim' ? 'text-red-600' : 'text-gray-900';
   return (
     <div className="bg-white rounded-xl border border-gray-200/60 shadow-sm px-3.5 py-3">
-      <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{titulo}</p>
-      <p className={`text-[15px] font-bold tabular-nums mt-1 ${cor}`}>{valor}</p>
-      {sub != null && <p className="text-[10.5px] text-gray-400 mt-0.5">{sub}</p>}
+      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{titulo}</p>
+      <p className={`text-[18px] font-bold tabular-nums mt-1 ${cor}`}>{valor}</p>
+      {sub != null && <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );
 }
