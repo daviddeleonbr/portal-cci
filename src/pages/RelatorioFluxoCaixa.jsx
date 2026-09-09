@@ -1115,8 +1115,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         if (!permitida(cod)) return;
         const c = getC(cod); c.entradas += Number(v.debito) || 0; c.saidas += Number(v.credito) || 0;
       }));
+      // Só contas com MOVIMENTO no período (entradas ou saídas). Contas que têm
+      // apenas saldo (sem movimentação no período) não entram — evita, por ex., que
+      // contas de OUTRAS empresas da rede (saldo de abertura global no Autosystem)
+      // apareçam na empresa selecionada.
       return Array.from(porContaEdge.values())
-        .filter(c => Math.abs(c.saldoInicial) > 0.005 || Math.abs(c.saldoAtual) > 0.005 || Math.abs(c.entradas) > 0.005 || Math.abs(c.saidas) > 0.005)
+        .filter(c => Math.abs(c.entradas) > 0.005 || Math.abs(c.saidas) > 0.005)
         .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
     }
 
