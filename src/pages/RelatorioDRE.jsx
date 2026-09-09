@@ -496,6 +496,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         const dadosAnteriorPorMes = {};
         let totalLancsCarregados = 0;
         let lancsSemMatch = 0;
+        const mapSetDiag = new Set((contasCodigosMapeados || []).map(c => String(c).trim()));
+        const diag211 = []; // DIAGNÓSTICO temporário: movtos que tocam conta 2.1.1.x
         results.forEach(r => {
           const bucket = r.isPrev ? dadosAnteriorPorMes : dadosAtualPorMes;
           if (!bucket[r.key]) bucket[r.key] = { titulosReceber: [], titulosPagar: [], vendaItens: [], vendas: [] };
@@ -512,6 +514,15 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             if (lado === 'ambos' && cred && deb && (ehPassagem(cred) !== ehPassagem(deb))) {
               lado = ehPassagem(cred) ? 'credito' : 'debito';
             }
+            // DIAGNÓSTICO: registra movtos que envolvem 2.1.1.x (sem duplicar o mês anterior)
+            if (!r.isPrev && (ehPassagem(cred) || ehPassagem(deb))) {
+              diag211.push({
+                data: l.data, deb: deb.trim(), cred: cred.trim(),
+                ladoEdge: l.lado, ladoUsado: lado,
+                debMapeado: mapSetDiag.has(deb.trim()), credMapeado: mapSetDiag.has(cred.trim()),
+                valor: Number(l.valor || 0),
+              });
+            }
             let matched = false;
             if ((lado === 'credito' || lado === 'ambos') && cred) {
               bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
@@ -525,6 +536,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             else lancsSemMatch++;
           });
         });
+        if (diag211.length) {
+          console.warn(`[DRE/diag 2.1.1] ${diag211.length} movto(s) que tocam conta de passagem 2.1.1.x:`);
+          if (console.table) console.table(diag211.slice(0, 80)); else console.warn(diag211.slice(0, 80));
+        } else {
+          console.warn('[DRE/diag 2.1.1] Nenhum movto tocando 2.1.1.x foi retornado (nenhum lado 2.1.1.x está mapeado, ou não há movimento).');
+        }
         if (lancsSemMatch > 0) {
           console.warn('[DRE Autosystem] Lancamentos sem lado/codigo:', { semMatch: lancsSemMatch });
         }
