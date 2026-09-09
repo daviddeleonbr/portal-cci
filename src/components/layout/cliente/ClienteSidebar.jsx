@@ -122,10 +122,22 @@ export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, o
   const prefix = `/cliente/${tipoCliente}`;
   // Flags (DRE / Fluxo) vêm do cliente (Webposto) ou da rede (Autosystem)
   const flagSource = tipoCliente === 'autosystem' ? asRede : cliente;
+  // Cliente que usa o Visor360: as informações comerciais/financeiras ficam lá,
+  // então escondemos as seções Comercial e Financeiro e mostramos um botão de
+  // acesso. A URL do Visor360 é fixa por tipo (mesmas do seletor /visor360).
+  const usaVisor360 = !!flagSource?.usa_visor360;
+  const visor360Url = tipoCliente === 'autosystem'
+    ? 'https://visor360-as.cci.app.br'
+    : 'https://visor360.cci.app.br';
 
   const navigation = useMemo(
-    () => filtrarNavegacao(buildNavigation(prefix, tipoCliente), usuario?.permissoes, flagSource),
-    [prefix, tipoCliente, usuario?.permissoes, flagSource],
+    () => {
+      const nav = filtrarNavegacao(buildNavigation(prefix, tipoCliente), usuario?.permissoes, flagSource);
+      return usaVisor360
+        ? nav.filter(s => s.section !== 'Comercial' && s.section !== 'Financeiro')
+        : nav;
+    },
+    [prefix, tipoCliente, usuario?.permissoes, flagSource, usaVisor360],
   );
 
   // Calcula o href "mais específico" que case com a URL atual. Evita o bug
@@ -244,6 +256,19 @@ export default function ClienteSidebar({ collapsed: collapsedProp, mobileOpen, o
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+        {usaVisor360 && (
+          <a
+            href={visor360Url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={collapsed ? 'Acessar Visor360' : undefined}
+            className={`flex items-center gap-2.5 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 px-3 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 transition-all ${collapsed ? 'justify-center' : ''}`}
+          >
+            <PieChart className="h-[17px] w-[17px] flex-shrink-0" />
+            {!collapsed && <span className="flex-1">Acessar Visor360</span>}
+            {!collapsed && <ArrowUpRight className="h-4 w-4 flex-shrink-0" />}
+          </a>
+        )}
         {navigation.map((section) => (
           <div key={section.section}>
             {!collapsed && (

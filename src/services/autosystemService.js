@@ -28,7 +28,7 @@ export function gerarSlug(nome) {
 const SELECT_PUBLICO = `
   id, nome, slug,
   ativo, observacoes,
-  exibir_dre, exibir_fluxo_caixa,
+  exibir_dre, exibir_fluxo_caixa, usa_visor360,
   created_at, updated_at
 `;
 
@@ -99,6 +99,7 @@ export async function atualizarRede(id, campos) {
   if (resto.observacoes !== undefined)        update.observacoes = resto.observacoes || null;
   if (resto.exibir_dre !== undefined)         update.exibir_dre = !!resto.exibir_dre;
   if (resto.exibir_fluxo_caixa !== undefined) update.exibir_fluxo_caixa = !!resto.exibir_fluxo_caixa;
+  if (resto.usa_visor360 !== undefined)       update.usa_visor360 = !!resto.usa_visor360;
 
   if (Object.keys(update).length > 0) {
     const { data, error } = await supabase

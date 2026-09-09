@@ -105,7 +105,7 @@ export default function Clientes({ embedded = false }) {
       const novo = !rede[campo];
       await autosystemService.atualizarRede(rede.id, { [campo]: novo });
       setRedesAutosystem(prev => prev.map(r => r.id === rede.id ? { ...r, [campo]: novo } : r));
-      const label = campo === 'exibir_dre' ? 'DRE' : 'Fluxo de Caixa';
+      const label = campo === 'exibir_dre' ? 'DRE' : campo === 'usa_visor360' ? 'Visor360' : 'Fluxo de Caixa';
       showToast('success', `${label} ${novo ? 'liberado' : 'bloqueado'} para a rede`);
     } catch (err) {
       showToast('error', err.message);
@@ -609,6 +609,13 @@ function SecaoRedesAutosystem({ redes, loading, togglesAtivos, onToggleRelatorio
                         ativo={!!rede.exibir_fluxo_caixa}
                         loading={togglesAtivos?.has(`${rede.id}:exibir_fluxo_caixa`)}
                         onToggle={() => onToggleRelatorio?.(rede, 'exibir_fluxo_caixa')}
+                      />
+                      <ToggleRelatorioMini
+                        icon={Eye}
+                        label="Visor360"
+                        ativo={!!rede.usa_visor360}
+                        loading={togglesAtivos?.has(`${rede.id}:usa_visor360`)}
+                        onToggle={() => onToggleRelatorio?.(rede, 'usa_visor360')}
                       />
                     </div>
                   </td>
@@ -1761,14 +1768,14 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
     } finally { setBuscandoCep(false); }
   };
 
-  const toggleRelatorioFlag = async (campo) => {
+  const toggleRelatorioFlag = async (campo, msgs) => {
     if (!cliente) return;
     const novo = !form[campo];
     setForm(f => ({ ...f, [campo]: novo }));
     try {
       setTogglingFlag(campo);
       await clientesService.atualizarCliente(cliente.id, { [campo]: novo });
-      showToast('success', novo ? 'Relatório liberado para o cliente' : 'Relatório bloqueado para o cliente');
+      showToast('success', novo ? (msgs?.on || 'Relatório liberado para o cliente') : (msgs?.off || 'Relatório bloqueado para o cliente'));
       onSaved?.();
     } catch (err) {
       setForm(f => ({ ...f, [campo]: !novo })); // rollback
@@ -1982,6 +1989,25 @@ function ModalEditar({ open, cliente, onClose, onSaved, showToast }) {
               onToggle={() => toggleRelatorioFlag('exibir_fluxo_caixa')}
             />
 
+          </div>
+
+          {/* Visor360: esconde Comercial/Financeiro no portal e mostra botão de acesso */}
+          <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-gray-900">Visor360</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Cliente que usa o Visor360: no portal, as seções Comercial e Financeiro ficam ocultas e aparece um botão &quot;Acessar Visor360&quot;.
+              </p>
+            </div>
+            <ToggleRelatorio
+              icon={Eye}
+              label="Utiliza Visor360"
+              desc="Informações comerciais/financeiras acessadas pelo Visor360"
+              ativo={!!form.usa_visor360}
+              loading={togglingFlag === 'usa_visor360'}
+              disabled={togglingFlag !== null}
+              onToggle={() => toggleRelatorioFlag('usa_visor360', { on: 'Visor360 ativado para o cliente', off: 'Visor360 desativado' })}
+            />
           </div>
 
         </div>

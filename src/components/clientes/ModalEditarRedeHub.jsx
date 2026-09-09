@@ -6,14 +6,14 @@ import { useState, useEffect } from 'react';
 import {
   X, Link2, Landmark, CreditCard, Layers, Network,
   Database, Wallet, Trash2, Settings2,
-  BarChart3, TrendingUp, Loader2,
+  BarChart3, TrendingUp, Loader2, Eye,
 } from 'lucide-react';
 import SeletorMascarasRede from './SeletorMascarasRede';
 
 // Aba "Relatórios" (Autosystem) — toggles DRE/Fluxo por rede. Estado local
 // inicializado da rede (montada com key={rede.id}, sem efeito de sync).
 function RelatoriosTabAS({ rede, onToggleRelatorio, togglesAtivos }) {
-  const [flags, setFlags] = useState({ exibir_dre: !!rede.exibir_dre, exibir_fluxo_caixa: !!rede.exibir_fluxo_caixa });
+  const [flags, setFlags] = useState({ exibir_dre: !!rede.exibir_dre, exibir_fluxo_caixa: !!rede.exibir_fluxo_caixa, usa_visor360: !!rede.usa_visor360 });
   const toggleFlag = (campo) => {
     setFlags(f => ({ ...f, [campo]: !f[campo] }));
     onToggleRelatorio?.(rede, campo);
@@ -21,6 +21,7 @@ function RelatoriosTabAS({ rede, onToggleRelatorio, togglesAtivos }) {
   const itens = [
     { campo: 'exibir_dre', Icone: BarChart3, label: 'DRE', desc: 'Demonstração do resultado do exercício' },
     { campo: 'exibir_fluxo_caixa', Icone: TrendingUp, label: 'Fluxo de Caixa', desc: 'Entradas e saídas por período' },
+    { campo: 'usa_visor360', Icone: Eye, label: 'Utiliza Visor360', desc: 'Esconde Comercial/Financeiro no portal e mostra o botão "Acessar Visor360"' },
   ];
   return (
     <div className="space-y-2">
