@@ -501,6 +501,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         // A BAIXA/pagamento (débito na mesma conta) é IGNORADA — senão o pagamento
         // anula a provisão da mesma conta e o valor zera na DRE.
         const ehPassagem = (c) => /^2\.1\.1/.test(String(c));
+        const setContasMapeadas = new Set(contasCodigosMapeados);
         results.forEach(r => {
           const bucket = r.isPrev ? dadosAnteriorPorMes : dadosAtualPorMes;
           if (!bucket[r.key]) bucket[r.key] = { titulosReceber: [], titulosPagar: [], vendaItens: [], vendas: [] };
@@ -526,11 +527,21 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               matched = true;
             }
             if ((lado === 'debito' || lado === 'ambos') && deb) {
-              // Débito na passagem = BAIXA/pagamento da obrigação. Na DRE por COMPETÊNCIA
-              // isso é IGNORADO — senão a baixa (+) anula a provisão (−) da mesma conta e
-              // o valor zera (some do relatório). Conta normal debitada = despesa (−).
-              if (debEhPass) { /* baixa de passagem: não entra na competência */ }
-              else { bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito')); matched = true; }
+              // Débito na passagem = BAIXA/pagamento da obrigação. Numa passagem MAPEADA,
+              // a DRE por COMPETÊNCIA ignora a baixa — senão ela (+) anula a provisão (−)
+              // da mesma conta e o valor zera (some do relatório). Se a passagem NÃO está
+              // mapeada, a baixa é mantida para a conta continuar aparecendo no diagnóstico
+              // de "Contas não mapeadas" (essas não entram no corpo da DRE de qualquer forma).
+              // Conta normal debitada = despesa (−).
+              if (debEhPass) {
+                if (!setContasMapeadas.has(deb)) {
+                  bucket[r.key].titulosReceber.push(lancToTitulo(l, deb, 'debito'));
+                  matched = true;
+                }
+              } else {
+                bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
+                matched = true;
+              }
             }
             if (matched) totalLancsCarregados++;
             else lancsSemMatch++;
@@ -908,16 +919,6 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const descricoesAtual = idxAtualFull.descricoes || {};
   const descricoesAnterior = idxAnteriorFull.descricoes || {};
   const lancamentosAtual = idxAtualFull.lancamentos;
-
-  // DIAG passagem: mostra os totais das contas de passagem (2.1.1.x) no índice.
-  useEffect(() => {
-    const chaves = Object.keys(idxAtual).filter(c => /^2\.1\.1/.test(c));
-    if (!chaves.length) return;
-    console.table(chaves.map(c => ({
-      conta: c,
-      total: Object.values(idxAtual[c]).reduce((a, b) => a + b, 0),
-    })));
-  }, [idxAtual]);
 
   // ─── Indexar VENDAS por grupo configurado ──────────────────
   // SEM lancamentos individuais (vendas nao expandem em tela).
