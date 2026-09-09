@@ -403,8 +403,12 @@ serve(async (req) => {
             const v = Number(r.saldo_inicial || 0);
             const donos = donoDaConta(conta);
             let ec: string | null = null;
-            if (donos.length === 1) ec = donos[0];                              // dona única
-            else if (donos.length === 0 && empresasNum.length === 1) ec = String(empresasNum[0]); // sem movimento + 1 empresa
+            if (donos.length === 1) ec = donos[0];                              // dona única (tem movimento)
+            // donos.length === 0 → conta SEM movimento das empresas selecionadas: como
+            //   `conta` é global (sem coluna empresa), não dá pra saber a dona; NÃO
+            //   atribuímos (antes o fallback "1 empresa" jogava o saldo de abertura de
+            //   contas de OUTRAS empresas na empresa selecionada — ex.: contas de
+            //   Cristóvão Colombo/Marlin aparecendo na Norte Sul).
             // donos.length > 1 (conta compartilhada) → ambíguo, ignora
             if (ec) (abertura[ec] ||= {})[conta] = v;
           });
