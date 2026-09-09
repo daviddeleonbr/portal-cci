@@ -514,45 +514,45 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             const deb  = String(l.debito_codigo ?? '').trim();
             const credEhPass = ehPassagem(cred);
             const debEhPass = ehPassagem(deb);
-            // Quando o movto tem os DOIS lados mapeados (lado 'ambos') e só um deles é
-            // passagem, a PASSAGEM vence: classifica só por ela e descarta a contrapartida.
-            let lado = l.lado;
-            if (lado === 'ambos' && cred && deb && (credEhPass !== debEhPass)) {
-              lado = credEhPass ? 'credito' : 'debito';
-            }
+            // Mapeamento é decidido pela pertença ao conjunto (robusto a espaços do
+            // char do movto), não pelo `lado` do edge (que compara sem trim).
+            const credMap = !!cred && setContasMapeadas.has(cred);
+            const debMap  = !!deb  && setContasMapeadas.has(deb);
             let matched = false;
-            if ((lado === 'credito' || lado === 'ambos') && cred) {
-              // Crédito na passagem = PROVISÃO (obrigação incorrida, ex.: lucro a
-              // distribuir) → conta pela passagem, SAÍDA (−). Conta normal creditada = receita (+).
-              if (credEhPass) bucket[r.key].titulosPagar.push(lancToTitulo(l, cred, 'credito'));
-              else bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
+
+            // ── CORPO DA DRE: SÓ contas MAPEADAS ─────────────────────────────
+            if (credMap) {
+              if (credEhPass) {
+                // Crédito na passagem = PROVISÃO (obrigação incorrida, ex.: lucro a
+                // distribuir) → conta pela passagem, SAÍDA (−).
+                bucket[r.key].titulosPagar.push(lancToTitulo(l, cred, 'credito'));
+              } else if (!(debMap && debEhPass)) {
+                // Receita normal (+). Se o DÉBITO é passagem mapeada, a PASSAGEM vence
+                // (evita dupla contagem) e a contrapartida não conta aqui.
+                bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
+              }
               matched = true;
             }
-            if ((lado === 'debito' || lado === 'ambos') && deb) {
-              // Débito na passagem = BAIXA/pagamento da obrigação. Numa passagem MAPEADA,
-              // a DRE por COMPETÊNCIA ignora a baixa — senão ela (+) anula a provisão (−)
-              // da mesma conta e o valor zera (some do relatório). Se a passagem NÃO está
-              // mapeada, a baixa é mantida para a conta continuar aparecendo no diagnóstico
-              // de "Contas não mapeadas" (essas não entram no corpo da DRE de qualquer forma).
-              // Conta normal debitada = despesa (−).
+            if (debMap) {
               if (debEhPass) {
-                if (!setContasMapeadas.has(deb)) {
-                  bucket[r.key].titulosReceber.push(lancToTitulo(l, deb, 'debito'));
-                  matched = true;
-                }
-              } else {
+                // Débito na passagem = BAIXA/pagamento. Na competência é IGNORADO —
+                // senão a baixa (+) anula a provisão (−) da mesma conta e o valor zera.
+              } else if (!(credMap && credEhPass)) {
+                // Despesa normal (−). Se o CRÉDITO é passagem mapeada, a PASSAGEM vence.
                 bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
-                matched = true;
               }
+              matched = true;
             }
-            // DIAGNÓSTICO "Contas não mapeadas": quando a PROVISÃO cai numa passagem
-            // MAPEADA (crédito), a contrapartida no débito é a conta de resultado real
-            // (ex.: SALÁRIOS, DISTRIBUIÇÃO DE LUCROS). Se ela NÃO está mapeada, surfaça-a
-            // para o admin ver o que falta vincular. Não entra no corpo da DRE (conta
-            // não mapeada não pertence a nenhum grupo) — só alimenta a seção de aviso.
-            // Não surfamos a contrapartida da BAIXA (débito na passagem), que costuma
-            // ser banco/caixa e viraria ruído.
-            if (credEhPass && setContasMapeadas.has(cred) && deb && !debEhPass && !setContasMapeadas.has(deb)) {
+
+            // ── DIAGNÓSTICO "Contas não mapeadas": TODO lado com movimento que NÃO
+            //    está vinculado a nenhum grupo da DRE, seja débito ou crédito. Não
+            //    entra no corpo da DRE (conta não mapeada não pertence a grupo); só
+            //    alimenta a seção de aviso do admin. ──────────────────────────────
+            if (cred && !credMap) {
+              bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
+              matched = true;
+            }
+            if (deb && !debMap) {
               bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
               matched = true;
             }
@@ -1179,7 +1179,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // distorce os cálculos e não é exibida pra cliente (esta página é
   // exclusiva do admin).
   const contasNaoMapeadas = useMemo(() => {
-    const codigosMapeados = new Set(mapeamentos.map(m => String(m.plano_conta_codigo)));
+    // trim: as chaves do índice vêm sem espaço; casar com o código do mapeamento.
+    const codigosMapeados = new Set(mapeamentos.map(m => String(m.plano_conta_codigo || '').trim()));
     const codigosVistos = new Set([
       ...Object.keys(idxAtual || {}),
       ...Object.keys(idxAnterior || {}),
