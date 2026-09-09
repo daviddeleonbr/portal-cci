@@ -2302,11 +2302,16 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           /* Impede quebra de pagina dentro de cards */
           .print-no-break { page-break-inside: avoid; break-inside: avoid; }
 
-          /* Evolução: o gráfico tem scroll horizontal (largura larguraPx) na tela.
-             Na impressão, força a largura a 100% pra caber na página — o recharts
-             re-mede via ResizeObserver no reflow de impressão. */
+          /* Evolução: na tela o gráfico é mais largo que a página (scroll horizontal).
+             Na impressão escalamos o BLOCO inteiro (eixo Y + gráfico) pra caber a
+             largura útil do A4 mostrando TODOS os pontos (ex.: 1 mês completo), e
+             recolhemos a altura junto (evita estourar o rodapé). --evol-scale (inline). */
           .evol-chart-scroll { overflow: visible !important; }
-          .evol-chart-inner { width: 100% !important; min-width: 0 !important; }
+          .evol-chart-fit { overflow: hidden !important; height: calc(372px * var(--evol-scale, 1)) !important; }
+          .evol-chart-flex { width: max-content !important; transform: scale(var(--evol-scale, 1)); transform-origin: top left; }
+          /* Cards de resumo numa única linha (fonte menor, mas cabem). */
+          .evol-cards-grid { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: 6px !important; }
+          .evol-cards-grid p { font-size: 8.5pt !important; line-height: 1.15 !important; }
 
           /* ── Identidade CCI na impressão ─────────────────────────────────
              Bandas de cor da marca nas linhas de hierarquia (seção/subtotal/
@@ -2346,7 +2351,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           .pdf-footer { display: block !important; position: fixed; left: 0; right: 0; bottom: 0; }
 
           /* Margem inferior maior reserva espaço pro rodapé fixo. */
-          @page { size: A4 portrait; margin: 9mm 8mm 16mm 8mm; }
+          @page { size: A4 portrait; margin: 9mm 8mm 20mm 8mm; }
         }
         .print-only { display: none; }
         .pdf-footer { display: none; }
@@ -2670,7 +2675,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 evol-cards-grid">
                   <CardEvol titulo="Saldo inicial" valor={formatCurrency(evolucaoCaixa.saldoInicial)} />
                   <CardEvol titulo="Saldo final" valor={formatCurrency(evolucaoCaixa.saldoFinal)}
                     destaque={evolucaoCaixa.saldoFinal >= evolucaoCaixa.saldoInicial ? 'bom' : 'ruim'} />
@@ -2742,7 +2747,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       ))}
                     </div>
                   </div>
-                  <div className="flex">
+                  <div className="evol-chart-fit" style={{ '--evol-scale': evolucaoCaixa.larguraPx ? Math.min(1, 700 / (74 + evolucaoCaixa.larguraPx)) : 1 }}>
+                  <div className="flex evol-chart-flex">
                     {/* Eixo Y fixo — não acompanha o scroll horizontal. Renderiza só o
                         eixo (mesmo domínio do gráfico ao lado), pra rótulos ficarem visíveis. */}
                     <div style={{ width: 74, flexShrink: 0 }}>
@@ -2808,6 +2814,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     </ResponsiveContainer>
                       </div>
                     </div>
+                  </div>
                   </div>
                   {/* Legenda das séries e da coluna de fim de semana. */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 pt-3 text-[11px] text-gray-600">
