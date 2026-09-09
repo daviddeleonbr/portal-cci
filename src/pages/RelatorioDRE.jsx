@@ -496,52 +496,44 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         const dadosAnteriorPorMes = {};
         let totalLancsCarregados = 0;
         let lancsSemMatch = 0;
-        const mapSetDiag = new Set((contasCodigosMapeados || []).map(c => String(c).trim()));
-        const diag211 = []; // DIAGNÓSTICO temporário: movtos que tocam conta 2.1.1.x
+        // Conta de PASSAGEM = 2.1.1.x (contas a pagar). Nessas contas o sinal do DRE
+        // é INVERTIDO em relação à convenção crédito=+/débito=−: como é um passivo,
+        // um CRÉDITO na conta (aumento da obrigação, ex.: distribuição de lucros a
+        // pagar) é uma SAÍDA (−); um DÉBITO (baixa/pagamento) é uma ENTRADA/estorno (+).
+        const ehPassagem = (c) => /^2\.1\.1/.test(String(c));
         results.forEach(r => {
           const bucket = r.isPrev ? dadosAnteriorPorMes : dadosAtualPorMes;
           if (!bucket[r.key]) bucket[r.key] = { titulosReceber: [], titulosPagar: [], vendaItens: [], vendas: [] };
           (r.lancs || []).forEach(l => {
-            const cred = String(l.credito_codigo ?? '');
-            const deb  = String(l.debito_codigo ?? '');
-            // Conta de PASSAGEM = 2.1.1.x (contas a pagar). Quando o movto tem os DOIS
-            // lados mapeados na máscara (lado 'ambos') e só um deles é passagem, a
-            // PASSAGEM vence: classifica só por ela e descarta a contrapartida.
-            // (Passagem mapeada → retorna a passagem; passagem NÃO mapeada → o único
-            // lado mapeado é a contrapartida, então ela é retornada normalmente.)
-            const ehPassagem = (c) => /^2\.1\.1/.test(c);
+            // trim: os códigos do movto (char) podem ter espaços; a máscara guarda sem
+            // espaço → sem isso a chave não casa na árvore e a conta não aparece.
+            const cred = String(l.credito_codigo ?? '').trim();
+            const deb  = String(l.debito_codigo ?? '').trim();
+            const credEhPass = ehPassagem(cred);
+            const debEhPass = ehPassagem(deb);
+            // Quando o movto tem os DOIS lados mapeados (lado 'ambos') e só um deles é
+            // passagem, a PASSAGEM vence: classifica só por ela e descarta a contrapartida.
             let lado = l.lado;
-            if (lado === 'ambos' && cred && deb && (ehPassagem(cred) !== ehPassagem(deb))) {
-              lado = ehPassagem(cred) ? 'credito' : 'debito';
-            }
-            // DIAGNÓSTICO: registra movtos que envolvem 2.1.1.x (sem duplicar o mês anterior)
-            if (!r.isPrev && (ehPassagem(cred) || ehPassagem(deb))) {
-              diag211.push({
-                data: l.data, deb: deb.trim(), cred: cred.trim(),
-                ladoEdge: l.lado, ladoUsado: lado,
-                debMapeado: mapSetDiag.has(deb.trim()), credMapeado: mapSetDiag.has(cred.trim()),
-                valor: Number(l.valor || 0),
-              });
+            if (lado === 'ambos' && cred && deb && (credEhPass !== debEhPass)) {
+              lado = credEhPass ? 'credito' : 'debito';
             }
             let matched = false;
             if ((lado === 'credito' || lado === 'ambos') && cred) {
-              bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
+              // passagem creditada → SAÍDA (−); conta normal creditada → receita (+).
+              if (credEhPass) bucket[r.key].titulosPagar.push(lancToTitulo(l, cred, 'credito'));
+              else bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
               matched = true;
             }
             if ((lado === 'debito' || lado === 'ambos') && deb) {
-              bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
+              // passagem debitada → ENTRADA/estorno (+); conta normal debitada → despesa (−).
+              if (debEhPass) bucket[r.key].titulosReceber.push(lancToTitulo(l, deb, 'debito'));
+              else bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
               matched = true;
             }
             if (matched) totalLancsCarregados++;
             else lancsSemMatch++;
           });
         });
-        if (diag211.length) {
-          console.warn(`[DRE/diag 2.1.1] ${diag211.length} movto(s) que tocam conta de passagem 2.1.1.x:`);
-          if (console.table) console.table(diag211.slice(0, 80)); else console.warn(diag211.slice(0, 80));
-        } else {
-          console.warn('[DRE/diag 2.1.1] Nenhum movto tocando 2.1.1.x foi retornado (nenhum lado 2.1.1.x está mapeado, ou não há movimento).');
-        }
         if (lancsSemMatch > 0) {
           console.warn('[DRE Autosystem] Lancamentos sem lado/codigo:', { semMatch: lancsSemMatch });
         }
@@ -1025,7 +1017,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       const contasMapeadas = mapeamentos.filter(m => m.grupo_dre_id === grupo.id);
 
       const contas = contasMapeadas.map(m => {
-        const codKey = String(m.plano_conta_codigo);
+        const codKey = String(m.plano_conta_codigo).trim();
         const valoresPorMes = {};
         const valoresAnt = {};
         let totalPeriodo = 0;
@@ -1554,7 +1546,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     function buildNode(grupo) {
       const contasMapeadas = mapeamentos.filter(m => m.grupo_dre_id === grupo.id);
       const contas = contasMapeadas.map(m => {
-        const codKey = String(m.plano_conta_codigo);
+        const codKey = String(m.plano_conta_codigo).trim();
         const valoresPorMes = {};
         const valoresAnt = {};
         let totalPeriodo = 0;
