@@ -484,6 +484,32 @@ export async function buscarLancamentosAutosystem(redeId, empresaCodigos, filtro
   return Array.isArray(data?.lancamentos) ? data.lancamentos : [];
 }
 
+// ─── Resumo de TODAS as contas com movimento no período ──────
+// Sem filtro de mapeamento: retorna cada conta do plano que teve débito ou
+// crédito no período, com o total de cada lado. Usado pela seção "Contas não
+// mapeadas" do DRE Autosystem para listar tudo que não está vinculado a um grupo.
+export async function buscarContasComMovimentoAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-lancamentos', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de: filtros.data_de,
+      data_ate: filtros.data_ate,
+      resumo: true,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar contas com movimento');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.resumoContas) ? data.resumoContas : [];
+}
+
 // ─── Fluxo de caixa Autosystem ────────────────────────────────
 // Retorna lançamentos do movto onde uma das contas (debit/credit) é
 // caixa/banco. A contraparte (a outra conta do lançamento) é o que o

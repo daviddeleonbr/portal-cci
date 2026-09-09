@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, FileBarChart, Printer,
-  EyeOff, Eye, ChevronLeft as ChevLeft, Sparkles, Table
+  EyeOff, Eye, ChevronLeft as ChevLeft, Sparkles, Table, Search
 } from 'lucide-react';
 import InsightsView from '../components/dre/InsightsView';
 import * as clientesService from '../services/clientesService';
@@ -77,6 +77,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // categorias: combustivel | automotivos | conveniencia
   // { atual: { [categoria]: { [mesKey]: { venda, custo } } }, anterior: idem }
   const [vendasAutosystemPorMes, setVendasAutosystemPorMes] = useState({ atual: {}, anterior: {} });
+  // Autosystem: TODAS as contas com movimento no período (resumo do edge), para a
+  // seção "Contas não mapeadas". { [codigo]: { nome, valoresPorMes: {mesKey: net}, qtd } }
+  const [contasMovimentoAutosystem, setContasMovimentoAutosystem] = useState({});
   const [mapVendasAutosystem, setMapVendasAutosystem] = useState([]);
   // Categorização de grupo_produto → categoria, vinda de as_rede_grupo_produto
   // (parametrizada em /cliente/autosystem/configuracoes).
@@ -388,9 +391,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           // Vendas: `agregado: true` retorna 1 linha por (empresa, produto, vendedor)
           // com sum(valor), sum(quantidade), sum(custo) etc.
           // Lançamentos: filtra movto pelos conta_codigo mapeados.
-          let vendas = [], lancs = [];
+          let vendas = [], lancs = [], resumoContas = [];
           try {
-            [vendas, lancs] = await Promise.all([
+            [vendas, lancs, resumoContas] = await Promise.all([
               autosystemService.buscarVendasAutosystem(
                 cliente.as_rede_id,
                 empresaCodigos,
@@ -403,6 +406,14 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                     { data_de: p.dataInicial, data_ate: p.dataFinal, contas_codigos: contasCodigosMapeados },
                   )
                 : Promise.resolve([]),
+              // Só no período ATUAL: resumo de TODAS as contas com movimento (p/ "não mapeadas")
+              p.isPrev
+                ? Promise.resolve([])
+                : autosystemService.buscarContasComMovimentoAutosystem(
+                    cliente.as_rede_id,
+                    empresaCodigos,
+                    { data_de: p.dataInicial, data_ate: p.dataFinal },
+                  ),
             ]);
           } catch (err) {
             console.error('[DRE Autosystem] Falha em buscar dados', { periodo: p, err });
@@ -413,7 +424,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             atual: concluidas, total,
             mensagem: `${periodoLabel} · ${vendas.length} itens · ${lancs.length} lancamentos`,
           });
-          return { ...p, vendas, lancs };
+          return { ...p, vendas, lancs, resumoContas };
         }));
 
         // Diagnóstico: avisa se nada veio do Autosystem
@@ -544,18 +555,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               matched = true;
             }
 
-            // ── DIAGNÓSTICO "Contas não mapeadas": TODO lado com movimento que NÃO
-            //    está vinculado a nenhum grupo da DRE, seja débito ou crédito. Não
-            //    entra no corpo da DRE (conta não mapeada não pertence a grupo); só
-            //    alimenta a seção de aviso do admin. ──────────────────────────────
-            if (cred && !credMap) {
-              bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
-              matched = true;
-            }
-            if (deb && !debMap) {
-              bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
-              matched = true;
-            }
+            // A seção "Contas não mapeadas" NÃO é mais alimentada por aqui: ela vem
+            // do resumo do edge (buscarContasComMovimentoAutosystem), que lista TODAS
+            // as contas com movimento — inclusive as que nunca tocam uma conta mapeada.
             if (matched) totalLancsCarregados++;
             else lancsSemMatch++;
           });
@@ -568,10 +570,26 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           contasMapeadasUsadas: contasCodigosMapeados.length,
         });
 
+        // Resumo de TODAS as contas com movimento (período atual), por mês →
+        // alimenta a seção "Contas não mapeadas". net = crédito − débito.
+        const contasMovMap = {};
+        results.filter(r => !r.isPrev).forEach(r => {
+          (r.resumoContas || []).forEach(c => {
+            const cod = String(c.codigo || '').trim();
+            if (!cod) return;
+            if (!contasMovMap[cod]) contasMovMap[cod] = { nome: c.nome || '', valoresPorMes: {}, qtd: 0 };
+            const net = Number(c.total_credito || 0) - Number(c.total_debito || 0);
+            contasMovMap[cod].valoresPorMes[r.key] = (contasMovMap[cod].valoresPorMes[r.key] || 0) + net;
+            contasMovMap[cod].qtd += Number(c.qtd || 0);
+            if (!contasMovMap[cod].nome && c.nome) contasMovMap[cod].nome = c.nome;
+          });
+        });
+
         setLoadingProgress({ atual: total, total, mensagem: 'Montando o relatório...' });
         await new Promise(rsv => setTimeout(rsv, 200));
         setDadosPorMes(dadosAtualPorMes);
         setDadosPorMesAnterior(dadosAnteriorPorMes);
+        setContasMovimentoAutosystem(contasMovMap);
         setVendasAutosystemPorMes({ atual, anterior });
         setDadosCarregados(true);
         setTempoGeracao(performance.now() - _t0);
@@ -587,6 +605,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       setDadosPorMes({});
       setDadosPorMesAnterior({});
       setVendasAutosystemPorMes({ atual: {}, anterior: {} });
+      setContasMovimentoAutosystem({});
       setDadosCarregados(true);
       return;
     }
@@ -705,6 +724,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       await new Promise(r => setTimeout(r, 250));
       setDadosPorMes(atual);
       setDadosPorMesAnterior(anterior);
+      setContasMovimentoAutosystem({}); // Webposto usa o caminho legado (índice)
       setDadosCarregados(true);
       setTempoGeracao(performance.now() - _t0);
     } catch (err) {
@@ -1181,6 +1201,35 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const contasNaoMapeadas = useMemo(() => {
     // trim: as chaves do índice vêm sem espaço; casar com o código do mapeamento.
     const codigosMapeados = new Set(mapeamentos.map(m => String(m.plano_conta_codigo || '').trim()));
+
+    // AUTOSYSTEM: usa o resumo de TODAS as contas com movimento (do edge), que
+    // inclui até contas cujos lançamentos nunca tocam uma conta mapeada.
+    const codsMov = Object.keys(contasMovimentoAutosystem || {});
+    if (codsMov.length > 0) {
+      return codsMov
+        .filter(cod => !codigosMapeados.has(cod))
+        .map(cod => {
+          const info = contasMovimentoAutosystem[cod];
+          const valoresPorMes = {};
+          let totalPeriodo = 0;
+          meses.forEach(mes => {
+            const v = info.valoresPorMes?.[mes.key] || 0;
+            valoresPorMes[mes.key] = v;
+            totalPeriodo += v;
+          });
+          return {
+            codigo: cod,
+            descricao: info.nome || '(sem descrição)',
+            valoresPorMes,
+            totalPeriodo,
+            qtdLancamentos: info.qtd || 0,
+            lancamentos: [],
+          };
+        })
+        .sort((a, b) => Math.abs(b.totalPeriodo) - Math.abs(a.totalPeriodo));
+    }
+
+    // WEBPOSTO (legado): deriva do índice, que já contém todas as contas vistas.
     const codigosVistos = new Set([
       ...Object.keys(idxAtual || {}),
       ...Object.keys(idxAnterior || {}),
@@ -1212,7 +1261,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         lancamentos: lancs,
       };
     }).sort((a, b) => Math.abs(b.totalPeriodo) - Math.abs(a.totalPeriodo));
-  }, [mapeamentos, idxAtual, idxAnterior, lancamentosAtual, descricoesAtual, descricoesAnterior, meses, planoContasMap]);
+  }, [mapeamentos, contasMovimentoAutosystem, idxAtual, idxAnterior, lancamentosAtual, descricoesAtual, descricoesAnterior, meses, planoContasMap]);
 
   // ─── Acumulado para subtotais/resultados ─────────────────
   const dreComCalculos = useMemo(() => {
@@ -2369,7 +2418,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 // ═══════════════════════════════════════════════════════════
 function SecaoContasNaoMapeadas({ contas, meses }) {
   const [expandida, setExpandida] = useState(false);
-  const totalGeral = contas.reduce((s, c) => s + c.totalPeriodo, 0);
+  const [busca, setBusca] = useState('');
+  const termo = busca.trim().toLowerCase();
+  const contasFiltradas = termo
+    ? contas.filter(c => `${c.codigo} ${c.descricao}`.toLowerCase().includes(termo))
+    : contas;
+  const totalGeral = contasFiltradas.reduce((s, c) => s + c.totalPeriodo, 0);
 
   return (
     <motion.div
@@ -2409,6 +2463,31 @@ function SecaoContasNaoMapeadas({ contas, meses }) {
 
       {expandida && (
         <div className="border-t border-amber-200/70 bg-white">
+          <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/30">
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-amber-500 pointer-events-none" />
+              <input
+                type="text"
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="Buscar conta por código ou nome..."
+                className="w-full pl-9 pr-8 py-2 text-[12px] rounded-lg border border-amber-200 bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300"
+              />
+              {busca && (
+                <button
+                  type="button"
+                  onClick={() => setBusca('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded text-amber-500 hover:bg-amber-100"
+                  title="Limpar busca"
+                >×</button>
+              )}
+            </div>
+            {termo && (
+              <p className="mt-1.5 text-[11px] text-amber-700/80">
+                {contasFiltradas.length} de {contas.length} conta(s)
+              </p>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
               <thead className="bg-amber-50/60 text-amber-800 border-b border-amber-100">
@@ -2423,7 +2502,7 @@ function SecaoContasNaoMapeadas({ contas, meses }) {
                 </tr>
               </thead>
               <tbody>
-                {contas.map(conta => (
+                {contasFiltradas.map(conta => (
                   <tr key={conta.codigo} className="border-b border-amber-50 hover:bg-amber-50/30">
                     <td className="px-4 py-2 font-mono text-[11px] text-gray-700">{conta.codigo}</td>
                     <td className="px-4 py-2 text-gray-800">{conta.descricao}</td>

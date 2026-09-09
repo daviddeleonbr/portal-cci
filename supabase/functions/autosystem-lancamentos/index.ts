@@ -59,6 +59,7 @@ serve(async (req) => {
     data_de?: string;
     data_ate?: string;
     contas_codigos?: string[];
+    resumo?: boolean;
   };
   try {
     body = await req.json();
@@ -66,7 +67,7 @@ serve(async (req) => {
     return json({ error: 'Body JSON inválido' }, 400);
   }
 
-  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_codigos } = body;
+  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_codigos, resumo } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
   if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
     return json({ error: 'empresa_codigos deve ser um array não-vazio' }, 400);
@@ -74,7 +75,7 @@ serve(async (req) => {
   if (!data_de || !data_ate) {
     return json({ error: 'data_de e data_ate são obrigatórios' }, 400);
   }
-  if (!Array.isArray(contas_codigos) || contas_codigos.length === 0) {
+  if (!resumo && (!Array.isArray(contas_codigos) || contas_codigos.length === 0)) {
     // Nada mapeado → retorna vazio (sem precisar consultar o Autosystem)
     return json({ lancamentos: [] });
   }
@@ -96,6 +97,41 @@ serve(async (req) => {
     // `movto` é varchar/text com formato "1.1.2.001").
     const codigos = (contas_codigos || []).map(c => String(c));
     const empresasNum = (empresaCodigos || []).map(e => Number(e)).filter(n => Number.isFinite(n));
+
+    // ── Modo RESUMO: totais por conta de TODAS as contas com movimento no
+    //    período (sem filtro de mapeamento). Usado pela seção "Contas não
+    //    mapeadas" do DRE para listar tudo que não está vinculado a um grupo.
+    if (resumo) {
+      const sqlResumo = `
+        select
+          btrim(t.conta_codigo)                                 as codigo,
+          convert_to(coalesce(c.nome, ''), 'LATIN1')            as nome,
+          sum(case when t.tipo = 'D' then m.valor else 0 end)   as total_debito,
+          sum(case when t.tipo = 'C' then m.valor else 0 end)   as total_credito,
+          count(*)                                              as qtd
+        from movto m
+        cross join lateral (values ('D'::text, m.conta_debitar), ('C'::text, m.conta_creditar)) as t(tipo, conta_codigo)
+        left join conta c on c.codigo = t.conta_codigo
+        where m.empresa = any($1::bigint[])
+          and m.data between $2 and $3
+          and t.conta_codigo is not null
+          and btrim(t.conta_codigo) <> ''
+        group by btrim(t.conta_codigo), c.nome
+        order by 1
+      `;
+      const rowsResumo = await executarQuery(rede, sqlResumo, [empresasNum, data_de, data_ate], { encoding: 'SQL_ASCII' });
+      const contas = rowsResumo.map((row) => {
+        const out = decodeRowText(row, new Set(['nome']), 'windows-1252');
+        return {
+          codigo: String(out.codigo ?? '').trim(),
+          nome: out.nome ?? '',
+          total_debito: Number(out.total_debito ?? 0),
+          total_credito: Number(out.total_credito ?? 0),
+          qtd: Number(out.qtd ?? 0),
+        };
+      });
+      return json({ resumoContas: contas });
+    }
 
     const sql = `
       select
