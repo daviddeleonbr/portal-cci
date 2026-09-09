@@ -496,10 +496,10 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         const dadosAnteriorPorMes = {};
         let totalLancsCarregados = 0;
         let lancsSemMatch = 0;
-        // Conta de PASSAGEM = 2.1.1.x (contas a pagar). Nessas contas o sinal do DRE
-        // é INVERTIDO em relação à convenção crédito=+/débito=−: como é um passivo,
-        // um CRÉDITO na conta (aumento da obrigação, ex.: distribuição de lucros a
-        // pagar) é uma SAÍDA (−); um DÉBITO (baixa/pagamento) é uma ENTRADA/estorno (+).
+        // Conta de PASSAGEM = 2.1.1.x (contas a pagar). A DRE é por COMPETÊNCIA: vale
+        // a PROVISÃO (o crédito na conta a pagar, ex.: distribuição de lucros a pagar).
+        // A BAIXA/pagamento (débito na mesma conta) é IGNORADA — senão o pagamento
+        // anula a provisão da mesma conta e o valor zera na DRE.
         const ehPassagem = (c) => /^2\.1\.1/.test(String(c));
         results.forEach(r => {
           const bucket = r.isPrev ? dadosAnteriorPorMes : dadosAtualPorMes;
@@ -519,16 +519,18 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             }
             let matched = false;
             if ((lado === 'credito' || lado === 'ambos') && cred) {
-              // passagem creditada → SAÍDA (−); conta normal creditada → receita (+).
+              // Crédito na passagem = PROVISÃO (obrigação incorrida, ex.: lucro a
+              // distribuir) → conta pela passagem, SAÍDA (−). Conta normal creditada = receita (+).
               if (credEhPass) bucket[r.key].titulosPagar.push(lancToTitulo(l, cred, 'credito'));
               else bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
               matched = true;
             }
             if ((lado === 'debito' || lado === 'ambos') && deb) {
-              // passagem debitada → ENTRADA/estorno (+); conta normal debitada → despesa (−).
-              if (debEhPass) bucket[r.key].titulosReceber.push(lancToTitulo(l, deb, 'debito'));
-              else bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
-              matched = true;
+              // Débito na passagem = BAIXA/pagamento da obrigação. Na DRE por COMPETÊNCIA
+              // isso é IGNORADO — senão a baixa (+) anula a provisão (−) da mesma conta e
+              // o valor zera (some do relatório). Conta normal debitada = despesa (−).
+              if (debEhPass) { /* baixa de passagem: não entra na competência */ }
+              else { bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito')); matched = true; }
             }
             if (matched) totalLancsCarregados++;
             else lancsSemMatch++;
@@ -907,7 +909,15 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const descricoesAnterior = idxAnteriorFull.descricoes || {};
   const lancamentosAtual = idxAtualFull.lancamentos;
 
-
+  // DIAG passagem: mostra os totais das contas de passagem (2.1.1.x) no índice.
+  useEffect(() => {
+    const chaves = Object.keys(idxAtual).filter(c => /^2\.1\.1/.test(c));
+    if (!chaves.length) return;
+    console.table(chaves.map(c => ({
+      conta: c,
+      total: Object.values(idxAtual[c]).reduce((a, b) => a + b, 0),
+    })));
+  }, [idxAtual]);
 
   // ─── Indexar VENDAS por grupo configurado ──────────────────
   // SEM lancamentos individuais (vendas nao expandem em tela).
