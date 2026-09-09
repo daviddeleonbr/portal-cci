@@ -130,9 +130,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [expandedContas, setExpandedContas] = useState(new Set());
   const [activeTab, setActiveTab] = useState('fluxo'); // 'fluxo' | 'empresa' | 'evolucao'
   // Granularidade do gráfico de Evolução: 'auto' (pelo período) | 'dia' | 'semana' | 'mes'.
-  const [granEvol, setGranEvol] = useState('auto');
+  // Granularidade da Evolução — default 'dia' (o usuário pode trocar p/ Semana/Mês).
+  const [granEvol, setGranEvol] = useState('dia');
   // Modo do gráfico de Evolução: 'saldo' (saldo acumulado) | 'variacao' (variação por período).
-  const [modoGrafico, setModoGrafico] = useState('saldo');
+  // Default 'variacao'.
+  const [modoGrafico, setModoGrafico] = useState('variacao');
   // Período específico da Evolução (recorte dentro do período carregado). Vazio = todo o período.
   const [evolRange, setEvolRange] = useState({ ini: '', fim: '' });
   // Modal de detalhamento ao clicar num marcador do gráfico de evolução.
@@ -2300,6 +2302,12 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           /* Impede quebra de pagina dentro de cards */
           .print-no-break { page-break-inside: avoid; break-inside: avoid; }
 
+          /* Evolução: o gráfico tem scroll horizontal (largura larguraPx) na tela.
+             Na impressão, força a largura a 100% pra caber na página — o recharts
+             re-mede via ResizeObserver no reflow de impressão. */
+          .evol-chart-scroll { overflow: visible !important; }
+          .evol-chart-inner { width: 100% !important; min-width: 0 !important; }
+
           /* ── Identidade CCI na impressão ─────────────────────────────────
              Bandas de cor da marca nas linhas de hierarquia (seção/subtotal/
              resultado) — reafirmadas com !important + print-color-adjust pra
@@ -2673,11 +2681,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   <CardEvol titulo="Menor saldo" valor={formatCurrency(evolucaoCaixa.menorSaldo)} sub={evolucaoCaixa.menorLabel} destaque="ruim" />
                 </div>
 
-                <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4 sm:p-5">
+                <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4 sm:p-5 print-no-break">
                   <div className="flex items-center gap-2 mb-3 flex-wrap">
                     <LineChartIcon className="h-4 w-4 text-emerald-500" />
                     <h3 className="text-sm font-semibold text-gray-800">Evolução do Caixa</h3>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 no-print">
                       <input type="date" value={evolRange.ini || evolucaoCaixa.dataIni}
                         min={evolucaoCaixa.loadedIni} max={evolucaoCaixa.loadedFim}
                         onChange={(e) => setEvolRange(r => ({ ...r, ini: e.target.value }))}
@@ -2697,7 +2705,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                     {contasAplicacao.size > 0 && (
                       <button type="button" onClick={() => setIncluirAplicacoes(v => !v)}
                         title="Incluir ou excluir as contas de aplicação financeira na análise do fluxo"
-                        className={`ml-auto inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                        className={`ml-auto no-print inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all ${
                           incluirAplicacoes
                             ? 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                             : 'border-amber-300 bg-amber-50 text-amber-700'
@@ -2706,7 +2714,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         Aplicações {incluirAplicacoes ? 'incluídas' : 'excluídas'}
                       </button>
                     )}
-                    <div className={`flex items-center gap-0.5 ${contasAplicacao.size > 0 ? '' : 'ml-auto'} bg-gray-100/80 rounded-lg p-0.5`}>
+                    <div className={`flex items-center gap-0.5 no-print ${contasAplicacao.size > 0 ? '' : 'ml-auto'} bg-gray-100/80 rounded-lg p-0.5`}>
                       {[
                         { v: 'saldo', label: 'Saldo' },
                         { v: 'variacao', label: 'Variação' },
@@ -2719,7 +2727,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                         </button>
                       ))}
                     </div>
-                    <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5">
+                    <div className="flex items-center gap-0.5 no-print bg-gray-100/80 rounded-lg p-0.5">
                       {[
                         { v: 'dia', label: 'Dia' },
                         { v: 'semana', label: 'Semana' },
@@ -2749,8 +2757,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       </ResponsiveContainer>
                     </div>
                     {/* Gráfico rolável (eixo Y oculto — quem mostra os rótulos é o fixo à esquerda). */}
-                    <div className="overflow-x-auto flex-1">
-                      <div style={{ height: 360, width: evolucaoCaixa.larguraPx || '100%', minWidth: '100%' }}>
+                    <div className="overflow-x-auto flex-1 evol-chart-scroll">
+                      <div className="evol-chart-inner" style={{ height: 360, width: evolucaoCaixa.larguraPx || '100%', minWidth: '100%' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <ComposedChart data={evolucaoCaixa.pontos} margin={{ top: 10, right: 16, left: 0, bottom: evolucaoCaixa.larguraPx ? 24 : 4 }}
                         style={{ cursor: 'pointer' }}>
