@@ -476,6 +476,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           return {
             codigo: l.lancamento_id != null ? `as-${l.lancamento_id}-${lado}` : undefined,
             planoContaGerencialCodigo: codigo,
+            // nome do plano de contas daquele lado (para a seção "Contas não mapeadas")
+            planoContaGerencialDescricao: (lado === 'debito' ? l.debito_nome : l.credito_nome) || '',
             empresaCodigo: l.empresa,
             // movto.data como única fonte de data do lançamento
             dataMovimento: l.data,
@@ -542,6 +544,17 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                 bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
                 matched = true;
               }
+            }
+            // DIAGNÓSTICO "Contas não mapeadas": quando a PROVISÃO cai numa passagem
+            // MAPEADA (crédito), a contrapartida no débito é a conta de resultado real
+            // (ex.: SALÁRIOS, DISTRIBUIÇÃO DE LUCROS). Se ela NÃO está mapeada, surfaça-a
+            // para o admin ver o que falta vincular. Não entra no corpo da DRE (conta
+            // não mapeada não pertence a nenhum grupo) — só alimenta a seção de aviso.
+            // Não surfamos a contrapartida da BAIXA (débito na passagem), que costuma
+            // ser banco/caixa e viraria ruído.
+            if (credEhPass && setContasMapeadas.has(cred) && deb && !debEhPass && !setContasMapeadas.has(deb)) {
+              bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
+              matched = true;
             }
             if (matched) totalLancsCarregados++;
             else lancsSemMatch++;
