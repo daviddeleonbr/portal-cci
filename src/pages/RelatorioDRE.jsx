@@ -502,12 +502,22 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           (r.lancs || []).forEach(l => {
             const cred = String(l.credito_codigo ?? '');
             const deb  = String(l.debito_codigo ?? '');
+            // Conta de PASSAGEM = 2.1.1.x (contas a pagar). Quando o movto tem os DOIS
+            // lados mapeados na máscara (lado 'ambos') e só um deles é passagem, a
+            // PASSAGEM vence: classifica só por ela e descarta a contrapartida.
+            // (Passagem mapeada → retorna a passagem; passagem NÃO mapeada → o único
+            // lado mapeado é a contrapartida, então ela é retornada normalmente.)
+            const ehPassagem = (c) => /^2\.1\.1/.test(c);
+            let lado = l.lado;
+            if (lado === 'ambos' && cred && deb && (ehPassagem(cred) !== ehPassagem(deb))) {
+              lado = ehPassagem(cred) ? 'credito' : 'debito';
+            }
             let matched = false;
-            if ((l.lado === 'credito' || l.lado === 'ambos') && cred) {
+            if ((lado === 'credito' || lado === 'ambos') && cred) {
               bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
               matched = true;
             }
-            if ((l.lado === 'debito' || l.lado === 'ambos') && deb) {
+            if ((lado === 'debito' || lado === 'ambos') && deb) {
               bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
               matched = true;
             }
