@@ -27,18 +27,20 @@ const CATEGORIAS_GRUPO = [
   { key: 'combustivel',  label: 'Combustível',  cor: 'amber'   },
   { key: 'automotivos',  label: 'Automotivos',  cor: 'blue'    },
   { key: 'conveniencia', label: 'Conveniência', cor: 'emerald' },
+  { key: 'servicos',     label: 'Serviços',     cor: 'purple'  },
   { key: 'outros',       label: 'Outros',       cor: 'gray'    },
 ];
 const CAT_CLASSES = {
   amber:   { ativa: 'bg-amber-100 text-amber-700 border-amber-300',       idle: 'border-gray-200 text-gray-500 hover:border-amber-300' },
   blue:    { ativa: 'bg-blue-100 text-blue-700 border-blue-300',           idle: 'border-gray-200 text-gray-500 hover:border-blue-300' },
   emerald: { ativa: 'bg-emerald-100 text-emerald-700 border-emerald-300', idle: 'border-gray-200 text-gray-500 hover:border-emerald-300' },
+  purple:  { ativa: 'bg-purple-100 text-purple-700 border-purple-300',    idle: 'border-gray-200 text-gray-500 hover:border-purple-300' },
   gray:    { ativa: 'bg-gray-200 text-gray-700 border-gray-300',           idle: 'border-gray-200 text-gray-500 hover:border-gray-400' },
 };
 
 const ABAS = [
   { key: 'gasolina', label: 'Classificação de gasolina', icon: Droplet, descricao: 'Aditivada / Comum por produto' },
-  { key: 'grupos',   label: 'Classificação de grupos',   icon: Tags,    descricao: 'Combustível / Automotivos / Conveniência' },
+  { key: 'grupos',   label: 'Classificação de grupos',   icon: Tags,    descricao: 'Combustível / Automotivos / Conveniência / Serviços' },
   { key: 'contas_receber', label: 'Contas a receber',    icon: Coins,   descricao: 'Prefixos: cartões, cheques, notas, faturas' },
   { key: 'apelidos', label: 'Apelidos das empresas',     icon: Tag,     descricao: 'Nome curto por empresa' },
 ];

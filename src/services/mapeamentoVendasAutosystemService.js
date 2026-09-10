@@ -11,6 +11,7 @@ export const CATEGORIAS_VENDA = [
   { key: 'combustivel',  label: 'Combustível'  },
   { key: 'automotivos',  label: 'Automotivos'  },
   { key: 'conveniencia', label: 'Conveniência' },
+  { key: 'servicos',     label: 'Serviços'     },
 ];
 
 // Lista mapeamentos de uma (rede, máscara).

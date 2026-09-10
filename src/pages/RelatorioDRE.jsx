@@ -1018,6 +1018,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       combustivel: 'Combustível',
       automotivos: 'Automotivos',
       conveniencia: 'Conveniência',
+      servicos: 'Serviços',
     };
     mapVendasAutosystem.forEach(m => {
       const gpId = m.grupo_dre_id || m.grupo_fluxo_id;
@@ -1546,6 +1547,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       combustivel: 'Combustível',
       automotivos: 'Automotivos',
       conveniencia: 'Conveniência',
+      servicos: 'Serviços',
     };
     mapVendasAutosystem.forEach(m => {
       const gpId = m.grupo_dre_id || m.grupo_fluxo_id;
