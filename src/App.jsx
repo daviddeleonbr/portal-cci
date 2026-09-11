@@ -298,6 +298,10 @@ export default function App() {
         <Route path="/cliente/comercial/operacao" element={<Navigate to="/cliente/webposto/comercial/operacao" replace />} />
         <Route path="/cliente/comercial/produtividade" element={<Navigate to="/cliente/webposto/comercial/produtividade" replace />} />
 
+        {/* Modo Tela Cheia — aba nova, sem layout (100% da tela) */}
+        <Route path="/tela-cheia/dre/rede-as/:asRedeId" element={<RequireAdmin><RelatorioDREAsRede telaCheia /></RequireAdmin>} />
+        <Route path="/tela-cheia/cliente/dre" element={<RequireCliente><AsDRE telaCheia /></RequireCliente>} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

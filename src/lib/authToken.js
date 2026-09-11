@@ -37,11 +37,17 @@ function salvarSessao(key, session) {
   } catch { /* noop */ }
 }
 
-// Qual portal está ativo agora, pela URL. Tudo sob /admin usa a sessão
-// admin; o resto (inclusive /cliente/*, landing) usa a sessão cliente.
+// Qual portal está ativo agora, pela URL. Tudo sob /admin usa a sessão admin;
+// o resto (inclusive /cliente/*, landing) usa a sessão cliente.
+// Modo Tela Cheia (aba nova, fora do layout): /tela-cheia/cliente/* é cliente;
+// as demais telas cheias (/tela-cheia/dre/... = rede consolidada) são admin.
 function portalAtivo() {
   try {
-    return window.location.pathname.startsWith('/admin') ? 'admin' : 'cliente';
+    const p = window.location.pathname;
+    if (p.startsWith('/admin')) return 'admin';
+    if (p.startsWith('/tela-cheia/cliente')) return 'cliente';
+    if (p.startsWith('/tela-cheia/')) return 'admin';
+    return 'cliente';
   } catch {
     return 'cliente';
   }

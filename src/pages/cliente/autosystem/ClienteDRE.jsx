@@ -5,7 +5,7 @@
 // agregando todas as empresas que o usuário pode ver
 // (session.clientesRede, já filtrado por `empresas_permitidas`).
 
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, Building2 } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import PageHeader from '../../../components/ui/PageHeader';
@@ -14,19 +14,23 @@ import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMulti
 import { useClienteSession } from '../../../hooks/useAuth';
 import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
 
-export default function ClienteDRE() {
+export default function ClienteDRE({ telaCheia = false } = {}) {
   const session = useClienteSession();
   const asRede = session?.asRede;
+  const [searchParams] = useSearchParams();
 
   const { empresasDisponiveis } = useEmpresaAtiva();
   const empresas = empresasDisponiveis;
 
   // Multi-seleção local — DEFAULT: TODAS as empresas marcadas (o DRE já
-  // consolida a rede inteira). O usuário pode desmarcar/remarcar. Se a lista
-  // carregar depois, inicializa em "todas" enquanto a seleção estiver vazia.
-  const [empresasSelIds, setEmpresasSelIds] = useState(
-    () => new Set(empresas.map(e => e.id)),
-  );
+  // consolida a rede inteira). Em Modo Tela Cheia, respeita o `emp` da URL.
+  const [empresasSelIds, setEmpresasSelIds] = useState(() => {
+    if (telaCheia) {
+      const emp = searchParams.get('emp');
+      if (emp) return new Set(emp.split(',').filter(Boolean));
+    }
+    return new Set(empresas.map(e => e.id));
+  });
   useEffect(() => {
     setEmpresasSelIds(prev => {
       if (prev.size === 0 && empresas.length > 0) return new Set(empresas.map(e => e.id));
@@ -95,6 +99,9 @@ export default function ClienteDRE() {
       redeContexto={redeContexto}
       backHref="/cliente/autosystem/dashboard"
       modoCliente
+      telaCheia={telaCheia}
+      telaCheiaBaseUrl="/tela-cheia/cliente/dre"
+      telaCheiaParams={{ emp: [...empresasSelIds].join(',') }}
       seletorEmpresas={empresas.length > 1 ? (
         <EmpresaSeletorCompartilhado
           clientesRede={empresas}

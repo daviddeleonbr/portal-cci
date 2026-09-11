@@ -8,7 +8,7 @@ import * as autosystemService from '../services/autosystemService';
 // DRE consolidada da rede Autosystem: agrega todas as empresas Autosystem
 // de uma `as_rede`. Reusa o RelatorioDRE passando `redeContexto` com
 // `asRedeId` + lista de empresaCodigos.
-export default function RelatorioDREAsRede() {
+export default function RelatorioDREAsRede({ telaCheia = false } = {}) {
   const { asRedeId } = useParams();
   const [redeContexto, setRedeContexto] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +67,8 @@ export default function RelatorioDREAsRede() {
     <RelatorioDRE
       redeContexto={redeContexto}
       backHref="/admin/relatorios-cliente"
+      telaCheia={telaCheia}
+      telaCheiaBaseUrl={`/tela-cheia/dre/rede-as/${asRedeId}`}
     />
   );
 }

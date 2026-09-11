@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, FileBarChart, Printer,
-  EyeOff, Eye, ChevronLeft as ChevLeft, Sparkles, Table, Search
+  EyeOff, Eye, ChevronLeft as ChevLeft, Sparkles, Table, Search, Maximize2
 } from 'lucide-react';
 import InsightsView from '../components/dre/InsightsView';
 import * as clientesService from '../services/clientesService';
+import { salvarSnapshotDRE, lerSnapshotDRE } from '../services/dreSnapshotStore';
 import * as dreService from '../services/mascaraDreService';
 import * as mapService from '../services/mapeamentoService';
 import * as manualService from '../services/mapeamentoManualService';
@@ -80,12 +81,22 @@ function formatDuracao(ms) {
 // redeContexto (opcional): { nomeRede, chaveApiId, empresaCodigos: number[] }
 // Quando passado, a DRE agrega as empresas da rede usando o mesmo mapeamento
 // (mapeamento_empresa_contas e sempre por chave_api_id).
-export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto, seletorEmpresas, modoCliente = false } = {}) {
+export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto, seletorEmpresas, modoCliente = false, telaCheia = false, telaCheiaBaseUrl = null, telaCheiaParams = null } = {}) {
   const { labelEmpresa, labelCnpj } = useAnonimizador();
   const params = useParams();
   const clienteId = clienteIdOverride || params.clienteId;
   const navigate = useNavigate();
   const modoRede = !!redeContexto;
+  const [searchParams] = useSearchParams();
+  // Em Modo Tela Cheia, os filtros vêm da URL (aba nova). tc* = valores iniciais.
+  const tcMascaraId = telaCheia ? searchParams.get('mascaraId') : null;
+  const tcCat = telaCheia ? (searchParams.get('cat') || '') : '';
+  const tcIni = telaCheia ? searchParams.get('ini') : null;
+  const tcFim = telaCheia ? searchParams.get('fim') : null;
+  const tcMes = telaCheia ? searchParams.get('mes') : null;
+  const tcAno = telaCheia ? searchParams.get('ano') : null;
+  const tcQtd = telaCheia ? searchParams.get('qtd') : null;
+  const tcSnap = telaCheia ? searchParams.get('snap') : null; // token do snapshot (cache)
   const usarApelido = useUsarApelido();
   const backTarget = backHref || (modoRede ? '/admin/relatorios-cliente' : `/admin/relatorios-cliente/${clienteId}`);
 
@@ -97,21 +108,27 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
   // Periodo: usuario seleciona o mes FINAL; sistema busca N meses para tras (1 ou 3) terminando no mes selecionado
   const today = new Date();
-  const [mesFinal, setMesFinal] = useState({ ano: today.getFullYear(), mes: today.getMonth() + 1 });
-  const [qtdMeses, setQtdMeses] = useState(3); // 1 ou 3
+  const [mesFinal, setMesFinal] = useState(
+    () => (telaCheia && tcMes && tcAno) ? { ano: Number(tcAno), mes: Number(tcMes) } : { ano: today.getFullYear(), mes: today.getMonth() + 1 },
+  );
+  const [qtdMeses, setQtdMeses] = useState(telaCheia && tcQtd ? Number(tcQtd) : 3); // 1, 3 ou 6
   // Modo "Selecionar por intervalo": dois inputs de data (máx. 12 meses)
-  const [usarIntervalo, setUsarIntervalo] = useState(false);
+  const [usarIntervalo, setUsarIntervalo] = useState(telaCheia && !!(tcIni && tcFim));
   const [intervaloInicio, setIntervaloInicio] = useState(() => {
+    if (telaCheia && tcIni) return tcIni;
     const d = new Date(today.getFullYear(), today.getMonth() - 2, 1); // 3 meses (padrão)
     return ymd(d);
   });
   const [intervaloFim, setIntervaloFim] = useState(() => {
+    if (telaCheia && tcFim) return tcFim;
     const d = new Date(today.getFullYear(), today.getMonth() + 1, 0); // último dia do mês atual
     return ymd(d);
   });
   const hojeStr = ymd(today);
   // Filtro por categoria de empresa (só modo rede): '' = todas
-  const [categoriaFiltro, setCategoriaFiltro] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState(tcCat);
+  // Modo Tela Cheia: barra de filtros começa recolhida (maximiza a tabela).
+  const [filtrosVisiveis, setFiltrosVisiveis] = useState(!telaCheia);
   const [dreSolicitado, setDreSolicitado] = useState(false);
 
   const [dadosPorMes, setDadosPorMes] = useState({});       // { 'YYYY-MM': { titulosPagar, titulosReceber, vendaItens, vendas } }
@@ -273,7 +290,10 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           });
           setCliente(virtualCliente);
           setMascaras(masks || []);
-          if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
+          if (masks && masks.length > 0) {
+            const daUrl = tcMascaraId ? masks.find(m => m.id === tcMascaraId) : null;
+            setMascaraSelecionada(daUrl || masks.find(m => m.padrao) || masks[0]);
+          }
         } else {
           // Sem cliente e sem rede (ex.: seleção de empresas ficou vazia) — não
           // busca nada. Evita buscarCliente(undefined) → "uuid undefined".
@@ -285,7 +305,10 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           });
           setCliente(c);
           setMascaras(masks || []);
-          if (masks && masks.length > 0) setMascaraSelecionada(masks.find(m => m.padrao) || masks[0]);
+          if (masks && masks.length > 0) {
+            const daUrl = tcMascaraId ? masks.find(m => m.id === tcMascaraId) : null;
+            setMascaraSelecionada(daUrl || masks.find(m => m.padrao) || masks[0]);
+          }
         }
       } catch (err) { setError(err.message); }
       finally { setLoading(false); }
@@ -837,11 +860,19 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // Ao mudar periodo ou mascara após já ter gerado, invalida o relatorio (usuario
   // deve clicar "Montar DRE" novamente). O filtro de CATEGORIA NÃO invalida — ele
   // é aplicado na agregação em cache, sem re-buscar.
+  const montagemInicialRef = useRef(false);
   useEffect(() => {
+    // Em Modo Tela Cheia, ignora as definições INICIAIS dos filtros (seed pela
+    // URL, incl. a máscara que carrega depois) — senão descartaria o snapshot
+    // recém-hidratado. Só passa a invalidar após o 1º relatório ficar pronto.
+    if (telaCheia && !montagemInicialRef.current) return;
     setDreSolicitado(false);
     setDadosCarregados(false);
     setReportReady(false);
-  }, [mesFinal, qtdMeses, mascaraSelecionada, usarIntervalo, intervaloInicio, intervaloFim]);
+  }, [mesFinal, qtdMeses, mascaraSelecionada, usarIntervalo, intervaloInicio, intervaloFim, telaCheia]);
+  useEffect(() => {
+    if (telaCheia && reportReady) montagemInicialRef.current = true;
+  }, [telaCheia, reportReady]);
 
   // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado:
   // sempre que o array de meses mudar, se o valor atual nao pertence mais
@@ -860,6 +891,73 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     setReportReady(false);
     carregarLancamentos();
   }, [carregarLancamentos]);
+
+  // Modo Tela Cheia + snapshot: hidrata os dados JÁ gerados (cache da aba
+  // anterior) direto do IndexedDB, sem re-buscar no Autosystem.
+  // 'pendente' = tem token, tentando ler; 'ok'/'falhou'/'sem'.
+  const [snapEstado, setSnapEstado] = useState(telaCheia && tcSnap ? 'pendente' : 'sem');
+  useEffect(() => {
+    if (!(telaCheia && tcSnap) || snapEstado !== 'pendente') return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const snap = await lerSnapshotDRE(tcSnap);
+        if (cancelado) return;
+        if (snap) {
+          setDadosPorMes(snap.dadosPorMes || {});
+          setDadosPorMesAnterior(snap.dadosPorMesAnterior || {});
+          setVendasAutosystemPorMes(snap.vendasAutosystemPorMes || { atual: {}, anterior: {} });
+          setContasMovimentoAutosystem(snap.contasMovimentoAutosystem || {});
+          setMesesComFalha(snap.mesesComFalha || []);
+          setDreSolicitado(true);
+          setDadosCarregados(true);
+          setSnapEstado('ok');
+        } else {
+          setSnapEstado('falhou'); // cache expirou/sumiu → regenera
+        }
+      } catch {
+        if (!cancelado) setSnapEstado('falhou');
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [telaCheia, tcSnap, snapEstado]);
+
+  // Modo Tela Cheia: monta o relatório automaticamente (1x) quando máscara e
+  // cliente já carregaram — SÓ quando não há snapshot a reaproveitar.
+  const autoGeradoRef = useRef(false);
+  useEffect(() => {
+    // Se há snapshot e ele ainda não falhou, não busca (usa o cache).
+    if (telaCheia && tcSnap && snapEstado !== 'falhou') return;
+    if (telaCheia && !autoGeradoRef.current && mascaraSelecionada && cliente && !loading && meses.length > 0) {
+      autoGeradoRef.current = true;
+      handleMontarDRE();
+    }
+  }, [telaCheia, tcSnap, snapEstado, mascaraSelecionada, cliente, loading, meses.length, handleMontarDRE]);
+
+  // Abre o relatório atual em nova aba, no Modo Tela Cheia. Salva um snapshot
+  // dos dados já gerados (IndexedDB) para a aba nova reusar sem re-buscar.
+  const abrirTelaCheia = useCallback(async () => {
+    if (!telaCheiaBaseUrl) return;
+    // Abre a aba JÁ (síncrono) pra não ser bloqueada como popup depois do await.
+    const win = window.open('', '_blank');
+    const q = new URLSearchParams();
+    if (mascaraSelecionada?.id) q.set('mascaraId', mascaraSelecionada.id);
+    if (usarIntervalo) { q.set('ini', intervaloInicio); q.set('fim', intervaloFim); }
+    else { q.set('mes', String(mesFinal.mes)); q.set('ano', String(mesFinal.ano)); q.set('qtd', String(qtdMeses)); }
+    if (categoriaFiltro) q.set('cat', categoriaFiltro);
+    if (telaCheiaParams) Object.entries(telaCheiaParams).forEach(([k, v]) => { if (v != null && v !== '') q.set(k, String(v)); });
+    if (dadosCarregados) {
+      try {
+        const token = `dre-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        await salvarSnapshotDRE(token, {
+          dadosPorMes, dadosPorMesAnterior, vendasAutosystemPorMes, contasMovimentoAutosystem, mesesComFalha,
+        });
+        q.set('snap', token);
+      } catch { /* sem snapshot → a aba nova regenera */ }
+    }
+    const url = `${telaCheiaBaseUrl}?${q.toString()}`;
+    if (win) win.location.href = url; else window.open(url, '_blank');
+  }, [telaCheiaBaseUrl, telaCheiaParams, mascaraSelecionada, usarIntervalo, intervaloInicio, intervaloFim, mesFinal, qtdMeses, categoriaFiltro, dadosCarregados, dadosPorMes, dadosPorMesAnterior, vendasAutosystemPorMes, contasMovimentoAutosystem, mesesComFalha]);
 
   // ─── Orquestrar reportReady: so libera quando TUDO esta pronto ─
   // Aguarda: dados carregados + grupos carregados + mapeamentos carregados + memos computados
@@ -1983,7 +2081,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const orientacaoA4 = meses.length === 1 ? 'portrait' : 'landscape';
 
   return (
-    <div>
+    <div className={telaCheia ? 'min-h-screen bg-slate-50 dark:bg-slate-950 px-3 py-3' : undefined}>
       {/* Print-only styles — orientacao e fontes mudam conforme meses.length */}
       <style>{`
         @media print {
@@ -2036,10 +2134,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
         className="flex items-center justify-between gap-4 mb-6 no-print">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => navigate(backTarget)}
-            className="flex items-center justify-center h-9 w-9 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all flex-shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-          </button>
+          {!telaCheia && (
+            <button onClick={() => navigate(backTarget)}
+              className="flex items-center justify-center h-9 w-9 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all flex-shrink-0">
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
             <FileBarChart className="h-5 w-5 text-white" />
           </div>
@@ -2065,6 +2165,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {!telaCheia && telaCheiaBaseUrl && (
+            <button onClick={abrirTelaCheia} title="Abrir em tela cheia (nova aba)"
+              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              <Maximize2 className="h-4 w-4" /> Modo Tela Cheia
+            </button>
+          )}
           <button onClick={handleMontarDRE} disabled={loadingDados || !mascaraSelecionada || !dreSolicitado}
             className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -2077,7 +2183,16 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         </div>
       </motion.div>
 
+      {/* Toggle de filtros — só no Modo Tela Cheia (barra começa recolhida) */}
+      {telaCheia && (
+        <button onClick={() => setFiltrosVisiveis(v => !v)}
+          className="mb-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[12px] font-medium text-gray-600 hover:bg-gray-50 no-print">
+          <Table className="h-3.5 w-3.5" /> {filtrosVisiveis ? 'Ocultar filtros' : 'Filtros'}
+        </button>
+      )}
+
       {/* Filters bar (no-print) */}
+      {filtrosVisiveis && (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-xl border border-gray-200/60 px-3 py-2.5 mb-5 shadow-sm no-print">
         <div className="flex flex-wrap items-end gap-2.5">
@@ -2213,6 +2328,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           </div>
         </div>
       </motion.div>
+      )}
 
       {/* Error */}
       {error && (
