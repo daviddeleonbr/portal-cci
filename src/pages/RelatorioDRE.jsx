@@ -67,6 +67,58 @@ async function comRetentativa(fn, tentativas = 3, esperaMs = 800) {
   throw ultimoErro;
 }
 
+// Constrói a árvore DRE com EMPRESAS nas colunas. `idxE` (código→{empKey:total}),
+// `vendasEmpGrupo`/`vendasASEmpGrupo` (grupo→...) definem o escopo temporal
+// (mês selecionado na aba, ou período inteiro no "Resultado por empresa").
+function construirTreeEmpresa({ grupos, mapeamentos, colunas, idxE, lancsE = {}, vendasEmpGrupo = {}, vendasASEmpGrupo = {} }) {
+  function buildNode(grupo) {
+    const contas = mapeamentos.filter(m => m.grupo_dre_id === grupo.id).map(m => {
+      const codKey = String(m.plano_conta_codigo).trim();
+      const valoresPorMes = {}; const valoresAnt = {}; let totalPeriodo = 0;
+      colunas.forEach(col => { const v = idxE[codKey]?.[col.key] || 0; valoresPorMes[col.key] = v; valoresAnt[col.key] = 0; totalPeriodo += v; });
+      const lancs = (lancsE[codKey] || []).slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+      return { id: m.id, codigo: m.plano_conta_codigo, descricao: m.plano_conta_descricao, natureza: m.plano_conta_natureza, isManual: m.isManual, valoresPorMes, valoresAnt, totalPeriodo, totalAnt: 0, lancamentos: lancs };
+    });
+    const vendasGrupo = vendasEmpGrupo[grupo.id];
+    if (vendasGrupo) Object.entries(vendasGrupo).forEach(([tipo, dados]) => {
+      const valoresPorMes = {}; const valoresAnt = {}; let totalPeriodo = 0;
+      colunas.forEach(col => { const v = dados.valoresPorMes[col.key] || 0; valoresPorMes[col.key] = v; valoresAnt[col.key] = 0; totalPeriodo += v; });
+      contas.push({ id: `venda-${grupo.id}-${tipo}`, codigo: '', descricao: `${dados.tipoCfg.label} (vendas)`, isVendas: true, tipoVenda: tipo, valoresPorMes, valoresAnt, totalPeriodo, totalAnt: 0, lancamentos: [] });
+    });
+    const vendasASGrupo = vendasASEmpGrupo[grupo.id];
+    if (vendasASGrupo) Object.entries(vendasASGrupo).forEach(([key, dados]) => {
+      const valoresPorMes = {}; const valoresAnt = {}; let totalPeriodo = 0;
+      colunas.forEach(col => { const v = dados.valoresPorMes[col.key] || 0; valoresPorMes[col.key] = v; valoresAnt[col.key] = 0; totalPeriodo += v; });
+      contas.push({ id: `${key}-emp-${grupo.id}`, codigo: '', descricao: dados.label, isVendas: true, valoresPorMes, valoresAnt, totalPeriodo, totalAnt: 0, lancamentos: [] });
+    });
+    const children = grupos.filter(g => g.parent_id === grupo.id).sort((a, b) => a.ordem - b.ordem).map(buildNode);
+    const valoresPorMes = {}; const valoresAnt = {}; let totalPeriodo = 0;
+    colunas.forEach(col => {
+      const fromContas = contas.reduce((s, c) => s + (c.valoresPorMes[col.key] || 0), 0);
+      const fromChildren = children.reduce((s, c) => s + (c.valoresPorMes[col.key] || 0), 0);
+      valoresPorMes[col.key] = fromContas + fromChildren;
+      valoresAnt[col.key] = 0;
+      totalPeriodo += valoresPorMes[col.key];
+    });
+    return { ...grupo, contas, children, valoresPorMes, valoresAnt, totalPeriodo, totalAnt: 0 };
+  }
+  return grupos.filter(g => !g.parent_id).sort((a, b) => a.ordem - b.ordem).map(buildNode);
+}
+
+// Acumula subtotais/resultados na árvore por-empresa (running sum por coluna).
+function acumularTreeEmpresa(tree, colunas) {
+  const acum = {}; let acumTotal = 0;
+  colunas.forEach(c => { acum[c.key] = 0; });
+  return tree.map(node => {
+    if (node.tipo === 'subtotal' || node.tipo === 'resultado') {
+      return { ...node, isCalc: true, valoresPorMes: { ...acum }, valoresAnt: colunas.reduce((a, c) => { a[c.key] = 0; return a; }, {}), totalPeriodo: acumTotal, totalAnt: 0 };
+    }
+    colunas.forEach(c => { acum[c.key] += (node.valoresPorMes[c.key] || 0); });
+    acumTotal += node.totalPeriodo;
+    return node;
+  });
+}
+
 // Formata uma duracao em ms em algo curto e legivel (ex: "850 ms", "12,3s", "1m 23s")
 function formatDuracao(ms) {
   if (ms == null || !Number.isFinite(ms)) return '';
@@ -1519,124 +1571,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       ?? dreTree.reduce((s, n) => s + n.totalPeriodo, 0);
   }, [dreComCalculos, dreTree]);
 
-  // ─── Resultado por empresa (apenas em modo rede) ─────────
-  // Calcula o resultado (receita liquida − custos, conforme mapeamento) por
-  // empresa da rede e computa a participacao de cada uma no total.
-  const resultadoPorEmpresa = useMemo(() => {
-    if (!modoRede || empresasDaCategoria.length === 0) return null;
-
-    const codigosMapeados = new Set(mapeamentos.map(m => String(m.plano_conta_codigo)));
-    const tiposVendaMap = new Map();
-    mapeamentoVendas.forEach(m => {
-      if (m.grupo_dre_id) tiposVendaMap.set(m.tipo, m);
-    });
-
-    const porEmpresa = {};
-    empresasDaCategoria.forEach(emp => {
-      const ec = Number(emp.empresa_codigo);
-      if (!Number.isFinite(ec)) return;
-      porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, total: 0 };
-    });
-
-    // Autosystem: soma vendas/custo dos mapeamentos (todos os meses do período)
-    // por empresa. tipo='venda' soma +, tipo='custo' soma −.
-    if (Array.isArray(mapVendasAutosystem) && mapVendasAutosystem.length > 0) {
-      mapVendasAutosystem.forEach(m => {
-        if (!m.grupo_dre_id && !m.grupo_fluxo_id) return;
-        const sinal = m.tipo === 'custo' ? -1 : 1;
-        meses.forEach(mes => {
-          const porEmp = vendasAutosystemPorMes.atual?.[m.categoria]?.[mes.key] || {};
-          Object.entries(porEmp).forEach(([ec, x]) => {
-            const ecNum = Number(ec);
-            if (!porEmpresa[ecNum]) return;
-            const val = (m.tipo === 'custo' ? Number(x?.custo || 0) : Number(x?.venda || 0)) * sinal;
-            porEmpresa[ecNum].total += val;
-          });
-        });
-      });
-    }
-
-    // "Pseudo-empresa" pra lançamentos sem empresaCodigo válido. Só
-    // entra no resultado final se algum lançamento órfão aparecer.
-    const REDE_KEY = '_rede';
-
-    Object.values(dadosPorMes).forEach(d => {
-      // Lançamentos contábeis: títulos + movimentos extras + remessas cartão
-      // (mesma fonte do DRE sintético — `_sinal` já aplicado).
-      const lancs = montarLancamentosDoMes(d, gridTaxaCartao);
-      lancs.forEach(t => {
-        const cod = String(t.planoContaGerencialCodigo || '');
-        if (!cod || !codigosMapeados.has(cod)) return;
-        const ecRaw = Number(t.empresaCodigo);
-        const empresaValida = Number.isFinite(ecRaw) && porEmpresa[ecRaw];
-        // Com categoria selecionada, ignora lançamentos órfãos/de empresas fora
-        // da categoria (não cria a linha "Rede / Não alocado").
-        if (empresaFiltroSet && !empresaValida) return;
-        const bucket = empresaValida
-          ? porEmpresa[ecRaw]
-          : (porEmpresa[REDE_KEY] ??= {
-              empresa: { fantasia: 'Rede / Não alocado', razao_social: 'Rede / Não alocado' },
-              empresaCodigo: REDE_KEY, _isRede: true, total: 0,
-            });
-        bucket.total += Number(t.valor || 0) * (t._sinal || 1);
-      });
-
-      // Vendas: agrega por empresa usando vendaItens + vendas
-      if (tiposVendaMap.size > 0) {
-        const itensPorEmp = new Map();
-        (d.vendaItens || []).forEach(item => {
-          const ec = Number(item.empresaCodigo);
-          if (!porEmpresa[ec]) return;
-          if (!itensPorEmp.has(ec)) itensPorEmp.set(ec, []);
-          itensPorEmp.get(ec).push(item);
-        });
-        const vendasPorEmp = new Map();
-        (d.vendas || []).forEach(v => {
-          const ec = Number(v.empresaCodigo);
-          if (!porEmpresa[ec]) return;
-          if (!vendasPorEmp.has(ec)) vendasPorEmp.set(ec, new Map());
-          vendasPorEmp.get(ec).set(v.vendaCodigo || v.codigo, v);
-        });
-        itensPorEmp.forEach((itens, ec) => {
-          const vMap = vendasPorEmp.get(ec) || new Map();
-          const totais = vendasMapService.agregarVendasItens(itens, vMap, produtosMap, gruposCatMap);
-          Object.entries(totais).forEach(([tipo, valor]) => {
-            if (!tiposVendaMap.has(tipo)) return;
-            const tipoCfg = TIPOS_VENDA.find(t => t.id === tipo);
-            if (!tipoCfg) return;
-            porEmpresa[ec].total += (valor || 0) * tipoCfg.sinal;
-          });
-        });
-      }
-    });
-
-    // Ordena pela numeração (ordem_exibicao) definida em Configurações, como na
-    // aba "Por Empresa". Empresas sem número vão ao final por nome; a linha
-    // "Rede / Não alocado" fica sempre por último.
-    const arr = Object.values(porEmpresa).sort((a, b) => {
-      if (a._isRede) return 1;
-      if (b._isRede) return -1;
-      const oa = a.empresa?.ordem_exibicao;
-      const ob = b.empresa?.ordem_exibicao;
-      const hasA = oa != null && oa !== '';
-      const hasB = ob != null && ob !== '';
-      if (hasA && hasB) {
-        if (Number(oa) !== Number(ob)) return Number(oa) - Number(ob);
-      } else if (hasA) return -1;
-      else if (hasB) return 1;
-      return (nomeEmpresa(a.empresa) || '').localeCompare(nomeEmpresa(b.empresa) || '');
-    });
-    const somaAbsoluta = arr.reduce((s, p) => s + Math.abs(p.total), 0);
-    const totalConsolidado = arr.reduce((s, p) => s + p.total, 0);
-    return {
-      empresas: arr.map(p => ({
-        ...p,
-        participacao: somaAbsoluta > 0 ? (Math.abs(p.total) / somaAbsoluta) * 100 : 0,
-      })),
-      totalConsolidado,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modoRede, cliente, empresasDaCategoria, empresaFiltroSet, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap, mapVendasAutosystem, vendasAutosystemPorMes.atual, meses, gridTaxaCartao, hierarquiaGridMap]);
+  // ─── Resultado por empresa: ver `resultadoPorEmpresa` abaixo ─────────
+  // Definido depois de `dreComCalculosEmpresa` porque usa o nó RESULTADO da
+  // máscara (mesma linha que fecha o DRE), garantindo que o total bata.
 
   // ═══════════════════════════════════════════════════════════
   // ABA "POR EMPRESA": mesmo relatorio da mascara DRE, mas com
@@ -1977,6 +1914,95 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       return node;
     });
   }, [dreTreeEmpresa, colunasEmpresa]);
+
+  // ─── Resultado por empresa = valor da linha RESULTADO da máscara, por empresa ─
+  // A tabela é sobre o PERÍODO INTEIRO (como a DRE), então usa índices próprios
+  // por empresa (NÃO a seleção de meses da aba "Por Empresa"). Monta a mesma
+  // árvore da máscara por empresa e lê o nó `resultado` (o que FECHA a DRE), então
+  // o total bate exatamente com o RESULTADO consolidado.
+  const idxEmpresaPeriodo = useMemo(() => {
+    const totais = {};
+    Object.values(dadosPorMes).forEach(dados => {
+      montarLancamentosDoMes(dados, gridTaxaCartao).forEach(t => {
+        const cod = String(t.planoContaGerencialCodigo || '');
+        if (!cod) return;
+        const empKey = String(t.empresaCodigo ?? '') || '_rede';
+        if (!totais[cod]) totais[cod] = {};
+        totais[cod][empKey] = (totais[cod][empKey] || 0) + Number(t.valor || 0) * t._sinal;
+      });
+    });
+    return totais;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosPorMes, gridTaxaCartao, hierarquiaGridMap]);
+  const vendasASEmpresaPeriodo = useMemo(() => {
+    const out = {};
+    if (!Array.isArray(mapVendasAutosystem) || mapVendasAutosystem.length === 0) return out;
+    const LABELS = { combustivel: 'Combustível', automotivos: 'Automotivos', conveniencia: 'Conveniência', servicos: 'Serviços' };
+    mapVendasAutosystem.forEach(m => {
+      const gpId = m.grupo_dre_id || m.grupo_fluxo_id;
+      if (!gpId) return;
+      const sinal = m.tipo === 'custo' ? -1 : 1;
+      const label = `${LABELS[m.categoria] || m.categoria} (${m.tipo === 'custo' ? 'custo' : 'vendas'})`;
+      const key = `as-${m.categoria}-${m.tipo}`;
+      Object.values(vendasAutosystemPorMes.atual?.[m.categoria] || {}).forEach(porEmp => {
+        Object.entries(porEmp).forEach(([ec, x]) => {
+          const val = (m.tipo === 'custo' ? Number(x?.custo || 0) : Number(x?.venda || 0)) * sinal;
+          if (!out[gpId]) out[gpId] = {};
+          if (!out[gpId][key]) out[gpId][key] = { valoresPorMes: {}, label };
+          out[gpId][key].valoresPorMes[String(ec)] = (out[gpId][key].valoresPorMes[String(ec)] || 0) + val;
+        });
+      });
+    });
+    return out;
+  }, [mapVendasAutosystem, vendasAutosystemPorMes.atual]);
+  const vendasEmpresaPeriodo = useMemo(() => {
+    const porGrupo = {};
+    const cfgPorTipo = new Map();
+    mapeamentoVendas.forEach(m => { if (m.grupo_dre_id) cfgPorTipo.set(m.tipo, m); });
+    if (cfgPorTipo.size === 0) return porGrupo;
+    Object.values(dadosPorMes).forEach(d => {
+      const itensPorEmp = new Map();
+      (d.vendaItens || []).forEach(item => { const ec = String(item.empresaCodigo ?? '') || '_rede'; if (!itensPorEmp.has(ec)) itensPorEmp.set(ec, []); itensPorEmp.get(ec).push(item); });
+      const vendasPorEmp = new Map();
+      (d.vendas || []).forEach(v => { const ec = String(v.empresaCodigo ?? '') || '_rede'; if (!vendasPorEmp.has(ec)) vendasPorEmp.set(ec, new Map()); vendasPorEmp.get(ec).set(v.vendaCodigo || v.codigo, v); });
+      itensPorEmp.forEach((itens, empKey) => {
+        const vMap = vendasPorEmp.get(empKey) || new Map();
+        const totais = vendasMapService.agregarVendasItens(itens, vMap, produtosMap, gruposCatMap);
+        Object.entries(totais).forEach(([tipo, valor]) => {
+          const cfg = cfgPorTipo.get(tipo); if (!cfg) return;
+          const tipoCfg = TIPOS_VENDA.find(t => t.id === tipo); if (!tipoCfg) return;
+          if (!porGrupo[cfg.grupo_dre_id]) porGrupo[cfg.grupo_dre_id] = {};
+          if (!porGrupo[cfg.grupo_dre_id][tipo]) porGrupo[cfg.grupo_dre_id][tipo] = { valoresPorMes: {}, tipoCfg };
+          porGrupo[cfg.grupo_dre_id][tipo].valoresPorMes[empKey] = (porGrupo[cfg.grupo_dre_id][tipo].valoresPorMes[empKey] || 0) + (valor || 0) * tipoCfg.sinal;
+        });
+      });
+    });
+    return porGrupo;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosPorMes, mapeamentoVendas, produtosMap, gruposCatMap]);
+  const resultadoPorEmpresa = useMemo(() => {
+    if (!modoRede || colunasEmpresa.length === 0) return null;
+    const tree = construirTreeEmpresa({
+      grupos, mapeamentos, colunas: colunasEmpresa,
+      idxE: idxEmpresaPeriodo, vendasEmpGrupo: vendasEmpresaPeriodo, vendasASEmpGrupo: vendasASEmpresaPeriodo,
+    });
+    const acum = acumularTreeEmpresa(tree, colunasEmpresa);
+    const resultados = acum.filter(n => n.tipo === 'resultado');
+    const resNode = resultados[resultados.length - 1];
+    if (!resNode) return null;
+    const arr = colunasEmpresa.map(col => ({
+      empresa: col._empresa || { fantasia: col.label, razao_social: col.label },
+      empresaCodigo: col._empresaCodigo ?? col.key,
+      _isRede: !!col._isRede,
+      total: resNode.valoresPorMes[col.key] || 0,
+    }));
+    const somaAbsoluta = arr.reduce((s, p) => s + Math.abs(p.total), 0);
+    const totalConsolidado = arr.reduce((s, p) => s + p.total, 0);
+    return {
+      empresas: arr.map(p => ({ ...p, participacao: somaAbsoluta > 0 ? (Math.abs(p.total) / somaAbsoluta) * 100 : 0 })),
+      totalConsolidado,
+    };
+  }, [modoRede, colunasEmpresa, grupos, mapeamentos, idxEmpresaPeriodo, vendasEmpresaPeriodo, vendasASEmpresaPeriodo]);
 
   // ─── Largura AUTOMÁTICA das colunas de valor (auto-fit ao conteúdo) ─────
   // Mede o maior valor formatado de cada coluna e devolve a largura ideal já
