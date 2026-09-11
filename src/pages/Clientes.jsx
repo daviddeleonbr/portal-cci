@@ -4,7 +4,7 @@ import {
   Search, Plus, Building2, Mail, Phone, MapPin, Users as UsersIcon,
   Loader2, AlertCircle, Pencil, Trash2, ChevronRight, ChevronDown,
   Check, Zap, ArrowLeft, RefreshCw, Key, Network, Landmark, Wallet, Coins, Boxes,
-  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock, CreditCard, X, Settings2,
+  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock, CreditCard, X, Settings2, Tags,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -2548,6 +2548,41 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
   };
   const [formManual, setFormManual] = useState(FORM_MANUAL_VAZIO);
   const [salvandoManual, setSalvandoManual] = useState(false);
+  // Aba "Categorias": categoria por empresa importada (id → categoria)
+  const [categoriasEmp, setCategoriasEmp] = useState({});
+  const [salvandoCategoria, setSalvandoCategoria] = useState(null);
+  const [categoriaBusca, setCategoriaBusca] = useState('');
+
+  // Empresas já importadas nesta rede (linhas de `clientes`).
+  const empresasImportadas = useMemo(() => {
+    if (!rede) return [];
+    return (clientesExistentes || [])
+      .filter(c => c.as_rede_id === rede.id)
+      .slice()
+      .sort((a, b) => (a.nome || a.razao_social || '').localeCompare(b.nome || b.razao_social || ''));
+  }, [clientesExistentes, rede]);
+
+  // Semeia o estado local das categorias a partir dos clientes.
+  useEffect(() => {
+    const seed = {};
+    empresasImportadas.forEach(c => { seed[c.id] = c.categoria_empresa || ''; });
+    setCategoriasEmp(seed);
+  }, [empresasImportadas]);
+
+  const salvarCategoria = async (cliente, categoria) => {
+    const valor = categoria || null;
+    setCategoriasEmp(prev => ({ ...prev, [cliente.id]: valor || '' }));
+    setSalvandoCategoria(cliente.id);
+    try {
+      await clientesService.atualizarCliente(cliente.id, { categoria_empresa: valor });
+      showToast('success', 'Categoria atualizada');
+    } catch (err) {
+      showToast('error', 'Erro ao salvar categoria: ' + err.message);
+      setCategoriasEmp(prev => ({ ...prev, [cliente.id]: cliente.categoria_empresa || '' }));
+    } finally {
+      setSalvandoCategoria(null);
+    }
+  };
 
   // CNPJs já cadastrados nesta rede (para marcar como "já importada")
   const cnpjsExistentes = useMemo(() => {
@@ -2700,6 +2735,14 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
             }`}>
             <Plus className="h-3.5 w-3.5" /> Adicionar manualmente
           </button>
+          <button onClick={() => setModo('categorias')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              modo === 'categorias'
+                ? 'bg-white dark:bg-white/10 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800'
+            }`}>
+            <Tags className="h-3.5 w-3.5" /> Categorias
+          </button>
         </div>
 
         {modo === 'manual' ? (
@@ -2711,6 +2754,15 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
             salvando={salvandoManual}
             onSalvar={salvarManual}
             onCancelar={onClose}
+          />
+        ) : modo === 'categorias' ? (
+          <AbaCategoriasEmpresas
+            empresas={empresasImportadas}
+            categorias={categoriasEmp}
+            salvandoId={salvandoCategoria}
+            busca={categoriaBusca}
+            setBusca={setCategoriaBusca}
+            onDefinir={salvarCategoria}
           />
         ) : (
           <ConteudoImportarServidor
@@ -2728,6 +2780,55 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
         )}
       </div>
     </Modal>
+  );
+}
+
+// Aba "Categorias" — classifica cada empresa importada da rede em
+// Posto / Conveniência / Outros / Unificado. Salva direto no `clientes`.
+function AbaCategoriasEmpresas({ empresas, categorias, salvandoId, busca, setBusca, onDefinir }) {
+  const CATS = clientesService.CATEGORIAS_EMPRESA_AUTOSYSTEM;
+  const termo = busca.trim().toLowerCase();
+  const filtradas = termo
+    ? empresas.filter(c => `${c.nome || ''} ${c.razao_social || ''} ${c.cnpj || ''}`.toLowerCase().includes(termo))
+    : empresas;
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-gray-500">
+        Defina a categoria de cada empresa da rede. <strong>Unificado</strong> indica que posto e conveniência
+        estão no mesmo CNPJ. A categoria fica disponível como opção nos relatórios.
+      </p>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+        <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar empresa por nome ou CNPJ..."
+          className="w-full h-9 pl-9 pr-3 rounded-lg border border-gray-200 dark:border-white/10 dark:bg-white/5 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+      </div>
+      {empresas.length === 0 ? (
+        <p className="text-sm text-gray-400 py-8 text-center">Nenhuma empresa importada nesta rede ainda.</p>
+      ) : (
+        <div className="border border-gray-200 dark:border-white/10 rounded-xl divide-y divide-gray-100 dark:divide-white/5 max-h-[52vh] overflow-auto">
+          {filtradas.map(c => (
+            <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{c.nome || c.razao_social || '—'}</p>
+                <p className="text-[11px] text-gray-400 font-mono">{c.cnpj || (c.empresa_codigo != null ? `#${c.empresa_codigo}` : '—')}</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {salvandoId === c.id && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+                <select value={categorias[c.id] ?? ''} onChange={e => onDefinir(c, e.target.value)}
+                  className="h-8 rounded-lg border border-gray-200 dark:border-white/10 dark:bg-white/5 px-2 text-[12.5px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                  <option value="">Sem categoria</option>
+                  {CATS.map(cat => <option key={cat.key} value={cat.key}>{cat.label}</option>)}
+                </select>
+              </div>
+            </div>
+          ))}
+          {filtradas.length === 0 && (
+            <p className="text-sm text-gray-400 py-6 text-center">Nenhuma empresa encontrada.</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

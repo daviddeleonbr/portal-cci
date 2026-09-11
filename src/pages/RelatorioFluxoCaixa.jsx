@@ -120,6 +120,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [loadingDados, setLoadingDados] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState({ atual: 0, total: 0, mensagem: '' });
   const [reportSolicitado, setReportSolicitado] = useState(false);
+  // Filtro por categoria de empresa (só modo rede): '' = todas
+  const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [dadosCarregados, setDadosCarregados] = useState(false);
   const [reportReady, setReportReady] = useState(false);
   const [error, setError] = useState(null);
@@ -413,6 +415,28 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Lancamentos expandidos mostram os dados do documento origem quando aplicavel
   const [expandedLancamentos, setExpandedLancamentos] = useState(new Set());
 
+  // ─── Filtro por categoria de empresa (só modo rede) ───────────
+  const empresasDaCategoria = useMemo(() => {
+    const base = cliente?._empresas || [];
+    if (!categoriaFiltro) return base;
+    return base.filter(e => e.categoria_empresa === categoriaFiltro);
+  }, [cliente, categoriaFiltro]);
+  const empresaCodigosDaCategoria = useMemo(
+    () => empresasDaCategoria.map(e => Number(e.empresa_codigo)).filter(Number.isFinite),
+    [empresasDaCategoria],
+  );
+  // Conjunto permitido pelo filtro (null = todas). Aplicado na agregação (cache).
+  const empresaFiltroSet = useMemo(() => {
+    if (!modoRede || !categoriaFiltro) return null;
+    return new Set(empresaCodigosDaCategoria.map(String));
+  }, [modoRede, categoriaFiltro, empresaCodigosDaCategoria]);
+  const categoriasPresentesRede = useMemo(() => {
+    const base = cliente?._empresas || [];
+    return clientesService.CATEGORIAS_EMPRESA_AUTOSYSTEM.filter(
+      cat => base.some(e => e.categoria_empresa === cat.key),
+    );
+  }, [cliente]);
+
   // ─── Fetch MOVIMENTO_CONTA + TITULO_PAGAR ─────────────────
   const carregarDados = useCallback(async () => {
     if (!cliente) return;
@@ -426,6 +450,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         setError(null);
         setTempoGeracao(null);
 
+        // Sempre busca TODAS as empresas da rede; o filtro por categoria é
+        // aplicado depois, na agregação (client-side), sem re-buscar.
         const empresaCodigos = (cliente._empresaCodigos && cliente._empresaCodigos.length)
           ? cliente._empresaCodigos
           : (cliente.empresa_codigo != null ? [cliente.empresa_codigo] : []);
@@ -920,6 +946,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     Object.entries(dadosPorMes).forEach(([mesKey, dados]) => {
       (dados.movimentos || []).forEach(m => {
         if (m.contaCodigo == null) return;
+        // Filtro por categoria de empresa (em cache): só empresas da categoria.
+        if (empresaFiltroSet && !empresaFiltroSet.has(String(m.empresaCodigo ?? ''))) return;
         const cod = String(m.contaCodigo);
         // 1. Filtro por classificacao - precisa ser explicita em Cadastros > Clientes.
         //    Conta sem classificacao (ou aplicacao/outras) NAO entra no fluxo.
@@ -1073,7 +1101,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       });
     });
     return { totaisPorConta: totais, totaisPorContaLado: totaisLado, lancamentosPorConta: lancs, nomesPorPlano: nomes };
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento, mapCodesSet]);
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento, mapCodesSet, empresaFiltroSet]);
 
   // ─── Composicao do saldo por conta (saldo inicial + movs = saldo atual) ─
   // Respeita os mesmos filtros aplicados ao fluxo (bancaria/caixa + multi-select).
@@ -1111,12 +1139,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         if (!c) { c = { contaCodigo: cod, contaNome: descricaoPorConta.get(cod) || `Conta #${cod}`, saldoInicial: 0, saldoAtual: 0, entradas: 0, saidas: 0 }; porContaEdge.set(cod, c); }
         return c;
       };
-      Object.values(saldosIniciaisContaPorEmpresa || {}).forEach(cs => Object.entries(cs).forEach(([cod, v]) => { if (permitida(cod)) getC(cod).saldoInicial += Number(v) || 0; }));
-      Object.values(saldosFinaisContaPorEmpresa || {}).forEach(cs => Object.entries(cs).forEach(([cod, v]) => { if (permitida(cod)) getC(cod).saldoAtual += Number(v) || 0; }));
-      Object.values(movimentacaoContaPorEmpresa || {}).forEach(cs => Object.entries(cs).forEach(([cod, v]) => {
+      // Filtro por categoria (em cache): só as empresas da categoria (chave = empresaCodigo).
+      const empPermitida = (ec) => !empresaFiltroSet || empresaFiltroSet.has(String(ec));
+      Object.entries(saldosIniciaisContaPorEmpresa || {}).forEach(([ec, cs]) => { if (!empPermitida(ec)) return; Object.entries(cs).forEach(([cod, v]) => { if (permitida(cod)) getC(cod).saldoInicial += Number(v) || 0; }); });
+      Object.entries(saldosFinaisContaPorEmpresa || {}).forEach(([ec, cs]) => { if (!empPermitida(ec)) return; Object.entries(cs).forEach(([cod, v]) => { if (permitida(cod)) getC(cod).saldoAtual += Number(v) || 0; }); });
+      Object.entries(movimentacaoContaPorEmpresa || {}).forEach(([ec, cs]) => { if (!empPermitida(ec)) return; Object.entries(cs).forEach(([cod, v]) => {
         if (!permitida(cod)) return;
         const c = getC(cod); c.entradas += Number(v.debito) || 0; c.saidas += Number(v.credito) || 0;
-      }));
+      }); });
       // Só contas com MOVIMENTO no período (entradas ou saídas). Contas que têm
       // apenas saldo (sem movimentação no período) não entram — evita, por ex., que
       // contas de OUTRAS empresas da rede (saldo de abertura global no Autosystem)
@@ -1133,6 +1163,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const porConta = new Map();
     todos.forEach(m => {
       if (m.contaCodigo == null) return;
+      if (empresaFiltroSet && !empresaFiltroSet.has(String(m.empresaCodigo ?? ''))) return;
       const cod = String(m.contaCodigo);
       const tipoConta = tipoPorConta.get(cod);
       if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
@@ -1185,7 +1216,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     });
     return Array.from(porConta.values())
       .sort((a, b) => (a.contaNome || '').localeCompare(b.contaNome || ''));
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, aberturaPorConta, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa]);
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, aberturaPorConta, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa, empresaFiltroSet]);
 
   // ─── Drill da Composição: movimentos por conta ────────────
   // Lista os movimentos de cada conta caixa/banco no período (data · valor · saldo
@@ -1206,6 +1237,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const porConta = new Map();
     Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(m => {
       if (m.contaCodigo == null) return;
+      if (empresaFiltroSet && !empresaFiltroSet.has(String(m.empresaCodigo ?? ''))) return;
       const cod = String(m.contaCodigo);
       if (!permitida(cod)) return;
       if (!porConta.has(cod)) porConta.set(cod, []);
@@ -1225,7 +1257,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     }));
     porConta.forEach(arr => arr.sort((a, b) => (a.data || '').localeCompare(b.data || '')));
     return porConta;
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas]);
+  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, empresaFiltroSet]);
 
   // ─── Build Fluxo tree ─────────────────────────────────────
   const fluxoTree = useMemo(() => {
@@ -1507,7 +1539,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // mesmos filtros aplicados na arvore (tipoConta bancaria/caixa explicito,
   // toggles e multi-select). Mostra quanto cada unidade contribuiu pro fluxo total.
   const resultadoPorEmpresa = useMemo(() => {
-    if (!modoRede || !cliente?._empresas || cliente._empresas.length === 0) return null;
+    if (!modoRede || empresasDaCategoria.length === 0) return null;
 
     const contaPermitida = (cod) => {
       const tc = tipoPorConta.get(String(cod));
@@ -1518,7 +1550,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     };
 
     const porEmpresa = {};
-    cliente._empresas.forEach(emp => {
+    empresasDaCategoria.forEach(emp => {
       const ec = Number(emp.empresa_codigo);
       if (Number.isFinite(ec)) porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, contasMap: {} };
     });
@@ -1604,7 +1636,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       totalSaldoInicial: arr.reduce((s, p) => s + p.saldoInicial, 0),
       totalSaldoFinal:   arr.reduce((s, p) => s + p.saldoFinal, 0),
     };
-  }, [modoRede, cliente, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa, descricaoPorConta, dadosPorMes, aberturaPorConta]);
+  }, [modoRede, empresasDaCategoria, tipoPorConta, tiposContaAtivos, filtroContas, saldosIniciaisContaPorEmpresa, saldosFinaisContaPorEmpresa, movimentacaoContaPorEmpresa, descricaoPorConta, dadosPorMes, aberturaPorConta]);
 
   // ─── Evolução do Caixa (saldo acumulado ao longo do período) ────────────
   // Reaproveita: saldo inicial REAL (resultadoPorEmpresa/composicaoSaldo) + os
@@ -1629,7 +1661,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     // Em rede, conta só movimentos de empresas da seleção (igual à "Variação por
     // empresa"), pra o saldo final bater com aquela tabela.
     const empresasValidas = modoRede
-      ? new Set((cliente?._empresas || []).map(e => Number(e.empresa_codigo)).filter(Number.isFinite))
+      ? new Set(empresaCodigosDaCategoria)
       : null;
 
     // Todos os movimentos do período CARREGADO (data + entrada + saída).
@@ -1770,7 +1802,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       loadedIni, loadedFim, varMin, varMax, offSaldo, offVar,
       tendenciaDir, domSaldo, domVar, movimentos: movs,
     };
-  }, [dadosCarregados, modoRede, resultadoPorEmpresa, composicaoSaldo, cliente, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, meses, granEvol, evolRange, incluirAplicacoes, contasAplicacao]);
+  }, [dadosCarregados, modoRede, resultadoPorEmpresa, composicaoSaldo, cliente, empresaCodigosDaCategoria, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, meses, granEvol, evolRange, incluirAplicacoes, contasAplicacao]);
 
   // Giro semanal "de segunda a segunda": agrupa TODOS os movimentos do período em
   // semanas (2ª→dom) e monta o perfil médio por dia da semana, pra revelar a
@@ -1937,7 +1969,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
   const colunasEmpresa = useMemo(() => {
     if (!modoRede) return [];
-    return (cliente?._empresas || [])
+    return empresasDaCategoria
       .filter(emp => Number.isFinite(Number(emp.empresa_codigo)))
       .map(emp => {
         const ec = Number(emp.empresa_codigo);
@@ -1949,7 +1981,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           _empresa: emp,
         };
       });
-  }, [modoRede, cliente, usarApelido]);
+  }, [modoRede, empresasDaCategoria, usarApelido]);
 
   const mesEmpresa = useMemo(
     () => meses.find(m => m.key === mesEmpresaKey) || null,
@@ -2377,7 +2409,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               <span className="truncate">{labelEmpresa(cliente)}</span>
               {modoRede && cliente._empresaCodigos && (
                 <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
-                  · {cliente._empresaCodigos.length} empresas
+                  · {empresaCodigosDaCategoria.length} empresas
+                  {categoriaFiltro && <span className="text-purple-600"> ({clientesService.rotuloCategoriaEmpresa(categoriaFiltro)})</span>}
                 </span>
               )}
               {cliente.usa_webposto && (
@@ -2529,6 +2562,20 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               )}
             </div>
           </div>
+
+          {/* Filtro por categoria de empresa (só modo rede, quando há empresas classificadas) */}
+          {modoRede && categoriasPresentesRede.length > 0 && (
+            <div>
+              <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Categoria</label>
+              <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)}
+                className="h-8 rounded-lg border border-gray-200 px-2 text-[11px] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                <option value="">Todas as empresas</option>
+                {categoriasPresentesRede.map(cat => (
+                  <option key={cat.key} value={cat.key}>{cat.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Seletor de empresas (injetado pelo wrapper cliente) */}
           {seletorEmpresas && (

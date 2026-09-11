@@ -1,5 +1,17 @@
 import { supabase } from '../lib/supabase';
 
+// Categorias de empresa (Autosystem). "unificado" = posto e conveniência no
+// mesmo CNPJ (rótulo informativo). Usado na aba Categorias (edição da rede) e
+// como opção de agrupamento/filtro nos relatórios.
+export const CATEGORIAS_EMPRESA_AUTOSYSTEM = [
+  { key: 'posto',        label: 'Posto' },
+  { key: 'conveniencia', label: 'Conveniência' },
+  { key: 'outros',       label: 'Outros' },
+  { key: 'unificado',    label: 'Unificado' },
+];
+export const rotuloCategoriaEmpresa = (key) =>
+  CATEGORIAS_EMPRESA_AUTOSYSTEM.find(c => c.key === key)?.label || null;
+
 export async function listarClientes() {
   const { data, error } = await supabase
     .from('clientes')

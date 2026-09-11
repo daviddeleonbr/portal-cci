@@ -11,11 +11,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Building2 } from 'lucide-react';
 import { nomeEmpresa } from '../../utils/nomeEmpresa';
 import { useUsarApelido } from '../../lib/apelidoPref';
+import { CATEGORIAS_EMPRESA_AUTOSYSTEM, rotuloCategoriaEmpresa } from '../../services/clientesService';
 
 export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggle, onToggleTodas, single = false }) {
   const [aberto, setAberto] = useState(false);
+  const [filtroCat, setFiltroCat] = useState(''); // '' = todas as categorias
   const ref = useRef(null);
   const usarApelido = useUsarApelido();
+
+  // Categorias (Posto/Conveniência/Outros/Unificado) presentes na rede — só
+  // aparecem no dropdown quando alguma empresa está classificada.
+  const catsPresentes = CATEGORIAS_EMPRESA_AUTOSYSTEM.filter(
+    cat => clientesRede.some(e => e.categoria_empresa === cat.key)
+  );
+  const visiveis = filtroCat
+    ? clientesRede.filter(e => e.categoria_empresa === filtroCat)
+    : clientesRede;
 
   useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
@@ -65,9 +76,24 @@ export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggl
                 </span>
               </button>
             )}
+            {catsPresentes.length > 0 && (
+              <div className="flex items-center gap-1 flex-wrap px-2 py-1.5 border-b border-gray-100 bg-gray-50/60">
+                <button type="button" onClick={() => setFiltroCat('')}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                    filtroCat === '' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'
+                  }`}>Todas</button>
+                {catsPresentes.map(cat => (
+                  <button key={cat.key} type="button" onClick={() => setFiltroCat(f => f === cat.key ? '' : cat.key)}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                      filtroCat === cat.key ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'
+                    }`}>{cat.label}</button>
+                ))}
+              </div>
+            )}
             <div className="max-h-72 overflow-y-auto">
-              {clientesRede.map(emp => {
+              {visiveis.map(emp => {
                 const marcada = selecionadas.has(emp.id);
+                const catLabel = rotuloCategoriaEmpresa(emp.categoria_empresa);
                 return (
                   <label key={emp.id}
                     className="flex items-start gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors cursor-pointer">
@@ -75,12 +101,20 @@ export default function EmpresaMultiSelect({ clientesRede, selecionadas, onToggl
                       onChange={() => { onToggle(emp.id); if (single) setAberto(false); }}
                       className={`h-3.5 w-3.5 ${single ? '' : 'rounded'} border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11.5px] text-gray-800 truncate">{nomeEmpresa(emp, usarApelido)}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-[11.5px] text-gray-800 truncate">{nomeEmpresa(emp, usarApelido)}</p>
+                        {catLabel && (
+                          <span className="flex-shrink-0 px-1.5 py-px rounded-full bg-blue-50 text-blue-700 text-[8.5px] font-semibold uppercase tracking-wide">{catLabel}</span>
+                        )}
+                      </div>
                       {emp.cnpj && <p className="text-[9.5px] text-gray-400 font-mono truncate">{emp.cnpj}</p>}
                     </div>
                   </label>
                 );
               })}
+              {visiveis.length === 0 && (
+                <p className="text-[11px] text-gray-400 text-center py-4">Nenhuma empresa nesta categoria.</p>
+              )}
             </div>
           </motion.div>
         )}

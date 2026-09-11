@@ -110,6 +110,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     return ymd(d);
   });
   const hojeStr = ymd(today);
+  // Filtro por categoria de empresa (só modo rede): '' = todas
+  const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [dreSolicitado, setDreSolicitado] = useState(false);
 
   const [dadosPorMes, setDadosPorMes] = useState({});       // { 'YYYY-MM': { titulosPagar, titulosReceber, vendaItens, vendas } }
@@ -405,6 +407,31 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
   useEffect(() => { carregarMapeamentos(); }, [carregarMapeamentos]);
 
+  // ─── Filtro por categoria de empresa (só modo rede) ───────────
+  // Empresas da rede que batem com a categoria escolhida (ou todas).
+  const empresasDaCategoria = useMemo(() => {
+    const base = cliente?._empresas || [];
+    if (!categoriaFiltro) return base;
+    return base.filter(e => e.categoria_empresa === categoriaFiltro);
+  }, [cliente, categoriaFiltro]);
+  const empresaCodigosDaCategoria = useMemo(
+    () => empresasDaCategoria.map(e => Number(e.empresa_codigo)).filter(Number.isFinite),
+    [empresasDaCategoria],
+  );
+  // Conjunto de códigos permitidos pelo filtro (null = todas as empresas). Aplicado
+  // na agregação para filtrar em cache, sem re-buscar dados.
+  const empresaFiltroSet = useMemo(() => {
+    if (!modoRede || !categoriaFiltro) return null;
+    return new Set(empresaCodigosDaCategoria.map(String));
+  }, [modoRede, categoriaFiltro, empresaCodigosDaCategoria]);
+  // Categorias efetivamente presentes entre as empresas da rede (monta o dropdown).
+  const categoriasPresentesRede = useMemo(() => {
+    const base = cliente?._empresas || [];
+    return clientesService.CATEGORIAS_EMPRESA_AUTOSYSTEM.filter(
+      cat => base.some(e => e.categoria_empresa === cat.key),
+    );
+  }, [cliente]);
+
   // ─── Load lancamentos para todos os meses (atual e anterior) ─
   const carregarLancamentos = useCallback(async () => {
     if (!cliente || meses.length === 0) return;
@@ -419,6 +446,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         setError(null);
         setTempoGeracao(null);
 
+        // Sempre busca TODAS as empresas da rede; o filtro por categoria é
+        // aplicado depois, na agregação (client-side), sem re-buscar.
         const empresaCodigos = (cliente._empresaCodigos && cliente._empresaCodigos.length)
           ? cliente._empresaCodigos
           : (cliente.empresa_codigo != null ? [cliente.empresa_codigo] : []);
@@ -805,7 +834,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     }
   }, [cliente, meses, categoriasGruposProduto, mapeamentos]);
 
-  // Ao mudar periodo ou mascara apos ja ter gerado, invalida o relatorio (usuario deve clicar "Montar DRE" novamente)
+  // Ao mudar periodo ou mascara após já ter gerado, invalida o relatorio (usuario
+  // deve clicar "Montar DRE" novamente). O filtro de CATEGORIA NÃO invalida — ele
+  // é aplicado na agregação em cache, sem re-buscar.
   useEffect(() => {
     setDreSolicitado(false);
     setDadosCarregados(false);
@@ -977,6 +1008,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     Object.entries(dadosMap).forEach(([mesKey, dados]) => {
       const todos = montarLancamentosDoMes(dados, gridTaxaCartao);
       todos.forEach(t => {
+        // Filtro por categoria (em cache): só inclui lançamentos das empresas da categoria.
+        if (empresaFiltroSet && !empresaFiltroSet.has(String(t.empresaCodigo ?? ''))) return;
         const codigo = String(t.planoContaGerencialCodigo || '');
         if (!codigo) return;
         if (!descricoes[codigo] && t.planoContaGerencialDescricao) {
@@ -1015,9 +1048,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     return { totais, lancamentos, descricoes };
   }
 
-  const idxAtualFull = useMemo(() => indexarPorConta(dadosPorMes), [dadosPorMes, gridTaxaCartao, hierarquiaGridMap]);
+  const idxAtualFull = useMemo(() => indexarPorConta(dadosPorMes), [dadosPorMes, gridTaxaCartao, hierarquiaGridMap, empresaFiltroSet]);
 
-  const idxAnteriorFull = useMemo(() => indexarPorConta(dadosPorMesAnterior), [dadosPorMesAnterior, gridTaxaCartao, hierarquiaGridMap]);
+  const idxAnteriorFull = useMemo(() => indexarPorConta(dadosPorMesAnterior), [dadosPorMesAnterior, gridTaxaCartao, hierarquiaGridMap, empresaFiltroSet]);
   const idxAtual = idxAtualFull.totais;
   const idxAnterior = idxAnteriorFull.totais;
   const descricoesAtual = idxAtualFull.descricoes || {};
@@ -1049,8 +1082,13 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     }
 
     Object.entries(dadosMap).forEach(([mesKey, dados]) => {
-      const itens = dados.vendaItens || [];
-      const vendasArr = dados.vendas || [];
+      let itens = dados.vendaItens || [];
+      let vendasArr = dados.vendas || [];
+      // Filtro por categoria (em cache): só itens/vendas das empresas da categoria.
+      if (empresaFiltroSet) {
+        itens = itens.filter(it => empresaFiltroSet.has(String(it.empresaCodigo ?? '')));
+        vendasArr = vendasArr.filter(v => empresaFiltroSet.has(String(v.empresaCodigo ?? '')));
+      }
       const vendasMap = new Map();
       vendasArr.forEach(v => vendasMap.set(v.vendaCodigo || v.codigo, v));
 
@@ -1071,12 +1109,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const vendasAtualPorGrupo = useMemo(
     () => indexarVendasPorGrupo(dadosPorMes),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dadosPorMes, mapeamentoVendas, produtosMap, gruposCatMap]
+    [dadosPorMes, mapeamentoVendas, produtosMap, gruposCatMap, empresaFiltroSet]
   );
   const vendasAnteriorPorGrupo = useMemo(
     () => indexarVendasPorGrupo(dadosPorMesAnterior),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dadosPorMesAnterior, mapeamentoVendas, produtosMap, gruposCatMap]
+    [dadosPorMesAnterior, mapeamentoVendas, produtosMap, gruposCatMap, empresaFiltroSet]
   );
 
   // ─── Indexar VENDAS/CUSTO Autosystem por grupo DRE ──────────
@@ -1103,7 +1141,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         // só pra aba "Por Empresa"; no DRE principal somamos tudo).
         const porEmp = porCategoria?.[m.categoria]?.[mes.key] || {};
         let val = 0;
-        Object.values(porEmp).forEach(x => {
+        Object.entries(porEmp).forEach(([ec, x]) => {
+          // Filtro por categoria (em cache): só as empresas da categoria selecionada.
+          if (empresaFiltroSet && !empresaFiltroSet.has(String(ec))) return;
           val += m.tipo === 'custo' ? Number(x?.custo || 0) : Number(x?.venda || 0);
         });
         if (!out[gpId]) out[gpId] = {};
@@ -1117,12 +1157,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const vendasASAtualPorGrupo = useMemo(
     () => indexarVendasAutosystemPorGrupoDRE(vendasAutosystemPorMes.atual),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [vendasAutosystemPorMes.atual, mapVendasAutosystem, meses]
+    [vendasAutosystemPorMes.atual, mapVendasAutosystem, meses, empresaFiltroSet]
   );
   const vendasASAnteriorPorGrupo = useMemo(
     () => indexarVendasAutosystemPorGrupoDRE(vendasAutosystemPorMes.anterior),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [vendasAutosystemPorMes.anterior, mapVendasAutosystem, meses]
+    [vendasAutosystemPorMes.anterior, mapVendasAutosystem, meses, empresaFiltroSet]
   );
 
   // ─── Build DRE tree com totais por mes + total + AH ────
@@ -1385,7 +1425,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // Calcula o resultado (receita liquida − custos, conforme mapeamento) por
   // empresa da rede e computa a participacao de cada uma no total.
   const resultadoPorEmpresa = useMemo(() => {
-    if (!modoRede || !cliente?._empresas || cliente._empresas.length === 0) return null;
+    if (!modoRede || empresasDaCategoria.length === 0) return null;
 
     const codigosMapeados = new Set(mapeamentos.map(m => String(m.plano_conta_codigo)));
     const tiposVendaMap = new Map();
@@ -1394,7 +1434,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     });
 
     const porEmpresa = {};
-    cliente._empresas.forEach(emp => {
+    empresasDaCategoria.forEach(emp => {
       const ec = Number(emp.empresa_codigo);
       if (!Number.isFinite(ec)) return;
       porEmpresa[ec] = { empresa: emp, empresaCodigo: ec, total: 0 };
@@ -1430,7 +1470,11 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         const cod = String(t.planoContaGerencialCodigo || '');
         if (!cod || !codigosMapeados.has(cod)) return;
         const ecRaw = Number(t.empresaCodigo);
-        const bucket = Number.isFinite(ecRaw) && porEmpresa[ecRaw]
+        const empresaValida = Number.isFinite(ecRaw) && porEmpresa[ecRaw];
+        // Com categoria selecionada, ignora lançamentos órfãos/de empresas fora
+        // da categoria (não cria a linha "Rede / Não alocado").
+        if (empresaFiltroSet && !empresaValida) return;
+        const bucket = empresaValida
           ? porEmpresa[ecRaw]
           : (porEmpresa[REDE_KEY] ??= {
               empresa: { fantasia: 'Rede / Não alocado', razao_social: 'Rede / Não alocado' },
@@ -1494,7 +1538,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       totalConsolidado,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modoRede, cliente, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap, mapVendasAutosystem, vendasAutosystemPorMes.atual, meses, gridTaxaCartao, hierarquiaGridMap]);
+  }, [modoRede, cliente, empresasDaCategoria, empresaFiltroSet, dadosPorMes, mapeamentos, mapeamentoVendas, produtosMap, gruposCatMap, mapVendasAutosystem, vendasAutosystemPorMes.atual, meses, gridTaxaCartao, hierarquiaGridMap]);
 
   // ═══════════════════════════════════════════════════════════
   // ABA "POR EMPRESA": mesmo relatorio da mascara DRE, mas com
@@ -1506,7 +1550,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // ({key, label}) para que o renderer DreNodeRows funcione sem mudancas.
   const colunasEmpresaBase = useMemo(() => {
     if (!modoRede) return [];
-    const cols = (cliente?._empresas || [])
+    const cols = empresasDaCategoria
       .filter(emp => Number.isFinite(Number(emp.empresa_codigo)))
       .map(emp => {
         const ec = Number(emp.empresa_codigo);
@@ -1538,7 +1582,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       });
     }
     return cols;
-  }, [modoRede, cliente, usarApelido, ordemEmpDir]);
+  }, [modoRede, empresasDaCategoria, usarApelido, ordemEmpDir]);
 
   // Meses de referência da aba Por Empresa (objetos completos, na ordem do período)
   const mesesEmpresaSel = useMemo(
@@ -1601,12 +1645,13 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // com o DRE sintético.
   const colunasEmpresa = useMemo(() => {
     if (!colunasEmpresaBase.length) return colunasEmpresaBase;
-    if (!idxEmpresaFull.temOrfaos) return colunasEmpresaBase;
+    // Com categoria selecionada, não mostra a coluna "Rede" (não alocado).
+    if (empresaFiltroSet || !idxEmpresaFull.temOrfaos) return colunasEmpresaBase;
     return [
       ...colunasEmpresaBase,
       { key: '_rede', label: 'Rede', _isRede: true },
     ];
-  }, [colunasEmpresaBase, idxEmpresaFull.temOrfaos]);
+  }, [colunasEmpresaBase, idxEmpresaFull.temOrfaos, empresaFiltroSet]);
 
   // Vendas/custo Autosystem do mes selecionado, por (grupo_dre, key, empresaCodigo)
   // — espelha vendasASAtualPorGrupo mas com empresa como "coluna".
@@ -2007,7 +2052,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               <span className="truncate">{labelEmpresa(cliente)}</span>
               {modoRede && cliente._empresaCodigos && (
                 <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
-                  · {cliente._empresaCodigos.length} empresas
+                  · {empresaCodigosDaCategoria.length} empresas
+                  {categoriaFiltro && <span className="text-purple-600"> ({clientesService.rotuloCategoriaEmpresa(categoriaFiltro)})</span>}
                 </span>
               )}
               {cliente.usa_webposto && (
@@ -2110,6 +2156,20 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400 cursor-pointer" />
             <span className="text-[11px] font-medium text-gray-600">Selecionar por intervalo</span>
           </label>
+
+          {/* Filtro por categoria de empresa (só modo rede, quando há empresas classificadas) */}
+          {modoRede && categoriasPresentesRede.length > 0 && (
+            <div>
+              <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Categoria</label>
+              <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)}
+                className="h-8 rounded-lg border border-gray-200 px-2 text-[11px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                <option value="">Todas as empresas</option>
+                {categoriasPresentesRede.map(cat => (
+                  <option key={cat.key} value={cat.key}>{cat.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Seletor de empresas (injetado pelo wrapper cliente) */}
           {seletorEmpresas && (
