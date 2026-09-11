@@ -2953,8 +2953,8 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
               }`}>
                 {formatCurrencyCompact(v)}
               </td>
-              <td key={`${m.key}-av`} className="text-right px-2 py-2 font-mono tabular-nums text-[10px] text-gray-400 whitespace-nowrap">
-                {!isCalc && av !== 0 ? `${av.toFixed(1)}%` : ''}
+              <td key={`${m.key}-av`} className={`text-right px-2 py-2 font-mono tabular-nums text-[10px] whitespace-nowrap ${isCalc ? 'text-gray-500 font-semibold' : 'text-gray-400'}`}>
+                {av !== 0 ? `${av.toFixed(1)}%` : ''}
               </td>
             </>
           );
@@ -2967,8 +2967,8 @@ function DreNodeRows({ node, depth, meses, baseAV, expandedGrupos, expandedConta
             }`}>
               {formatCurrencyCompact(node.totalPeriodo)}
             </td>
-            <td className="text-right px-2 py-2 font-mono tabular-nums text-[10px] text-gray-400 bg-blue-50/60 whitespace-nowrap">
-              {!isCalc && baseAV.total > 0 ? `${(node.totalPeriodo / baseAV.total * 100).toFixed(1)}%` : ''}
+            <td className={`text-right px-2 py-2 font-mono tabular-nums text-[10px] bg-blue-50/60 whitespace-nowrap ${isCalc ? 'text-gray-500 font-semibold' : 'text-gray-400'}`}>
+              {baseAV.total > 0 ? `${(node.totalPeriodo / baseAV.total * 100).toFixed(1)}%` : ''}
             </td>
             {showAH && (
               <td className="text-right px-3 py-2 font-mono tabular-nums text-[11px] bg-blue-50/60 whitespace-nowrap">
