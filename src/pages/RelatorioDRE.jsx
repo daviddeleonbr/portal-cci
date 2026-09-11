@@ -35,6 +35,37 @@ function rangeMes(ano, mes) {
   return { dataInicial: ymd(inicio), dataFinal: ymd(fim) };
 }
 
+// Executa `tarefas` (funções que retornam Promise) com no máximo `limite` em
+// paralelo. Evita disparar dezenas de queries ao mesmo tempo no Postgres remoto
+// do cliente — a sobrecarga causava timeout e deixava meses zerados.
+async function executarComLimite(tarefas, limite) {
+  const resultados = new Array(tarefas.length);
+  let proximo = 0;
+  async function worker() {
+    while (proximo < tarefas.length) {
+      const idx = proximo++;
+      resultados[idx] = await tarefas[idx]();
+    }
+  }
+  const n = Math.max(1, Math.min(limite, tarefas.length));
+  await Promise.all(Array.from({ length: n }, worker));
+  return resultados;
+}
+
+// Tenta `fn` até `tentativas` vezes, com backoff simples entre as tentativas.
+// Usado para não deixar um timeout transitório zerar um mês.
+async function comRetentativa(fn, tentativas = 3, esperaMs = 800) {
+  let ultimoErro;
+  for (let t = 0; t < tentativas; t++) {
+    try { return await fn(); }
+    catch (err) {
+      ultimoErro = err;
+      if (t < tentativas - 1) await new Promise(r => setTimeout(r, esperaMs * (t + 1)));
+    }
+  }
+  throw ultimoErro;
+}
+
 // Formata uma duracao em ms em algo curto e legivel (ex: "850 ms", "12,3s", "1m 23s")
 function formatDuracao(ms) {
   if (ms == null || !Number.isFinite(ms)) return '';
@@ -68,6 +99,17 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const today = new Date();
   const [mesFinal, setMesFinal] = useState({ ano: today.getFullYear(), mes: today.getMonth() + 1 });
   const [qtdMeses, setQtdMeses] = useState(3); // 1 ou 3
+  // Modo "Selecionar por intervalo": dois inputs de data (máx. 12 meses)
+  const [usarIntervalo, setUsarIntervalo] = useState(false);
+  const [intervaloInicio, setIntervaloInicio] = useState(() => {
+    const d = new Date(today.getFullYear(), today.getMonth() - 2, 1); // 3 meses (padrão)
+    return ymd(d);
+  });
+  const [intervaloFim, setIntervaloFim] = useState(() => {
+    const d = new Date(today.getFullYear(), today.getMonth() + 1, 0); // último dia do mês atual
+    return ymd(d);
+  });
+  const hojeStr = ymd(today);
   const [dreSolicitado, setDreSolicitado] = useState(false);
 
   const [dadosPorMes, setDadosPorMes] = useState({});       // { 'YYYY-MM': { titulosPagar, titulosReceber, vendaItens, vendas } }
@@ -80,6 +122,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // Autosystem: TODAS as contas com movimento no período (resumo do edge), para a
   // seção "Contas não mapeadas". { [codigo]: { nome, valoresPorMes: {mesKey: net}, qtd } }
   const [contasMovimentoAutosystem, setContasMovimentoAutosystem] = useState({});
+  // Meses (label) que falharam ao buscar no Autosystem mesmo após retentativas.
+  const [mesesComFalha, setMesesComFalha] = useState([]);
   const [mapVendasAutosystem, setMapVendasAutosystem] = useState([]);
   // Categorização de grupo_produto → categoria, vinda de as_rede_grupo_produto
   // (parametrizada em /cliente/autosystem/configuracoes).
@@ -127,8 +171,9 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  // Mes selecionado da aba "Por Empresa" (so modoRede). Default: ultimo mes do periodo.
-  const [mesEmpresaKey, setMesEmpresaKey] = useState(null);
+  // Meses selecionados na aba "Por Empresa" (so modoRede). Multiseleção: os
+  // valores por empresa são a SOMA dos meses marcados. Default: último mês.
+  const [mesesEmpresaKeys, setMesesEmpresaKeys] = useState([]);
   // Ordenação das colunas da aba "Por Empresa" pela numeração (ordem_exibicao):
   // 'asc' (crescente, padrão) | 'desc' (decrescente) | 'natural' (ordem original).
   const [ordemEmpDir, setOrdemEmpDir] = useState('asc');
@@ -170,16 +215,31 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const [tempoGeracao, setTempoGeracao] = useState(null); // ms
 
   // ─── Compute meses array: N meses (1 ou 3) terminando em mesFinal ─
+  const mkMes = (y, m) => ({ ano: y, mes: m, key: `${y}-${String(m).padStart(2, '0')}`, label: `${MESES_NOMES[m - 1]}/${String(y).slice(2)}` });
   const meses = useMemo(() => {
+    // Modo intervalo: meses inteiros de início→fim, limitado aos últimos 12.
+    if (usarIntervalo && intervaloInicio && intervaloFim) {
+      const [y1, m1] = intervaloInicio.split('-').map(Number);
+      const [y2, m2] = intervaloFim.split('-').map(Number);
+      if (!y1 || !m1 || !y2 || !m2) return [];
+      let ini = y1 * 12 + (m1 - 1);
+      let fim = y2 * 12 + (m2 - 1);
+      if (fim < ini) [ini, fim] = [fim, ini]; // datas invertidas → corrige
+      if (fim - ini + 1 > 12) ini = fim - 11; // máx. 12 meses (mantém os mais recentes)
+      const arr = [];
+      for (let idx = ini; idx <= fim; idx++) arr.push(mkMes(Math.floor(idx / 12), (idx % 12) + 1));
+      return arr;
+    }
     const arr = [];
     for (let i = qtdMeses - 1; i >= 0; i--) {
       let y = mesFinal.ano;
       let m = mesFinal.mes - i;
       while (m < 1) { m += 12; y--; }
-      arr.push({ ano: y, mes: m, key: `${y}-${String(m).padStart(2, '0')}`, label: `${MESES_NOMES[m - 1]}/${String(y).slice(2)}` });
+      arr.push(mkMes(y, m));
     }
     return arr;
-  }, [mesFinal, qtdMeses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mesFinal, qtdMeses, usarIntervalo, intervaloInicio, intervaloFim]);
 
   // ─── Init: load cliente + mascaras ──────────────────────
   // Em modo rede, pula o fetch de cliente e cria um objeto "virtual" com
@@ -387,13 +447,18 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         let concluidas = 0;
         setLoadingProgress({ atual: 0, total, mensagem: `Buscando dados Autosystem de ${meses.length} mês(es)...` });
 
-        const results = await Promise.all(promises.map(async (p) => {
+        // Falhas por período (após retentativas) — vira aviso pro usuário em vez
+        // de silenciosamente zerar o mês.
+        const periodosComFalha = [];
+        // Concorrência limitada + retry: garante que TODOS os dados voltem (ou que
+        // a falha seja explícita), sem sobrecarregar o Postgres remoto do cliente.
+        const tarefas = promises.map((p) => async () => {
           // Vendas: `agregado: true` retorna 1 linha por (empresa, produto, vendedor)
           // com sum(valor), sum(quantidade), sum(custo) etc.
           // Lançamentos: filtra movto pelos conta_codigo mapeados.
           let vendas = [], lancs = [], resumoContas = [];
           try {
-            [vendas, lancs, resumoContas] = await Promise.all([
+            [vendas, lancs, resumoContas] = await comRetentativa(() => Promise.all([
               autosystemService.buscarVendasAutosystem(
                 cliente.as_rede_id,
                 empresaCodigos,
@@ -414,9 +479,10 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                     empresaCodigos,
                     { data_de: p.dataInicial, data_ate: p.dataFinal },
                   ),
-            ]);
+            ]));
           } catch (err) {
-            console.error('[DRE Autosystem] Falha em buscar dados', { periodo: p, err });
+            console.error('[DRE Autosystem] Falha em buscar dados (após retentativas)', { periodo: p, err });
+            if (!p.isPrev) periodosComFalha.push(p.label);
           }
           concluidas++;
           const periodoLabel = p.isPrev ? `${p.label} (ano anterior)` : p.label;
@@ -425,7 +491,10 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             mensagem: `${periodoLabel} · ${vendas.length} itens · ${lancs.length} lancamentos`,
           });
           return { ...p, vendas, lancs, resumoContas };
-        }));
+        });
+        // Máx. 4 períodos simultâneos (cada um faz até 3 sub-consultas).
+        const results = await executarComLimite(tarefas, 4);
+        setMesesComFalha(Array.from(new Set(periodosComFalha)));
 
         // Diagnóstico: avisa se nada veio do Autosystem
         const totalItens = results.reduce((s, r) => s + (r.vendas?.length || 0), 0);
@@ -606,6 +675,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       setDadosPorMesAnterior({});
       setVendasAutosystemPorMes({ atual: {}, anterior: {} });
       setContasMovimentoAutosystem({});
+      setMesesComFalha([]);
       setDadosCarregados(true);
       return;
     }
@@ -725,6 +795,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       setDadosPorMes(atual);
       setDadosPorMesAnterior(anterior);
       setContasMovimentoAutosystem({}); // Webposto usa o caminho legado (índice)
+      setMesesComFalha([]);
       setDadosCarregados(true);
       setTempoGeracao(performance.now() - _t0);
     } catch (err) {
@@ -739,16 +810,16 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     setDreSolicitado(false);
     setDadosCarregados(false);
     setReportReady(false);
-  }, [mesFinal, qtdMeses, mascaraSelecionada]);
+  }, [mesFinal, qtdMeses, mascaraSelecionada, usarIntervalo, intervaloInicio, intervaloFim]);
 
   // Sincroniza mesEmpresaKey (aba "Por Empresa") com o periodo carregado:
   // sempre que o array de meses mudar, se o valor atual nao pertence mais
   // a ele, reseta pro ultimo mes (mais recente).
   useEffect(() => {
-    if (meses.length === 0) { setMesEmpresaKey(null); return; }
-    setMesEmpresaKey(prev => {
-      if (prev && meses.some(m => m.key === prev)) return prev;
-      return meses[meses.length - 1].key;
+    if (meses.length === 0) { setMesesEmpresaKeys([]); return; }
+    setMesesEmpresaKeys(prev => {
+      const validos = prev.filter(k => meses.some(m => m.key === k));
+      return validos.length ? validos : [meses[meses.length - 1].key];
     });
   }, [meses]);
 
@@ -1469,62 +1540,61 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     return cols;
   }, [modoRede, cliente, usarApelido, ordemEmpDir]);
 
-  // Mes de referencia da aba Por Empresa (objeto completo)
-  const mesEmpresa = useMemo(
-    () => meses.find(m => m.key === mesEmpresaKey) || null,
-    [meses, mesEmpresaKey]
+  // Meses de referência da aba Por Empresa (objetos completos, na ordem do período)
+  const mesesEmpresaSel = useMemo(
+    () => meses.filter(m => mesesEmpresaKeys.includes(m.key)),
+    [meses, mesesEmpresaKeys]
   );
-
-  // Indexacao de titulos do mes selecionado por (plano, empresa)
+  // Indexacao de titulos dos meses selecionados por (plano, empresa) — SOMA dos meses.
   // Retorna mesma shape de idxAtualFull mas usando empresaCodigo como "mesKey".
   const idxEmpresaFull = useMemo(() => {
     const totais = {};
     const lancamentos = {};
-    if (!mesEmpresa) return { totais, lancamentos };
-    const dados = dadosPorMes[mesEmpresa.key];
-    if (!dados) return { totais, lancamentos };
-    // Mesma fonte do DRE sintético: títulos + movimentos extras + remessas cartão.
-    const todos = montarLancamentosDoMes(dados, gridTaxaCartao);
-    // Bandeira: ao menos 1 lançamento órfão (sem empresaCodigo). Usado
-    // pra decidir se mostramos a coluna virtual "Rede" no header.
     let temOrfaos = false;
-    todos.forEach(t => {
-      const codigo = String(t.planoContaGerencialCodigo || '');
-      if (!codigo) return;
-      // Lançamento SEM empresaCodigo vai pra coluna virtual '_rede'
-      // (lançamentos centralizados — matriz/holding). Sem essa rede,
-      // o total da quebra por empresa não bate com o DRE sintético.
-      const empKeyRaw = String(t.empresaCodigo ?? '');
-      const empKey = empKeyRaw || '_rede';
-      if (!empKeyRaw) temOrfaos = true;
-      const valor = Number(t.valor || 0) * t._sinal;
-      if (!totais[codigo]) totais[codigo] = {};
-      totais[codigo][empKey] = (totais[codigo][empKey] || 0) + valor;
+    if (!mesesEmpresaSel.length) return { totais, lancamentos, temOrfaos };
+    mesesEmpresaSel.forEach(mes => {
+      const dados = dadosPorMes[mes.key];
+      if (!dados) return;
+      // Mesma fonte do DRE sintético: títulos + movimentos extras + remessas cartão.
+      const todos = montarLancamentosDoMes(dados, gridTaxaCartao);
+      todos.forEach(t => {
+        const codigo = String(t.planoContaGerencialCodigo || '');
+        if (!codigo) return;
+        // Lançamento SEM empresaCodigo vai pra coluna virtual '_rede'
+        // (lançamentos centralizados — matriz/holding). Sem essa rede,
+        // o total da quebra por empresa não bate com o DRE sintético.
+        const empKeyRaw = String(t.empresaCodigo ?? '');
+        const empKey = empKeyRaw || '_rede';
+        if (!empKeyRaw) temOrfaos = true;
+        const valor = Number(t.valor || 0) * t._sinal;
+        if (!totais[codigo]) totais[codigo] = {};
+        totais[codigo][empKey] = (totais[codigo][empKey] || 0) + valor;
 
-      const partes = [];
-      const descBase = (t.descricao || '').trim();
-      if (descBase) partes.push(descBase);
-      const numTitulo = (t.numeroTitulo || '').trim();
-      if (numTitulo) partes.push(`Nº ${numTitulo}`);
-      const contraparte = (t.nomeFornecedor || t.nomeCliente || '').trim();
-      if (contraparte) partes.push(contraparte);
-      const descricaoComposta = partes.join(' · ');
+        const partes = [];
+        const descBase = (t.descricao || '').trim();
+        if (descBase) partes.push(descBase);
+        const numTitulo = (t.numeroTitulo || '').trim();
+        if (numTitulo) partes.push(`Nº ${numTitulo}`);
+        const contraparte = (t.nomeFornecedor || t.nomeCliente || '').trim();
+        if (contraparte) partes.push(contraparte);
+        const descricaoComposta = partes.join(' · ');
 
-      if (!lancamentos[codigo]) lancamentos[codigo] = [];
-      lancamentos[codigo].push({
-        id: t.codigo || `${t._tipo}-${t.tituloPagarCodigo || t.tituloReceberCodigo}`,
-        mesKey: empKey, // DreNodeRows usa l.mesKey pra decidir coluna; aqui empresa
-        data: t.dataMovimento || t.dataPagamento || t.vencimento || '',
-        descricao: descricaoComposta || '—',
-        valor: Math.abs(Number(t.valor || 0)),
-        sinal: t._sinal,
-        situacao: t.situacao,
-        tipo: t._tipo,
+        if (!lancamentos[codigo]) lancamentos[codigo] = [];
+        lancamentos[codigo].push({
+          id: t.codigo || `${t._tipo}-${t.tituloPagarCodigo || t.tituloReceberCodigo}`,
+          mesKey: empKey, // DreNodeRows usa l.mesKey pra decidir coluna; aqui empresa
+          data: t.dataMovimento || t.dataPagamento || t.vencimento || '',
+          descricao: descricaoComposta || '—',
+          valor: Math.abs(Number(t.valor || 0)),
+          sinal: t._sinal,
+          situacao: t.situacao,
+          tipo: t._tipo,
+        });
       });
     });
     return { totais, lancamentos, temOrfaos };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesEmpresa, dadosPorMes, gridTaxaCartao, hierarquiaGridMap]);
+  }, [mesesEmpresaSel, dadosPorMes, gridTaxaCartao, hierarquiaGridMap]);
 
   // Adiciona coluna virtual "Rede" no fim quando há lançamentos órfãos
   // (sem empresaCodigo) no mês selecionado. Sem isso, o total não bate
@@ -1542,7 +1612,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   // — espelha vendasASAtualPorGrupo mas com empresa como "coluna".
   const vendasASEmpresaPorGrupo = useMemo(() => {
     const out = {};
-    if (!mesEmpresa || !Array.isArray(mapVendasAutosystem) || mapVendasAutosystem.length === 0) return out;
+    if (!mesesEmpresaSel.length || !Array.isArray(mapVendasAutosystem) || mapVendasAutosystem.length === 0) return out;
     const LABELS = {
       combustivel: 'Combustível',
       automotivos: 'Automotivos',
@@ -1556,62 +1626,69 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       const sinal = m.tipo === 'custo' ? -1 : 1;
       const label = `${catLabel} (${m.tipo === 'custo' ? 'custo' : 'vendas'})`;
       const key = `as-${m.categoria}-${m.tipo}`;
-      const porEmp = vendasAutosystemPorMes.atual?.[m.categoria]?.[mesEmpresa.key] || {};
-      Object.entries(porEmp).forEach(([ec, x]) => {
-        const val = (m.tipo === 'custo' ? Number(x?.custo || 0) : Number(x?.venda || 0)) * sinal;
-        if (!out[gpId]) out[gpId] = {};
-        if (!out[gpId][key]) out[gpId][key] = { valoresPorMes: {}, label };
-        out[gpId][key].valoresPorMes[ec] = (out[gpId][key].valoresPorMes[ec] || 0) + val;
+      // Soma dos meses selecionados
+      mesesEmpresaSel.forEach(mes => {
+        const porEmp = vendasAutosystemPorMes.atual?.[m.categoria]?.[mes.key] || {};
+        Object.entries(porEmp).forEach(([ec, x]) => {
+          const val = (m.tipo === 'custo' ? Number(x?.custo || 0) : Number(x?.venda || 0)) * sinal;
+          if (!out[gpId]) out[gpId] = {};
+          if (!out[gpId][key]) out[gpId][key] = { valoresPorMes: {}, label };
+          out[gpId][key].valoresPorMes[ec] = (out[gpId][key].valoresPorMes[ec] || 0) + val;
+        });
       });
     });
     return out;
-  }, [mesEmpresa, mapVendasAutosystem, vendasAutosystemPorMes.atual]);
+  }, [mesesEmpresaSel, mapVendasAutosystem, vendasAutosystemPorMes.atual]);
 
   // Vendas do mes selecionado agregadas por (grupo, empresa, tipo)
   const vendasEmpresaPorGrupo = useMemo(() => {
     const porGrupo = {};
-    if (!mesEmpresa) return porGrupo;
-    const dados = dadosPorMes[mesEmpresa.key];
-    if (!dados) return porGrupo;
+    if (!mesesEmpresaSel.length) return porGrupo;
 
     const cfgPorTipo = new Map();
     mapeamentoVendas.forEach(m => { if (m.grupo_dre_id) cfgPorTipo.set(m.tipo, m); });
     if (cfgPorTipo.size === 0) return porGrupo;
 
-    // Agrupa itens e vendas por empresa. Sem empresaCodigo → coluna '_rede'.
-    const itensPorEmp = new Map();
-    (dados.vendaItens || []).forEach(item => {
-      const ec = String(item.empresaCodigo ?? '') || '_rede';
-      if (!itensPorEmp.has(ec)) itensPorEmp.set(ec, []);
-      itensPorEmp.get(ec).push(item);
-    });
-    const vendasPorEmp = new Map();
-    (dados.vendas || []).forEach(v => {
-      const ec = String(v.empresaCodigo ?? '') || '_rede';
-      if (!vendasPorEmp.has(ec)) vendasPorEmp.set(ec, new Map());
-      vendasPorEmp.get(ec).set(v.vendaCodigo || v.codigo, v);
-    });
+    // SOMA dos meses selecionados
+    mesesEmpresaSel.forEach(mes => {
+      const dados = dadosPorMes[mes.key];
+      if (!dados) return;
 
-    itensPorEmp.forEach((itens, empKey) => {
-      const vMap = vendasPorEmp.get(empKey) || new Map();
-      const totaisMes = vendasMapService.agregarVendasItens(itens, vMap, produtosMap, gruposCatMap);
-      Object.entries(totaisMes).forEach(([tipo, valor]) => {
-        const cfg = cfgPorTipo.get(tipo);
-        if (!cfg) return;
-        const tipoCfg = TIPOS_VENDA.find(t => t.id === tipo);
-        if (!tipoCfg) return;
-        const valorComSinal = (valor || 0) * tipoCfg.sinal;
-        if (!porGrupo[cfg.grupo_dre_id]) porGrupo[cfg.grupo_dre_id] = {};
-        if (!porGrupo[cfg.grupo_dre_id][tipo]) {
-          porGrupo[cfg.grupo_dre_id][tipo] = { valoresPorMes: {}, tipoCfg };
-        }
-        porGrupo[cfg.grupo_dre_id][tipo].valoresPorMes[empKey] =
-          (porGrupo[cfg.grupo_dre_id][tipo].valoresPorMes[empKey] || 0) + valorComSinal;
+      // Agrupa itens e vendas por empresa. Sem empresaCodigo → coluna '_rede'.
+      const itensPorEmp = new Map();
+      (dados.vendaItens || []).forEach(item => {
+        const ec = String(item.empresaCodigo ?? '') || '_rede';
+        if (!itensPorEmp.has(ec)) itensPorEmp.set(ec, []);
+        itensPorEmp.get(ec).push(item);
+      });
+      const vendasPorEmp = new Map();
+      (dados.vendas || []).forEach(v => {
+        const ec = String(v.empresaCodigo ?? '') || '_rede';
+        if (!vendasPorEmp.has(ec)) vendasPorEmp.set(ec, new Map());
+        vendasPorEmp.get(ec).set(v.vendaCodigo || v.codigo, v);
+      });
+
+      itensPorEmp.forEach((itens, empKey) => {
+        const vMap = vendasPorEmp.get(empKey) || new Map();
+        const totaisMes = vendasMapService.agregarVendasItens(itens, vMap, produtosMap, gruposCatMap);
+        Object.entries(totaisMes).forEach(([tipo, valor]) => {
+          const cfg = cfgPorTipo.get(tipo);
+          if (!cfg) return;
+          const tipoCfg = TIPOS_VENDA.find(t => t.id === tipo);
+          if (!tipoCfg) return;
+          const valorComSinal = (valor || 0) * tipoCfg.sinal;
+          if (!porGrupo[cfg.grupo_dre_id]) porGrupo[cfg.grupo_dre_id] = {};
+          if (!porGrupo[cfg.grupo_dre_id][tipo]) {
+            porGrupo[cfg.grupo_dre_id][tipo] = { valoresPorMes: {}, tipoCfg };
+          }
+          porGrupo[cfg.grupo_dre_id][tipo].valoresPorMes[empKey] =
+            (porGrupo[cfg.grupo_dre_id][tipo].valoresPorMes[empKey] || 0) + valorComSinal;
+        });
       });
     });
     return porGrupo;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesEmpresa, dadosPorMes, mapeamentoVendas, produtosMap, gruposCatMap]);
+  }, [mesesEmpresaSel, dadosPorMes, mapeamentoVendas, produtosMap, gruposCatMap]);
 
   // Arvore DRE com empresas como colunas (espelha dreTree com colunasEmpresa)
   const dreTreeEmpresa = useMemo(() => {
@@ -1968,43 +2045,71 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             </select>
           </div>
 
-          {/* Mes final (selecionado) — sistema busca 2 meses anteriores automaticamente */}
-          <div>
-            <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
-            <div className="flex items-center gap-0.5 h-8 rounded-lg border border-gray-200 bg-white px-0.5">
-              <button onClick={() => navMes(-1)} className="rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
-                <ChevLeft className="h-3 w-3" />
-              </button>
-              <select value={mesFinal.mes}
-                onChange={(e) => setMesFinal(p => ({ ...p, mes: Number(e.target.value) }))}
-                className="text-[11px] border-0 focus:outline-none bg-transparent">
-                {MESES_NOMES.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
-              </select>
-              <select value={mesFinal.ano}
-                onChange={(e) => setMesFinal(p => ({ ...p, ano: Number(e.target.value) }))}
-                className="text-[11px] border-0 focus:outline-none bg-transparent">
-                {[today.getFullYear() - 2, today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1].map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-              <button onClick={() => navMes(1)} className="rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
-                <ChevronRight className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
+          {!usarIntervalo ? (
+            <>
+              {/* Mes final (selecionado) — sistema busca 2 meses anteriores automaticamente */}
+              <div>
+                <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
+                <div className="flex items-center gap-0.5 h-8 rounded-lg border border-gray-200 bg-white px-0.5">
+                  <button onClick={() => navMes(-1)} className="rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
+                    <ChevLeft className="h-3 w-3" />
+                  </button>
+                  <select value={mesFinal.mes}
+                    onChange={(e) => setMesFinal(p => ({ ...p, mes: Number(e.target.value) }))}
+                    className="text-[11px] border-0 focus:outline-none bg-transparent">
+                    {MESES_NOMES.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
+                  </select>
+                  <select value={mesFinal.ano}
+                    onChange={(e) => setMesFinal(p => ({ ...p, ano: Number(e.target.value) }))}
+                    className="text-[11px] border-0 focus:outline-none bg-transparent">
+                    {[today.getFullYear() - 2, today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <button onClick={() => navMes(1)} className="rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
 
-          {/* Quantidade de meses (1 ou 3) */}
-          <div>
-            <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
-            <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
-              {[1, 3, 6].map(q => (
-                <button key={q} onClick={() => setQtdMeses(q)}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
-                    qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}>
-                  {q === 1 ? '1 mês' : `${q} meses`}
-                </button>
-              ))}
-            </div>
-          </div>
+              {/* Quantidade de meses (1 ou 3) */}
+              <div>
+                <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
+                <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
+                  {[1, 3, 6].map(q => (
+                    <button key={q} onClick={() => setQtdMeses(q)}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
+                        qtdMeses === q ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                      }`}>
+                      {q === 1 ? '1 mês' : `${q} meses`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Intervalo por datas (máx. 12 meses) */}
+              <div>
+                <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data início</label>
+                <input type="date" value={intervaloInicio} max={intervaloFim || hojeStr}
+                  onChange={(e) => setIntervaloInicio(e.target.value)}
+                  className="h-8 rounded-lg border border-gray-200 px-2 text-[11px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+              <div>
+                <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data fim</label>
+                <input type="date" value={intervaloFim} min={intervaloInicio || undefined}
+                  onChange={(e) => setIntervaloFim(e.target.value)}
+                  className="h-8 rounded-lg border border-gray-200 px-2 text-[11px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+            </>
+          )}
+
+          {/* Checkbox: selecionar por intervalo */}
+          <label className="flex items-center gap-1.5 h-8 cursor-pointer select-none pb-0.5">
+            <input type="checkbox" checked={usarIntervalo}
+              onChange={(e) => setUsarIntervalo(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400 cursor-pointer" />
+            <span className="text-[11px] font-medium text-gray-600">Selecionar por intervalo</span>
+          </label>
 
           {/* Seletor de empresas (injetado pelo wrapper cliente) */}
           {seletorEmpresas && (
@@ -2013,7 +2118,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
 
           {/* Montar DRE */}
           <div>
-            <button onClick={handleMontarDRE} disabled={loadingDados || !mascaraSelecionada}
+            <button onClick={handleMontarDRE} disabled={loadingDados || !mascaraSelecionada || meses.length === 0}
               className="flex items-center gap-1.5 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 text-[11px] font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {loadingDados ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileBarChart className="h-3.5 w-3.5" />}
               Montar DRE
@@ -2054,6 +2159,17 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 flex items-start gap-2 no-print">
           <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Aviso: meses que falharam ao buscar (podem aparecer zerados) */}
+      {mesesComFalha.length > 0 && (
+        <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 flex items-start gap-2 no-print">
+          <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-800">
+            <span className="font-semibold">Alguns meses não retornaram todos os dados</span> (podem aparecer zerados):{' '}
+            <strong>{mesesComFalha.join(', ')}</strong>. O servidor do cliente pode ter demorado a responder — clique em <strong>Atualizar</strong> para tentar de novo.
+          </div>
         </div>
       )}
 
@@ -2117,7 +2233,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             </div>
             <p className="text-sm font-semibold text-gray-900 mb-1">Selecione o período e clique em "Montar DRE"</p>
             <p className="text-xs text-gray-500 max-w-md mx-auto">
-              O relatório sera gerado com os 3 meses terminando em <strong>{meses[meses.length - 1]?.label}</strong>: <strong>{meses.map(m => m.label).join(', ')}</strong>.
+              {meses.length === 0 ? (
+                'Informe a data de início e fim do intervalo.'
+              ) : (
+                <>O relatório sera gerado com {meses.length === 1 ? 'o mês' : `os ${meses.length} meses`} <strong>{meses.map(m => m.label).join(', ')}</strong>.</>
+              )}
+              {usarIntervalo && <span className="block mt-1 text-gray-400">Intervalo limitado a no máximo 12 meses.</span>}
             </p>
           </motion.div>
         ) : (loadingDados || loadingGrupos || loadingMapeamentos || (!reportReady && (cliente.usa_webposto || cliente.as_rede_id))) ? (
@@ -2157,7 +2278,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-gray-800">{mascaraSelecionada?.nome}</h3>
                     <p className="text-[11px] text-gray-400">
-                      Por empresa · {mesEmpresa?.label || '—'} · {colunasEmpresaBase.length} empresas
+                      Por empresa · {mesesEmpresaSel.length === 0 ? '—' : mesesEmpresaSel.length === 1 ? mesesEmpresaSel[0].label : `${mesesEmpresaSel.length} meses`} · {colunasEmpresaBase.length} empresas
                       {idxEmpresaFull.temOrfaos && <span className="text-blue-500"> + rede</span>}
                     </p>
                   </div>
@@ -2172,12 +2293,39 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
                     }`}>
                     Nº {ordemEmpDir === 'asc' ? '↑' : ordemEmpDir === 'desc' ? '↓' : '—'}
                   </button>
-                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider ml-1">Mês:</label>
-                  <select value={mesEmpresaKey || ''}
-                    onChange={(e) => setMesEmpresaKey(e.target.value)}
-                    className="h-9 rounded-lg border border-gray-200 px-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-                    {meses.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                  </select>
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider ml-1">Meses:</label>
+                  <details className="relative group">
+                    <summary className="h-9 min-w-[110px] inline-flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-2.5 text-sm text-gray-700 cursor-pointer list-none select-none hover:bg-gray-50 focus:outline-none [&::-webkit-details-marker]:hidden">
+                      <span className="truncate">
+                        {mesesEmpresaSel.length === 0 ? 'Selecione' : mesesEmpresaSel.length === 1 ? mesesEmpresaSel[0].label : `${mesesEmpresaSel.length} meses`}
+                      </span>
+                      <ChevronRight className="h-3.5 w-3.5 text-gray-400 rotate-90 flex-shrink-0" />
+                    </summary>
+                    <div className="absolute right-0 z-40 mt-1 w-52 rounded-xl border border-gray-200 bg-white shadow-lg p-1.5">
+                      <div className="flex items-center justify-between px-1.5 pb-1.5 mb-1 border-b border-gray-100">
+                        <button type="button" onClick={() => setMesesEmpresaKeys(meses.map(m => m.key))}
+                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-700">Todos</button>
+                        <button type="button" onClick={() => setMesesEmpresaKeys(meses.length ? [meses[meses.length - 1].key] : [])}
+                          className="text-[11px] font-medium text-gray-500 hover:text-gray-700">Só o último</button>
+                      </div>
+                      <div className="max-h-56 overflow-auto">
+                        {meses.map(m => {
+                          const marcado = mesesEmpresaKeys.includes(m.key);
+                          return (
+                            <label key={m.key} className="flex items-center gap-2 px-1.5 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input type="checkbox" checked={marcado}
+                                onChange={() => setMesesEmpresaKeys(prev => {
+                                  const next = marcado ? prev.filter(k => k !== m.key) : [...prev, m.key];
+                                  return next.length ? next : prev; // nunca deixa vazio
+                                })}
+                                className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                              <span className="text-[13px] text-gray-700">{m.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </details>
                   <div className="text-right ml-2">
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide">Resultado</p>
                     <p className={`text-base font-bold ${totalGeralEmpresa >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
