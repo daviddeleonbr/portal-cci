@@ -4,11 +4,12 @@ import {
   Coins, Loader2, AlertCircle, Building2, Zap, Calendar,
   UserRound, CheckCircle2, TrendingUp, TrendingDown, RefreshCw, Clock, ChevronRight,
   Fuel, Wrench, ShoppingBag, Package, CreditCard, Banknote, FileText, MoreHorizontal,
-  XCircle, ChevronDown, PlusCircle, MinusCircle, Printer, History,
+  XCircle, ChevronDown, PlusCircle, MinusCircle, Printer, History, Stethoscope,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import BpoAlteracoesCaixas from './BpoAlteracoesCaixas';
 import BpoAnaliseCartoes from './BpoAnaliseCartoes';
+import BpoDiagnosticarCartoes from './BpoDiagnosticarCartoes';
 import Modal from '../components/ui/Modal';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
@@ -45,7 +46,7 @@ export default function BpoConciliacaoCaixas({
   const modoCliente = !!clienteFixed;
 
   // Aba ativa (só no admin). Modo cliente continua sem abas.
-  const [abaAtiva, setAbaAtiva] = useState('conciliacao'); // 'conciliacao' | 'alteracoes' | 'cartoes'
+  const [abaAtiva, setAbaAtiva] = useState('conciliacao'); // 'conciliacao' | 'alteracoes' | 'cartoes' | 'diagnosticar'
 
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
@@ -885,6 +886,12 @@ export default function BpoConciliacaoCaixas({
             }`}>
             <CreditCard className="h-4 w-4" /> Análise de cartões
           </button>
+          <button onClick={() => setAbaAtiva('diagnosticar')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              abaAtiva === 'diagnosticar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <Stethoscope className="h-4 w-4" /> Diagnosticar
+          </button>
         </div>
       )}
 
@@ -896,6 +903,11 @@ export default function BpoConciliacaoCaixas({
       {/* Aba: Análise de cartões */}
       {!modoCliente && abaAtiva === 'cartoes' && (
         <BpoAnaliseCartoes />
+      )}
+
+      {/* Aba: Diagnosticar — cartões do sistema (Autosystem) x Equals (CSV) */}
+      {!modoCliente && abaAtiva === 'diagnosticar' && (
+        <BpoDiagnosticarCartoes />
       )}
 
       {/* Aba: Conciliação de caixas (conteúdo original) */}

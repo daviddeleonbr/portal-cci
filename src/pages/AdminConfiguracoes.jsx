@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import {
   Phone, Sparkles, Loader2, Save, Eye, EyeOff, AlertCircle, CheckCircle2, Key,
+  Coins, CreditCard, Plus, Trash2,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
 import { CciContatoView } from './CciContato';
 import * as configuracoesIaService from '../services/configuracoesIaService';
+import * as catalogoCartaoService from '../services/bpoCartaoCatalogoService';
 import { useAdminSession } from '../hooks/useAuth';
 
 const ABAS = [
   { key: 'contatos', label: 'Contatos',        icon: Phone,    descricao: 'Canais públicos da landing page' },
   { key: 'ia',       label: 'Análises de IA',  icon: Sparkles, descricao: 'Chave Claude e parâmetros da Análise IA' },
+  { key: 'bpo',      label: 'BPO',             icon: Coins,    descricao: 'Conciliação de caixas: adquirentes e bandeiras' },
 ];
 
 export default function AdminConfiguracoes() {
@@ -47,6 +50,123 @@ export default function AdminConfiguracoes() {
 
       {aba === 'contatos' && <CciContatoView />}
       {aba === 'ia'       && <AbaAnalisesIa />}
+      {aba === 'bpo'      && <AbaBpo />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Aba: BPO → sub-aba Conciliação de caixas (adquirentes/bandeiras)
+// ═══════════════════════════════════════════════════════════
+function AbaBpo() {
+  const [sub, setSub] = useState('conciliacao');
+  return (
+    <div>
+      <div className="inline-flex items-center gap-1 mb-4 bg-gray-100 rounded-lg p-1">
+        <button onClick={() => setSub('conciliacao')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            sub === 'conciliacao' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}>
+          <Coins className="h-3.5 w-3.5" /> Conciliação de caixas
+        </button>
+      </div>
+      {sub === 'conciliacao' && <AbaConciliacaoCaixasConfig />}
+    </div>
+  );
+}
+
+function AbaConciliacaoCaixasConfig() {
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState('');
+  const [adquirentes, setAdquirentes] = useState([]);
+  const [bandeiras, setBandeiras] = useState([]);
+  const [modalidades, setModalidades] = useState([]);
+  const [toast, setToast] = useState(null);
+
+  const carregar = async () => {
+    try {
+      setLoading(true); setErro('');
+      const { adquirentes: adq, bandeiras: ban, modalidades: mod } = await catalogoCartaoService.listarCatalogoCartao();
+      setAdquirentes(adq); setBandeiras(ban); setModalidades(mod);
+    } catch (e) { setErro(e.message || 'Falha ao carregar.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { carregar(); }, []);
+
+  const notificar = (tipo, msg) => setToast({ show: true, type: tipo, message: msg });
+
+  if (loading) return <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>;
+  if (erro) return <p className="text-sm text-red-600 py-6 text-center">{erro}</p>;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500">
+        Cadastre os nomes padrão de <strong>adquirentes</strong> e <strong>bandeiras</strong>. Eles aparecem como
+        <strong> dropdown</strong> na configuração de contas de cartão (Editar rede → Empresas → Contas de cartão),
+        evitando digitação manual e divergências de nome.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <ListaCatalogo titulo="Adquirentes" tipo="adquirente" itens={adquirentes} onMudou={carregar} notificar={notificar}
+          placeholder="Ex.: Cielo, Rede, Stone…" icon={<CreditCard className="h-3.5 w-3.5" />} />
+        <ListaCatalogo titulo="Bandeiras" tipo="bandeira" itens={bandeiras} onMudou={carregar} notificar={notificar}
+          placeholder="Ex.: Visa, Mastercard, Elo…" icon={<CreditCard className="h-3.5 w-3.5" />} />
+        <ListaCatalogo titulo="Modalidades" tipo="modalidade" itens={modalidades} onMudou={carregar} notificar={notificar}
+          placeholder="Ex.: Crédito à Vista, Débito à Vista…" icon={<CreditCard className="h-3.5 w-3.5" />} />
+      </div>
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+    </div>
+  );
+}
+
+function ListaCatalogo({ titulo, tipo, itens, onMudou, notificar, placeholder, icon }) {
+  const [novo, setNovo] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [removendo, setRemovendo] = useState(null);
+
+  const adicionar = async () => {
+    const n = novo.trim();
+    if (!n) return;
+    setSalvando(true);
+    try {
+      await catalogoCartaoService.adicionarCatalogoCartao(tipo, n);
+      setNovo(''); await onMudou(); notificar('success', `${titulo}: "${n}" adicionado`);
+    } catch (e) { notificar('error', e.message); }
+    finally { setSalvando(false); }
+  };
+  const remover = async (item) => {
+    setRemovendo(item.id);
+    try { await catalogoCartaoService.removerCatalogoCartao(item.id); await onMudou(); }
+    catch (e) { notificar('error', e.message); }
+    finally { setRemovendo(null); }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200/60 p-4">
+      <h4 className="text-[13px] font-semibold text-gray-800 flex items-center gap-1.5 mb-3">{icon} {titulo} <span className="text-gray-400 font-normal">({itens.length})</span></h4>
+      <div className="flex gap-2 mb-3">
+        <input value={novo} onChange={e => setNovo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') adicionar(); }}
+          placeholder={placeholder}
+          className="flex-1 h-9 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        <button onClick={adicionar} disabled={salvando || !novo.trim()}
+          className="inline-flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 text-sm font-medium text-white disabled:opacity-50">
+          {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+        </button>
+      </div>
+      {itens.length === 0 ? (
+        <p className="text-xs text-gray-400 py-3 text-center">Nenhum cadastrado.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {itens.map(item => (
+            <span key={item.id} className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 border border-gray-200 pl-3 pr-1.5 py-1 text-[12px] text-gray-700">
+              {item.nome}
+              <button onClick={() => remover(item)} disabled={removendo === item.id} title="Remover"
+                className="h-4 w-4 inline-flex items-center justify-center rounded-full text-gray-400 hover:text-rose-600 hover:bg-rose-50">
+                {removendo === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

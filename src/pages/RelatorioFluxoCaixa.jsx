@@ -5,7 +5,7 @@ import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, Wallet, Printer,
   EyeOff, Eye, ChevronLeft as ChevLeft, Download,
-  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale, Activity,
+  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale, Activity, Truck,
 } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
@@ -2682,6 +2682,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             }`}>
             <LineChartIcon className="h-3.5 w-3.5" /> Evolução
           </button>
+          {cliente?.as_rede_id && (
+            <button onClick={() => setActiveTab('compras')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+                activeTab === 'compras' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              <Truck className="h-3.5 w-3.5" /> Compras
+            </button>
+          )}
         </div>
       )}
 
@@ -3150,6 +3158,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 )}
               </>
             )}
+          </motion.div>
+        ) : activeTab === 'compras' ? (
+          <motion.div key="compras" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            <ComprasFornecedorView
+              asRedeId={cliente?.as_rede_id}
+              empresaCodigos={modoRede ? (empresaCodigosDaCategoria || []) : (cliente?.empresa_codigo != null ? [cliente.empresa_codigo] : [])}
+              dataDe={meses[0]?.dataInicial}
+              dataAte={meses[meses.length - 1]?.dataFinal}
+            />
           </motion.div>
         ) : activeTab === 'empresa' && modoRede ? (
           <motion.div key="empresa" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
@@ -4417,6 +4434,309 @@ function ModalDetalheEvol({ ponto, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Aba "Compras" (fornecedores) — títulos a pagar do período com
+// data da compra, vencimento e data de pagamento (Autosystem).
+// ═══════════════════════════════════════════════════════════
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+function fmtDataCompra(d) {
+  const s = String(d || '').slice(0, 10);
+  const [y, m, dd] = s.split('-');
+  return dd ? `${dd}/${m}/${y}` : (s || '—');
+}
+
+function ComprasFornecedorView({ asRedeId, empresaCodigos, dataDe, dataAte }) {
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState('');
+  const [compras, setCompras] = useState(null);
+  const [filtro, setFiltro] = useState('todas'); // 'todas' | 'pagas' | 'abertas'
+  const [busca, setBusca] = useState('');
+  const [visao, setVisao] = useState('analise'); // 'analise' | 'arvore'
+  const [expData, setExpData] = useState(() => new Set());
+  const [expPessoa, setExpPessoa] = useState(() => new Set());
+
+  const empKey = (empresaCodigos || []).join(',');
+  useEffect(() => {
+    if (!asRedeId || !empresaCodigos?.length || !dataDe || !dataAte) { setCompras(null); return; }
+    let vivo = true;
+    (async () => {
+      try {
+        setLoading(true); setErro('');
+        const data = await autosystemService.buscarComprasFornecedorAutosystem(asRedeId, empresaCodigos, { data_de: dataDe, data_ate: dataAte });
+        if (vivo) setCompras(data || []);
+      } catch (e) { if (vivo) setErro(e.message || 'Falha ao buscar compras.'); }
+      finally { if (vivo) setLoading(false); }
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asRedeId, empKey, dataDe, dataAte]);
+
+  const filtradas = useMemo(() => {
+    if (!compras) return [];
+    const termo = busca.trim().toLowerCase();
+    return compras.filter(c => {
+      const paga = !!c.data_pagamento;
+      if (filtro === 'pagas' && !paga) return false;
+      if (filtro === 'abertas' && paga) return false;
+      if (termo && !`${c.fornecedor || ''} ${c.documento || ''} ${c.despesa_nome || ''}`.toLowerCase().includes(termo)) return false;
+      return true;
+    });
+  }, [compras, filtro, busca]);
+
+  const totais = useMemo(() => {
+    const t = { total: 0, pago: 0, aberto: 0, qtd: filtradas.length };
+    filtradas.forEach(c => {
+      const v = Number(c.valor) || 0;
+      t.total += v;
+      if (c.data_pagamento) t.pago += v; else t.aberto += v;
+    });
+    return t;
+  }, [filtradas]);
+
+  // Árvore: Mês de pagamento → Pessoa (fornecedor) → títulos.
+  const arvore = useMemo(() => {
+    const porData = new Map();
+    filtradas.forEach(c => {
+      const raw = c.data_pagamento ? String(c.data_pagamento).slice(0, 7) : ''; // YYYY-MM
+      const [y, m] = raw.split('-');
+      const label = raw ? `${MESES_ABREV[Number(m) - 1] || m}/${y}` : 'Em aberto';
+      if (!porData.has(label)) porData.set(label, { label, raw, total: 0, qtd: 0, pessoas: new Map() });
+      const nd = porData.get(label);
+      const pes = c.fornecedor || '—';
+      if (!nd.pessoas.has(pes)) nd.pessoas.set(pes, { pessoa: pes, total: 0, itens: [] });
+      const np = nd.pessoas.get(pes);
+      const v = Number(c.valor) || 0;
+      np.itens.push(c); np.total += v; nd.total += v; nd.qtd += 1;
+    });
+    const arr = [...porData.values()].sort((a, b) => {
+      if (a.label === 'Em aberto') return 1;
+      if (b.label === 'Em aberto') return -1;
+      return String(b.raw).localeCompare(String(a.raw)); // pagamento mais recente primeiro
+    });
+    arr.forEach(nd => { nd.pessoasArr = [...nd.pessoas.values()].sort((a, b) => (a.pessoa || '').localeCompare(b.pessoa || '')); });
+    return arr;
+  }, [filtradas]);
+
+  const autoOpen = busca.trim() !== '';
+  const toggleData = (k) => setExpData(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const togglePessoa = (k) => setExpPessoa(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  // Análise: compras por MÊS (data da compra) — total, por categoria (estoque 1.4.X) e por fornecedor.
+  const analise = useMemo(() => {
+    const mesesSet = new Set();
+    filtradas.forEach(c => { const mk = String(c.data_compra || '').slice(0, 7); if (mk) mesesSet.add(mk); });
+    const meses = [...mesesSet].sort();
+    if (meses.length === 0) return { meses: [], total: {}, categorias: [], fornecedores: [] };
+    const zero = () => Object.fromEntries(meses.map(m => [m, 0]));
+    const total = zero();
+    const catMap = new Map(), forMap = new Map();
+    filtradas.forEach(c => {
+      const mk = String(c.data_compra || '').slice(0, 7);
+      if (!(mk in total)) return;
+      const v = Number(c.valor) || 0;
+      total[mk] += v;
+      const catNome = c.categoria_nome || c.categoria_codigo || '—';
+      const catKey = c.categoria_codigo || catNome;
+      if (!catMap.has(catKey)) catMap.set(catKey, { nome: catNome, porMes: zero(), totalGeral: 0 });
+      const cn = catMap.get(catKey); cn.porMes[mk] += v; cn.totalGeral += v;
+      const fn = c.fornecedor || '—';
+      if (!forMap.has(fn)) forMap.set(fn, { nome: fn, porMes: zero(), totalGeral: 0 });
+      const f = forMap.get(fn); f.porMes[mk] += v; f.totalGeral += v;
+    });
+    return {
+      meses,
+      total,
+      categorias: [...catMap.values()].sort((a, b) => b.totalGeral - a.totalGeral),
+      fornecedores: [...forMap.values()].sort((a, b) => b.totalGeral - a.totalGeral),
+    };
+  }, [filtradas]);
+
+  if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-emerald-500" /></div>;
+  if (erro) return <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700">{erro}</div>;
+  if (!compras) return <div className="text-sm text-gray-400 py-10 text-center">Selecione o período e monte o fluxo para ver as compras.</div>;
+
+  const FILTROS = [
+    { key: 'todas', label: 'Todas' },
+    { key: 'pagas', label: 'Pagas' },
+    { key: 'abertas', label: 'Em aberto' },
+  ];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Truck className="h-4 w-4 text-emerald-600" />
+          <h3 className="text-sm font-semibold text-gray-800">Compras por fornecedor</h3>
+          <span className="text-[11px] text-gray-400">{totais.qtd} título(s)</span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="inline-flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+            {[{ key: 'analise', label: 'Análise' }, { key: 'arvore', label: 'Detalhado' }].map(v => (
+              <button key={v.key} onClick={() => setVisao(v.key)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                  visao === v.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>{v.label}</button>
+            ))}
+          </div>
+          {visao === 'arvore' && (
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar fornecedor / documento…"
+              className="h-8 rounded-lg border border-gray-200 px-2.5 text-[12px] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 min-w-[200px]" />
+          )}
+          <div className="inline-flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+            {FILTROS.map(f => (
+              <button key={f.key} onClick={() => setFiltro(f.key)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                  filtro === f.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>{f.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-5 py-2.5 border-b border-gray-100 flex flex-wrap gap-5 text-[12px]">
+        <span>Total: <strong className="text-gray-900">{formatCurrency(totais.total)}</strong></span>
+        <span className="text-emerald-700">Pago: <strong>{formatCurrency(totais.pago)}</strong></span>
+        <span className="text-amber-700">Em aberto: <strong>{formatCurrency(totais.aberto)}</strong></span>
+      </div>
+
+      {visao === 'analise' && <AnaliseComprasView analise={analise} />}
+
+      {visao === 'arvore' && (
+      <div className="max-h-[64vh] overflow-auto">
+        {arvore.length === 0 && <p className="px-4 py-8 text-center text-gray-400 text-sm">Nenhuma compra de estoque (1.4) no período/filtro.</p>}
+        {arvore.map(nd => {
+          const abertoD = autoOpen || expData.has(nd.label);
+          return (
+            <div key={nd.label} className="border-b border-gray-100">
+              {/* Nível 1: Data de pagamento */}
+              <button type="button" onClick={() => toggleData(nd.label)}
+                className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-50 text-left">
+                <ChevronRight className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${abertoD ? 'rotate-90' : ''}`} />
+                <span className={`text-[12.5px] font-semibold ${nd.label === 'Em aberto' ? 'text-amber-700' : 'text-gray-800'}`}>{nd.label === 'Em aberto' ? 'Em aberto' : `Pagos em ${nd.label}`}</span>
+                <span className="text-[11px] text-gray-400">{nd.qtd} título(s) · {nd.pessoasArr.length} fornecedor(es)</span>
+                <span className="ml-auto text-[12.5px] font-semibold tabular-nums text-gray-900">{formatCurrency(nd.total)}</span>
+              </button>
+
+              {abertoD && nd.pessoasArr.map(np => {
+                const kP = `${nd.label}|${np.pessoa}`;
+                const abertoP = autoOpen || expPessoa.has(kP);
+                return (
+                  <div key={kP}>
+                    {/* Nível 2: Pessoa (fornecedor) */}
+                    <button type="button" onClick={() => togglePessoa(kP)}
+                      className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-gray-50/60 text-left" style={{ paddingLeft: 30 }}>
+                      <ChevronRight className={`h-3 w-3 text-gray-400 flex-shrink-0 transition-transform ${abertoP ? 'rotate-90' : ''}`} />
+                      <span className="text-[12px] text-gray-700">{np.pessoa}</span>
+                      <span className="text-[10.5px] text-gray-400">({np.itens.length})</span>
+                      <span className="ml-auto text-[12px] tabular-nums text-gray-600">{formatCurrency(np.total)}</span>
+                    </button>
+
+                    {/* Nível 3: títulos */}
+                    {abertoP && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11.5px]">
+                          <thead className="bg-gray-50/70 text-gray-400">
+                            <tr>
+                              <th className="text-left pl-14 pr-3 py-1 font-medium uppercase text-[9.5px] tracking-wider">Documento</th>
+                              <th className="text-left px-3 py-1 font-medium uppercase text-[9.5px] tracking-wider">Estoque</th>
+                              <th className="text-center px-3 py-1 font-medium uppercase text-[9.5px] tracking-wider">Compra</th>
+                              <th className="text-center px-3 py-1 font-medium uppercase text-[9.5px] tracking-wider">Vencimento</th>
+                              <th className="text-right px-4 py-1 font-medium uppercase text-[9.5px] tracking-wider">Valor</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {np.itens.map((c, i) => (
+                              <tr key={i} className="border-t border-gray-50 hover:bg-gray-50/40">
+                                <td className="pl-14 pr-3 py-1 font-mono text-gray-600">{c.documento || '—'}</td>
+                                <td className="px-3 py-1 text-gray-600 truncate max-w-[240px]" title={c.despesa_nome || ''}>{c.despesa_nome || '—'}</td>
+                                <td className="px-3 py-1 text-center font-mono text-gray-700">{fmtDataCompra(c.data_compra)}</td>
+                                <td className="px-3 py-1 text-center font-mono text-gray-700">{fmtDataCompra(c.vencimento)}</td>
+                                <td className="px-4 py-1 text-right tabular-nums text-gray-800">{formatCurrency(Number(c.valor) || 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      )}
+    </div>
+  );
+}
+
+function fmtMesCompra(mk) {
+  const [y, m] = String(mk).split('-');
+  const mi = Number(m) - 1;
+  return `${MESES_ABREV[mi] || m}/${String(y).slice(2)}`;
+}
+
+// Tabela pivô: cada mês seguido da variação em relação ao mês anterior (ao lado).
+function TabelaPivotCompras({ titulo, meses, linhas }) {
+  if (!meses || meses.length === 0) return null;
+  const totalCols = 1 + meses.length + Math.max(0, meses.length - 1);
+  return (
+    <div className="mb-6">
+      <h4 className="text-[12.5px] font-semibold text-gray-800 mb-1.5 px-1">{titulo}</h4>
+      <div className="overflow-x-auto border border-gray-100 rounded-lg">
+        <table className="w-full text-[12px]">
+          <thead className="bg-gray-50 text-gray-500">
+            <tr>
+              <th className="text-left px-3 py-1.5 font-semibold whitespace-nowrap sticky left-0 bg-gray-50">&nbsp;</th>
+              {meses.map((m, idx) => (
+                <Fragment key={m}>
+                  <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap">{fmtMesCompra(m)}</th>
+                  {idx > 0 && <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap text-gray-400">vs {fmtMesCompra(meses[idx - 1])}</th>}
+                </Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((l, i) => (
+              <tr key={i} className="border-t border-gray-50 hover:bg-gray-50/40">
+                <td className="px-3 py-1 text-gray-800 font-medium whitespace-nowrap max-w-[240px] truncate sticky left-0 bg-white" title={l.label}>{l.label}</td>
+                {meses.map((m, idx) => {
+                  const base = idx > 0 ? (l.porMes[meses[idx - 1]] || 0) : 0;
+                  const pct = idx > 0 && base ? (((l.porMes[m] || 0) - base) / Math.abs(base)) * 100 : null;
+                  return (
+                    <Fragment key={m}>
+                      <td className="px-3 py-1 text-right tabular-nums text-gray-700 whitespace-nowrap">{formatCurrency(l.porMes[m] || 0)}</td>
+                      {idx > 0 && (
+                        <td className={`px-3 py-1 text-right tabular-nums whitespace-nowrap ${pct == null ? 'text-gray-300' : pct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {pct == null ? '—' : `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}
+                        </td>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tr>
+            ))}
+            {linhas.length === 0 && <tr><td colSpan={totalCols} className="px-3 py-4 text-center text-gray-400">Sem dados.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AnaliseComprasView({ analise }) {
+  if (!analise || analise.meses.length === 0) {
+    return <p className="px-5 py-10 text-center text-gray-400 text-sm">Sem compras de estoque (1.4) no período para analisar.</p>;
+  }
+  const { meses, total, fornecedores } = analise;
+  return (
+    <div className="p-5 max-h-[64vh] overflow-auto">
+      <TabelaPivotCompras titulo="1. Total de compras por mês" meses={meses} linhas={[{ label: 'Total de compras (R$)', porMes: total }]} />
+      <TabelaPivotCompras titulo="2. Compras por fornecedor por mês (ordenado por total)" meses={meses} linhas={fornecedores.map(f => ({ label: f.nome, porMes: f.porMes }))} />
     </div>
   );
 }

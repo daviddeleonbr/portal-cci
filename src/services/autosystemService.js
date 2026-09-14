@@ -217,6 +217,31 @@ export async function buscarContasPagar(redeId, empresaCodigo, filtros = {}) {
   return Array.isArray(data?.contas) ? data.contas : [];
 }
 
+// ─── Compras por fornecedor (títulos a pagar: abertos + pagos) ──
+// Retorna as compras no período (por data da compra) com fornecedor, data da
+// compra, vencimento e data de pagamento (null = em aberto). Usado na aba
+// "Compras" do Fluxo de Caixa.
+export async function buscarComprasFornecedorAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-compras-fornecedor', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de: filtros.data_de,
+      data_ate: filtros.data_ate,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar compras por fornecedor');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return Array.isArray(data?.compras) ? data.compras : [];
+}
+
 // ─── Notas a manifestar (manifestação do destinatário / DFe) ──
 // Lista as NF-e recebidas que ainda não tiveram evento de manifestação
 // (nfe_evento = 0), por empresa. Somente CONSULTA. `empresaCodigos` = array
@@ -249,6 +274,43 @@ export async function buscarContasAutosystem(redeId) {
   if (error) throw await _extrairErroFn(error, 'Falha ao buscar contas');
   if (data?.error) throw new Error(data.detail || data.error);
   return Array.isArray(data?.contas) ? data.contas : [];
+}
+
+// ─── Contas de CARTÃO (diagnóstico movto × Equals), por rede ──
+// Retorna as contas do plano marcadas como cartão, com adquirente,
+// bandeira e modalidade. Usadas pela aba "Diagnosticar".
+export async function listarContasCartaoRede(redeId) {
+  if (!redeId) return [];
+  const { data, error } = await supabase
+    .from('as_rede_conta_cartao')
+    .select('*')
+    .eq('as_rede_id', redeId)
+    .order('codigo', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// Upsert em lote das contas de cartão. `contas` = array de
+// { codigo, nome, adquirente, bandeira, modalidade }. Contas que não vierem
+// na lista são REMOVIDAS (desmarcadas) para esta rede.
+export async function salvarContasCartaoRede(redeId, contas) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  const valid = (contas || []).filter(c => c && c.codigo);
+  // Substitui o conjunto: apaga as da rede e regrava só as marcadas.
+  const { error: errDel } = await supabase
+    .from('as_rede_conta_cartao').delete().eq('as_rede_id', redeId);
+  if (errDel) throw errDel;
+  if (valid.length === 0) return;
+  const payload = valid.map(c => ({
+    as_rede_id: redeId,
+    codigo: String(c.codigo),
+    nome: c.nome || null,
+    adquirente: c.adquirente?.trim() || null,
+    bandeira: c.bandeira?.trim() || null,
+    modalidade: c.modalidade?.trim() || null,
+  }));
+  const { error } = await supabase.from('as_rede_conta_cartao').insert(payload);
+  if (error) throw error;
 }
 
 // Lista contas já categorizadas no Supabase para esta rede.

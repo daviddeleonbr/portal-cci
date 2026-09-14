@@ -16,6 +16,7 @@ import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as autosystemService from '../services/autosystemService';
+import * as catalogoCartaoService from '../services/bpoCartaoCatalogoService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
 import * as administradorasService from '../services/clienteAdministradorasService';
 import { buscarCep } from '../services/viacepService';
@@ -2743,6 +2744,14 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
             }`}>
             <Tags className="h-3.5 w-3.5" /> Categorias
           </button>
+          <button onClick={() => setModo('cartoes')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              modo === 'cartoes'
+                ? 'bg-white dark:bg-white/10 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800'
+            }`}>
+            <CreditCard className="h-3.5 w-3.5" /> Contas de cartão
+          </button>
         </div>
 
         {modo === 'manual' ? (
@@ -2764,6 +2773,8 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
             setBusca={setCategoriaBusca}
             onDefinir={salvarCategoria}
           />
+        ) : modo === 'cartoes' ? (
+          <AbaContasCartao rede={rede} showToast={showToast} />
         ) : (
           <ConteudoImportarServidor
             loading={loading} erro={erro} empresas={empresas}
@@ -2780,6 +2791,206 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
         )}
       </div>
     </Modal>
+  );
+}
+
+// Monta a árvore do plano de contas a partir dos códigos hierárquicos
+// ("1" › "1.1" › "1.1.2" ...). Ordena numericamente por segmento.
+function construirArvoreContas(contas) {
+  const segNum = code => String(code).split('.').map(s => Number(s) || 0);
+  const nodes = (contas || []).map(c => ({ ...c, codigo: String(c.codigo), children: [] }));
+  nodes.sort((a, b) => {
+    const A = segNum(a.codigo), B = segNum(b.codigo);
+    for (let i = 0; i < Math.max(A.length, B.length); i++) {
+      const d = (A[i] ?? -1) - (B[i] ?? -1); if (d) return d;
+    }
+    return 0;
+  });
+  const porCodigo = new Map(nodes.map(n => [n.codigo, n]));
+  const raizes = [];
+  nodes.forEach(n => {
+    const idx = n.codigo.lastIndexOf('.');
+    const pai = idx >= 0 ? porCodigo.get(n.codigo.slice(0, idx)) : null;
+    if (pai && pai !== n) pai.children.push(n);
+    else raizes.push(n);
+  });
+  return raizes;
+}
+
+// Aba "Contas de cartão" — marca no plano de contas (Autosystem) quais contas
+// são cartão e atribui adquirente/bandeira/modalidade. Usado no diagnóstico
+// (movto × Equals). Config por REDE. Exibe o plano em árvore.
+function AbaContasCartao({ rede, showToast }) {
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState('');
+  const [contas, setContas] = useState([]);      // plano de contas: {codigo, nome}
+  const [config, setConfig] = useState({});      // codigo -> { marcado, adquirente, bandeira, modalidade, nome }
+  const [catalogo, setCatalogo] = useState({ adquirentes: [], bandeiras: [], modalidades: [] }); // dropdowns padrão
+  const [busca, setBusca] = useState('');
+  const [filtro, setFiltro] = useState('todas'); // 'todas' | 'config' | 'nao'
+  const [expandidos, setExpandidos] = useState(() => new Set());
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    if (!rede?.id) return;
+    let vivo = true;
+    (async () => {
+      try {
+        setLoading(true); setErro('');
+        const [plano, salvas, cat] = await Promise.all([
+          autosystemService.buscarContasAutosystem(rede.id),
+          autosystemService.listarContasCartaoRede(rede.id),
+          catalogoCartaoService.listarCatalogoCartao().catch(() => ({ adquirentes: [], bandeiras: [], modalidades: [] })),
+        ]);
+        if (!vivo) return;
+        setContas(plano || []);
+        setCatalogo({ adquirentes: cat.adquirentes || [], bandeiras: cat.bandeiras || [], modalidades: cat.modalidades || [] });
+        const cfg = {};
+        (salvas || []).forEach(s => {
+          cfg[String(s.codigo)] = { marcado: true, adquirente: s.adquirente || '', bandeira: s.bandeira || '', modalidade: s.modalidade || '', nome: s.nome || '' };
+        });
+        setConfig(cfg);
+      } catch (e) { if (vivo) setErro(e.message || 'Falha ao carregar o plano de contas.'); }
+      finally { if (vivo) setLoading(false); }
+    })();
+    return () => { vivo = false; };
+  }, [rede?.id]);
+
+  const nomeConta = (c) => c.nome || c.descricao || '';
+  const setCampo = (cod, campo, val) => setConfig(p => ({ ...p, [cod]: { ...(p[cod] || {}), [campo]: val } }));
+  const toggleMarcado = (c) => {
+    const cod = String(c.codigo);
+    setConfig(p => {
+      if (p[cod]?.marcado) { const n = { ...p }; delete n[cod]; return n; }
+      return { ...p, [cod]: { marcado: true, adquirente: '', bandeira: '', modalidade: '', nome: nomeConta(c) } };
+    });
+  };
+  const toggleExpand = (cod) => setExpandidos(prev => { const n = new Set(prev); if (n.has(cod)) n.delete(cod); else n.add(cod); return n; });
+
+  const arvore = useMemo(() => construirArvoreContas(contas), [contas]);
+  const qtdMarcadas = Object.values(config).filter(v => v?.marcado).length;
+
+  // Filtra mantendo os ancestrais dos nós que passam (pra navegar na árvore).
+  const arvoreFiltrada = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    const passa = (n) => {
+      const marc = !!config[n.codigo]?.marcado;
+      if (filtro === 'config' && !marc) return false;
+      if (filtro === 'nao' && marc) return false;
+      if (termo && !`${n.codigo} ${nomeConta(n)}`.toLowerCase().includes(termo)) return false;
+      return true;
+    };
+    const filtra = (n) => {
+      const kids = n.children.map(filtra).filter(Boolean);
+      if (passa(n) || kids.length) return { ...n, children: kids };
+      return null;
+    };
+    return arvore.map(filtra).filter(Boolean);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arvore, config, busca, filtro]);
+
+  const autoOpen = busca.trim() !== '' || filtro !== 'todas';
+
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      const lista = Object.entries(config).filter(([, v]) => v?.marcado)
+        .map(([cod, v]) => ({ codigo: cod, nome: v.nome, adquirente: v.adquirente, bandeira: v.bandeira, modalidade: v.modalidade }));
+      await autosystemService.salvarContasCartaoRede(rede.id, lista);
+      showToast('success', `${lista.length} conta(s) de cartão salva(s)`);
+    } catch (e) { showToast('error', 'Erro ao salvar: ' + e.message); }
+    finally { setSalvando(false); }
+  };
+
+  const renderNos = (nos, depth) => nos.map(n => {
+    const cod = n.codigo;
+    const cfg = config[cod];
+    const marcado = !!cfg?.marcado;
+    const temFilhos = n.children.length > 0;
+    const aberto = autoOpen || expandidos.has(cod);
+    return (
+      <div key={cod}>
+        <div className={marcado ? 'bg-blue-50/40 dark:bg-blue-500/5' : ''}>
+          <div className="flex items-center gap-1.5 py-1.5 pr-3" style={{ paddingLeft: 8 + depth * 16 }}>
+            {temFilhos ? (
+              <button type="button" onClick={() => toggleExpand(cod)} className="p-0.5 text-gray-400 hover:text-gray-700 flex-shrink-0">
+                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${aberto ? 'rotate-90' : ''}`} />
+              </button>
+            ) : <span className="w-[18px] flex-shrink-0" />}
+            <input type="checkbox" checked={marcado} onChange={() => toggleMarcado(n)} className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 flex-shrink-0" />
+            <span className="font-mono text-[11px] text-gray-500 flex-shrink-0">{cod}</span>
+            <span className="text-[13px] text-gray-800 dark:text-gray-100 truncate">{nomeConta(n) || '—'}</span>
+          </div>
+          {marcado && (
+            <div className="flex flex-wrap gap-2 pb-2 pr-3" style={{ paddingLeft: 8 + depth * 16 + 44 }}>
+              <select value={cfg.adquirente} onChange={e => setCampo(cod, 'adquirente', e.target.value)}
+                className="h-8 rounded-lg border border-gray-200 dark:border-white/10 dark:bg-white/5 px-2 text-[12px] w-44">
+                <option value="">Adquirente…</option>
+                {catalogo.adquirentes.map(a => <option key={a.id} value={a.nome}>{a.nome}</option>)}
+                {cfg.adquirente && !catalogo.adquirentes.some(a => a.nome === cfg.adquirente) && <option value={cfg.adquirente}>{cfg.adquirente}</option>}
+              </select>
+              <select value={cfg.bandeira} onChange={e => setCampo(cod, 'bandeira', e.target.value)}
+                className="h-8 rounded-lg border border-gray-200 dark:border-white/10 dark:bg-white/5 px-2 text-[12px] w-40">
+                <option value="">Bandeira…</option>
+                {catalogo.bandeiras.map(b => <option key={b.id} value={b.nome}>{b.nome}</option>)}
+                {cfg.bandeira && !catalogo.bandeiras.some(b => b.nome === cfg.bandeira) && <option value={cfg.bandeira}>{cfg.bandeira}</option>}
+              </select>
+              <select value={cfg.modalidade} onChange={e => setCampo(cod, 'modalidade', e.target.value)}
+                className="h-8 rounded-lg border border-gray-200 dark:border-white/10 dark:bg-white/5 px-2 text-[12px] w-44">
+                <option value="">Modalidade…</option>
+                {catalogo.modalidades.map(m => <option key={m.id} value={m.nome}>{m.nome}</option>)}
+                {cfg.modalidade && !catalogo.modalidades.some(m => m.nome === cfg.modalidade) && <option value={cfg.modalidade}>{cfg.modalidade}</option>}
+              </select>
+            </div>
+          )}
+        </div>
+        {temFilhos && aberto && renderNos(n.children, depth + 1)}
+      </div>
+    );
+  });
+
+  if (loading) return <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>;
+  if (erro) return <p className="text-sm text-red-600 py-6 text-center">{erro}</p>;
+
+  const FILTROS = [
+    { key: 'todas', label: 'Todas' },
+    { key: 'config', label: `Configuradas (${qtdMarcadas})` },
+    { key: 'nao', label: 'Não configuradas' },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-gray-500">
+        Marque as contas do plano que representam <strong>cartão</strong>. Para cada uma, informe <strong>adquirente</strong>,
+        <strong> bandeira</strong> e <strong>modalidade</strong> — a conferência (movto × Equals) casa por esses campos + a
+        autorização (movto.documento) + o valor bruto.
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar conta por código ou nome..."
+            className="w-full h-9 pl-9 pr-3 rounded-lg border border-gray-200 dark:border-white/10 dark:bg-white/5 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        </div>
+        <div className="inline-flex items-center gap-0.5 bg-gray-100 dark:bg-white/5 rounded-lg p-0.5">
+          {FILTROS.map(f => (
+            <button key={f.key} type="button" onClick={() => setFiltro(f.key)}
+              className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                filtro === f.key ? 'bg-white dark:bg-white/10 text-blue-700 dark:text-blue-300 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}>{f.label}</button>
+          ))}
+        </div>
+        <button onClick={salvar} disabled={salvando}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-50">
+          {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Salvar
+        </button>
+      </div>
+
+      <div className="border border-gray-200 dark:border-white/10 rounded-xl max-h-[52vh] overflow-auto">
+        {arvoreFiltrada.length > 0
+          ? renderNos(arvoreFiltrada, 0)
+          : <p className="text-sm text-gray-400 py-6 text-center">Nenhuma conta encontrada.</p>}
+      </div>
+    </div>
   );
 }
 
