@@ -68,20 +68,34 @@ function normBandeira(s) { return semAcento(s).replace(/\s+/g, ' ').trim().toUpp
 
 // Normaliza modalidade por TIPO-BASE. No sistema não há separação fina: uma
 // conta é "crédito" ou "débito". A Equals detalha (Crédito à Vista, Pré-Pago
-// Crédito, Débito à Vista, Cartão de benefícios). Pré-pago = crédito. Assim o
-// que o sistema marca como crédito casa com "crédito à vista" e "pré-pago crédito".
+// Crédito, Débito à Vista, Cartão de benefícios). Pré-pago = crédito e
+// PARCELADO (loja/emissor) = crédito. Assim o que o sistema marca como crédito
+// casa com "crédito à vista", "pré-pago crédito" e "parcelado".
 function normModalidade(s) {
   const v = semAcento(s);
   if (/deb/.test(v)) return 'DEBITO';
-  if (/cred|pre.?pago/.test(v)) return 'CREDITO';
+  if (/cred|pre.?pago|parcel/.test(v)) return 'CREDITO';
   if (/benefic|vale|aliment|refei/.test(v)) return 'BENEFICIO';
   return normBandeira(s); // fallback: texto normalizado
 }
+
+// A modalidade da Equals indica venda parcelada? (Parcelado Loja/Emissor…)
+function textoIndicaParcelado(s) { return /parcel/.test(semAcento(s)); }
 
 // Autorização/NSU: só dígitos e letras, sem zeros à esquerda ("000123" == "123").
 function normAutorizacao(s) {
   const v = String(s || '').replace(/[^0-9a-zA-Z]/g, '').toUpperCase();
   return v.replace(/^0+(?=\d)/, '');
+}
+
+// O sistema fatia o cartão parcelado em N lançamentos e adiciona "/1", "/2"… ao
+// documento (autorização). Extrai a autorização-base e o nº da parcela.
+// Ex.: "327811/3" → { base: "327811", parcela: 3 }.
+function parseDocParcela(doc) {
+  const s = String(doc || '').trim();
+  const m = s.match(/^(.*)\/(\d{1,3})$/);
+  if (m && m[1]) return { base: m[1], parcela: Number(m[2]) };
+  return { base: s, parcela: null };
 }
 
 function adivinharColuna(headers, chaves) {
@@ -104,7 +118,7 @@ export default function BpoDiagnosticarCartoes() {
 
   const [csv, setCsv] = useState(null); // { nome, headers, rows }
   // Mapeamento de colunas. Chave: adquirente · bandeira · modalidade · autorização · valor (bruto).
-  const COLS_VAZIO = { adquirente: '', bandeira: '', modalidade: '', autorizacao: '', valor: '' };
+  const COLS_VAZIO = { adquirente: '', bandeira: '', modalidade: '', autorizacao: '', valor: '', parcelas: '' };
   const [cols, setCols] = useState(COLS_VAZIO);
   const fileRef = useRef(null);
 
@@ -164,6 +178,7 @@ export default function BpoDiagnosticarCartoes() {
           modalidade:  adivinharColuna(headers, ['modalidade', 'tipo', 'debito', 'credito']),
           autorizacao: adivinharColuna(headers, ['autorizacao', 'autorizac', 'codigo autorizacao']),
           valor:       adivinharColuna(headers, ['valor bruto', 'bruto', 'valor da venda', 'valor']),
+          parcelas:    adivinharColuna(headers, ['qtd parcela', 'qtde parcela', 'total parcela', 'num parcela', 'parcela']),
         });
         setError(null);
       } catch (err) { setError('Falha ao ler o CSV: ' + err.message); }
@@ -174,12 +189,13 @@ export default function BpoDiagnosticarCartoes() {
 
   // Transações da Equals (lista normalizada + chave de conferência)
   const equalsTx = useMemo(() => {
-    const { adquirente, bandeira, modalidade, autorizacao, valor } = cols;
+    const { adquirente, bandeira, modalidade, autorizacao, valor, parcelas } = cols;
     if (!csv || valor === '' || autorizacao === '') return null;
     const qi = adquirente === '' ? -1 : Number(adquirente);
     const bi = bandeira === '' ? -1 : Number(bandeira);
     const mi = modalidade === '' ? -1 : Number(modalidade);
     const ai = Number(autorizacao), vi = Number(valor);
+    const pi = parcelas === '' ? -1 : Number(parcelas);
     const mapeouMeta = qi >= 0 || bi >= 0 || mi >= 0;
     const ehVazio = s => !/[a-z0-9]/i.test(String(s || '')); // '', '-', '—' → vazio
     const lista = [];
@@ -193,7 +209,10 @@ export default function BpoDiagnosticarCartoes() {
       const adq = qi >= 0 ? normBandeira(r[qi]) : '';
       const band = bi >= 0 ? normBandeira(r[bi]) : '';
       const modal = mi >= 0 ? normModalidade(r[mi]) : '';
-      lista.push({ adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, valor: v, key: `${adq}|${band}|${modal}|${aut}|${v.toFixed(2)}` });
+      // Parcelado? Pela coluna de parcelas (>1) ou pelo texto da modalidade ("Parcelado…").
+      const nParc = pi >= 0 ? (parseInt(String(r[pi]).replace(/[^\d]/g, ''), 10) || 0) : 0;
+      const parceladoEquals = nParc > 1 || (mi >= 0 && textoIndicaParcelado(r[mi]));
+      lista.push({ adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, valor: v, parceladoEquals, parcelasEquals: nParc || null, key: `${adq}|${band}|${modal}|${aut}|${v.toFixed(2)}` });
     });
     const total = lista.reduce((s, t) => s + t.valor, 0);
     return { lista, total, ignoradas };
@@ -222,8 +241,9 @@ export default function BpoDiagnosticarCartoes() {
       );
 
       // 3) Cada lançamento vira uma transação do sistema (adquirente/bandeira/modalidade
-      //    da conta marcada; autorização = documento; valor = valor).
-      const sistemaTx = [];
+      //    da conta marcada; autorização = documento; valor = valor). O documento
+      //    do parcelado vem como "327811/1", "327811/2"… — guardamos a base e a parcela.
+      const sistemaRaw = [];
       let semDocumento = 0;
       (lancs || []).forEach(l => {
         const deb = String(l.debito_codigo ?? '').trim();
@@ -233,17 +253,42 @@ export default function BpoDiagnosticarCartoes() {
         // ...e a contrapartida (crédito) precisa ser conta de ativo (começa com "1").
         const cred = String(l.credito_codigo ?? '').trim();
         if (!cred.startsWith('1')) return;
-        const aut = normAutorizacao(l.documento);
+        const { base, parcela } = parseDocParcela(l.documento);
+        const aut = normAutorizacao(base);
         const valor = Number(l.valor) || 0;
         if (!aut) { semDocumento++; return; }
         const adq = normBandeira(cfg.adquirente || '');
         const band = normBandeira(cfg.bandeira || '');
         const modal = normModalidade(cfg.modalidade || '');
-        sistemaTx.push({
-          adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, valor,
+        sistemaRaw.push({
+          adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, parcela, valor,
           conta: cfg.codigo, contaNome: cfg.nome, data: l.data,
           documento: l.documento || '', obs: (l.obs || '').trim(), pessoa: l.pessoa_nome || '',
-          key: `${adq}|${band}|${modal}|${aut}|${valor.toFixed(2)}`,
+        });
+      });
+
+      // 3b) Consolida as parcelas: lançamentos com a MESMA base de autorização
+      //     (mesmo adquirente/bandeira/modalidade) viram UMA transação com o valor
+      //     somado. Assim "327811/1..3" (3×100) casa com a Equals "327811" (300).
+      const gruposSis = new Map();
+      sistemaRaw.forEach(t => {
+        const gk = `${t.adquirente}|${t.bandeira}|${t.modalidade}|${t.autorizacao}`;
+        const g = gruposSis.get(gk) || [];
+        g.push(t); gruposSis.set(gk, g);
+      });
+      const sistemaTx = [];
+      gruposSis.forEach(membros => {
+        const parcelado = membros.length > 1;
+        const valorTotal = membros.reduce((s, m) => s + m.valor, 0);
+        const f = membros[0];
+        sistemaTx.push({
+          adquirente: f.adquirente, bandeira: f.bandeira, modalidade: f.modalidade,
+          autorizacao: f.autorizacao, valor: valorTotal,
+          parcelas: membros.length, parceladoSistema: parcelado,
+          conta: f.conta, contaNome: f.contaNome, data: f.data,
+          documento: parcelado ? `${f.autorizacao} (${membros.length}x)` : (f.documento || ''),
+          obs: f.obs, pessoa: f.pessoa, membros,
+          key: `${f.adquirente}|${f.bandeira}|${f.modalidade}|${f.autorizacao}|${valorTotal.toFixed(2)}`,
         });
       });
 
@@ -274,10 +319,24 @@ export default function BpoDiagnosticarCartoes() {
       const soSistemaFinal = [];
       idxFraca.forEach(arr => arr.forEach(t => soSistemaFinal.push(t)));
 
+      // 6) ALERTAS de parcelamento: onde o sistema fatiou (parceladoSistema) mas a
+      //    Equals NÃO indica parcelamento → o sistema parcelou um cartão que não é
+      //    parcelado. (E o inverso: Equals parcelada mas o sistema não fatiou.)
+      const alertasParcelamento = [];
+      [...conciliadas, ...provaveis].forEach(par => {
+        const { sistema: s, equals: e } = par;
+        if (s.parceladoSistema && !e.parceladoEquals) {
+          alertasParcelamento.push({ tipo: 'sistema-parcelou', equals: e, sistema: s });
+        } else if (!s.parceladoSistema && e.parceladoEquals) {
+          alertasParcelamento.push({ tipo: 'equals-parcelou', equals: e, sistema: s });
+        }
+      });
+
       setResultado({
         totalEquals: equalsTx.lista.length,
         totalSistema: sistemaTx.length,
         conciliadas, provaveis, soEquals: soEqualsFinal, soSistema: soSistemaFinal, semDocumento,
+        alertasParcelamento,
         valorEquals: equalsTx.total,
         valorSistema: sistemaTx.reduce((s, t) => s + t.valor, 0),
       });
@@ -293,6 +352,7 @@ export default function BpoDiagnosticarCartoes() {
     { campo: 'modalidade', label: 'Modalidade (déb/créd)', cor: 'bg-amber-50 text-amber-700' },
     { campo: 'autorizacao', label: 'Autorização *', cor: 'bg-blue-50 text-blue-700' },
     { campo: 'valor', label: 'Valor bruto *', cor: 'bg-emerald-50 text-emerald-700' },
+    { campo: 'parcelas', label: 'Parcelas', cor: 'bg-indigo-50 text-indigo-700' },
   ];
   const corColuna = (i) => {
     const f = MAP_FIELDS.find(x => String(cols[x.campo]) === String(i));
@@ -459,6 +519,7 @@ export default function BpoDiagnosticarCartoes() {
           </div>
 
           <AjustesSugeridos resultado={resultado} />
+          <AlertasParcelamento itens={resultado.alertasParcelamento || []} />
           <ListaProvaveis itens={resultado.provaveis || []} />
           <ListaDivergencia titulo="Só na Equals (não achou no sistema)" itens={resultado.soEquals} cor="rose" />
           <ListaDivergencia titulo="Só no sistema (não achou na Equals)" itens={resultado.soSistema} cor="amber" />
@@ -511,6 +572,45 @@ function AjustesSugeridos({ resultado }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function AlertasParcelamento({ itens }) {
+  const [aberto, setAberto] = useState(true);
+  if (!itens || itens.length === 0) return null;
+  return (
+    <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
+      <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50/50 text-left">
+        <span className="text-[12.5px] font-semibold text-orange-700">Divergências de parcelamento <span className="text-gray-400">({itens.length})</span></span>
+        <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${aberto ? 'rotate-90' : ''}`} />
+      </button>
+      {aberto && (
+        <div className="divide-y divide-gray-50 border-t border-orange-100">
+          {itens.map((a, i) => (
+            <div key={i} className="px-4 py-2.5 flex items-start gap-3">
+              {a.tipo === 'sistema-parcelou' ? (
+                <>
+                  <span className="mt-0.5 inline-flex items-center rounded-full bg-orange-100 text-orange-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Sistema parcelou</span>
+                  <p className="text-[12.5px] text-gray-700 leading-relaxed">
+                    Conta <strong>{a.sistema.conta}</strong> ({a.equals.adquirente}/{a.equals.bandeira}/{a.equals.modalidade}) · autorização <span className="font-mono">{a.sistema.autorizacao}</span> · {formatCurrency(a.sistema.valor)}:
+                    o sistema fatiou em <strong>{a.sistema.parcelas}x</strong> ({a.sistema.membros.map(m => m.documento).join(', ')}), mas na Equals <strong>não é parcelado</strong>. → Verificar: lançamento à vista foi parcelado indevidamente.
+                    {a.sistema.pessoa && <span className="text-gray-400"> · {a.sistema.pessoa}</span>}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <span className="mt-0.5 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Equals parcelada</span>
+                  <p className="text-[12.5px] text-gray-700 leading-relaxed">
+                    Conta <strong>{a.sistema.conta}</strong> ({a.equals.adquirente}/{a.equals.bandeira}/{a.equals.modalidade}) · autorização <span className="font-mono">{a.sistema.autorizacao}</span> · {formatCurrency(a.equals.valor)}:
+                    na Equals é <strong>parcelada{a.equals.parcelasEquals ? ` (${a.equals.parcelasEquals}x)` : ''}</strong>, mas o sistema lançou em parcela única. → Verificar o parcelamento no sistema.
+                  </p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
