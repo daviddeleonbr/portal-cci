@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { hidratarRAM } from './services/webpostoCacheV3'
-import NovaVersaoToast from './components/ui/NovaVersaoToast'
 import { iniciarAtualizacaoPwa } from './pwaUpdate'
 
 // Registra o service worker e passa a checar deploys novos periodicamente.
@@ -18,7 +17,6 @@ function montar() {
   createRoot(document.getElementById('root')).render(
     <StrictMode>
       <App />
-      <NovaVersaoToast />
     </StrictMode>,
   );
 }

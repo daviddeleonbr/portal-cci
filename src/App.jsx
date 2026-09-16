@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import NovaVersaoToast from './components/ui/NovaVersaoToast';
 
 // Landing
 import LandingPage from './pages/LandingPage';
@@ -301,6 +302,9 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {/* Toast "Nova versão disponível" (PWA) — dentro do Router pra ocultar
+          em login, página inicial, BPO e política de privacidade. */}
+      <NovaVersaoToast />
     </BrowserRouter>
   );
 }

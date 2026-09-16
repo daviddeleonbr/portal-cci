@@ -3,12 +3,27 @@
 // precisar de logout/login. Escuta o evento `pwa:nova-versao` disparado em
 // main.jsx (via iniciarAtualizacaoPwa).
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
 import { aplicarAtualizacao } from '../../pwaUpdate';
+
+// Onde o toast NÃO deve aparecer: login (admin/cliente), página inicial,
+// landing do BPO Financeiro e política de privacidade.
+function rotaOculta(pathname) {
+  const p = pathname || '';
+  return (
+    p === '/' ||                        // página inicial (landing)
+    p === '/admin' ||                   // login admin
+    p.startsWith('/cliente/login') ||   // login cliente
+    p === '/bpo-financeiro' ||          // landing do BPO Financeiro
+    p === '/politica-privacidade'       // política de privacidade
+  );
+}
 
 export default function NovaVersaoToast() {
   const [visivel, setVisivel] = useState(false);
   const [aplicando, setAplicando] = useState(false);
+  const { pathname } = useLocation();
 
   useEffect(() => {
     const onNova = () => setVisivel(true);
@@ -16,7 +31,7 @@ export default function NovaVersaoToast() {
     return () => window.removeEventListener('pwa:nova-versao', onNova);
   }, []);
 
-  if (!visivel) return null;
+  if (!visivel || rotaOculta(pathname)) return null;
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-2rem)] max-w-sm">
