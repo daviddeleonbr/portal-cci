@@ -47,6 +47,7 @@ function json(body: unknown, status = 200) {
 const TEXT_COLUMNS = new Set([
   'motivo_nome', 'debito_nome', 'credito_nome',
   'pessoa_nome', 'documento', 'obs',
+  'usuario', 'usuario_nome',
 ]);
 
 serve(async (req) => {
@@ -148,12 +149,17 @@ serve(async (req) => {
         convert_to(coalesce(p.nome,  ''), 'LATIN1')           as pessoa_nome,
         convert_to(coalesce(m.documento::text, ''), 'LATIN1') as documento,
         convert_to(coalesce(m.obs::text, ''),       'LATIN1') as obs,
+        -- Funcionário: quem lançou (movto.usuario = login) → usuario → pessoa.nome
+        convert_to(coalesce(m.usuario::text, ''), 'LATIN1')   as usuario,
+        convert_to(coalesce(pf.nome::text, ''),   'LATIN1')   as usuario_nome,
         m.grid                                                as lancamento_id
       from movto m
       left join conta         cd on cd.codigo = m.conta_debitar
       left join conta         cc on cc.codigo = m.conta_creditar
       left join pessoa        p  on p.grid    = m.pessoa
       left join motivo_movto  mm on mm.grid   = m.motivo
+      left join usuario       u  on u.nome    = m.usuario
+      left join pessoa        pf on pf.grid   = u.pessoa
       where m.empresa = any($1::bigint[])
         and m.data between $2 and $3
         and (m.conta_debitar  = any($4::text[])

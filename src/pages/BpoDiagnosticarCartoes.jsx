@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Stethoscope, Loader2, AlertCircle, Building2, UploadCloud, FileText,
-  CheckCircle2, XCircle, RefreshCw, X, ChevronRight,
+  CheckCircle2, XCircle, RefreshCw, X, ChevronRight, User,
 } from 'lucide-react';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
@@ -264,6 +264,7 @@ export default function BpoDiagnosticarCartoes() {
           adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, parcela, valor,
           conta: cfg.codigo, contaNome: cfg.nome, data: l.data,
           documento: l.documento || '', obs: (l.obs || '').trim(), pessoa: l.pessoa_nome || '',
+          funcionario: (l.usuario_nome || '').trim(), usuario: (l.usuario || '').trim(),
         });
       });
 
@@ -281,6 +282,8 @@ export default function BpoDiagnosticarCartoes() {
         const parcelado = membros.length > 1;
         const valorTotal = membros.reduce((s, m) => s + m.valor, 0);
         const f = membros[0];
+        // Funcionário(s) que lançaram (normalmente o mesmo em todas as parcelas).
+        const funcs = [...new Set(membros.map(m => m.funcionario).filter(Boolean))];
         sistemaTx.push({
           adquirente: f.adquirente, bandeira: f.bandeira, modalidade: f.modalidade,
           autorizacao: f.autorizacao, valor: valorTotal,
@@ -288,6 +291,7 @@ export default function BpoDiagnosticarCartoes() {
           conta: f.conta, contaNome: f.contaNome, data: f.data,
           documento: parcelado ? `${f.autorizacao} (${membros.length}x)` : (f.documento || ''),
           obs: f.obs, pessoa: f.pessoa, membros,
+          funcionario: funcs.join(', '), usuario: f.usuario,
           key: `${f.adquirente}|${f.bandeira}|${f.modalidade}|${f.autorizacao}|${valorTotal.toFixed(2)}`,
         });
       });
@@ -535,43 +539,97 @@ function AjustesSugeridos({ resultado }) {
   const prov = resultado.provaveis || [];
   const soEq = resultado.soEquals || [];
   const soSis = resultado.soSistema || [];
-  if (prov.length === 0 && soEq.length === 0 && soSis.length === 0) {
+  const total = prov.length + soEq.length + soSis.length;
+  if (total === 0) {
     return <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 font-medium">✓ Tudo conciliado — nenhum ajuste necessário.</div>;
   }
+
+  // Normaliza todos os ajustes num item único e agrupa por funcionário (caixa).
+  const itens = [
+    ...prov.map(p => ({ tipo: 'prov', func: p.sistema.funcionario || '', valor: p.equals.valor || 0, p })),
+    ...soSis.map(s => ({ tipo: 'soSis', func: s.funcionario || '', valor: s.valor || 0, s })),
+    ...soEq.map(e => ({ tipo: 'soEq', func: '', valor: e.valor || 0, e })),
+  ];
+  const mapa = new Map();
+  itens.forEach(it => {
+    const k = it.func || '__sem__';
+    const g = mapa.get(k) || { func: it.func, itens: [], total: 0 };
+    g.itens.push(it); g.total += it.valor;
+    mapa.set(k, g);
+  });
+  const grupos = [...mapa.values()].sort((a, b) => {
+    if (!a.func && b.func) return 1;          // "Sem funcionário" por último
+    if (a.func && !b.func) return -1;
+    return b.itens.length - a.itens.length;   // mais ajustes primeiro
+  });
+
   return (
     <div className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-        <h3 className="text-[13px] font-semibold text-gray-800">Ajustes sugeridos no sistema <span className="text-gray-400">({prov.length + soEq.length + soSis.length})</span></h3>
+      <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between gap-2">
+        <h3 className="text-[13px] font-semibold text-gray-800">Ajustes sugeridos no sistema <span className="text-gray-400">({total})</span></h3>
+        <span className="text-[11px] text-gray-400">{grupos.length} funcionário(s)</span>
       </div>
-      <div className="divide-y divide-gray-50">
-        {prov.map((p, i) => (
-          <div key={'p' + i} className="px-4 py-2.5 flex items-start gap-3">
-            <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Corrigir autorização</span>
-            <p className="text-[12.5px] text-gray-700 leading-relaxed">
-              Conta <strong>{p.sistema.conta}</strong> em <strong>{fmtDataBR(p.sistema.data)}</strong> ({p.equals.adquirente}/{p.equals.bandeira}/{p.equals.modalidade}, {formatCurrency(p.equals.valor)}):
-              autorização no sistema <span className="font-mono text-rose-700">{p.sistema.autorizacao}</span> ≠ Equals <span className="font-mono text-emerald-700">{p.equals.autorizacao}</span>. → Corrigir a autorização no sistema.
-              {p.sistema.pessoa && <span className="text-gray-400"> · {p.sistema.pessoa}</span>}
-            </p>
-          </div>
-        ))}
-        {soEq.map((e, i) => (
-          <div key={'e' + i} className="px-4 py-2.5 flex items-start gap-3">
-            <span className="mt-0.5 inline-flex items-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Falta no sistema</span>
-            <p className="text-[12.5px] text-gray-700 leading-relaxed">
-              Transação na Equals sem correspondência: <strong>{e.adquirente}/{e.bandeira}/{e.modalidade}</strong> · autorização <span className="font-mono">{e.autorizacao}</span> · {formatCurrency(e.valor)}. → Lançar no sistema.
-            </p>
-          </div>
-        ))}
-        {soSis.map((s, i) => (
-          <div key={'s' + i} className="px-4 py-2.5 flex items-start gap-3">
-            <span className="mt-0.5 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Revisar no sistema</span>
-            <p className="text-[12.5px] text-gray-700 leading-relaxed">
-              Lançamento no sistema (conta <strong>{s.conta}</strong>, {fmtDataBR(s.data)}) sem correspondência na Equals: autorização <span className="font-mono">{s.autorizacao}</span> · {formatCurrency(s.valor)}. → Revisar (valor/autorização errada, duplicidade ou lançamento indevido).
-              {s.pessoa && <span className="text-gray-400"> · {s.pessoa}</span>}
-            </p>
-          </div>
-        ))}
+      <div className="divide-y divide-gray-100">
+        {grupos.map((g, gi) => <GrupoFuncionarioAjustes key={gi} grupo={g} defaultOpen={grupos.length <= 3} />)}
       </div>
+    </div>
+  );
+}
+
+function GrupoFuncionarioAjustes({ grupo, defaultOpen }) {
+  const [aberto, setAberto] = useState(defaultOpen);
+  const nome = grupo.func || 'Sem funcionário (só na Equals)';
+  return (
+    <div>
+      <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 text-left gap-3">
+        <span className="flex items-center gap-2 min-w-0">
+          <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform flex-shrink-0 ${aberto ? 'rotate-90' : ''}`} />
+          <User className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
+          <span className="text-[12.5px] font-semibold text-gray-800 truncate">{nome}</span>
+          <span className="text-[11px] text-gray-400 flex-shrink-0">({grupo.itens.length})</span>
+        </span>
+        <span className="text-[11.5px] tabular-nums text-gray-500 flex-shrink-0">{formatCurrency(grupo.total)}</span>
+      </button>
+      {aberto && (
+        <div className="divide-y divide-gray-50 bg-gray-50/30 border-t border-gray-50">
+          {grupo.itens.map((it, i) => <LinhaAjuste key={i} item={it} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinhaAjuste({ item }) {
+  if (item.tipo === 'prov') {
+    const p = item.p;
+    return (
+      <div className="pl-11 pr-4 py-2 flex items-start gap-3">
+        <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Corrigir autorização</span>
+        <p className="text-[12.5px] text-gray-700 leading-relaxed">
+          Conta <strong>{p.sistema.conta}</strong> em <strong>{fmtDataBR(p.sistema.data)}</strong> ({p.equals.adquirente}/{p.equals.bandeira}/{p.equals.modalidade}, {formatCurrency(p.equals.valor)}):
+          autorização no sistema <span className="font-mono text-rose-700">{p.sistema.autorizacao}</span> ≠ Equals <span className="font-mono text-emerald-700">{p.equals.autorizacao}</span>. → Corrigir a autorização no sistema.
+        </p>
+      </div>
+    );
+  }
+  if (item.tipo === 'soSis') {
+    const s = item.s;
+    return (
+      <div className="pl-11 pr-4 py-2 flex items-start gap-3">
+        <span className="mt-0.5 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Revisar no sistema</span>
+        <p className="text-[12.5px] text-gray-700 leading-relaxed">
+          Lançamento no sistema (conta <strong>{s.conta}</strong>, {fmtDataBR(s.data)}) sem correspondência na Equals: autorização <span className="font-mono">{s.autorizacao}</span> · {formatCurrency(s.valor)}. → Revisar (valor/autorização errada, duplicidade ou lançamento indevido).
+        </p>
+      </div>
+    );
+  }
+  const e = item.e;
+  return (
+    <div className="pl-11 pr-4 py-2 flex items-start gap-3">
+      <span className="mt-0.5 inline-flex items-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Falta no sistema</span>
+      <p className="text-[12.5px] text-gray-700 leading-relaxed">
+        Transação na Equals sem correspondência: <strong>{e.adquirente}/{e.bandeira}/{e.modalidade}</strong> · autorização <span className="font-mono">{e.autorizacao}</span> · {formatCurrency(e.valor)}. → Lançar no sistema.
+      </p>
     </div>
   );
 }
@@ -595,7 +653,7 @@ function AlertasParcelamento({ itens }) {
                   <p className="text-[12.5px] text-gray-700 leading-relaxed">
                     Conta <strong>{a.sistema.conta}</strong> ({a.equals.adquirente}/{a.equals.bandeira}/{a.equals.modalidade}) · autorização <span className="font-mono">{a.sistema.autorizacao}</span> · {formatCurrency(a.sistema.valor)}:
                     o sistema fatiou em <strong>{a.sistema.parcelas}x</strong> ({a.sistema.membros.map(m => m.documento).join(', ')}), mas na Equals <strong>não é parcelado</strong>. → Verificar: lançamento à vista foi parcelado indevidamente.
-                    {a.sistema.pessoa && <span className="text-gray-400"> · {a.sistema.pessoa}</span>}
+                    {a.sistema.funcionario && <span className="text-indigo-600 font-medium"> · caixa de {a.sistema.funcionario}</span>}
                   </p>
                 </>
               ) : (
@@ -604,6 +662,7 @@ function AlertasParcelamento({ itens }) {
                   <p className="text-[12.5px] text-gray-700 leading-relaxed">
                     Conta <strong>{a.sistema.conta}</strong> ({a.equals.adquirente}/{a.equals.bandeira}/{a.equals.modalidade}) · autorização <span className="font-mono">{a.sistema.autorizacao}</span> · {formatCurrency(a.equals.valor)}:
                     na Equals é <strong>parcelada{a.equals.parcelasEquals ? ` (${a.equals.parcelasEquals}x)` : ''}</strong>, mas o sistema lançou em parcela única. → Verificar o parcelamento no sistema.
+                    {a.sistema.funcionario && <span className="text-indigo-600 font-medium"> · caixa de {a.sistema.funcionario}</span>}
                   </p>
                 </>
               )}
@@ -634,6 +693,7 @@ function ListaProvaveis({ itens }) {
                 <th className="text-left px-3 py-1.5 font-semibold">Modalidade</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Autorização (Equals)</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Autorização (Sistema)</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Funcionário</th>
                 <th className="text-right px-3 py-1.5 font-semibold">Valor</th>
               </tr>
             </thead>
@@ -645,6 +705,7 @@ function ListaProvaveis({ itens }) {
                   <td className="px-3 py-1 text-gray-700">{p.equals.modalidade || '—'}</td>
                   <td className="px-3 py-1 font-mono text-emerald-700">{p.equals.autorizacao}</td>
                   <td className="px-3 py-1 font-mono text-rose-700">{p.sistema.autorizacao}{p.sistema.conta ? <span className="text-gray-400"> · conta {p.sistema.conta}</span> : null}</td>
+                  <td className="px-3 py-1 text-indigo-700">{p.sistema.funcionario || '—'}</td>
                   <td className="px-3 py-1 text-right tabular-nums text-gray-700">{formatCurrency(p.equals.valor)}</td>
                 </tr>
               ))}
@@ -660,6 +721,7 @@ function ListaDivergencia({ titulo, itens, cor }) {
   const [aberto, setAberto] = useState(false);
   if (!itens || itens.length === 0) return null;
   const corTxt = cor === 'rose' ? 'text-rose-700' : 'text-amber-700';
+  const temFunc = itens.some(t => t.funcionario);
   return (
     <div className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
       <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 text-left">
@@ -675,6 +737,7 @@ function ListaDivergencia({ titulo, itens, cor }) {
                 <th className="text-left px-3 py-1.5 font-semibold">Bandeira</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Modalidade</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Autorização</th>
+                {temFunc && <th className="text-left px-3 py-1.5 font-semibold">Funcionário</th>}
                 <th className="text-right px-3 py-1.5 font-semibold">Valor</th>
               </tr>
             </thead>
@@ -684,7 +747,8 @@ function ListaDivergencia({ titulo, itens, cor }) {
                   <td className="px-3 py-1 text-gray-700">{t.adquirente || '—'}</td>
                   <td className="px-3 py-1 text-gray-700">{t.bandeira || '—'}</td>
                   <td className="px-3 py-1 text-gray-700">{t.modalidade || '—'}</td>
-                  <td className="px-3 py-1 font-mono text-gray-700">{t.autorizacao || '—'}</td>
+                  <td className="px-3 py-1 font-mono text-gray-700">{t.autorizacao || '—'}{t.conta ? <span className="text-gray-400"> · conta {t.conta}</span> : null}</td>
+                  {temFunc && <td className="px-3 py-1 text-indigo-700">{t.funcionario || '—'}</td>}
                   <td className="px-3 py-1 text-right tabular-nums text-gray-700">{formatCurrency(t.valor)}</td>
                 </tr>
               ))}
