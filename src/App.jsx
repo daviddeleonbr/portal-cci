@@ -41,7 +41,6 @@ import CciFornecedores from './pages/CciFornecedores';
 import CciContasPagar from './pages/CciContasPagar';
 import CciMotivos from './pages/CciMotivos';
 import CciUsuarios from './pages/CciUsuarios';
-import BpoConciliacaoBancaria from './pages/BpoConciliacaoBancaria';
 import BpoConciliacaoCaixas from './pages/BpoConciliacaoCaixas';
 import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
 import BpoAlteracoesCaixas from './pages/BpoAlteracoesCaixas';
@@ -205,10 +204,8 @@ export default function App() {
           <Route path="/admin/relatorios-cliente/:clienteId/evolucao" element={<RelatorioEvolucaoMensal />} />
 
           {/* BPO */}
-          <Route path="/admin/bpo/conciliacao-bancaria" element={<BpoConciliacaoBancaria />} />
           <Route path="/admin/bpo/conciliacao-caixas" element={<BpoConciliacaoCaixas />} />
           <Route path="/admin/bpo/caixa-administrativo" element={<BpoCaixaAdministrativo />} />
-          <Route path="/admin/bpo/validacao-ofx" element={<Navigate to="/admin/bpo/conciliacao-bancaria?aba=ofx" replace />} />
           <Route path="/admin/bpo/alteracoes-caixas" element={<BpoAlteracoesCaixas />} />
 
           {/* Relatórios de BI (Power BI) */}

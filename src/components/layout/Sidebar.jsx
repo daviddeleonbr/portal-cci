@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronLeft, ChevronRight, LogOut,
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
-  Landmark, Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
+  Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
   MessageCircle, RefreshCw, Eye, AlertTriangle,
   Activity, FileSpreadsheet, Receipt, FileSignature, FileDown,
 } from 'lucide-react';
@@ -61,7 +61,6 @@ const navigationAll = [
   {
     section: 'BPO',
     items: [
-      { name: 'Conciliação Bancária', href: '/admin/bpo/conciliacao-bancaria', icon: Landmark, permissao: 'conciliacao_bancaria' },
       { name: 'Conciliação de Caixas', href: '/admin/bpo/conciliacao-caixas', icon: Coins, permissao: 'conciliacao_caixas' },
       { name: 'Caixa Administrativo', href: '/admin/bpo/caixa-administrativo', icon: WalletCards, permissao: 'caixa_administrativo' },
       { name: 'Manifestação de Notas', href: '/admin/fiscal/manifestacao', icon: FileSpreadsheet, permissao: 'notas_fiscais' },
