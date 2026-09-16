@@ -12,7 +12,7 @@
 // Todos os parâmetros (janela, lead time, meta de cobertura, dias-morto,
 // limites ABC) são configuráveis via modal.
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Boxes, Loader2, AlertCircle, Search, RefreshCw, ChevronRight,
@@ -138,6 +138,7 @@ export default function ClienteEstoques() {
   const [modalParams, setModalParams] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroAbc, setFiltroAbc] = useState('todos');
+  const [filtroGrupos, setFiltroGrupos] = useState(() => new Set()); // vazio = todos
   const [ordenacao, setOrdenacao] = useState({ campo: 'valor_imobilizado', dir: 'desc' });
   const [gruposClassificados, setGruposClassificados] = useState([]);
   const [categoriaAba, setCategoriaAba] = useState('automotivos');
@@ -145,6 +146,7 @@ export default function ClienteEstoques() {
   const [modalCompras, setModalCompras] = useState(false);
   const [qtdAjustada, setQtdAjustada] = useState(() => new Map()); // chave produto → qtd manual
   const [comprasFiltroPrioridade, setComprasFiltroPrioridade] = useState('todos');
+  const [comprasFiltroGrupos, setComprasFiltroGrupos] = useState(() => new Set()); // vazio = todos
   const [comprasBusca, setComprasBusca] = useState('');
   const [comprasMinSugestao, setComprasMinSugestao] = useState(0);
   const [comprasMinVendaDia, setComprasMinVendaDia] = useState(0);
@@ -324,12 +326,38 @@ export default function ClienteEstoques() {
     return subset;
   }, [analisados, categoriaAba, params.abcA, params.abcB]);
 
+  // ─── Grupos de produto disponíveis na categoria ativa ──
+  const gruposDisponiveis = useMemo(() => {
+    const map = new Map();
+    analisadosCategoria.forEach(p => {
+      const g = p.grupo || 'Sem grupo';
+      map.set(g, (map.get(g) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([grupo, qtd]) => ({ grupo, qtd }))
+      .sort((a, b) => a.grupo.localeCompare(b.grupo, 'pt-BR'));
+  }, [analisadosCategoria]);
+
+  // Seleção efetiva = só os grupos que existem na categoria ativa (descarta
+  // seleções de outra aba). Vazio → mostra todos.
+  const filtroGruposEfetivos = useMemo(() => {
+    const disp = new Set(gruposDisponiveis.map(g => g.grupo));
+    return new Set([...filtroGrupos].filter(g => disp.has(g)));
+  }, [filtroGrupos, gruposDisponiveis]);
+
+  const toggleGrupo = useCallback((g) => setFiltroGrupos(prev => {
+    const n = new Set(prev);
+    if (n.has(g)) n.delete(g); else n.add(g);
+    return n;
+  }), []);
+
   // ─── Filtros + busca + ordenação ────────────────────────
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
     let lista = analisadosCategoria.filter(p => {
       if (filtroStatus !== 'todos' && p.status !== filtroStatus) return false;
       if (filtroAbc !== 'todos' && p.abc !== filtroAbc) return false;
+      if (filtroGruposEfetivos.size > 0 && !filtroGruposEfetivos.has(p.grupo || 'Sem grupo')) return false;
       if (!q) return true;
       return (
         String(p.produto_nome).toLowerCase().includes(q) ||
@@ -347,7 +375,7 @@ export default function ClienteEstoques() {
       return sign * (Number(va) - Number(vb));
     });
     return lista;
-  }, [analisadosCategoria, busca, filtroStatus, filtroAbc, ordenacao]);
+  }, [analisadosCategoria, busca, filtroStatus, filtroAbc, filtroGruposEfetivos, ordenacao]);
 
   // ─── KPIs executivos (sobre a CATEGORIA ativa) ──────────
   const kpis = useMemo(() => {
@@ -455,6 +483,30 @@ export default function ClienteEstoques() {
     return p.sugestaoCompraArred;
   }, [qtdAjustada]);
 
+  // Grupos de produto disponíveis no plano de compras (categoria ativa).
+  const comprasGruposDisponiveis = useMemo(() => {
+    const map = new Map();
+    produtosCompra.forEach(p => {
+      const g = p.grupo || 'Sem grupo';
+      map.set(g, (map.get(g) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([grupo, qtd]) => ({ grupo, qtd }))
+      .sort((a, b) => a.grupo.localeCompare(b.grupo, 'pt-BR'));
+  }, [produtosCompra]);
+
+  // Seleção efetiva = só grupos que existem entre os candidatos da categoria.
+  const comprasFiltroGruposEfetivos = useMemo(() => {
+    const disp = new Set(comprasGruposDisponiveis.map(g => g.grupo));
+    return new Set([...comprasFiltroGrupos].filter(g => disp.has(g)));
+  }, [comprasFiltroGrupos, comprasGruposDisponiveis]);
+
+  const toggleCompraGrupo = useCallback((g) => setComprasFiltroGrupos(prev => {
+    const n = new Set(prev);
+    if (n.has(g)) n.delete(g); else n.add(g);
+    return n;
+  }), []);
+
   const produtosCompraFiltrados = useMemo(() => {
     const q = comprasBusca.trim().toLowerCase();
     const min = Number(comprasMinSugestao) || 0;
@@ -462,6 +514,7 @@ export default function ClienteEstoques() {
     return produtosCompra.filter(p => {
       if (comprasFiltroPrioridade === 'urgentes' && p.status !== 'ruptura' && p.status !== 'critico') return false;
       if (comprasFiltroPrioridade === 'baixo' && p.status !== 'baixo') return false;
+      if (comprasFiltroGruposEfetivos.size > 0 && !comprasFiltroGruposEfetivos.has(p.grupo || 'Sem grupo')) return false;
       if (min > 0 && p.sugestaoCompraArred <= min) return false;
       if (minVd > 0 && p.vendaDiaria <= minVd) return false;
       if (!q) return true;
@@ -471,7 +524,7 @@ export default function ClienteEstoques() {
         String(p.subgrupo).toLowerCase().includes(q)
       );
     });
-  }, [produtosCompra, comprasFiltroPrioridade, comprasBusca, comprasMinSugestao, comprasMinVendaDia]);
+  }, [produtosCompra, comprasFiltroPrioridade, comprasFiltroGruposEfetivos, comprasBusca, comprasMinSugestao, comprasMinVendaDia]);
 
   // Totais do plano (sempre sobre TODA a lista, não apenas o filtro visual).
   const totalCompras = useMemo(() => {
@@ -760,6 +813,12 @@ export default function ClienteEstoques() {
           <option value="B">Classe B</option>
           <option value="C">Classe C</option>
         </select>
+        <FiltroGruposMulti
+          grupos={gruposDisponiveis}
+          selecionados={filtroGruposEfetivos}
+          onToggle={toggleGrupo}
+          onLimpar={() => setFiltroGrupos(new Set())}
+        />
       </div>
 
       {/* ────────── ERROR / LOADING ────────── */}
@@ -884,6 +943,10 @@ export default function ClienteEstoques() {
           ajustes={qtdAjustada}
           filtroPrioridade={comprasFiltroPrioridade}
           setFiltroPrioridade={setComprasFiltroPrioridade}
+          filtroGrupos={comprasFiltroGruposEfetivos}
+          onToggleGrupo={toggleCompraGrupo}
+          onLimparGrupos={() => setComprasFiltroGrupos(new Set())}
+          gruposDisponiveis={comprasGruposDisponiveis}
           busca={comprasBusca}
           setBusca={setComprasBusca}
           minSugestao={comprasMinSugestao}
@@ -899,6 +962,59 @@ export default function ClienteEstoques() {
 }
 
 // ─── Subcomponentes ─────────────────────────────────────────
+
+// Filtro de grupos com MULTISSELEÇÃO (checkboxes num dropdown).
+// `selecionados` é um Set; vazio = todos os grupos.
+function FiltroGruposMulti({ grupos, selecionados, onToggle, onLimpar }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!aberto) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [aberto]);
+
+  const n = selecionados.size;
+  const label = n === 0 ? 'Todos os grupos' : n === 1 ? [...selecionados][0] : `${n} grupos`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setAberto(v => !v)}
+        className={`h-9 max-w-[240px] inline-flex items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium ${
+          n > 0
+            ? 'border-blue-300 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300'
+            : 'border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200'
+        }`}>
+        <Layers className="h-3.5 w-3.5 flex-shrink-0" />
+        <span className="truncate">{label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+      </button>
+      {aberto && (
+        <div className="absolute right-0 z-30 mt-1 w-64 max-h-72 overflow-auto rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 shadow-lg p-1">
+          <div className="flex items-center justify-between px-2 py-1 sticky top-0 bg-white dark:bg-slate-800">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Grupos de produto</span>
+            {n > 0 && (
+              <button type="button" onClick={onLimpar} className="text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline">Limpar</button>
+            )}
+          </div>
+          {grupos.length === 0 && <p className="px-2 py-2 text-xs text-gray-400">Nenhum grupo.</p>}
+          {grupos.map(g => {
+            const checked = selecionados.has(g.grupo);
+            return (
+              <label key={g.grupo} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-white/[0.04] cursor-pointer text-xs">
+                <input type="checkbox" checked={checked} onChange={() => onToggle(g.grupo)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <span className="flex-1 truncate text-gray-700 dark:text-gray-200" title={g.grupo}>{g.grupo}</span>
+                <span className="text-[10.5px] text-gray-400 tabular-nums">{fmtInt(g.qtd)}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Badge ABC reutilizável — usa flex pra centralizar o glyph perfeitamente
 // na horizontal e vertical. Tamanhos: 'sm' (linhas de alerta) e 'md' (tabela).
@@ -1074,6 +1190,7 @@ function ModalParams({ open, params, onSave, onCancel }) {
 function PlanoComprasContent({
   produtos, totalGeral, totalCompras, qtdEfetiva, ajustarQtd, restaurarSugestao,
   limparAjustes, ajustes, filtroPrioridade, setFiltroPrioridade,
+  filtroGrupos, onToggleGrupo, onLimparGrupos, gruposDisponiveis,
   busca, setBusca, minSugestao, setMinSugestao,
   minVendaDia, setMinVendaDia, onExport, params,
 }) {
@@ -1142,6 +1259,12 @@ function PlanoComprasContent({
             <option value="urgentes">Apenas urgentes (ruptura + crítico)</option>
             <option value="baixo">Apenas cobertura baixa</option>
           </select>
+          <FiltroGruposMulti
+            grupos={gruposDisponiveis}
+            selecionados={filtroGrupos}
+            onToggle={onToggleGrupo}
+            onLimpar={onLimparGrupos}
+          />
           <FiltroMinNumerico
             label="Sugestão >"
             unidade="un"
