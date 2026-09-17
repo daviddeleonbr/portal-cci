@@ -145,7 +145,7 @@ export default function ClienteEstoques() {
   const [error, setError] = useState(null);
   const [params, setParams] = useState(() => PARAMS_DEFAULT);
   const [modalParams, setModalParams] = useState(false);
-  const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [filtroStatusSel, setFiltroStatusSel] = useState(() => new Set()); // vazio = todos
   const [filtroAbc, setFiltroAbc] = useState('todos');
   const [filtroGrupos, setFiltroGrupos] = useState(() => new Set()); // vazio = todos
   const [ordenacao, setOrdenacao] = useState({ campo: 'valor_imobilizado', dir: 'desc' });
@@ -373,11 +373,27 @@ export default function ClienteEstoques() {
     return n;
   }), []);
 
+  // ─── Status disponíveis na categoria ativa (com contagem) ──
+  const statusDisponiveis = useMemo(() => {
+    const map = new Map();
+    analisadosCategoria.forEach(p => { map.set(p.status, (map.get(p.status) || 0) + 1); });
+    // Mantém a ordem de STATUS_INFO; só os que têm produtos.
+    return Object.keys(STATUS_INFO)
+      .filter(k => (map.get(k) || 0) > 0)
+      .map(k => ({ value: k, label: STATUS_INFO[k].label, cor: STATUS_INFO[k].cor, qtd: map.get(k) }));
+  }, [analisadosCategoria]);
+
+  const toggleStatus = useCallback((s) => setFiltroStatusSel(prev => {
+    const n = new Set(prev);
+    if (n.has(s)) n.delete(s); else n.add(s);
+    return n;
+  }), []);
+
   // ─── Filtros + busca + ordenação ────────────────────────
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
     let lista = analisadosCategoria.filter(p => {
-      if (filtroStatus !== 'todos' && p.status !== filtroStatus) return false;
+      if (filtroStatusSel.size > 0 && !filtroStatusSel.has(p.status)) return false;
       if (filtroAbc !== 'todos' && p.abc !== filtroAbc) return false;
       if (filtroGruposEfetivos.size > 0 && !filtroGruposEfetivos.has(p.grupo || 'Sem grupo')) return false;
       if (!q) return true;
@@ -397,7 +413,7 @@ export default function ClienteEstoques() {
       return sign * (Number(va) - Number(vb));
     });
     return lista;
-  }, [analisadosCategoria, busca, filtroStatus, filtroAbc, filtroGruposEfetivos, ordenacao]);
+  }, [analisadosCategoria, busca, filtroStatusSel, filtroAbc, filtroGruposEfetivos, ordenacao]);
 
   // ─── KPIs executivos (sobre a CATEGORIA ativa) ──────────
   const kpis = useMemo(() => {
@@ -823,11 +839,12 @@ export default function ClienteEstoques() {
             placeholder="Buscar por produto, código, grupo..."
             className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 pl-10 pr-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
         </div>
-        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
-          className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2 text-xs">
-          <option value="todos">Todos os status</option>
-          {Object.entries(STATUS_INFO).map(([k, c]) => <option key={k} value={k}>{c.label}</option>)}
-        </select>
+        <FiltroStatusMulti
+          opcoes={statusDisponiveis}
+          selecionados={filtroStatusSel}
+          onToggle={toggleStatus}
+          onLimpar={() => setFiltroStatusSel(new Set())}
+        />
         <select value={filtroAbc} onChange={e => setFiltroAbc(e.target.value)}
           className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 px-2 text-xs">
           <option value="todos">Toda curva ABC</option>
@@ -1029,6 +1046,61 @@ function FiltroGruposMulti({ grupos, selecionados, onToggle, onLimpar }) {
                   className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 <span className="flex-1 truncate text-gray-700 dark:text-gray-200" title={g.grupo}>{g.grupo}</span>
                 <span className="text-[10.5px] text-gray-400 tabular-nums">{fmtInt(g.qtd)}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Filtro de status com MULTISSELEÇÃO. `selecionados` é um Set; vazio = todos.
+// `opcoes`: [{ value, label, cor, qtd }].
+function FiltroStatusMulti({ opcoes, selecionados, onToggle, onLimpar }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!aberto) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [aberto]);
+
+  const n = selecionados.size;
+  const label = n === 0 ? 'Todos os status'
+    : n === 1 ? (opcoes.find(o => o.value === [...selecionados][0])?.label || '1 status')
+    : `${n} status`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setAberto(v => !v)}
+        className={`h-9 max-w-[200px] inline-flex items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium ${
+          n > 0
+            ? 'border-blue-300 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300'
+            : 'border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200'
+        }`}>
+        <span className="truncate">{label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+      </button>
+      {aberto && (
+        <div className="absolute right-0 z-30 mt-1 w-56 max-h-72 overflow-auto rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 shadow-lg p-1">
+          <div className="flex items-center justify-between px-2 py-1 sticky top-0 bg-white dark:bg-slate-800">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</span>
+            {n > 0 && (
+              <button type="button" onClick={onLimpar} className="text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline">Limpar</button>
+            )}
+          </div>
+          {opcoes.length === 0 && <p className="px-2 py-2 text-xs text-gray-400">Nenhum status.</p>}
+          {opcoes.map(o => {
+            const checked = selecionados.has(o.value);
+            return (
+              <label key={o.value} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-white/[0.04] cursor-pointer text-xs">
+                <input type="checkbox" checked={checked} onChange={() => onToggle(o.value)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: o.cor }} />
+                <span className="flex-1 truncate text-gray-700 dark:text-gray-200">{o.label}</span>
+                <span className="text-[10.5px] text-gray-400 tabular-nums">{fmtInt(o.qtd)}</span>
               </label>
             );
           })}
