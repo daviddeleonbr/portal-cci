@@ -167,10 +167,57 @@ serve(async (req) => {
     `;
     const resCusto = await executarQuery(rede, sqlCustoFallback, [], { encoding: 'SQL_ASCII' });
 
+    // ─── Bloco 3: fornecedores por produto (ENTRADAS) ────────
+    // De quem compramos cada produto: entradas `lancto.operacao = 'E'`,
+    // fornecedor = `lancto.pessoa` → pessoa.nome. Janela mais larga que a de
+    // vendas (compras são esparsas): usa max(janela, 365) dias.
+    const janelaForn = Math.max(janela, 365);
+    const dFornDe = new Date(dataCorte + 'T00:00:00');
+    dFornDe.setDate(dFornDe.getDate() - janelaForn);
+    const dataFornDe = dFornDe.toISOString().slice(0, 10);
+    const paramsForn: unknown[] = [dataFornDe, dataCorte];
+    let condEmpForn = '';
+    if (empresaCodigo != null && empresaCodigo !== '') {
+      paramsForn.push(empresaCodigo);
+      condEmpForn = `AND l.empresa = $${paramsForn.length}`;
+    }
+    const sqlForn = `
+      SELECT
+        l.empresa,
+        l.produto,
+        l.pessoa                                              AS fornecedor,
+        convert_to(coalesce(pf.nome, ''), 'LATIN1')           AS fornecedor_nome,
+        MAX(l.data)                                           AS ultima_entrada,
+        SUM(coalesce(l.quantidade, 0))                        AS qtd_entrada
+      FROM lancto l
+      JOIN pessoa pf ON pf.grid = l.pessoa
+      WHERE l.operacao = 'E'
+        AND l.data >= $1
+        AND l.data <  $2
+        ${condEmpForn}
+      GROUP BY l.empresa, l.produto, l.pessoa, pf.nome
+    `;
+    const resForn = await executarQuery(rede, sqlForn, paramsForn, { encoding: 'SQL_ASCII' });
+
     // ─── Junção no Deno ──────────────────────────────────────
     const estoque  = resEstoque.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
     const vendas   = resVendas;
     const fallback = resCusto;
+    const fornecedores = resForn.map((row) => decodeRowText(row, new Set(['fornecedor_nome']), 'windows-1252'));
+
+    // mapa (empresa, produto) → lista de fornecedores das entradas
+    const mapaForn = new Map<string, Array<Record<string, unknown>>>();
+    fornecedores.forEach((f: any) => {
+      const k = `${f.empresa}|${f.produto}`;
+      const arr = mapaForn.get(k) || [];
+      arr.push({
+        fornecedor:      f.fornecedor,
+        fornecedor_nome: String(f.fornecedor_nome || '').trim(),
+        ultima_entrada:  f.ultima_entrada,
+        qtd_entrada:     Number(f.qtd_entrada || 0),
+      });
+      mapaForn.set(k, arr);
+    });
 
     // mapa (empresa, produto) → venda
     const mapaVendas = new Map<string, Record<string, unknown>>();
@@ -211,6 +258,7 @@ serve(async (req) => {
         venda_custo:    v ? Number(v.venda_custo)   : 0,
         ultima_venda:   v ? v.ultima_venda          : null,
         qtd_movimentos: v ? Number(v.qtd_movimentos): 0,
+        fornecedores:   mapaForn.get(`${e.empresa}|${e.produto}`) || [],
       };
     });
 

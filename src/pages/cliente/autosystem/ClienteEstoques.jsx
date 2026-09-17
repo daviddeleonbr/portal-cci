@@ -19,7 +19,7 @@ import {
   Package, Layers, TrendingDown, TrendingUp, AlertTriangle,
   Settings, ChevronDown, ChevronUp, Zap, Target, ArrowDownRight,
   ArrowUpRight, Activity, DollarSign, Clock, BarChart3, X,
-  Wrench, Store, Fuel, HelpCircle, Info,
+  Wrench, Store, Fuel, HelpCircle, Info, Truck,
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -148,6 +148,7 @@ export default function ClienteEstoques() {
   const [filtroStatusSel, setFiltroStatusSel] = useState(() => new Set()); // vazio = todos
   const [filtroAbc, setFiltroAbc] = useState('todos');
   const [filtroGrupos, setFiltroGrupos] = useState(() => new Set()); // vazio = todos
+  const [filtroFornecedores, setFiltroFornecedores] = useState(() => new Set()); // vazio = todos
   const [ordenacao, setOrdenacao] = useState({ campo: 'valor_imobilizado', dir: 'desc' });
   const [gruposClassificados, setGruposClassificados] = useState([]);
   const [categoriaAba, setCategoriaAba] = useState('automotivos');
@@ -220,6 +221,7 @@ export default function ClienteEstoques() {
           ultima_venda: null,
           custo_unit: null,
           preco_unit: null,
+          fornecedoresSet: new Set(),
         };
         mapa.set(k, g);
       }
@@ -233,11 +235,18 @@ export default function ClienteEstoques() {
       }
       if (g.custo_unit == null && it.custo_unit != null) g.custo_unit = Number(it.custo_unit);
       if (g.preco_unit == null && it.preco_unit != null) g.preco_unit = Number(it.preco_unit);
+      // Fornecedores das entradas (de quem compramos este produto).
+      (it.fornecedores || []).forEach(f => {
+        const nome = String(f.fornecedor_nome || '').trim();
+        if (nome) g.fornecedoresSet.add(nome);
+      });
     });
     // Custo unit consolidado: melhor estimativa = venda_custo/venda_qtd se houver, senão o que veio.
     return Array.from(mapa.values()).map(g => {
       if (g.venda_qtd > 0) g.custo_unit = g.venda_custo / g.venda_qtd;
       if (g.venda_qtd > 0) g.preco_unit = g.venda_valor / g.venda_qtd;
+      g.fornecedores = Array.from(g.fornecedoresSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      delete g.fornecedoresSet;
       return g;
     });
   }, [itens]);
@@ -373,6 +382,29 @@ export default function ClienteEstoques() {
     return n;
   }), []);
 
+  // ─── Fornecedores disponíveis na categoria ativa (com contagem) ──
+  // Cada produto pode ter vários fornecedores (de quem compramos nas entradas).
+  const fornecedoresDisponiveis = useMemo(() => {
+    const map = new Map();
+    analisadosCategoria.forEach(p => {
+      (p.fornecedores || []).forEach(nome => map.set(nome, (map.get(nome) || 0) + 1));
+    });
+    return Array.from(map.entries())
+      .map(([grupo, qtd]) => ({ grupo, qtd }))
+      .sort((a, b) => a.grupo.localeCompare(b.grupo, 'pt-BR'));
+  }, [analisadosCategoria]);
+
+  const filtroFornecedoresEfetivos = useMemo(() => {
+    const disp = new Set(fornecedoresDisponiveis.map(g => g.grupo));
+    return new Set([...filtroFornecedores].filter(f => disp.has(f)));
+  }, [filtroFornecedores, fornecedoresDisponiveis]);
+
+  const toggleFornecedor = useCallback((f) => setFiltroFornecedores(prev => {
+    const n = new Set(prev);
+    if (n.has(f)) n.delete(f); else n.add(f);
+    return n;
+  }), []);
+
   // ─── Status disponíveis na categoria ativa (com contagem) ──
   const statusDisponiveis = useMemo(() => {
     const map = new Map();
@@ -396,6 +428,7 @@ export default function ClienteEstoques() {
       if (filtroStatusSel.size > 0 && !filtroStatusSel.has(p.status)) return false;
       if (filtroAbc !== 'todos' && p.abc !== filtroAbc) return false;
       if (filtroGruposEfetivos.size > 0 && !filtroGruposEfetivos.has(p.grupo || 'Sem grupo')) return false;
+      if (filtroFornecedoresEfetivos.size > 0 && !(p.fornecedores || []).some(f => filtroFornecedoresEfetivos.has(f))) return false;
       if (!q) return true;
       return (
         String(p.produto_nome).toLowerCase().includes(q) ||
@@ -413,7 +446,7 @@ export default function ClienteEstoques() {
       return sign * (Number(va) - Number(vb));
     });
     return lista;
-  }, [analisadosCategoria, busca, filtroStatusSel, filtroAbc, filtroGruposEfetivos, ordenacao]);
+  }, [analisadosCategoria, busca, filtroStatusSel, filtroAbc, filtroGruposEfetivos, filtroFornecedoresEfetivos, ordenacao]);
 
   // ─── KPIs executivos (sobre a CATEGORIA ativa) ──────────
   const kpis = useMemo(() => {
@@ -857,6 +890,21 @@ export default function ClienteEstoques() {
           selecionados={filtroGruposEfetivos}
           onToggle={toggleGrupo}
           onLimpar={() => setFiltroGrupos(new Set())}
+          comBusca
+          placeholderBusca="Buscar grupo..."
+        />
+        <FiltroGruposMulti
+          grupos={fornecedoresDisponiveis}
+          selecionados={filtroFornecedoresEfetivos}
+          onToggle={toggleFornecedor}
+          onLimpar={() => setFiltroFornecedores(new Set())}
+          titulo="Fornecedores (de quem compramos)"
+          iconeEl={<Truck className="h-3.5 w-3.5 flex-shrink-0" />}
+          labelTodos="Todos os fornecedores"
+          labelPlural="fornecedores"
+          vazioTexto="Sem entradas de compra no período."
+          comBusca
+          placeholderBusca="Buscar fornecedor..."
         />
       </div>
 
@@ -1002,10 +1050,16 @@ export default function ClienteEstoques() {
 
 // ─── Subcomponentes ─────────────────────────────────────────
 
-// Filtro de grupos com MULTISSELEÇÃO (checkboxes num dropdown).
-// `selecionados` é um Set; vazio = todos os grupos.
-function FiltroGruposMulti({ grupos, selecionados, onToggle, onLimpar }) {
+// Filtro com MULTISSELEÇÃO (checkboxes num dropdown). Reutilizável para grupos
+// e fornecedores. `selecionados` é um Set; vazio = todos. `opcoes`: [{grupo,qtd}].
+function FiltroGruposMulti({
+  grupos, selecionados, onToggle, onLimpar,
+  titulo = 'Grupos de produto', iconeEl = <Layers className="h-3.5 w-3.5 flex-shrink-0" />,
+  labelTodos = 'Todos os grupos', labelPlural = 'grupos', vazioTexto = 'Nenhum grupo.',
+  comBusca = false, placeholderBusca = 'Buscar...',
+}) {
   const [aberto, setAberto] = useState(false);
+  const [termo, setTermo] = useState('');
   const ref = useRef(null);
   useEffect(() => {
     if (!aberto) return;
@@ -1013,9 +1067,13 @@ function FiltroGruposMulti({ grupos, selecionados, onToggle, onLimpar }) {
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [aberto]);
+  // Limpa a busca ao fechar.
+  useEffect(() => { if (!aberto) setTermo(''); }, [aberto]);
 
   const n = selecionados.size;
-  const label = n === 0 ? 'Todos os grupos' : n === 1 ? [...selecionados][0] : `${n} grupos`;
+  const label = n === 0 ? labelTodos : n === 1 ? [...selecionados][0] : `${n} ${labelPlural}`;
+  const q = termo.trim().toLowerCase();
+  const visiveis = comBusca && q ? grupos.filter(g => g.grupo.toLowerCase().includes(q)) : grupos;
 
   return (
     <div className="relative" ref={ref}>
@@ -1025,20 +1083,31 @@ function FiltroGruposMulti({ grupos, selecionados, onToggle, onLimpar }) {
             ? 'border-blue-300 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300'
             : 'border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200'
         }`}>
-        <Layers className="h-3.5 w-3.5 flex-shrink-0" />
+        {iconeEl}
         <span className="truncate">{label}</span>
         <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
       </button>
       {aberto && (
-        <div className="absolute right-0 z-30 mt-1 w-64 max-h-72 overflow-auto rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 shadow-lg p-1">
-          <div className="flex items-center justify-between px-2 py-1 sticky top-0 bg-white dark:bg-slate-800">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Grupos de produto</span>
-            {n > 0 && (
-              <button type="button" onClick={onLimpar} className="text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline">Limpar</button>
+        <div className="absolute right-0 z-30 mt-1 w-64 max-h-80 overflow-auto rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 shadow-lg p-1">
+          <div className="sticky top-0 bg-white dark:bg-slate-800 pb-1">
+            <div className="flex items-center justify-between px-2 py-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{titulo}</span>
+              {n > 0 && (
+                <button type="button" onClick={onLimpar} className="text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline">Limpar</button>
+              )}
+            </div>
+            {comBusca && (
+              <div className="relative px-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                <input type="text" value={termo} onChange={e => setTermo(e.target.value)} autoFocus
+                  placeholder={placeholderBusca}
+                  className="w-full rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 pl-7 pr-2 py-1.5 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+              </div>
             )}
           </div>
-          {grupos.length === 0 && <p className="px-2 py-2 text-xs text-gray-400">Nenhum grupo.</p>}
-          {grupos.map(g => {
+          {grupos.length === 0 && <p className="px-2 py-2 text-xs text-gray-400">{vazioTexto}</p>}
+          {grupos.length > 0 && visiveis.length === 0 && <p className="px-2 py-2 text-xs text-gray-400">Nada encontrado.</p>}
+          {visiveis.map(g => {
             const checked = selecionados.has(g.grupo);
             return (
               <label key={g.grupo} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-white/[0.04] cursor-pointer text-xs">
