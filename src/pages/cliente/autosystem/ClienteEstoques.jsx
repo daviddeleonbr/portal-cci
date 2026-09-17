@@ -32,6 +32,7 @@ import { useClienteSession } from '../../../hooks/useAuth';
 import { useEmpresaAtiva } from '../../../contexts/EmpresaAtivaContext';
 import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMultiSelect';
 import * as autosystemService from '../../../services/autosystemService';
+import * as usuariosService from '../../../services/usuariosSistemaService';
 import { formatCurrency } from '../../../utils/format';
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -74,6 +75,14 @@ const CATEGORIA_INFO = {
   conveniencia:   { label: 'Conveniência',  icon: Store,      borderActive: 'border-emerald-600', textActive: 'text-emerald-700 dark:text-emerald-400' },
   combustivel:    { label: 'Combustíveis',  icon: Fuel,       borderActive: 'border-amber-600',   textActive: 'text-amber-700 dark:text-amber-400' },
   sem_categoria:  { label: 'Sem categoria', icon: HelpCircle, borderActive: 'border-gray-500',    textActive: 'text-gray-700 dark:text-gray-300' },
+};
+
+// Permissão por-aba de cada categoria (default-deny opcional: se o usuário não
+// tiver NENHUMA dessas permissões, vê todas as categorias — retrocompat).
+const PERM_POR_CATEGORIA = {
+  automotivos:  'estoques_automotivos',
+  conveniencia: 'estoques_conveniencia',
+  combustivel:  'estoques_combustivel',
 };
 
 // ─── Parâmetros default ─────────────────────────────────────
@@ -268,6 +277,19 @@ export default function ClienteEstoques() {
     return enriquecidos;
   }, [consolidados, params, meta.janelaDias, mapaCategoriasPorNome]);
 
+  // Categorias BLOQUEADas para este usuário (permissão por-aba). Se o usuário
+  // não tem NENHUMA permissão de aba de estoque, nada é bloqueado (retrocompat).
+  const categoriasBloqueadas = useMemo(() => {
+    const perms = new Set(usuariosService.permissoesEfetivas(session?.usuario));
+    const algumaLiberada = Object.values(PERM_POR_CATEGORIA).some(k => perms.has(k));
+    if (!algumaLiberada) return new Set();
+    const bloq = new Set();
+    Object.entries(PERM_POR_CATEGORIA).forEach(([cat, perm]) => {
+      if (!perms.has(perm)) bloq.add(cat);
+    });
+    return bloq;
+  }, [session?.usuario]);
+
   // Quais categorias existem (com count) — alimenta as tabs.
   const categoriasDisponiveis = useMemo(() => {
     const map = new Map();
@@ -277,8 +299,8 @@ export default function ClienteEstoques() {
     const ordem = ['automotivos', 'conveniencia', 'combustivel', 'sem_categoria'];
     return ordem
       .map(key => ({ key, qtd: map.get(key) || 0 }))
-      .filter(c => c.qtd > 0);
-  }, [analisados]);
+      .filter(c => c.qtd > 0 && !categoriasBloqueadas.has(c.key));
+  }, [analisados, categoriasBloqueadas]);
 
   // Ao detectar que a aba atual ficou vazia (mudou de empresa, etc), pula
   // pra primeira categoria com produtos.

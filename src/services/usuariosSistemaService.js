@@ -95,7 +95,16 @@ export const PERMISSOES_CLIENTE = [
       { key: 'produtividade_pista',        label: 'Pista',        tipo: 'webposto' },
       { key: 'produtividade_conveniencia', label: 'Conveniência' },
     ] },
-  { key: 'comercial_estoques', label: 'Comercial · Análise de Estoques', grupo: 'Comercial' },
+  { key: 'comercial_estoques', label: 'Comercial · Análise de Estoques', grupo: 'Comercial',
+    // Abas (categorias) da Análise de Estoques. `abasOpcionais`: se NENHUMA aba
+    // for marcada, o usuário vê TODAS as categorias (comportamento antigo /
+    // retrocompatível). Ao marcar uma ou mais, ele passa a ver apenas as marcadas.
+    abasOpcionais: true,
+    abas: [
+      { key: 'estoques_automotivos',  label: 'Automotivos' },
+      { key: 'estoques_conveniencia', label: 'Conveniência' },
+      { key: 'estoques_combustivel',  label: 'Combustíveis' },
+    ] },
   { key: 'compras',           label: 'Compras · Criar pedidos',         grupo: 'Comercial' },
   { key: 'compras_liberar',   label: 'Compras · Liberar pedidos',       grupo: 'Comercial' },
   { key: 'sangrias', label: 'Sangrias', grupo: 'Operacional' },

@@ -71,15 +71,21 @@ export default function SeletorPermissoes({ catalogo, value, onChange, tipoClien
                       <span className={ativo ? 'text-blue-900 font-medium' : 'text-gray-700'}>{p.label}</span>
                       {temAbas && (
                         <span className="ml-auto text-[10px] text-gray-400">
-                          {ativo
-                            ? `${abas.filter(a => has(a.key)).length}/${abas.length} abas`
-                            : `${abas.length} aba${abas.length === 1 ? '' : 's'}`}
+                          {(() => {
+                            const nSel = abas.filter(a => has(a.key)).length;
+                            if (!ativo) return `${abas.length} aba${abas.length === 1 ? '' : 's'}`;
+                            // Abas opcionais: 0 marcadas = todas liberadas.
+                            if (p.abasOpcionais && nSel === 0) return 'todas as abas';
+                            return `${nSel}/${abas.length} abas`;
+                          })()}
                         </span>
                       )}
                     </label>
                     {ativo && temAbas && (
                       <div className="px-3 pb-2 pl-9 flex flex-wrap gap-1.5">
-                        <span className="text-[10px] text-gray-400 self-center mr-0.5">Abas:</span>
+                        <span className="text-[10px] text-gray-400 self-center mr-0.5">
+                          {p.abasOpcionais ? 'Abas (nenhuma = todas):' : 'Abas:'}
+                        </span>
                         {abas.map(a => {
                           const on = has(a.key);
                           return (
