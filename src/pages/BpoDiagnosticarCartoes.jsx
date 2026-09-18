@@ -118,7 +118,7 @@ export default function BpoDiagnosticarCartoes() {
 
   const [csv, setCsv] = useState(null); // { nome, headers, rows }
   // Mapeamento de colunas. Chave: adquirente · bandeira · modalidade · autorização · valor (bruto).
-  const COLS_VAZIO = { adquirente: '', bandeira: '', modalidade: '', autorizacao: '', valor: '', parcelas: '' };
+  const COLS_VAZIO = { adquirente: '', bandeira: '', modalidade: '', autorizacao: '', valor: '', parcelas: '', hora: '' };
   const [cols, setCols] = useState(COLS_VAZIO);
   const fileRef = useRef(null);
 
@@ -179,6 +179,7 @@ export default function BpoDiagnosticarCartoes() {
           autorizacao: adivinharColuna(headers, ['autorizacao', 'autorizac', 'codigo autorizacao']),
           valor:       adivinharColuna(headers, ['valor bruto', 'bruto', 'valor da venda', 'valor']),
           parcelas:    adivinharColuna(headers, ['qtd parcela', 'qtde parcela', 'total parcela', 'num parcela', 'parcela']),
+          hora:        adivinharColuna(headers, ['hora', 'horario', 'hr venda', 'hora venda']),
         });
         setError(null);
       } catch (err) { setError('Falha ao ler o CSV: ' + err.message); }
@@ -189,13 +190,14 @@ export default function BpoDiagnosticarCartoes() {
 
   // Transações da Equals (lista normalizada + chave de conferência)
   const equalsTx = useMemo(() => {
-    const { adquirente, bandeira, modalidade, autorizacao, valor, parcelas } = cols;
+    const { adquirente, bandeira, modalidade, autorizacao, valor, parcelas, hora } = cols;
     if (!csv || valor === '' || autorizacao === '') return null;
     const qi = adquirente === '' ? -1 : Number(adquirente);
     const bi = bandeira === '' ? -1 : Number(bandeira);
     const mi = modalidade === '' ? -1 : Number(modalidade);
     const ai = Number(autorizacao), vi = Number(valor);
     const pi = parcelas === '' ? -1 : Number(parcelas);
+    const hi = hora === '' ? -1 : Number(hora);
     const mapeouMeta = qi >= 0 || bi >= 0 || mi >= 0;
     const ehVazio = s => !/[a-z0-9]/i.test(String(s || '')); // '', '-', '—' → vazio
     const lista = [];
@@ -212,7 +214,8 @@ export default function BpoDiagnosticarCartoes() {
       // Parcelado? Pela coluna de parcelas (>1) ou pelo texto da modalidade ("Parcelado…").
       const nParc = pi >= 0 ? (parseInt(String(r[pi]).replace(/[^\d]/g, ''), 10) || 0) : 0;
       const parceladoEquals = nParc > 1 || (mi >= 0 && textoIndicaParcelado(r[mi]));
-      lista.push({ adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, valor: v, parceladoEquals, parcelasEquals: nParc || null, key: `${adq}|${band}|${modal}|${aut}|${v.toFixed(2)}` });
+      const hora = hi >= 0 ? String(r[hi] || '').trim() : '';
+      lista.push({ adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, valor: v, hora, parceladoEquals, parcelasEquals: nParc || null, key: `${adq}|${band}|${modal}|${aut}|${v.toFixed(2)}` });
     });
     const total = lista.reduce((s, t) => s + t.valor, 0);
     return { lista, total, ignoradas };
@@ -397,6 +400,7 @@ export default function BpoDiagnosticarCartoes() {
     { campo: 'autorizacao', label: 'Autorização *', cor: 'bg-blue-50 text-blue-700' },
     { campo: 'valor', label: 'Valor bruto *', cor: 'bg-emerald-50 text-emerald-700' },
     { campo: 'parcelas', label: 'Parcelas', cor: 'bg-indigo-50 text-indigo-700' },
+    { campo: 'hora', label: 'Hora', cor: 'bg-rose-50 text-rose-700' },
   ];
   const corColuna = (i) => {
     const f = MAP_FIELDS.find(x => String(cols[x.campo]) === String(i));
@@ -776,7 +780,7 @@ function LinhaAjuste({ item }) {
     <div className="pl-16 pr-4 py-2 flex items-start gap-3">
       <span className="mt-0.5 inline-flex items-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Falta no sistema</span>
       <p className="text-[12.5px] text-gray-700 leading-relaxed">
-        Transação na Equals sem correspondência: <strong>{e.adquirente}/{e.bandeira}/{e.modalidade}</strong> · autorização <span className="font-mono">{e.autorizacao}</span> · {formatCurrency(e.valor)}. → Lançar no sistema.
+        Transação na Equals sem correspondência: <strong>{e.adquirente}/{e.bandeira}/{e.modalidade}</strong> · autorização <span className="font-mono">{e.autorizacao}</span> · {formatCurrency(e.valor)}{e.hora ? <> · {e.hora}</> : null}. → Lançar no sistema.
       </p>
     </div>
   );
@@ -879,6 +883,7 @@ function ListaDivergencia({ titulo, itens, cor }) {
   const corTxt = cor === 'rose' ? 'text-rose-700' : 'text-amber-700';
   const temFunc = itens.some(t => t.funcionario || t.responsavel);
   const temTurno = itens.some(t => t.turno != null && t.turno !== '');
+  const temHora = itens.some(t => t.hora);
   return (
     <div className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
       <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 text-left">
@@ -894,6 +899,7 @@ function ListaDivergencia({ titulo, itens, cor }) {
                 <th className="text-left px-3 py-1.5 font-semibold">Bandeira</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Modalidade</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Autorização</th>
+                {temHora && <th className="text-center px-3 py-1.5 font-semibold">Hora</th>}
                 {temTurno && <th className="text-center px-3 py-1.5 font-semibold">Turno</th>}
                 {temFunc && <th className="text-left px-3 py-1.5 font-semibold">Funcionário / Resp.</th>}
                 <th className="text-right px-3 py-1.5 font-semibold">Valor</th>
@@ -906,6 +912,7 @@ function ListaDivergencia({ titulo, itens, cor }) {
                   <td className="px-3 py-1 text-gray-700">{t.bandeira || '—'}</td>
                   <td className="px-3 py-1 text-gray-700">{t.modalidade || '—'}</td>
                   <td className="px-3 py-1 font-mono text-gray-700">{t.autorizacao || '—'}{t.conta ? <span className="text-gray-400"> · conta {t.conta}</span> : null}</td>
+                  {temHora && <td className="px-3 py-1 text-center text-gray-700">{t.hora || '—'}</td>}
                   {temTurno && <td className="px-3 py-1 text-center text-gray-700">{t.turno ?? '—'}</td>}
                   {temFunc && <td className="px-3 py-1 text-indigo-700">{t.funcionario || t.responsavel || '—'}</td>}
                   <td className="px-3 py-1 text-right tabular-nums text-gray-700">{formatCurrency(t.valor)}</td>
