@@ -812,7 +812,10 @@ export default function BpoConciliacaoCaixas({
 
   return (
     <div>
-      <PrintStyles />
+      {/* Estilos de impressão da CONCILIAÇÃO. Só na aba dela — senão o
+          `@page { margin: 1cm }` e os `th,td { border }` vazam para a impressão
+          timbrada da aba "Alterações em caixas" e desenham uma moldura. */}
+      {(modoCliente || abaAtiva === 'conciliacao') && <PrintStyles />}
 
       <div className="no-print">
         <PageHeader

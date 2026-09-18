@@ -154,7 +154,7 @@ serve(async (req) => {
     aliases.push(`${lancExpr} as _lancamento`);
     const aliasesClause = aliases.length ? `, ${aliases.join(', ')}` : '';
 
-    // JOIN usuario→pessoa pra trazer o nome completo do funcionário
+    // JOIN usuario→pessoa pra trazer o nome completo de quem ALTEROU (log).
     let usuarioJoin = '';
     if (colUsuario) {
       usuarioJoin = `,
@@ -163,6 +163,37 @@ serve(async (req) => {
              left join pessoa pe on pe.grid = u.pessoa
             where u.nome::text = mf.${colUsuario}::text
             limit 1) as usuario_nome`;
+    }
+
+    // FUNCIONÁRIO original do lançamento: mf.usuario (login) → usuario → pessoa.
+    let usuarioOriginalJoin = '';
+    if (has('usuario')) {
+      usuarioOriginalJoin = `,
+          (select convert_to(coalesce(pe.nome::text,''), 'LATIN1')
+             from usuario u
+             left join pessoa pe on pe.grid = u.pessoa
+            where u.nome::text = mf.usuario::text
+            limit 1) as usuario_original_nome`;
+    }
+
+    // RESPONSÁVEL pelo caixa/turno: tabela `caixa` (empresa, data, turno, conta do
+    // PDV = a conta 1.1.2% do lançamento) → pessoa. Preenche mesmo quando não há
+    // funcionário (frentista não é o responsável).
+    let responsavelJoin = '';
+    if (has('data') && has('turno') && has('conta_debitar') && has('conta_creditar')) {
+      const caixaRes = await run(`select 1 from information_schema.tables where table_name = 'caixa' limit 1`);
+      if (caixaRes.length > 0) {
+        responsavelJoin = `,
+          (select convert_to(coalesce(pr.nome::text,''), 'LATIN1')
+             from caixa cx
+             left join pessoa pr on pr.grid = cx.pessoa
+            where cx.empresa = mf.${colEmpresa}
+              and cx.data  = mf.data
+              and cx.turno = mf.turno
+              and cx.conta = (case when mf.conta_creditar::text like '1.1.2%' then mf.conta_creditar::text
+                                   when mf.conta_debitar::text  like '1.1.2%' then mf.conta_debitar::text end)
+            limit 1) as responsavel_nome`;
+      }
     }
 
     // JOIN conta pra trazer o nome das contas contábeis (débito/crédito).
@@ -302,31 +333,62 @@ serve(async (req) => {
       return { kind: 'usuarios' as const, usuarios };
     }
 
-    // Modo `usuarios_originais`: retorna lista distinta da coluna `usuario`
-    // (usuário original do lançamento, diferente do pgd_username do log).
+    // Modo `usuarios_originais`: lista distinta do DONO DO CAIXA de cada
+    // lançamento alterado — funcionário original (mf.usuario → pessoa) OU, na
+    // falta dele, o responsável pelo caixa/turno (tabela `caixa` → pessoa).
     if (mode === 'usuarios_originais') {
-      if (!has('usuario')) {
+      const temCaixa = (has('data') && has('turno') && has('conta_debitar') && has('conta_creditar'))
+        ? (await run(`select 1 from information_schema.tables where table_name = 'caixa' limit 1`)).length > 0
+        : false;
+      if (!has('usuario') && !temCaixa) {
         return { kind: 'usuarios' as const, usuarios: [] as Record<string, unknown>[] };
       }
+      const exprFunc = has('usuario')
+        ? `(select pe.nome::text from usuario u left join pessoa pe on pe.grid = u.pessoa where u.nome::text = mf.usuario::text limit 1)`
+        : `null::text`;
+      const exprResp = temCaixa
+        ? `(select pr.nome::text from caixa cx left join pessoa pr on pr.grid = cx.pessoa
+              where cx.empresa = mf.${colEmpresa} and cx.data = mf.data and cx.turno = mf.turno
+                and cx.conta = (case when mf.conta_creditar::text like '1.1.2%' then mf.conta_creditar::text
+                                     when mf.conta_debitar::text  like '1.1.2%' then mf.conta_debitar::text end)
+              limit 1)`
+        : `null::text`;
       const res = await run(`
-          select distinct convert_to(mf.usuario::text, 'LATIN1') as usuario
-          from movto_flow mf
-          where mf.${colEmpresa} = any($1::bigint[])
-            and mf.${colDataFiltro} >= $2::date
-            and mf.${colDataFiltro} <  ($3::date + interval '1 day')
-            and mf.usuario is not null
-            and trim(mf.usuario::text) <> ''
-          order by 1
+          select convert_to(nome, 'LATIN1') as usuario, convert_to(nome, 'LATIN1') as usuario_nome
+          from (
+            select distinct coalesce(${exprFunc}, ${exprResp}) as nome
+            from movto_flow mf
+            where mf.${colEmpresa} = any($1::bigint[])
+              and mf.${colDataFiltro} >= $2::date
+              and mf.${colDataFiltro} <  ($3::date + interval '1 day')
+              and (mf.conta_debitar::text like '1.1.2%' or mf.conta_creditar::text like '1.1.2%')
+          ) d
+          where nome is not null and trim(nome) <> ''
+          order by nome
         `, [empresasNum, data_de, data_ate]);
       const usuarios = res.map(decodeRow);
       return { kind: 'usuarios' as const, usuarios };
     }
 
+    // Seleção explícita de mf: colunas de TEXTO são convertidas p/ LATIN1 (bytea)
+    // — senão o driver lê bytes latin1 (ex.: 0xFA = 'ú') como UTF8 e o servidor
+    // aborta com 22021 (invalid byte sequence for encoding "UTF8"). As demais
+    // colunas (números, datas, bool) são ASCII-safe e vão cruas. decodeRow()
+    // decodifica as bytea como windows-1252.
+    const mfSelect = schema.map(r => {
+      const nome = String((r as any).column_name);
+      const dt = String((r as any).data_type || '').toLowerCase();
+      const ehTexto = /char|text/.test(dt);
+      return ehTexto
+        ? `convert_to(coalesce(mf.${nome}::text, ''), 'LATIN1') as ${nome}`
+        : `mf.${nome}`;
+    }).join(', ');
+
     // Filtro direto na movto_flow — sem CTE, sem self-join. O range de data é
     // expresso de forma index-friendly (sem cast no LHS) pra permitir uso de
     // qualquer btree existente em mf.data.
     const alterRes = await run(`
-        select mf.* ${aliasesClause} ${usuarioJoin} ${contasJoin} ${motivoJoin}
+        select ${mfSelect} ${aliasesClause} ${usuarioJoin} ${usuarioOriginalJoin} ${responsavelJoin} ${contasJoin} ${motivoJoin}
         from movto_flow mf
         where mf.${colEmpresa} = any($1::bigint[])
           and mf.${colDataFiltro} >= $2::date

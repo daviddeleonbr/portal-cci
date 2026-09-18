@@ -11,7 +11,7 @@ import * as autosystemService from '../services/autosystemService';
 import { useAnonimizador } from '../services/anonimizarService';
 import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 import { formatCurrency } from '../utils/format';
-import { gerarPdfHistoricoUsuarios } from '../utils/pdfHistoricoUsuarios';
+import RelatorioAlteracoesCaixas from '../components/bpo/RelatorioAlteracoesCaixas';
 
 // ─── Helpers ───────────────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -82,6 +82,7 @@ const CAMPOS_META = new Set([
   // Metadados do log
   'pgd_gfid', 'pgd_optype', 'pgd_when', 'pgd_when_ts', 'pgd_rfid', 'pgd_host',
   'pgd_username', 'pgd_module', 'estacao', 'optype', 'usuario_nome',
+  'usuario_original_nome', 'responsavel_nome',
   // Aliases canônicos
   '_when', '_hora', '_lancamento',
   // Identificadores estruturais
@@ -434,27 +435,27 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
     });
   }
 
-  function exportarPdf() {
-    if (arvoreFiltrada.length === 0) return;
+  // Contexto do documento de impressão (papel timbrado CCI).
+  const contextoRelatorio = useMemo(() => {
     const empresaSel = empresasSel[0];
     const empresaTxt = empresaSel ? (labelEmpresa(empresaSel) || `Empresa ${empresaSel.empresa_codigo}`) : '';
-    const redeTxt = redeSel?.nome || '';
     const periodoTxt = dataDe === dataAte
       ? formatDataBR(dataDe)
       : `${formatDataBR(dataDe)} a ${formatDataBR(dataAte)}`;
-    const doc = gerarPdfHistoricoUsuarios({
-      arvore: arvoreFiltrada,
-      camposRelevantes: CAMPOS_RELEVANTES,
-      mapaEmpresas,
-      labelEmpresa,
-      contexto: {
-        periodo: periodoTxt,
-        rede: redeTxt,
-        empresa: empresaTxt,
-      },
-    });
-    const nomeArq = `historico-caixas-${dataDe}_a_${dataAte}.pdf`;
-    doc.save(nomeArq);
+    const d = new Date();
+    const p2 = n => String(n).padStart(2, '0');
+    return {
+      periodo: periodoTxt,
+      rede: redeSel?.nome || '',
+      empresa: empresaTxt,
+      geradoEm: `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`,
+    };
+  }, [empresasSel, labelEmpresa, dataDe, dataAte, redeSel]);
+
+  // Impressão pelo navegador (Ctrl+P → Salvar como PDF), com o papel timbrado.
+  function exportarPdf() {
+    if (arvoreFiltrada.length === 0) return;
+    window.print();
   }
 
   // Filtra as linhas brutas pelos usuários selecionados (AND lógico entre os
@@ -469,8 +470,9 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
         if (pg == null || !usuariosSelSet.has(String(pg))) return false;
       }
       if (usuariosOrigSelSet.size > 0) {
-        const orig = a.usuario;
-        if (orig == null || !usuariosOrigSelSet.has(String(orig))) return false;
+        // Dono do caixa: funcionário original do lançamento OU responsável pelo turno.
+        const orig = String(a.usuario_original_nome || a.responsavel_nome || '').trim();
+        if (!orig || !usuariosOrigSelSet.has(orig)) return false;
       }
       return true;
     });
@@ -566,19 +568,17 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
     for (const node of arvoreCompleta) {
       for (const ev of node.eventos) {
         const sourceRow = ev.depois || ev.antes || {};
-        // Destaque: campo `usuario` do lançamento. Secundário: `pgd_username`
-        // (login técnico do log) só se for diferente.
-        const usuarioDestaque = String(sourceRow.usuario ?? '').trim()
-                              || String(sourceRow.usuario_nome ?? '').trim()
-                              || String(sourceRow.pgd_username ?? '').trim();
-        const pgdLogin = String(sourceRow.pgd_username ?? '').trim();
-        const userKey = usuarioDestaque || pgdLogin || '__sem_usuario__';
+        // Primeira hierarquia = DONO DO CAIXA: funcionário original do lançamento
+        // ou, na falta dele, o responsável pelo caixa/turno.
+        const dono = String(sourceRow.usuario_original_nome ?? '').trim()
+                   || String(sourceRow.responsavel_nome ?? '').trim();
+        const userKey = dono || '__sem_dono__';
 
         if (!byUser.has(userKey)) {
           byUser.set(userKey, {
             userKey,
-            usuarioLogin: pgdLogin,
-            usuarioNome: usuarioDestaque || '(sem usuário)',
+            usuarioLogin: '',
+            usuarioNome: dono || '(sem responsável / funcionário)',
             tipos: new Map(),
             total: 0,
             maisRecente: '',
@@ -626,6 +626,9 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
               const docu = String(ctxNode?.snapshot?.documento || '').toLowerCase();
               if (docu.includes(q)) return true;
               if (String(ctxNode?.movto || '').toLowerCase().includes(q)) return true;
+              const src = ev.depois || ev.antes || {};
+              if (String(src.usuario_nome || '').toLowerCase().includes(q)) return true;
+              if (String(src.pgd_username || '').toLowerCase().includes(q)) return true;
               return (ev._changes || []).some(ch => String(ch.campo).toLowerCase().includes(q));
             });
             return eventosCasados.length > 0 ? { ...t, eventos: eventosCasados, count: eventosCasados.length } : null;
@@ -663,6 +666,7 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
 
   return (
     <div>
+      <div className="no-print">
       {!hideHeader && (
         <PageHeader title="Alterações em caixas" description="Histórico de mudanças nos lançamentos via movto_flow" />
       )}
@@ -715,7 +719,7 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
                   onLimpar={() => setUsuariosSelSet(new Set())}
                 />
                 <UsuarioMultiSelect
-                  label="Usuário original"
+                  label="Responsável / Funcionário"
                   usuarios={usuariosOrigOptions}
                   selecionados={usuariosOrigSelSet}
                   loading={loadingUsuariosOrig}
@@ -779,9 +783,9 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
               <History className="h-4 w-4 text-blue-500" />
-              <h3 className="text-[13px] font-semibold text-gray-800">Histórico por usuário</h3>
+              <h3 className="text-[13px] font-semibold text-gray-800">Histórico por responsável / funcionário</h3>
               <span className="text-[11px] text-gray-400">
-                · {fmtNum(arvoreFiltrada.length)} usuário{arvoreFiltrada.length === 1 ? '' : 's'} · {fmtNum(kpis.total)} evento{kpis.total === 1 ? '' : 's'}
+                · {fmtNum(arvoreFiltrada.length)} caixa{arvoreFiltrada.length === 1 ? '' : 's'} · {fmtNum(kpis.total)} evento{kpis.total === 1 ? '' : 's'}
               </span>
               <div className="flex-1" />
               <button onClick={exportarPdf}
@@ -827,6 +831,16 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
           Buscando alterações...
         </div>
       )}
+      </div>
+
+      {/* Documento de impressão (papel timbrado CCI) — oculto na tela. */}
+      <RelatorioAlteracoesCaixas
+        arvore={arvoreFiltrada}
+        camposRelevantes={CAMPOS_RELEVANTES}
+        mapaEmpresas={mapaEmpresas}
+        labelEmpresa={labelEmpresa}
+        contexto={contextoRelatorio}
+      />
     </div>
   );
 }
@@ -971,6 +985,8 @@ function EventoCard({ ev, mapaEmpresas, labelEmpresa }) {
   const dataLanc    = sourceRow.data;
   const documento   = sourceRow.documento;
   const valor       = Number(sourceRow.valor) || 0;
+  const turno       = sourceRow.turno;
+  const alteradoPor = String(sourceRow.usuario_nome || sourceRow.pgd_username || '').trim();
 
   return (
     <div className="px-8 py-3 hover:bg-blue-50/20 transition-colors">
@@ -985,6 +1001,9 @@ function EventoCard({ ev, mapaEmpresas, labelEmpresa }) {
             {formatDataBR(dataLanc)}
           </span>
         )}
+        {(turno != null && turno !== '') && (
+          <span className="text-[11.5px] text-gray-700">Turno <strong>{turno}</strong></span>
+        )}
         {documento && (
           <span className="text-[11.5px] text-gray-700">
             Doc <strong className="font-mono">{documento}</strong>
@@ -994,6 +1013,9 @@ function EventoCard({ ev, mapaEmpresas, labelEmpresa }) {
           <span className="text-[11.5px] text-gray-700">
             <strong className="font-mono tabular-nums">{formatCurrency(valor)}</strong>
           </span>
+        )}
+        {alteradoPor && (
+          <span className="text-[11px] text-indigo-600 font-medium">Alterado por: {alteradoPor}</span>
         )}
         {empresaNome && (
           <span className="text-[10.5px] text-gray-400 truncate" title={empresaNome}>
