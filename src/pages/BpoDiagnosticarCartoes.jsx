@@ -262,9 +262,10 @@ export default function BpoDiagnosticarCartoes() {
         const modal = normModalidade(cfg.modalidade || '');
         sistemaRaw.push({
           adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, parcela, valor,
-          conta: cfg.codigo, contaNome: cfg.nome, data: l.data,
+          conta: cfg.codigo, contaNome: cfg.nome, data: l.data, turno: l.turno,
           documento: l.documento || '', obs: (l.obs || '').trim(), pessoa: l.pessoa_nome || '',
           funcionario: (l.usuario_nome || '').trim(), usuario: (l.usuario || '').trim(),
+          responsavel: (l.responsavel_nome || '').trim(),
         });
       });
 
@@ -282,16 +283,18 @@ export default function BpoDiagnosticarCartoes() {
         const parcelado = membros.length > 1;
         const valorTotal = membros.reduce((s, m) => s + m.valor, 0);
         const f = membros[0];
-        // Funcionário(s) que lançaram (normalmente o mesmo em todas as parcelas).
+        // Funcionário(s) que lançaram e responsável(is) pelo PDV/turno (fallback
+        // quando não há funcionário — ex.: frentista não é o responsável).
         const funcs = [...new Set(membros.map(m => m.funcionario).filter(Boolean))];
+        const resps = [...new Set(membros.map(m => m.responsavel).filter(Boolean))];
         sistemaTx.push({
           adquirente: f.adquirente, bandeira: f.bandeira, modalidade: f.modalidade,
           autorizacao: f.autorizacao, valor: valorTotal,
           parcelas: membros.length, parceladoSistema: parcelado,
-          conta: f.conta, contaNome: f.contaNome, data: f.data,
+          conta: f.conta, contaNome: f.contaNome, data: f.data, turno: f.turno,
           documento: parcelado ? `${f.autorizacao} (${membros.length}x)` : (f.documento || ''),
           obs: f.obs, pessoa: f.pessoa, membros,
-          funcionario: funcs.join(', '), usuario: f.usuario,
+          funcionario: funcs.join(', '), responsavel: resps.join(', '), usuario: f.usuario,
           key: `${f.adquirente}|${f.bandeira}|${f.modalidade}|${f.autorizacao}|${valorTotal.toFixed(2)}`,
         });
       });
@@ -308,20 +311,57 @@ export default function BpoDiagnosticarCartoes() {
       const soSistema = [];
       idxSis.forEach(arr => arr.forEach(t => soSistema.push(t)));
 
-      // 5) PROVÁVEIS conciliações: dos restantes, casa por chave FRACA
-      //    (adquirente|bandeira|modalidade|valor), ignorando a autorização —
-      //    tipicamente autorização digitada errada no sistema.
-      const chaveFraca = t => `${t.adquirente}|${t.bandeira}|${t.modalidade}|${t.valor.toFixed(2)}`;
-      const idxFraca = new Map();
-      soSistema.forEach(t => { const k = chaveFraca(t); const arr = idxFraca.get(k) || []; arr.push(t); idxFraca.set(k, arr); });
-      const provaveis = [], soEqualsFinal = [];
-      soEquals.forEach(e => {
-        const arr = idxFraca.get(chaveFraca(e));
-        if (arr && arr.length) provaveis.push({ equals: e, sistema: arr.shift() });
-        else soEqualsFinal.push(e);
+      // 5) PROVÁVEIS conciliações: dos restantes, casa quando SÓ um (ou um par
+      //    específico) dos campos diverge, mantendo o resto igual. Cada padrão
+      //    define a "chave em comum" (campos que devem bater) e o `difere`
+      //    (o que precisa estar diferente). Processa do mais confiável (1 campo)
+      //    para o menos (bandeira + tipo). O adquirente sempre precisa bater.
+      const v2 = t => t.valor.toFixed(2);
+      const PADROES_PROVAVEL = [
+        { motivo: 'valor',       label: 'Valor diferente',
+          chave: t => `${t.adquirente}|${t.bandeira}|${t.modalidade}|${t.autorizacao}`,
+          difere: (e, s) => v2(e) !== v2(s) },
+        { motivo: 'autorizacao', label: 'Autorização diferente',
+          chave: t => `${t.adquirente}|${t.bandeira}|${t.modalidade}|${v2(t)}`,
+          difere: (e, s) => e.autorizacao !== s.autorizacao },
+        { motivo: 'bandeira',    label: 'Bandeira diferente',
+          chave: t => `${t.adquirente}|${t.modalidade}|${t.autorizacao}|${v2(t)}`,
+          difere: (e, s) => e.bandeira !== s.bandeira },
+        { motivo: 'modalidade',  label: 'Tipo diferente',
+          chave: t => `${t.adquirente}|${t.bandeira}|${t.autorizacao}|${v2(t)}`,
+          difere: (e, s) => e.modalidade !== s.modalidade },
+        { motivo: 'bandeira_modalidade', label: 'Bandeira e tipo diferentes',
+          chave: t => `${t.adquirente}|${t.autorizacao}|${v2(t)}`,
+          difere: (e, s) => e.bandeira !== s.bandeira && e.modalidade !== s.modalidade },
+      ];
+
+      let restEquals = soEquals.slice();
+      let restSistema = soSistema.slice();
+      const provaveis = [];
+      PADROES_PROVAVEL.forEach(padrao => {
+        const idx = new Map();
+        restSistema.forEach((s, i) => {
+          const k = padrao.chave(s);
+          const arr = idx.get(k) || []; arr.push(i); idx.set(k, arr);
+        });
+        const sisUsado = new Set(), eqUsado = new Set();
+        restEquals.forEach((e, ei) => {
+          const arr = idx.get(padrao.chave(e));
+          if (!arr) return;
+          for (const si of arr) {
+            if (sisUsado.has(si)) continue;
+            if (padrao.difere(e, restSistema[si])) {
+              provaveis.push({ equals: e, sistema: restSistema[si], motivo: padrao.motivo, motivoLabel: padrao.label });
+              sisUsado.add(si); eqUsado.add(ei);
+              break;
+            }
+          }
+        });
+        restEquals = restEquals.filter((_, i) => !eqUsado.has(i));
+        restSistema = restSistema.filter((_, i) => !sisUsado.has(i));
       });
-      const soSistemaFinal = [];
-      idxFraca.forEach(arr => arr.forEach(t => soSistemaFinal.push(t)));
+      const soEqualsFinal = restEquals;
+      const soSistemaFinal = restSistema;
 
       // 6) ALERTAS de parcelamento: onde o sistema fatiou (parceladoSistema) mas a
       //    Equals NÃO indica parcelamento → o sistema parcelou um cartão que não é
@@ -545,16 +585,23 @@ function AjustesSugeridos({ resultado }) {
   }
 
   // Normaliza todos os ajustes num item único e agrupa por funcionário (caixa).
+  // tipo: 'semEquals' (lançamento do sistema sem match na Equals),
+  //       'semSistema' (transação da Equals sem match no sistema),
+  //       'provavel'   (provável conciliação — autorização diferente).
+  // Quem responde pelo lançamento: funcionário (quem lançou) ou, na falta dele,
+  // o responsável pelo PDV/turno (ex.: frentista não é o responsável).
+  const quem = (s) => (s?.funcionario || s?.responsavel || '');
+  const ehResp = (s) => !!s && !s.funcionario && !!s.responsavel;
   const itens = [
-    ...prov.map(p => ({ tipo: 'prov', func: p.sistema.funcionario || '', valor: p.equals.valor || 0, p })),
-    ...soSis.map(s => ({ tipo: 'soSis', func: s.funcionario || '', valor: s.valor || 0, s })),
-    ...soEq.map(e => ({ tipo: 'soEq', func: '', valor: e.valor || 0, e })),
+    ...soSis.map(s => ({ tipo: 'semEquals', func: quem(s), ehResp: ehResp(s), valor: s.valor || 0, s })),
+    ...soEq.map(e => ({ tipo: 'semSistema', func: '', ehResp: false, valor: e.valor || 0, e })),
+    ...prov.map(p => ({ tipo: 'provavel', func: quem(p.sistema), ehResp: ehResp(p.sistema), valor: p.equals.valor || 0, p })),
   ];
   const mapa = new Map();
   itens.forEach(it => {
     const k = it.func || '__sem__';
-    const g = mapa.get(k) || { func: it.func, itens: [], total: 0 };
-    g.itens.push(it); g.total += it.valor;
+    const g = mapa.get(k) || { func: it.func, itens: [], total: 0, ehResp: true };
+    g.itens.push(it); g.total += it.valor; g.ehResp = g.ehResp && it.ehResp;
     mapa.set(k, g);
   });
   const grupos = [...mapa.values()].sort((a, b) => {
@@ -576,9 +623,39 @@ function AjustesSugeridos({ resultado }) {
   );
 }
 
+// Subgrupos dentro de cada funcionário, na ordem pedida:
+//  1) lançamentos do sistema sem correspondência na Equals
+//  2) transações da Equals sem correspondência no sistema
+//  3) prováveis conciliações
+const SUBGRUPOS_AJUSTE = [
+  { tipo: 'semEquals',  titulo: 'Sem correspondência na Equals' },
+  { tipo: 'semSistema', titulo: 'Sem correspondência no sistema' },
+  { tipo: 'provavel',   titulo: 'Prováveis conciliações' },
+];
+
+// Turno de um item de ajuste (lado sistema). Transação só na Equals não tem turno.
+function turnoDoItem(it) {
+  if (it.tipo === 'semEquals') return it.s?.turno;
+  if (it.tipo === 'provavel') return it.p?.sistema?.turno;
+  return null;
+}
+
 function GrupoFuncionarioAjustes({ grupo, defaultOpen }) {
   const [aberto, setAberto] = useState(defaultOpen);
-  const nome = grupo.func || 'Sem funcionário (só na Equals)';
+  const nome = grupo.func || 'Sem funcionário / responsável';
+  // Nível intermediário: TURNO. Agrupa os itens do funcionário por turno.
+  const mapaT = new Map();
+  grupo.itens.forEach(it => {
+    const tv = turnoDoItem(it);
+    const k = (tv == null || tv === '') ? '__sem__' : String(tv);
+    const g = mapaT.get(k) || { key: k, turno: tv, itens: [] };
+    g.itens.push(it); mapaT.set(k, g);
+  });
+  const turnos = [...mapaT.values()].sort((a, b) => {
+    if (a.key === '__sem__') return 1;
+    if (b.key === '__sem__') return -1;
+    return Number(a.turno) - Number(b.turno);
+  });
   return (
     <div>
       <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 text-left gap-3">
@@ -586,46 +663,117 @@ function GrupoFuncionarioAjustes({ grupo, defaultOpen }) {
           <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform flex-shrink-0 ${aberto ? 'rotate-90' : ''}`} />
           <User className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
           <span className="text-[12.5px] font-semibold text-gray-800 truncate">{nome}</span>
+          {grupo.func && grupo.ehResp && (
+            <span className="text-[9.5px] font-semibold uppercase tracking-wide rounded bg-indigo-50 text-indigo-600 px-1.5 py-0.5 flex-shrink-0">responsável</span>
+          )}
           <span className="text-[11px] text-gray-400 flex-shrink-0">({grupo.itens.length})</span>
         </span>
         <span className="text-[11.5px] tabular-nums text-gray-500 flex-shrink-0">{formatCurrency(grupo.total)}</span>
       </button>
       {aberto && (
-        <div className="divide-y divide-gray-50 bg-gray-50/30 border-t border-gray-50">
-          {grupo.itens.map((it, i) => <LinhaAjuste key={i} item={it} />)}
+        <div className="bg-gray-50/30 border-t border-gray-50">
+          {turnos.map(t => <TurnoNode key={t.key} turno={t} />)}
         </div>
       )}
     </div>
   );
 }
 
+function TurnoNode({ turno }) {
+  const [aberto, setAberto] = useState(true);
+  const label = turno.key === '__sem__' ? 'Sem turno' : `Turno ${turno.turno}`;
+  const subgrupos = SUBGRUPOS_AJUSTE
+    .map(sg => ({ ...sg, itens: turno.itens.filter(it => it.tipo === sg.tipo) }))
+    .filter(sg => sg.itens.length > 0);
+  return (
+    <div>
+      <button onClick={() => setAberto(v => !v)}
+        className="w-full pl-9 pr-4 py-1.5 flex items-center gap-2 bg-indigo-50/40 border-b border-indigo-100/60 hover:bg-indigo-50 text-left">
+        <ChevronRight className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-90' : ''}`} />
+        <span className="text-[11.5px] font-semibold text-indigo-700">{label}</span>
+        <span className="text-[10px] text-gray-400">({turno.itens.length})</span>
+      </button>
+      {aberto && subgrupos.map(sg => <SubgrupoAjuste key={sg.tipo} subgrupo={sg} />)}
+    </div>
+  );
+}
+
+function SubgrupoAjuste({ subgrupo }) {
+  const [aberto, setAberto] = useState(true);
+  return (
+    <div>
+      <button onClick={() => setAberto(v => !v)}
+        className="w-full pl-14 pr-4 py-1.5 flex items-center gap-2 bg-gray-100/60 border-b border-gray-100 hover:bg-gray-100 text-left">
+        <ChevronRight className={`h-3 w-3 text-gray-400 flex-shrink-0 transition-transform ${aberto ? 'rotate-90' : ''}`} />
+        <span className="text-[11px] font-semibold text-gray-600">{subgrupo.titulo}</span>
+        <span className="text-[10px] text-gray-400">({subgrupo.itens.length})</span>
+      </button>
+      {aberto && (
+        <div className="divide-y divide-gray-50">
+          {subgrupo.itens.map((it, i) => <LinhaAjuste key={i} item={it} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// "1.3.01.8 — MASTERCARD DÉBITO" (código + nome), ou só o código se não tiver nome.
+function rotuloConta(codigo, nome) {
+  const c = String(codigo ?? '').trim();
+  const n = String(nome ?? '').trim();
+  return n ? `${c} — ${n}` : c;
+}
+
+// Descreve, para uma provável conciliação, QUAL campo diverge (sistema ≠ Equals).
+function DiferencaProvavel({ p }) {
+  const s = p.sistema, e = p.equals;
+  const sis = (v) => <span className="font-mono text-rose-700">{v}</span>;
+  const eq = (v) => <span className="font-mono text-emerald-700">{v}</span>;
+  switch (p.motivo) {
+    case 'valor':
+      return <>valor no sistema {sis(formatCurrency(s.valor))} ≠ Equals {eq(formatCurrency(e.valor))}</>;
+    case 'bandeira':
+      return <>bandeira no sistema {sis(s.bandeira || '—')} ≠ Equals {eq(e.bandeira || '—')}</>;
+    case 'modalidade':
+      return <>tipo no sistema {sis(s.modalidade || '—')} ≠ Equals {eq(e.modalidade || '—')}</>;
+    case 'bandeira_modalidade':
+      return <>bandeira {sis(s.bandeira || '—')} ≠ {eq(e.bandeira || '—')} e tipo {sis(s.modalidade || '—')} ≠ {eq(e.modalidade || '—')}</>;
+    default: // autorizacao
+      return <>autorização no sistema {sis(s.autorizacao)} ≠ Equals {eq(e.autorizacao)}</>;
+  }
+}
+
 function LinhaAjuste({ item }) {
-  if (item.tipo === 'prov') {
+  if (item.tipo === 'provavel') {
     const p = item.p;
     return (
-      <div className="pl-11 pr-4 py-2 flex items-start gap-3">
-        <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Corrigir autorização</span>
+      <div className="pl-16 pr-4 py-2 flex items-start gap-3">
+        <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">{p.motivoLabel || 'Corrigir'}</span>
         <p className="text-[12.5px] text-gray-700 leading-relaxed">
-          Conta <strong>{p.sistema.conta}</strong> em <strong>{fmtDataBR(p.sistema.data)}</strong> ({p.equals.adquirente}/{p.equals.bandeira}/{p.equals.modalidade}, {formatCurrency(p.equals.valor)}):
-          autorização no sistema <span className="font-mono text-rose-700">{p.sistema.autorizacao}</span> ≠ Equals <span className="font-mono text-emerald-700">{p.equals.autorizacao}</span>. → Corrigir a autorização no sistema.
+          Conta <strong>{rotuloConta(p.sistema.conta, p.sistema.contaNome)}</strong> em <strong>{fmtDataBR(p.sistema.data)}</strong> (adquirente {p.equals.adquirente || '—'},
+          {p.motivo === 'autorizacao'
+            ? <> {formatCurrency(p.equals.valor)}</>
+            : <> autorização <span className="font-mono">{p.equals.autorizacao}</span></>}):
+          {' '}<DiferencaProvavel p={p} />. → Conferir e corrigir no sistema.
         </p>
       </div>
     );
   }
-  if (item.tipo === 'soSis') {
+  if (item.tipo === 'semEquals') {
     const s = item.s;
     return (
-      <div className="pl-11 pr-4 py-2 flex items-start gap-3">
+      <div className="pl-16 pr-4 py-2 flex items-start gap-3">
         <span className="mt-0.5 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Revisar no sistema</span>
         <p className="text-[12.5px] text-gray-700 leading-relaxed">
-          Lançamento no sistema (conta <strong>{s.conta}</strong>, {fmtDataBR(s.data)}) sem correspondência na Equals: autorização <span className="font-mono">{s.autorizacao}</span> · {formatCurrency(s.valor)}. → Revisar (valor/autorização errada, duplicidade ou lançamento indevido).
+          Lançamento no sistema (conta <strong>{rotuloConta(s.conta, s.contaNome)}</strong>, {fmtDataBR(s.data)}) sem correspondência na Equals: autorização <span className="font-mono">{s.autorizacao}</span> · {formatCurrency(s.valor)}. → Revisar (valor/autorização errada, duplicidade ou lançamento indevido).
         </p>
       </div>
     );
   }
+  // semSistema (transação só na Equals)
   const e = item.e;
   return (
-    <div className="pl-11 pr-4 py-2 flex items-start gap-3">
+    <div className="pl-16 pr-4 py-2 flex items-start gap-3">
       <span className="mt-0.5 inline-flex items-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Falta no sistema</span>
       <p className="text-[12.5px] text-gray-700 leading-relaxed">
         Transação na Equals sem correspondência: <strong>{e.adquirente}/{e.bandeira}/{e.modalidade}</strong> · autorização <span className="font-mono">{e.autorizacao}</span> · {formatCurrency(e.valor)}. → Lançar no sistema.
@@ -680,7 +828,7 @@ function ListaProvaveis({ itens }) {
   return (
     <div className="bg-white rounded-xl border border-sky-200 overflow-hidden">
       <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-sky-50/50 text-left">
-        <span className="text-[12.5px] font-semibold text-sky-700">Prováveis conciliações <span className="text-gray-400">({itens.length})</span> — mesmo adquirente/bandeira/modalidade/valor, autorização diferente</span>
+        <span className="text-[12.5px] font-semibold text-sky-700">Prováveis conciliações <span className="text-gray-400">({itens.length})</span> — igual em quase tudo, divergindo em um campo (valor, autorização, bandeira ou tipo)</span>
         <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${aberto ? 'rotate-90' : ''}`} />
       </button>
       {aberto && (
@@ -688,27 +836,35 @@ function ListaProvaveis({ itens }) {
           <table className="w-full text-[11.5px]">
             <thead className="bg-sky-50/60 text-gray-500">
               <tr>
+                <th className="text-left px-3 py-1.5 font-semibold">Divergência</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Adquirente</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Bandeira</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Modalidade</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Autorização (Equals)</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Autorização (Sistema)</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Funcionário</th>
-                <th className="text-right px-3 py-1.5 font-semibold">Valor</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Bandeira (Sist. / Equals)</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Tipo (Sist. / Equals)</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Autorização (Sist. / Equals)</th>
+                <th className="text-center px-3 py-1.5 font-semibold">Turno</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Funcionário / Resp.</th>
+                <th className="text-right px-3 py-1.5 font-semibold">Valor (Sist. / Equals)</th>
               </tr>
             </thead>
             <tbody>
-              {itens.map((p, i) => (
-                <tr key={i} className="border-t border-sky-50">
-                  <td className="px-3 py-1 text-gray-700">{p.equals.adquirente || '—'}</td>
-                  <td className="px-3 py-1 text-gray-700">{p.equals.bandeira || '—'}</td>
-                  <td className="px-3 py-1 text-gray-700">{p.equals.modalidade || '—'}</td>
-                  <td className="px-3 py-1 font-mono text-emerald-700">{p.equals.autorizacao}</td>
-                  <td className="px-3 py-1 font-mono text-rose-700">{p.sistema.autorizacao}{p.sistema.conta ? <span className="text-gray-400"> · conta {p.sistema.conta}</span> : null}</td>
-                  <td className="px-3 py-1 text-indigo-700">{p.sistema.funcionario || '—'}</td>
-                  <td className="px-3 py-1 text-right tabular-nums text-gray-700">{formatCurrency(p.equals.valor)}</td>
-                </tr>
-              ))}
+              {itens.map((p, i) => {
+                const dif = campo => (p.motivo === campo || (p.motivo === 'bandeira_modalidade' && (campo === 'bandeira' || campo === 'modalidade')));
+                const par = (campo, sv, ev) => dif(campo)
+                  ? <><span className="font-mono text-rose-700">{sv}</span> <span className="text-gray-300">/</span> <span className="font-mono text-emerald-700">{ev}</span></>
+                  : <span className="text-gray-700">{sv}</span>;
+                return (
+                  <tr key={i} className="border-t border-sky-50">
+                    <td className="px-3 py-1"><span className="inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-0.5">{p.motivoLabel}</span></td>
+                    <td className="px-3 py-1 text-gray-700">{p.equals.adquirente || '—'}</td>
+                    <td className="px-3 py-1">{par('bandeira', p.sistema.bandeira || '—', p.equals.bandeira || '—')}</td>
+                    <td className="px-3 py-1">{par('modalidade', p.sistema.modalidade || '—', p.equals.modalidade || '—')}</td>
+                    <td className="px-3 py-1">{par('autorizacao', p.sistema.autorizacao, p.equals.autorizacao)}{p.sistema.conta ? <span className="text-gray-400"> · conta {p.sistema.conta}</span> : null}</td>
+                    <td className="px-3 py-1 text-center text-gray-700">{p.sistema.turno ?? '—'}</td>
+                    <td className="px-3 py-1 text-indigo-700">{p.sistema.funcionario || p.sistema.responsavel || '—'}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">{par('valor', formatCurrency(p.sistema.valor), formatCurrency(p.equals.valor))}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -721,7 +877,8 @@ function ListaDivergencia({ titulo, itens, cor }) {
   const [aberto, setAberto] = useState(false);
   if (!itens || itens.length === 0) return null;
   const corTxt = cor === 'rose' ? 'text-rose-700' : 'text-amber-700';
-  const temFunc = itens.some(t => t.funcionario);
+  const temFunc = itens.some(t => t.funcionario || t.responsavel);
+  const temTurno = itens.some(t => t.turno != null && t.turno !== '');
   return (
     <div className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
       <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 text-left">
@@ -737,7 +894,8 @@ function ListaDivergencia({ titulo, itens, cor }) {
                 <th className="text-left px-3 py-1.5 font-semibold">Bandeira</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Modalidade</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Autorização</th>
-                {temFunc && <th className="text-left px-3 py-1.5 font-semibold">Funcionário</th>}
+                {temTurno && <th className="text-center px-3 py-1.5 font-semibold">Turno</th>}
+                {temFunc && <th className="text-left px-3 py-1.5 font-semibold">Funcionário / Resp.</th>}
                 <th className="text-right px-3 py-1.5 font-semibold">Valor</th>
               </tr>
             </thead>
@@ -748,7 +906,8 @@ function ListaDivergencia({ titulo, itens, cor }) {
                   <td className="px-3 py-1 text-gray-700">{t.bandeira || '—'}</td>
                   <td className="px-3 py-1 text-gray-700">{t.modalidade || '—'}</td>
                   <td className="px-3 py-1 font-mono text-gray-700">{t.autorizacao || '—'}{t.conta ? <span className="text-gray-400"> · conta {t.conta}</span> : null}</td>
-                  {temFunc && <td className="px-3 py-1 text-indigo-700">{t.funcionario || '—'}</td>}
+                  {temTurno && <td className="px-3 py-1 text-center text-gray-700">{t.turno ?? '—'}</td>}
+                  {temFunc && <td className="px-3 py-1 text-indigo-700">{t.funcionario || t.responsavel || '—'}</td>}
                   <td className="px-3 py-1 text-right tabular-nums text-gray-700">{formatCurrency(t.valor)}</td>
                 </tr>
               ))}

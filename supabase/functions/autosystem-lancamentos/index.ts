@@ -47,7 +47,7 @@ function json(body: unknown, status = 200) {
 const TEXT_COLUMNS = new Set([
   'motivo_nome', 'debito_nome', 'credito_nome',
   'pessoa_nome', 'documento', 'obs',
-  'usuario', 'usuario_nome',
+  'usuario', 'usuario_nome', 'responsavel_nome',
 ]);
 
 serve(async (req) => {
@@ -138,6 +138,7 @@ serve(async (req) => {
       select
         m.empresa,
         m.data,
+        m.turno,
         m.valor,
         m.conta_debitar                                       as debito_codigo,
         convert_to(coalesce(cd.nome, ''), 'LATIN1')           as debito_nome,
@@ -152,6 +153,10 @@ serve(async (req) => {
         -- Funcionário: quem lançou (movto.usuario = login) → usuario → pessoa.nome
         convert_to(coalesce(m.usuario::text, ''), 'LATIN1')   as usuario,
         convert_to(coalesce(pf.nome::text, ''),   'LATIN1')   as usuario_nome,
+        -- Responsável pelo PDV/turno: caixa (empresa, data, turno, conta do PDV
+        -- = contrapartida do cartão em conta_creditar) → pessoa.nome. Preenche
+        -- quando o lançamento não tem usuário (frentista não é o responsável).
+        convert_to(coalesce(pr.nome::text, ''),   'LATIN1')   as responsavel_nome,
         m.grid                                                as lancamento_id
       from movto m
       left join conta         cd on cd.codigo = m.conta_debitar
@@ -160,6 +165,9 @@ serve(async (req) => {
       left join motivo_movto  mm on mm.grid   = m.motivo
       left join usuario       u  on u.nome    = m.usuario
       left join pessoa        pf on pf.grid   = u.pessoa
+      left join caixa         cx on cx.empresa = m.empresa and cx.data = m.data
+                                and cx.turno = m.turno and cx.conta = m.conta_creditar
+      left join pessoa        pr on pr.grid   = cx.pessoa
       where m.empresa = any($1::bigint[])
         and m.data between $2 and $3
         and (m.conta_debitar  = any($4::text[])
