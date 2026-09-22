@@ -17,6 +17,23 @@ import * as servicosService from '../../services/servicosOferecidosService';
 import * as clientesService from '../../services/clientesService';
 import * as contratosService from '../../services/contratosService';
 
+const CAT_LABEL = { bpo: 'BPO', fiscal: 'Fiscal', consultoria: 'Consultoria', tecnologia: 'Tecnologia', treinamento: 'Treinamento', outro: 'Outros' };
+const CAT_ORDEM = ['bpo', 'fiscal', 'consultoria', 'tecnologia', 'treinamento', 'outro'];
+const rotuloCategoria = (c) => CAT_LABEL[c] || (c ? c[0].toUpperCase() + c.slice(1) : 'Outros');
+// Agrupa itens por categoria preservando o índice original (usado nos handlers).
+function agruparItensPorCategoria(itens) {
+  const map = new Map();
+  itens.forEach((it, idx) => {
+    const c = it.categoria || 'outro';
+    if (!map.has(c)) map.set(c, []);
+    map.get(c).push({ it, idx });
+  });
+  const rank = c => { const i = CAT_ORDEM.indexOf(c); return i < 0 ? 99 : i; };
+  return [...map.entries()]
+    .sort((a, b) => rank(a[0]) - rank(b[0]))
+    .map(([cat, linhas]) => ({ cat, label: rotuloCategoria(cat), linhas }));
+}
+
 const STATUS_STYLE = {
   rascunho:   'bg-gray-100   text-gray-600    border-gray-200',
   enviada:    'bg-blue-50    text-blue-700    border-blue-200',
@@ -731,8 +748,15 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
                 <p className="text-xs text-gray-500 dark:text-gray-400">Nenhum item ainda. Use a busca acima pra adicionar serviços do catálogo.</p>
               </div>
             ) : (
-              <div className="rounded-lg border border-gray-200 dark:border-white/10 divide-y divide-gray-100 dark:divide-white/5 overflow-hidden">
-                {itens.map((it, idx) => (
+              <div className="rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden">
+                {agruparItensPorCategoria(itens).map((g) => (
+                  <div key={g.cat} className="border-t first:border-t-0 border-gray-200 dark:border-white/10">
+                    <div className="px-3 py-1.5 bg-gray-50 dark:bg-white/[0.04] flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{g.label}</span>
+                      <span className="text-[10px] text-gray-400">· {g.linhas.length}</span>
+                    </div>
+                    <div className="divide-y divide-gray-100 dark:divide-white/5">
+                {g.linhas.map(({ it, idx }) => (
                   <div key={idx} className="p-3 hover:bg-gray-50/50 dark:hover:bg-white/[0.03]">
                     <div className="grid grid-cols-12 gap-3 items-start">
                       <div className="col-span-5">
@@ -775,6 +799,9 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
+                    </div>
+                  </div>
+                ))}
                     </div>
                   </div>
                 ))}

@@ -26,6 +26,13 @@ const PERIODO = {
   unico:  { label: 'Único',  sufixo: '' },
 };
 
+const CATEGORIA_LABEL = {
+  bpo: 'BPO', fiscal: 'Fiscal', consultoria: 'Consultoria',
+  tecnologia: 'Tecnologia', treinamento: 'Treinamento', outro: 'Outros',
+};
+const CATEGORIA_ORDEM = ['bpo', 'fiscal', 'consultoria', 'tecnologia', 'treinamento', 'outro'];
+const rotuloCategoria = (c) => CATEGORIA_LABEL[c] || (c ? c[0].toUpperCase() + c.slice(1) : 'Outros');
+
 function dataBR(iso) {
   if (!iso) return '';
   const [y, m, d] = String(iso).slice(0, 10).split('-');
@@ -78,6 +85,20 @@ export default function PropostaPublica() {
 
   const itens = useMemo(() => prop?.itens || [], [prop]);
   const descPct = Number(prop?.desconto_percentual) || 0;
+
+  // Serviços agrupados por categoria (na ordem definida; desconhecidas ao fim).
+  const grupos = useMemo(() => {
+    const map = new Map();
+    itens.forEach(it => {
+      const c = it.categoria || 'outro';
+      if (!map.has(c)) map.set(c, []);
+      map.get(c).push(it);
+    });
+    const rank = c => { const i = CATEGORIA_ORDEM.indexOf(c); return i < 0 ? 99 : i; };
+    return [...map.entries()]
+      .sort((a, b) => rank(a[0]) - rank(b[0]))
+      .map(([cat, its]) => ({ cat, label: rotuloCategoria(cat), itens: its }));
+  }, [itens]);
 
   const baseItem = useCallback((it) => {
     const unit = Number(it.valor_unitario) || 0;
@@ -168,18 +189,29 @@ export default function PropostaPublica() {
           </p>
         </div>
 
-        <div className="mt-4 space-y-3">
-          {itens.map((it, idx) => (
-            <ServicoCard
-              key={it.id}
-              it={it}
-              idx={idx}
-              ativo={ativos.has(it.id)}
-              qtd={qtds[it.id]}
-              onToggle={() => toggle(it.id)}
-              onQtd={(v) => setQtd(it.id, v)}
-              base={baseItem(it)}
-            />
+        <div className="mt-5 space-y-6">
+          {grupos.map((g) => (
+            <section key={g.cat}>
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <span className="h-4 w-1 rounded-full bg-teal-500" />
+                <h2 className="text-[0.72em] font-bold uppercase tracking-wider text-teal-700">{g.label}</h2>
+                <span className="text-[0.66em] text-slate-400">· {g.itens.length} serviço{g.itens.length === 1 ? '' : 's'}</span>
+              </div>
+              <div className="space-y-3">
+                {g.itens.map((it, idx) => (
+                  <ServicoCard
+                    key={it.id}
+                    it={it}
+                    idx={idx}
+                    ativo={ativos.has(it.id)}
+                    qtd={qtds[it.id]}
+                    onToggle={() => toggle(it.id)}
+                    onQtd={(v) => setQtd(it.id, v)}
+                    base={baseItem(it)}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
           {itens.length === 0 && (
             <p className="text-center text-[0.85em] text-slate-400 py-10">Esta proposta ainda não tem serviços.</p>
