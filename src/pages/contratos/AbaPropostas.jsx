@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Plus, Search, Pencil, Trash2, Send, CheckCircle2, XCircle, Loader2,
+  Link2 as LinkIcon,
   FileText, MoreHorizontal, Receipt,
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
@@ -60,6 +61,16 @@ export default function AbaPropostas({ showToast }) {
       showToast('success', msg);
       await carregar();
     } catch (err) { showToast('error', err.message); }
+  };
+
+  // Gera (ou reaproveita) o token e copia o link público da proposta.
+  const copiarLink = async (p) => {
+    try {
+      const token = await propostasService.gerarLinkPublico(p.id);
+      const link = propostasService.montarLinkPublico(token);
+      try { await navigator.clipboard.writeText(link); showToast('success', 'Link copiado: ' + link); }
+      catch { window.prompt('Copie o link público da proposta:', link); }
+    } catch (err) { showToast('error', 'Não foi possível gerar o link: ' + err.message); }
   };
 
   const filtradas = propostas.filter(p => {
@@ -197,6 +208,10 @@ export default function AbaPropostas({ showToast }) {
                               </button>
                             </>
                           )}
+                          <button onClick={() => copiarLink(p)}
+                            className="rounded-md p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Copiar link público (calculadora do cliente)">
+                            <LinkIcon className="h-3.5 w-3.5" />
+                          </button>
                           <button onClick={() => setModal({ open: true, propostaId: p.id })}
                             className="rounded-md p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Editar">
                             <Pencil className="h-3.5 w-3.5" />

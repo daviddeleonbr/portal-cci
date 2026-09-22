@@ -7,6 +7,7 @@ import LandingPortal from './pages/LandingPortal';
 import LandingVisor360 from './pages/LandingVisor360';
 import LandingBpoFinanceiro from './pages/LandingBpoFinanceiro';
 import PoliticaPrivacidade from './pages/PoliticaPrivacidade';
+import PropostaPublica from './pages/PropostaPublica';
 // import SolicitarOrcamento from './pages/SolicitarOrcamento'; // INATIVO — uso futuro
 
 // Admin
@@ -122,6 +123,8 @@ export default function App() {
         {/* Política de Privacidade (pública, LGPD) — alias /privacidade */}
         <Route path="/politica-privacidade" element={<PoliticaPrivacidade />} />
         <Route path="/privacidade" element={<Navigate to="/politica-privacidade" replace />} />
+        {/* Proposta pública (calculadora read-only) — link por token */}
+        <Route path="/proposta/:token" element={<PropostaPublica />} />
         {/* Rota /solicitar-orcamento desativada temporariamente — uso futuro */}
         {/* <Route path="/solicitar-orcamento" element={<SolicitarOrcamento />} /> */}
         {/* Seletor de portais (admin / cliente) */}

@@ -58,6 +58,15 @@ export async function salvarProposta(proposta, itens) {
   // — não são colunas de cci_propostas, então precisam ficar fora do header.
   const { id, cliente, itens: _itensAnexados, created_at, updated_at, ...header } = proposta;
 
+  // Sanea campos: string vazia em coluna uuid/date quebra o Postgres
+  // ("invalid input syntax for type uuid: ''"). Empty → null.
+  ['cliente_id', 'criada_por', 'token'].forEach(k => {
+    if (header[k] === '' || header[k] === undefined) header[k] = null;
+  });
+  if (header.valida_ate === '') header.valida_ate = null;
+  header.desconto_valor      = Number(header.desconto_valor)      || 0;
+  header.desconto_percentual = Number(header.desconto_percentual) || 0;
+
   // Recalcula totais a partir dos itens (não confia no que vem do front)
   const t = calcularTotais(itens, header.desconto_valor, header.desconto_percentual);
   header.valor_subtotal = t.subtotal;
@@ -105,6 +114,28 @@ export async function salvarProposta(proposta, itens) {
   }
 
   return { id: propostaId };
+}
+
+// ─── Link público (calculadora read-only p/ o cliente) ─────────
+// Gera um token na proposta (se ainda não tiver) e devolve. O link é
+// `${origin}/proposta/${token}` — ver montarLinkPublico().
+export async function gerarLinkPublico(id) {
+  const { data: atual, error: errGet } = await supabase
+    .from('cci_propostas').select('token').eq('id', id).single();
+  if (errGet) throw errGet;
+  let token = atual?.token;
+  if (!token) {
+    token = (crypto?.randomUUID?.() || null);
+    const { error } = await supabase.from('cci_propostas').update({ token }).eq('id', id);
+    if (error) throw error;
+  }
+  return token;
+}
+
+export function montarLinkPublico(token) {
+  if (!token) return '';
+  const origem = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${origem}/proposta/${token}`;
 }
 
 export async function excluirProposta(id) {
