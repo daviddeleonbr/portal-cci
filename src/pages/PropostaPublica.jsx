@@ -13,13 +13,12 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Loader2, Calculator, Minus, Plus, Info, ShieldCheck, CalendarClock, Sparkles,
+  Loader2, Calculator, Minus, Plus, Info, ShieldCheck, CalendarClock,
 } from 'lucide-react';
 import { obterPropostaPublica } from '../services/propostaPublicaService';
 import { formatCurrency } from '../utils/format';
 
 const FONTE_BASE = 16;               // px — base do conteúdo (1em)
-const FONTE_KEY = 'cci_proposta_fonte';
 
 const PERIODO = {
   mensal: { label: 'Mensal', sufixo: '/mês' },
@@ -44,13 +43,8 @@ export default function PropostaPublica() {
   const [ativos, setAtivos] = useState(() => new Set());
   const [qtds, setQtds] = useState(() => ({}));
 
-  // Ajuste de fonte do conteúdo (−2..+2 px)
-  const [fonteDelta, setFonteDelta] = useState(() => {
-    try { const v = parseInt(localStorage.getItem(FONTE_KEY), 10); return Number.isFinite(v) ? Math.max(-2, Math.min(2, v)) : 0; }
-    catch { return 0; }
-  });
-  useEffect(() => { try { localStorage.setItem(FONTE_KEY, String(fonteDelta)); } catch { /* ignore */ } }, [fonteDelta]);
-  const estiloFonte = { fontSize: `${FONTE_BASE + fonteDelta}px` };
+  // Fonte-base do conteúdo (+4px sobre o padrão), aplicada a `main` e à barra.
+  const estiloFonte = { fontSize: `${FONTE_BASE + 4}px` };
 
   useEffect(() => {
     let cancel = false;
@@ -144,13 +138,9 @@ export default function PropostaPublica() {
         <div className="absolute -top-24 -right-16 h-64 w-64 rounded-full bg-teal-500/25 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
         <div className="relative mx-auto max-w-2xl px-5 pt-6 pb-10">
-          <div className="flex items-center justify-between gap-3">
-            {/* Logo num chip claro para destacar da marca */}
-            <div className="inline-flex items-center gap-2.5 rounded-2xl bg-white px-3.5 py-2 shadow-lg shadow-black/20 ring-1 ring-black/5">
-              <img src="/logo-cci-landing.png" alt="CCI" className="h-8 w-auto object-contain" />
-            </div>
-            {/* Controle de tamanho da fonte */}
-            <ControleFonte delta={fonteDelta} onDelta={setFonteDelta} />
+          {/* Logo num chip claro para destacar da marca */}
+          <div className="inline-flex items-center gap-2.5 rounded-2xl bg-white px-3.5 py-2 shadow-lg shadow-black/20 ring-1 ring-black/5">
+            <img src="/logo-cci-landing.png" alt="CCI" className="h-8 w-auto object-contain" />
           </div>
 
           <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
@@ -171,8 +161,7 @@ export default function PropostaPublica() {
       </header>
 
       <main className="mx-auto max-w-2xl px-5" style={estiloFonte}>
-        <div className="-mt-5 relative rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/70 p-4 flex items-start gap-3">
-          <Sparkles className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="-mt-5 relative rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/70 p-4">
           <p className="text-[0.81em] text-slate-600 leading-relaxed">
             <strong className="text-slate-800">Marque ou desmarque</strong> os serviços tocando em cada card e ajuste as
             quantidades. O <strong className="text-slate-800">valor mensal estimado</strong> atualiza na hora.
@@ -229,24 +218,6 @@ export default function PropostaPublica() {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── Controle de tamanho de fonte (A− / A+) ─────────────────────
-function ControleFonte({ delta, onDelta }) {
-  const btn = 'h-8 w-8 grid place-items-center rounded-lg text-white/90 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors';
-  return (
-    <div className="inline-flex items-center gap-0.5 rounded-xl bg-white/10 ring-1 ring-white/15 p-0.5" role="group" aria-label="Tamanho da fonte">
-      <button type="button" className={btn} onClick={() => onDelta(Math.max(-2, delta - 1))} disabled={delta <= -2} aria-label="Diminuir fonte">
-        <span className="text-[11px] font-bold">A</span><Minus className="h-3 w-3 -ml-0.5" />
-      </button>
-      <span className="w-7 text-center text-[10.5px] font-semibold text-white/70 tabular-nums select-none">
-        {delta === 0 ? 'A' : delta > 0 ? `+${delta}` : delta}
-      </span>
-      <button type="button" className={btn} onClick={() => onDelta(Math.min(2, delta + 1))} disabled={delta >= 2} aria-label="Aumentar fonte">
-        <span className="text-[15px] font-bold">A</span><Plus className="h-3 w-3 -ml-0.5" />
-      </button>
     </div>
   );
 }
