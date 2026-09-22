@@ -8,7 +8,8 @@ import { RefreshCw, Sparkles, X } from 'lucide-react';
 import { aplicarAtualizacao } from '../../pwaUpdate';
 
 // Onde o toast NÃO deve aparecer: login (admin/cliente), página inicial,
-// landing do BPO Financeiro e política de privacidade.
+// landing do BPO Financeiro, política de privacidade e a proposta pública
+// (experiência isolada para o prospect).
 function rotaOculta(pathname) {
   const p = pathname || '';
   return (
@@ -16,7 +17,8 @@ function rotaOculta(pathname) {
     p === '/admin' ||                   // login admin
     p.startsWith('/cliente/login') ||   // login cliente
     p === '/bpo-financeiro' ||          // landing do BPO Financeiro
-    p === '/politica-privacidade'       // política de privacidade
+    p === '/politica-privacidade' ||    // política de privacidade
+    p.startsWith('/proposta/')          // proposta pública (prospect)
   );
 }
 
