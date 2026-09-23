@@ -134,6 +134,13 @@ export async function gerarLinkPublico(id) {
   return token;
 }
 
+// Exclui a aceitação: remove os comprovantes e reverte status → 'enviada'.
+export async function excluirAceitacao(propostaId) {
+  const { data, error } = await supabase.rpc('cci_proposta_aceite_excluir', { p_proposta_id: propostaId });
+  if (error) throw error;
+  return data;
+}
+
 // Comprovantes de aceite de uma proposta (admin — RLS select).
 export async function listarAceites(propostaId) {
   const { data, error } = await supabase

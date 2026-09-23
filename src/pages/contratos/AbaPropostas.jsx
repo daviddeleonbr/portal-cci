@@ -65,6 +65,10 @@ export default function AbaPropostas({ showToast }) {
   useEffect(() => { carregar(); }, [carregar]);
 
   const remover = async (p) => {
+    if (p.status === 'aceita') {
+      showToast('error', 'Proposta aceita — exclua a aceitação primeiro (botão do escudo) para poder remover.');
+      return;
+    }
     if (!confirm(`Remover a proposta "${p.titulo}"?`)) return;
     try {
       await propostasService.excluirProposta(p.id);
@@ -288,6 +292,7 @@ export default function AbaPropostas({ showToast }) {
       <ModalAceites
         proposta={aceitesProp}
         onClose={() => setAceitesProp(null)}
+        onExcluido={() => { setAceitesProp(null); carregar(); }}
         showToast={showToast}
       />
     </div>
@@ -297,9 +302,22 @@ export default function AbaPropostas({ showToast }) {
 // ═══════════════════════════════════════════════════════════
 // Modal: comprovante(s) de aceite (prova: data, IP, dispositivo, local)
 // ═══════════════════════════════════════════════════════════
-function ModalAceites({ proposta, onClose, showToast }) {
+function ModalAceites({ proposta, onClose, onExcluido, showToast }) {
   const [aceites, setAceites] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+
+  const excluir = async () => {
+    if (!proposta) return;
+    if (!confirm('Excluir a aceitação desta proposta? Os comprovantes serão removidos e a proposta volta para "enviada".')) return;
+    setExcluindo(true);
+    try {
+      await propostasService.excluirAceitacao(proposta.id);
+      showToast('success', 'Aceitação excluída');
+      onExcluido?.();
+    } catch (e) { showToast('error', 'Erro ao excluir aceitação: ' + e.message); }
+    finally { setExcluindo(false); }
+  };
   useEffect(() => {
     if (!proposta) { setAceites(null); return; }
     let cancel = false;
@@ -317,7 +335,18 @@ function ModalAceites({ proposta, onClose, showToast }) {
   };
 
   return (
-    <Modal open={!!proposta} onClose={onClose} title="Comprovante de aceite" size="md">
+    <Modal open={!!proposta} onClose={onClose} title="Comprovante de aceite" size="md"
+      footer={proposta?.status === 'aceita' ? (
+        <div className="flex justify-between items-center w-full gap-3">
+          <button type="button" onClick={excluir} disabled={excluindo}
+            className="inline-flex items-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-50">
+            {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Excluir aceitação
+          </button>
+          <button type="button" onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">Fechar</button>
+        </div>
+      ) : undefined}>
       {loading || !aceites ? (
         <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-emerald-500" /></div>
       ) : aceites.length === 0 ? (
