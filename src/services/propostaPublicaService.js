@@ -8,5 +8,13 @@ export async function obterPropostaPublica(token) {
   if (!token) return null;
   const { data, error } = await supabase.rpc('cci_proposta_publica', { p_token: token });
   if (error) throw error;
-  return data || null; // { titulo, cliente_nome, ..., itens: [...] } ou null
+  return data || null; // { titulo, cliente_nome, status, aceito_em, ..., itens: [...] } ou null
+}
+
+// Registra o aceite (status → 'aceita') + prova (IP/user-agent no servidor,
+// `dados` = dispositivo/geolocalização do navegador).
+export async function aceitarPropostaPublica(token, dados) {
+  const { data, error } = await supabase.rpc('cci_proposta_aceitar', { p_token: token, p_dados: dados || {} });
+  if (error) throw error;
+  return data; // { ok, status, aceito_em, ja_aceita?, erro? }
 }

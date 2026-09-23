@@ -103,6 +103,10 @@ async function resolverToken(session, key, portal) {
 // Chamado pelo client Supabase a cada request. Retorna o bearer a usar.
 // Sem sessão → retorna a ANON key (comportamento público/anon de hoje).
 export async function getAccessTokenAtivo() {
+  // Rotas públicas (ex.: proposta por link) NUNCA usam sessão — sempre anon.
+  // Senão uma sessão cliente antiga/expirada no navegador quebra a leitura.
+  try { if (window.location.pathname.startsWith('/proposta/')) return ANON; } catch { /* noop */ }
+
   const portal = portalAtivo();
 
   // Modo demo: a sessão cliente é o admin "fingindo" de cliente e não tem

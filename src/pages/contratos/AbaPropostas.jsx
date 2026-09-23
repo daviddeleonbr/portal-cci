@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Plus, Search, Pencil, Trash2, Send, CheckCircle2, XCircle, Loader2,
-  Link2 as LinkIcon,
+  Link2 as LinkIcon, Eye, ShieldCheck, MapPin,
   FileText, MoreHorizontal, Receipt,
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
@@ -50,6 +50,7 @@ export default function AbaPropostas({ showToast }) {
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [modal, setModal] = useState({ open: false, propostaId: null });
   const [converterId, setConverterId] = useState(null);
+  const [aceitesProp, setAceitesProp] = useState(null); // proposta p/ ver comprovante
 
   const carregar = useCallback(async () => {
     try {
@@ -78,6 +79,14 @@ export default function AbaPropostas({ showToast }) {
       showToast('success', msg);
       await carregar();
     } catch (err) { showToast('error', err.message); }
+  };
+
+  // Pré-visualiza a proposta como o cliente a verá (abre a página pública).
+  const visualizar = async (p) => {
+    try {
+      const token = await propostasService.gerarLinkPublico(p.id);
+      window.open(propostasService.montarLinkPublico(token), '_blank', 'noopener');
+    } catch (err) { showToast('error', 'Não foi possível abrir a prévia: ' + err.message); }
   };
 
   // Gera (ou reaproveita) o token e copia o link público da proposta.
@@ -194,7 +203,9 @@ export default function AbaPropostas({ showToast }) {
                         {p.cliente_cnpj && <p className="text-xs text-gray-400 font-mono">{p.cliente_cnpj}</p>}
                       </td>
                       <td className="px-6 py-3 text-right font-semibold text-gray-900 tabular-nums">
-                        {formatCurrency(Number(p.valor_total || 0))}
+                        {p.modelo === 'consultiva'
+                          ? <>{formatCurrency(Number(p.investimento_valor || 0))}<span className="text-[10px] font-normal text-gray-400"> {p.investimento_periodicidade === 'anual' ? '/ano' : p.investimento_periodicidade === 'unico' ? 'único' : '/mês'}</span></>
+                          : formatCurrency(Number(p.valor_total || 0))}
                       </td>
                       <td className="px-6 py-3 text-xs text-gray-600">
                         {formatDate(p.data_proposta)}
@@ -225,8 +236,18 @@ export default function AbaPropostas({ showToast }) {
                               </button>
                             </>
                           )}
+                          {(p.status === 'aceita' || p.status === 'convertida') && (
+                            <button onClick={() => setAceitesProp(p)}
+                              className="rounded-md p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors" title="Comprovante de aceite">
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <button onClick={() => visualizar(p)}
+                            className="rounded-md p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Pré-visualizar como o cliente vê">
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
                           <button onClick={() => copiarLink(p)}
-                            className="rounded-md p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Copiar link público (calculadora do cliente)">
+                            className="rounded-md p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Copiar link público">
                             <LinkIcon className="h-3.5 w-3.5" />
                           </button>
                           <button onClick={() => setModal({ open: true, propostaId: p.id })}
@@ -263,7 +284,89 @@ export default function AbaPropostas({ showToast }) {
         onDone={() => { setConverterId(null); carregar(); }}
         showToast={showToast}
       />
+
+      <ModalAceites
+        proposta={aceitesProp}
+        onClose={() => setAceitesProp(null)}
+        showToast={showToast}
+      />
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Modal: comprovante(s) de aceite (prova: data, IP, dispositivo, local)
+// ═══════════════════════════════════════════════════════════
+function ModalAceites({ proposta, onClose, showToast }) {
+  const [aceites, setAceites] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!proposta) { setAceites(null); return; }
+    let cancel = false;
+    (async () => {
+      try { setLoading(true); const a = await propostasService.listarAceites(proposta.id); if (!cancel) setAceites(a); }
+      catch (e) { if (!cancel) { showToast('error', 'Erro ao carregar comprovante: ' + e.message); onClose(); } }
+      finally { if (!cancel) setLoading(false); }
+    })();
+    return () => { cancel = true; };
+  }, [proposta, onClose, showToast]);
+
+  const fmtDataHora = (iso) => {
+    try { const d = new Date(iso); const p = n => String(n).padStart(2, '0'); return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+    catch { return '—'; }
+  };
+
+  return (
+    <Modal open={!!proposta} onClose={onClose} title="Comprovante de aceite" size="md">
+      {loading || !aceites ? (
+        <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-emerald-500" /></div>
+      ) : aceites.length === 0 ? (
+        <p className="text-sm text-gray-500 py-6 text-center">Sem registro de aceite para esta proposta.</p>
+      ) : (
+        <div className="space-y-4">
+          {aceites.map((a) => {
+            const d = a.dados || {};
+            const geo = d.geolocalizacao || {};
+            const linha = (rot, val) => val ? (
+              <div className="flex gap-2 text-[12px]"><span className="text-gray-400 w-28 flex-shrink-0">{rot}</span><span className="text-gray-700 dark:text-gray-200 break-all">{val}</span></div>
+            ) : null;
+            return (
+              <div key={a.id} className="rounded-xl border border-emerald-200 dark:border-emerald-500/25 bg-emerald-50/40 dark:bg-emerald-500/[0.06] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <span className="text-[13px] font-semibold text-emerald-800 dark:text-emerald-300">Aceito em {fmtDataHora(a.aceito_em)}</span>
+                </div>
+                <div className="space-y-1.5">
+                  {linha('IP', a.ip)}
+                  {linha('Dispositivo', a.user_agent || d.user_agent)}
+                  {linha('Plataforma', d.plataforma)}
+                  {linha('Idioma', d.idioma)}
+                  {linha('Fuso horário', d.fuso)}
+                  {linha('Tela', d.tela ? `${d.tela.largura}×${d.tela.altura} (dpr ${d.tela.dpr})` : null)}
+                  {linha('Origem (URL)', d.url)}
+                  {linha('Referrer', d.referrer)}
+                  {linha('Hora no dispositivo', d.ts_cliente ? fmtDataHora(d.ts_cliente) : null)}
+                  <div className="flex gap-2 text-[12px] items-start">
+                    <span className="text-gray-400 w-28 flex-shrink-0">Localização</span>
+                    <span className="text-gray-700 dark:text-gray-200">
+                      {geo.status === 'ok' ? (
+                        <a href={`https://www.google.com/maps?q=${geo.lat},${geo.lng}`} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 underline">
+                          <MapPin className="h-3.5 w-3.5" /> {Number(geo.lat).toFixed(6)}, {Number(geo.lng).toFixed(6)}
+                          {geo.precisao_m ? <span className="text-gray-400 no-underline"> (±{Math.round(geo.precisao_m)}m)</span> : null}
+                        </a>
+                      ) : geo.status === 'negada' ? 'Permissão negada pelo cliente'
+                        : geo.status === 'indisponivel' ? 'Indisponível no dispositivo'
+                        : 'Não informada'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -440,6 +543,8 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
       data_proposta: hoje, valida_ate: '',
       desconto_valor: '0', desconto_percentual: '0',
       status: 'rascunho',
+      // Modelo da proposta: 'calculadora' (padrão) | 'consultiva'
+      modelo: 'calculadora', conteudo_md: '', investimento_valor: '', investimento_periodicidade: 'mensal',
     };
   }
 
@@ -480,6 +585,10 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
           desconto_valor:      String(p.desconto_valor      ?? '0'),
           desconto_percentual: String(p.desconto_percentual ?? '0'),
           valida_ate:          p.valida_ate || '',
+          modelo:              p.modelo || 'calculadora',
+          conteudo_md:         p.conteudo_md ?? '',
+          investimento_valor:  p.investimento_valor ?? '',
+          investimento_periodicidade: p.investimento_periodicidade || 'mensal',
         });
         setItens(p.itens || []);
       } catch (err) {
@@ -550,8 +659,13 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (itens.length === 0) {
+    const ehConsultiva = form.modelo === 'consultiva';
+    if (!ehConsultiva && itens.length === 0) {
       alert('Adicione pelo menos um item à proposta.');
+      return;
+    }
+    if (ehConsultiva && !String(form.conteudo_md || '').trim()) {
+      alert('Escreva o conteúdo da proposta (markdown).');
       return;
     }
     setSalvando(true);
@@ -560,7 +674,7 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
         ...form,
         desconto_valor:      parseFloat(form.desconto_valor)      || 0,
         desconto_percentual: parseFloat(form.desconto_percentual) || 0,
-      }, itens);
+      }, ehConsultiva ? [] : itens);
       showToast('success', propostaId ? 'Proposta atualizada' : 'Proposta criada');
       onSaved();
     } catch (err) {
@@ -576,9 +690,15 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
       footer={(
         <div className="flex items-center justify-between gap-3 w-full">
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            Subtotal: <span className="font-semibold text-gray-700 dark:text-gray-200 tabular-nums">{formatCurrency(totais.subtotal)}</span>
-            {totais.desconto > 0 && <> · Desconto: <span className="text-rose-600 dark:text-rose-400 tabular-nums">−{formatCurrency(totais.desconto)}</span></>}
-            <span className="ml-2">Total: <span className="text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(totais.total)}</span></span>
+            {form.modelo === 'consultiva' ? (
+              <span>Investimento: <span className="text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(Number(form.investimento_valor) || 0)}</span>
+                <span className="text-gray-400"> · {form.investimento_periodicidade === 'anual' ? '/ano' : form.investimento_periodicidade === 'unico' ? 'único' : '/mês'}</span>
+              </span>
+            ) : (<>
+              Subtotal: <span className="font-semibold text-gray-700 dark:text-gray-200 tabular-nums">{formatCurrency(totais.subtotal)}</span>
+              {totais.desconto > 0 && <> · Desconto: <span className="text-rose-600 dark:text-rose-400 tabular-nums">−{formatCurrency(totais.desconto)}</span></>}
+              <span className="ml-2">Total: <span className="text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(totais.total)}</span></span>
+            </>)}
           </div>
           <div className="flex items-center gap-3">
             {propostaId && (
@@ -675,6 +795,19 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
           <div>
             <h4 className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Proposta</h4>
             <div className="space-y-3">
+              {/* Modelo da proposta */}
+              <div className="inline-flex rounded-lg bg-gray-100 dark:bg-white/5 p-0.5">
+                {[
+                  { k: 'calculadora', label: 'Calculadora', hint: 'menu de serviços interativo' },
+                  { k: 'consultiva', label: 'Consultiva', hint: 'documento + investimento' },
+                ].map(m => (
+                  <button key={m.k} type="button" title={m.hint}
+                    onClick={() => setForm(f => ({ ...f, modelo: m.k }))}
+                    className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      form.modelo === m.k ? 'bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400'
+                    }`}>{m.label}</button>
+                ))}
+              </div>
               <input type="text" required value={form.titulo}
                 onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
                 placeholder="Título *"
@@ -700,7 +833,46 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
             </div>
           </div>
 
-          {/* Itens */}
+          {/* Consultiva: conteúdo em markdown + investimento */}
+          {form.modelo === 'consultiva' && (
+            <>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Conteúdo (markdown)</h4>
+                  <span className="text-[10px] text-gray-400"># título · ## subtítulo · **negrito** · - lista · [link](url)</span>
+                </div>
+                <textarea rows={14} value={form.conteudo_md || ''}
+                  onChange={e => setForm(f => ({ ...f, conteudo_md: e.target.value }))}
+                  placeholder={'# Apresentação\n\nTexto...\n\n## Escopo\n- item 1\n- item 2\n\n## Objetivo\n\n...'}
+                  className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 py-2 text-[12.5px] font-mono leading-relaxed resize-y focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+              </div>
+              <div>
+                <h4 className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Investimento</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Valor (R$)</label>
+                    <input type="number" step="0.01" value={form.investimento_valor}
+                      onChange={e => setForm(f => ({ ...f, investimento_valor: e.target.value }))}
+                      placeholder="0,00"
+                      className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-3 text-sm tabular-nums focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Periodicidade</label>
+                    <select value={form.investimento_periodicidade}
+                      onChange={e => setForm(f => ({ ...f, investimento_periodicidade: e.target.value }))}
+                      className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40">
+                      <option value="mensal">Mensal</option>
+                      <option value="anual">Anual</option>
+                      <option value="unico">Pagamento único</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Itens (modo calculadora) */}
+          {form.modelo === 'calculadora' && (<>
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Itens da proposta</h4>
@@ -828,6 +1000,7 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
             </div>
             <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">Use só um dos dois — o que preencher zera o outro.</p>
           </div>
+          </>)}
 
           {/* Observações */}
           <div>

@@ -14,9 +14,11 @@ import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Loader2, Calculator, Minus, Plus, Info, ShieldCheck, CalendarClock,
+  CheckCircle2, X,
 } from 'lucide-react';
-import { obterPropostaPublica } from '../services/propostaPublicaService';
+import { obterPropostaPublica, aceitarPropostaPublica } from '../services/propostaPublicaService';
 import { formatCurrency } from '../utils/format';
+import Markdown from '../components/ui/Markdown';
 
 const FONTE_BASE = 16;               // px — base do conteúdo (1em)
 
@@ -152,34 +154,14 @@ export default function PropostaPublica() {
 
   const temUnico = totais.unico > 0;
 
+  // Modelo CONSULTIVA: documento em markdown + bloco de investimento.
+  if (prop.modelo === 'consultiva') {
+    return <PropostaConsultiva prop={prop} estiloFonte={estiloFonte} token={token} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-40">
-      {/* ── Cabeçalho ── */}
-      <header className="relative overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800 text-white">
-        <div className="absolute -top-24 -right-16 h-64 w-64 rounded-full bg-teal-500/25 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
-        <div className="relative mx-auto max-w-2xl px-5 pt-6 pb-10">
-          {/* Logo num chip claro para destacar da marca */}
-          <div className="inline-flex items-center gap-2.5 rounded-2xl bg-white px-3.5 py-2 shadow-lg shadow-black/20 ring-1 ring-black/5">
-            <img src="/logo-cci-landing.png" alt="CCI" className="h-8 w-auto object-contain" />
-          </div>
-
-          <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
-            className="mt-7 text-[22px] sm:text-2xl font-bold leading-tight">
-            {prop.titulo || 'Proposta de serviços'}
-          </motion.h1>
-          {prop.cliente_nome && (
-            <p className="mt-1 text-white/80 text-sm">Preparada para <strong className="font-semibold text-white">{prop.cliente_nome}</strong></p>
-          )}
-          {prop.descricao && <p className="mt-3 text-[13.5px] text-white/80 leading-relaxed">{prop.descricao}</p>}
-          <div className="mt-5 flex flex-wrap gap-2 text-[11.5px]">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/10 px-3 py-1"><Calculator className="h-3.5 w-3.5 text-teal-300" /> Simulação interativa</span>
-            {prop.valida_ate && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/10 px-3 py-1"><CalendarClock className="h-3.5 w-3.5 text-teal-300" /> Válida até {dataBR(prop.valida_ate)}</span>
-            )}
-          </div>
-        </div>
-      </header>
+      <Cabecalho prop={prop} interativa />
 
       <main className="mx-auto max-w-2xl px-5" style={estiloFonte}>
         <div className="-mt-5 relative rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/70 p-4">
@@ -218,6 +200,8 @@ export default function PropostaPublica() {
           )}
         </div>
 
+        <AceiteProposta token={token} prop={prop} />
+
         <p className="mt-6 text-[0.72em] text-slate-400 leading-relaxed flex items-start gap-1.5">
           <ShieldCheck className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-slate-300" />
           Valores estimados para sua conferência. A contratação e os valores finais são formalizados
@@ -250,6 +234,193 @@ export default function PropostaPublica() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Coleta de dados do dispositivo + geolocalização (prova) ────
+async function coletarDadosAceite() {
+  const base = {
+    ts_cliente: new Date().toISOString(),
+    user_agent: navigator.userAgent,
+    plataforma: navigator.userAgentData?.platform || navigator.platform || null,
+    idioma: navigator.language,
+    idiomas: Array.isArray(navigator.languages) ? navigator.languages : undefined,
+    tela: { largura: window.screen?.width, altura: window.screen?.height, dpr: window.devicePixelRatio },
+    viewport: { largura: window.innerWidth, altura: window.innerHeight },
+    fuso: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } })(),
+    url: window.location.href,
+    referrer: document.referrer || null,
+  };
+  const geo = await new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve({ status: 'indisponivel' });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ status: 'ok', lat: pos.coords.latitude, lng: pos.coords.longitude, precisao_m: pos.coords.accuracy, obtida_em: new Date().toISOString() }),
+      (err) => resolve({ status: err?.code === 1 ? 'negada' : 'erro', mensagem: err?.message || '' }),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
+    );
+  });
+  return { ...base, geolocalizacao: geo };
+}
+
+// ─── Aceite da proposta (botão + modal + prova) ─────────────────
+function AceiteProposta({ token, prop }) {
+  const jaAceita = prop.status === 'aceita' || prop.status === 'convertida' || !!prop.aceito_em;
+  const [aceito, setAceito] = useState(jaAceita);
+  const [aceitoEm, setAceitoEm] = useState(prop.aceito_em || null);
+  const [modal, setModal] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  const confirmar = async () => {
+    setEnviando(true); setErro(null);
+    try {
+      const dados = await coletarDadosAceite();
+      const r = await aceitarPropostaPublica(token, dados);
+      if (r?.ok || r?.status === 'aceita' || r?.ja_aceita) {
+        setAceito(true); setAceitoEm(r.aceito_em || new Date().toISOString()); setModal(false);
+      } else {
+        setErro(r?.erro === 'expirada' ? 'Esta proposta expirou.' : r?.erro === 'rejeitada' ? 'Esta proposta foi recusada.' : 'Não foi possível registrar o aceite.');
+      }
+    } catch {
+      setErro('Não foi possível registrar o aceite agora. Tente novamente.');
+    } finally { setEnviando(false); }
+  };
+
+  if (aceito) {
+    return (
+      <div className="mt-5 rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-4 flex items-start gap-3">
+        <CheckCircle2 className="h-6 w-6 text-emerald-600 flex-shrink-0" />
+        <div>
+          <p className="text-[1em] font-semibold text-emerald-800">Proposta aceita</p>
+          <p className="text-[0.8em] text-emerald-700/80">
+            {aceitoEm ? `Registrado em ${dataHoraBR(aceitoEm)}. ` : ''}A CCI dará sequência ao processo. Obrigado!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5">
+      <button type="button" onClick={() => setModal(true)}
+        className="w-full rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3.5 text-[1.02em] shadow-lg shadow-teal-600/20 active:scale-[0.99] transition">
+        Aceitar proposta
+      </button>
+      <p className="mt-2 text-[0.66em] text-slate-400 text-center">
+        Ao aceitar, registramos data, dispositivo e localização para comprovar o aceite.
+      </p>
+
+      {modal && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/50 backdrop-blur-sm" style={{ fontSize: '16px' }}>
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 pt-4">
+              <h3 className="text-[15px] font-semibold text-slate-900">Confirmar aceite</h3>
+              <button onClick={() => !enviando && setModal(false)} className="text-slate-400 hover:text-slate-600" aria-label="Fechar"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-[13px] text-slate-600 leading-relaxed">
+                Você confirma que deseja <strong className="text-slate-800">aceitar esta proposta</strong>?
+              </p>
+              <div className="mt-3 rounded-xl bg-slate-50 ring-1 ring-slate-200/70 p-3 flex items-start gap-2">
+                <ShieldCheck className="h-4 w-4 text-teal-600 flex-shrink-0 mt-0.5" />
+                <p className="text-[11.5px] text-slate-500 leading-relaxed">
+                  Para comprovar o aceite, vamos registrar a <strong>data/hora</strong>, os <strong>dados do seu dispositivo</strong> e a <strong>localização</strong> (seu navegador pode pedir permissão de localização).
+                </p>
+              </div>
+              {erro && <p className="mt-3 text-[12px] text-rose-600">{erro}</p>}
+            </div>
+            <div className="px-5 pb-4 flex items-center justify-end gap-2">
+              <button onClick={() => setModal(false)} disabled={enviando}
+                className="rounded-lg px-4 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancelar</button>
+              <button onClick={confirmar} disabled={enviando}
+                className="inline-flex items-center gap-2 rounded-lg bg-teal-600 hover:bg-teal-700 px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-60">
+                {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {enviando ? 'Registrando…' : 'Confirmar aceite'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function dataHoraBR(iso) {
+  try {
+    const d = new Date(iso);
+    const p = n => String(n).padStart(2, '0');
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  } catch { return ''; }
+}
+
+// ─── Cabeçalho (compartilhado) ──────────────────────────────────
+function Cabecalho({ prop, interativa }) {
+  return (
+    <header className="relative overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800 text-white">
+      <div className="absolute -top-24 -right-16 h-64 w-64 rounded-full bg-teal-500/25 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
+      <div className="relative mx-auto max-w-2xl px-5 pt-6 pb-10">
+        <div className="inline-flex items-center gap-2.5 rounded-2xl bg-white px-3.5 py-2 shadow-lg shadow-black/20 ring-1 ring-black/5">
+          <img src="/logo-cci-landing.png" alt="CCI" className="h-8 w-auto object-contain" />
+        </div>
+        <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
+          className="mt-7 text-[22px] sm:text-2xl font-bold leading-tight">
+          {prop.titulo || 'Proposta de serviços'}
+        </motion.h1>
+        {prop.cliente_nome && (
+          <p className="mt-1 text-white/80 text-sm">Preparada para <strong className="font-semibold text-white">{prop.cliente_nome}</strong></p>
+        )}
+        {interativa && prop.descricao && <p className="mt-3 text-[13.5px] text-white/80 leading-relaxed">{prop.descricao}</p>}
+        <div className="mt-5 flex flex-wrap gap-2 text-[11.5px]">
+          {interativa && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/10 px-3 py-1"><Calculator className="h-3.5 w-3.5 text-teal-300" /> Simulação interativa</span>
+          )}
+          {prop.valida_ate && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/10 px-3 py-1"><CalendarClock className="h-3.5 w-3.5 text-teal-300" /> Válida até {dataBR(prop.valida_ate)}</span>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// ─── Modelo CONSULTIVA (documento + investimento) ───────────────
+function PropostaConsultiva({ prop, estiloFonte, token }) {
+  const inv = Number(prop.investimento_valor) || 0;
+  const per = prop.investimento_periodicidade || 'mensal';
+  const sufixo = per === 'anual' ? '/ano' : per === 'unico' ? '' : '/mês';
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 pb-10">
+      <Cabecalho prop={prop} />
+      <main className="mx-auto max-w-2xl px-5" style={estiloFonte}>
+        <article className="-mt-5 relative rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/70 p-5 text-[1em]">
+          {prop.descricao && (
+            <p className="text-[1.02em] leading-relaxed text-slate-700 font-medium mb-1">{prop.descricao}</p>
+          )}
+          <Markdown>{prop.conteudo_md || ''}</Markdown>
+          {!prop.conteudo_md && !prop.descricao && (
+            <p className="text-slate-400 text-center py-6">Conteúdo da proposta em breve.</p>
+          )}
+        </article>
+
+        {inv > 0 && (
+          <div className="mt-5 rounded-2xl bg-slate-900 text-white shadow-lg ring-1 ring-black/10 p-5">
+            <p className="text-[0.7em] uppercase tracking-wider text-white/60">Investimento</p>
+            <p className="mt-1 text-[1.7em] font-bold leading-none tabular-nums">
+              {formatCurrency(inv)}
+              <span className="text-[0.5em] font-medium text-white/60"> {per === 'unico' ? 'pagamento único' : sufixo}</span>
+            </p>
+          </div>
+        )}
+
+        <AceiteProposta token={token} prop={prop} />
+
+        <p className="mt-6 text-[0.72em] text-slate-400 leading-relaxed flex items-start gap-1.5">
+          <ShieldCheck className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-slate-300" />
+          Proposta para sua avaliação. Os valores e condições são formalizados em contrato pela CCI.
+        </p>
+      </main>
     </div>
   );
 }

@@ -66,6 +66,8 @@ export async function salvarProposta(proposta, itens) {
   if (header.valida_ate === '') header.valida_ate = null;
   header.desconto_valor      = Number(header.desconto_valor)      || 0;
   header.desconto_percentual = Number(header.desconto_percentual) || 0;
+  header.investimento_valor  = (header.investimento_valor === '' || header.investimento_valor == null)
+    ? null : (Number(header.investimento_valor) || null);
 
   // Recalcula totais a partir dos itens (não confia no que vem do front)
   const t = calcularTotais(itens, header.desconto_valor, header.desconto_percentual);
@@ -130,6 +132,17 @@ export async function gerarLinkPublico(id) {
     if (error) throw error;
   }
   return token;
+}
+
+// Comprovantes de aceite de uma proposta (admin — RLS select).
+export async function listarAceites(propostaId) {
+  const { data, error } = await supabase
+    .from('cci_proposta_aceites')
+    .select('*')
+    .eq('proposta_id', propostaId)
+    .order('aceito_em', { ascending: false });
+  if (error) throw error;
+  return data || [];
 }
 
 export function montarLinkPublico(token) {
