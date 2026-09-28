@@ -72,12 +72,11 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
   const trad = (t) => traduzirRotulo(t || '');
 
   // ── Itens da barra de composição (peso de cada grupo nas saídas) ──
+  // Só grupos MAPEADOS na máscara (igual à árvore do Fluxo de Caixa) — o
+  // "sem classificação" fica de fora; % recalculado sobre os grupos exibidos.
   const itensSaidas = (porGrupo || [])
     .filter(g => Number(g.saidas) > 0)
     .map(g => ({ rotulo: g.grupo, valor: g.saidas }));
-  if (Number(pa.sem_plano?.saidas) > 0) {
-    itensSaidas.push({ rotulo: 'Saídas sem classificação', valor: pa.sem_plano.saidas });
-  }
 
   // ── Oportunidades (objeto de listas) achatadas numa lista única ──
   const opo = insights?.oportunidades || {};

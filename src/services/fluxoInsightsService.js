@@ -380,7 +380,11 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
 }
 
 export async function gerarAnaliseFluxoIA(dados, apiKey) {
-  const user = `Análise o Fluxo de Caixa deste posto (ou rede):\n\n${JSON.stringify(dados, null, 2)}`;
+  // A análise considera só os grupos mapeados na máscara (igual à árvore do
+  // Fluxo de Caixa) — o "sem classificação" não vai pro prompt.
+  const { sem_plano: _semPlano, ...periodoAtual } = dados?.periodo_atual || {};
+  const payload = { ...dados, periodo_atual: periodoAtual };
+  const user = `Análise o Fluxo de Caixa deste posto (ou rede):\n\n${JSON.stringify(payload, null, 2)}`;
   return chamarClaudeAPI({
     apiKey,
     system: [{ type: 'text', text: SYSTEM_PROMPT }],
