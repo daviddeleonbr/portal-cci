@@ -36,6 +36,10 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
   const serie = dados?.tendencia_6m || [];
   const yoy = dados?.comparativo_yoy || {};
   const porGrupo = pa.por_grupo || [];
+  // Base dos % por grupo = saídas dos GRUPOS da máscara (líquido, igual à árvore
+  // do Fluxo de Caixa) — mesma base na barra, na tabela e na concentração.
+  const saidasGrupos = Number(pa.saidas_grupos_total
+    ?? porGrupo.reduce((s, g) => s + Number(g.saidas || 0), 0));
   const alertasDados = dados?.alertas || {};
 
   // ── Detecção de inconsistência (sem movimento nenhum) ──
@@ -172,7 +176,7 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
           {itensSaidas.length > 0 && (
             <section className="rd-secao">
               <h2>Para onde vai o dinheiro</h2>
-              <p className="rd-oque-e">O que é isso? Mostra o peso de cada tipo de saída no mês. A maior fatia costuma ser a compra de combustível da distribuidora.</p>
+              <p className="rd-oque-e">O que é isso? Mostra o peso de cada tipo de saída no mês, pela estrutura do seu fluxo de caixa. A maior fatia costuma ser a compra de combustível da distribuidora. Os totais do topo também incluem transferências entre as suas próprias contas (ex.: depósito do caixa no banco), que não entram aqui.</p>
               <BarraComposicao itens={itensSaidas} />
             </section>
           )}
@@ -188,7 +192,7 @@ export default function RelatorioFluxo({ insights, dados, empresa, periodo, modo
                   { chave: 'grupo', titulo: 'Conta (máscara de fluxo)', render: (v) => trad(v) },
                   { chave: 'saidas', titulo: 'Saídas', num: true, render: (v) => moeda(v) },
                   { chave: 'entradas', titulo: 'Entradas', num: true, render: (v) => moeda(v) },
-                  { chave: 'pct', titulo: '% das saídas', num: true, render: (_, l) => saidas > 0 ? pct((Number(l.saidas || 0) / saidas) * 100) : '—' },
+                  { chave: 'pct', titulo: '% das saídas', num: true, render: (_, l) => saidasGrupos > 0 ? pct((Number(l.saidas || 0) / saidasGrupos) * 100) : '—' },
                 ]}
                 linhas={[...porGrupo]
                   .filter(g => Number(g.entradas || 0) > 0 || Number(g.saidas || 0) > 0)

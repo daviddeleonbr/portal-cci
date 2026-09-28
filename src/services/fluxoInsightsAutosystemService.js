@@ -10,7 +10,7 @@
 
 import * as mascaraFluxoService from './mascaraFluxoCaixaService';
 import * as autosystemService from './autosystemService';
-import { agregarFluxoPorGrupo } from './fluxoInsightsService';
+import { agregarFluxoPorGrupo, montarConcentracaoRisco } from './fluxoInsightsService';
 import { calcularPeriodos, round, variacaoPct } from './iaSharedHelpers';
 import { getAtivo as demoAtivo, mascararRede } from './anonimizarService';
 
@@ -158,14 +158,8 @@ export async function agregarDadosFluxoAutosystem({ rede, empresaCodigos, mascar
     .sort((a, b) => b.variacao_pct - a.variacao_pct)
     .slice(0, 5);
 
-  // Concentração: grupo da máscara que sozinho responde por >30% das saídas
-  const concentracaoRisco = aggAtual.por_grupo
-    .filter(g => g.saidas > 0 && aggAtual.saidas_total > 0 && (g.saidas / aggAtual.saidas_total) > 0.3)
-    .map(g => ({
-      conta: g.grupo,
-      pct_das_saidas: round((g.saidas / aggAtual.saidas_total) * 100, 2),
-      valor: g.saidas,
-    }));
+  // Concentração pela estrutura da máscara (base = saídas dos grupos).
+  const concentracaoRisco = montarConcentracaoRisco(aggAtual);
 
   return {
     empresa: {
@@ -178,6 +172,8 @@ export async function agregarDadosFluxoAutosystem({ rede, empresaCodigos, mascar
       entradas_total: aggAtual.entradas_total,
       saidas_total: aggAtual.saidas_total,
       variacao_caixa: aggAtual.variacao_caixa,
+      entradas_grupos_total: aggAtual.entradas_grupos_total,
+      saidas_grupos_total: aggAtual.saidas_grupos_total,
       por_grupo: aggAtual.por_grupo,
       sem_plano: aggAtual.sem_plano,
     },

@@ -77,6 +77,12 @@ REGRAS:
   "Salarios e encargos", "Impostos pagos"). Use EXATAMENTE esses nomes (campo grupo).
   NUNCA cite contas cruas/gerenciais do ERP (ex.: "PIX - STONE", "MASTERCARD CREDITO",
   "PDV PISTA", "VISA CREDITO") — o payload nem traz mais essas contas.
+- Valores de por_grupo sao LIQUIDOS por grupo (entradas - saidas das contas mapeadas),
+  igual ao relatorio de Fluxo de Caixa do sistema. Para % e pesos de grupos use
+  participacao_pct_saidas/participacao_pct_entradas (base = saidas_grupos_total /
+  entradas_grupos_total). entradas_total/saidas_total sao os totais brutos das contas
+  (incluem transferencias entre contas proprias) — use-os so para o total do mes e a
+  sobra/falta de caixa, nunca como base de % de grupo.
 - Use os numeros do payload. Nao invente.
 - Cite R$ e % com precisao.
 - Variacao de margem/percentual = pp. Variacao de receita/saldo = %.
@@ -119,12 +125,19 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
     else mapNull.set(cod, m.grupo_fluxo_id);
   });
 
-  // Totais: grupo -> { entradas, saidas } e contaGerencial -> { entradas, saidas, nome }
-  const totalPorGrupo = new Map();
-  const totalPorConta = new Map(); // plano -> {nome, entradas, saidas}
+  // Igual à árvore da tela de Fluxo de Caixa: cada grupo vale o LÍQUIDO
+  // (entradas − saídas) das contas mapeadas nele — estorno abate do próprio
+  // grupo em vez de virar saída/entrada à parte. Grupo líquido negativo = saída,
+  // positivo = entrada. "Sem classificação" também é líquido (transferências
+  // entre contas próprias, ex.: depósito do caixa no banco, se anulam).
+  // Os totais brutos (entradas_total/saidas_total) seguem batendo com a
+  // "Composição do saldo" da tela; os % usam a soma dos GRUPOS (mesma base
+  // em barra, tabela, concentração e payload da IA).
+  const liquidoPorGrupo = new Map(); // grupoId -> líquido (+ entrada / − saída)
+  const totalPorConta = new Map();   // plano -> {nome, liquido}
   let entradasTotal = 0;
   let saidasTotal = 0;
-  const semPlano = { entradas: 0, saidas: 0 }; // movimentos sem plano = outros
+  let semPlanoLiquido = 0;
 
   Object.values(dadosPorMes || {}).forEach(periodo => {
     (periodo.movimentos || []).forEach(m => {
@@ -132,6 +145,7 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
       const isCredito = m.tipo === 'Crédito' || m.tipo === 'Credito' || m.tipo === 'C';
       const valor = Math.abs(Number(m.valor || 0));
       if (isCredito) entradasTotal += valor; else saidasTotal += valor;
+      const sinal = isCredito ? 1 : -1;
 
       // Aloca um pedaço (plano, valor) no grupo da máscara ou em "sem plano".
       const alocar = (codigoPlano, v, nomePlano) => {
@@ -141,16 +155,14 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
               : (mapD.get(codigoPlano) ?? mapNull.get(codigoPlano)))
           : null;
         if (!grupoId) {
-          if (isCredito) semPlano.entradas += v; else semPlano.saidas += v;
+          semPlanoLiquido += v * sinal;
           return;
         }
-        const cur = totalPorGrupo.get(grupoId) || { entradas: 0, saidas: 0 };
-        if (isCredito) cur.entradas += v; else cur.saidas += v;
-        totalPorGrupo.set(grupoId, cur);
+        liquidoPorGrupo.set(grupoId, (liquidoPorGrupo.get(grupoId) || 0) + v * sinal);
 
         const nome = nomePlano || `Plano ${codigoPlano}`;
-        const curConta = totalPorConta.get(codigoPlano) || { nome, entradas: 0, saidas: 0 };
-        if (isCredito) curConta.entradas += v; else curConta.saidas += v;
+        const curConta = totalPorConta.get(codigoPlano) || { nome, liquido: 0 };
+        curConta.liquido += v * sinal;
         totalPorConta.set(codigoPlano, curConta);
       };
 
@@ -165,34 +177,35 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
     });
   });
 
+  // Base dos % = soma dos grupos (líquidos) de saída / de entrada.
+  let saidasGrupos = 0;
+  let entradasGrupos = 0;
+  liquidoPorGrupo.forEach(v => { if (v < 0) saidasGrupos += -v; else entradasGrupos += v; });
+
   // Monta linhas por grupo (respeitando ordem da mascara)
   const porGrupo = (grupos || [])
     .filter(g => g.tipo !== 'subtotal' && g.tipo !== 'resultado')
     .slice()
     .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
     .map(g => {
-      const t = totalPorGrupo.get(g.id) || { entradas: 0, saidas: 0 };
+      const liq = liquidoPorGrupo.get(g.id) || 0;
+      const saidas = liq < 0 ? -liq : 0;
+      const entradas = liq > 0 ? liq : 0;
       return {
         grupoId: g.id,
         grupo: g.nome,
         tipo: g.tipo,
-        entradas: round(t.entradas),
-        saidas: round(t.saidas),
-        variacao: round(t.entradas - t.saidas),
-        participacao_pct_saidas: saidasTotal > 0 ? round((t.saidas / saidasTotal) * 100, 2) : 0,
-        participacao_pct_entradas: entradasTotal > 0 ? round((t.entradas / entradasTotal) * 100, 2) : 0,
+        entradas: round(entradas),
+        saidas: round(saidas),
+        variacao: round(liq),
+        participacao_pct_saidas: saidasGrupos > 0 ? round((saidas / saidasGrupos) * 100, 2) : 0,
+        participacao_pct_entradas: entradasGrupos > 0 ? round((entradas / entradasGrupos) * 100, 2) : 0,
       };
     });
 
   // Top contas gerenciais (por |liquido|)
   const topContas = Array.from(totalPorConta.entries())
-    .map(([codigo, v]) => ({
-      codigo,
-      nome: v.nome,
-      entradas: round(v.entradas),
-      saidas: round(v.saidas),
-      liquido: round(v.entradas - v.saidas),
-    }))
+    .map(([codigo, v]) => ({ codigo, nome: v.nome, liquido: round(v.liquido) }))
     .sort((a, b) => Math.abs(b.liquido) - Math.abs(a.liquido))
     .slice(0, 10);
 
@@ -200,10 +213,26 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
     entradas_total: round(entradasTotal),
     saidas_total: round(saidasTotal),
     variacao_caixa: round(entradasTotal - saidasTotal),
-    sem_plano: { entradas: round(semPlano.entradas), saidas: round(semPlano.saidas) },
+    entradas_grupos_total: round(entradasGrupos),
+    saidas_grupos_total: round(saidasGrupos),
+    sem_plano: { liquido: round(semPlanoLiquido) },
     por_grupo: porGrupo,
     top_contas_gerenciais: topContas,
   };
+}
+
+// Concentração: GRUPO DA MÁSCARA que sozinho responde por >30% das saídas dos
+// grupos (mesma base da barra "Para onde vai o dinheiro").
+export function montarConcentracaoRisco(agg) {
+  const base = agg.saidas_grupos_total;
+  if (!(base > 0)) return [];
+  return agg.por_grupo
+    .filter(g => g.saidas > 0 && (g.saidas / base) > 0.3)
+    .map(g => ({
+      conta: g.grupo,
+      pct_das_saidas: round((g.saidas / base) * 100, 2),
+      valor: g.saidas,
+    }));
 }
 
 // ─── Fetch helper ──────────────────────────────────────────────
@@ -321,15 +350,8 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
     .sort((a, b) => b.variacao_pct - a.variacao_pct)
     .slice(0, 5);
 
-  // Concentracao: GRUPO DA MASCARA que sozinho responde por >30% das saidas.
-  // (Analise pela estrutura da mascara de fluxo, nao pelas contas cruas do ERP.)
-  const concentracaoRisco = aggAtual.por_grupo
-    .filter(g => g.saidas > 0 && aggAtual.saidas_total > 0 && (g.saidas / aggAtual.saidas_total) > 0.3)
-    .map(g => ({
-      conta: g.grupo,
-      pct_das_saidas: round((g.saidas / aggAtual.saidas_total) * 100, 2),
-      valor: g.saidas,
-    }));
+  // Concentracao pela estrutura da mascara de fluxo (base = saídas dos grupos).
+  const concentracaoRisco = montarConcentracaoRisco(aggAtual);
 
   return {
     empresa: {
@@ -344,6 +366,8 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
       entradas_total: aggAtual.entradas_total,
       saidas_total: aggAtual.saidas_total,
       variacao_caixa: aggAtual.variacao_caixa,
+      entradas_grupos_total: aggAtual.entradas_grupos_total,
+      saidas_grupos_total: aggAtual.saidas_grupos_total,
       por_grupo: aggAtual.por_grupo,
       sem_plano: aggAtual.sem_plano,
     },
