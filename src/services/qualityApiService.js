@@ -742,6 +742,50 @@ export async function buscarCartaoRemessa(apiKey, { dataInicial, dataFinal, empr
   });
 }
 
+// ─── Ajuste CARTAO_REMESSA: valor LÍQUIDO no fluxo de caixa ───
+// Em MOVIMENTO_CONTA, movimentos com tipoDocumentoOrigem === 'CARTAO_REMESSA'
+// trazem o valor BRUTO. O que de fato cai no banco é o `valorLiquido` da remessa
+// (endpoint CARTAO_REMESSA), já descontadas taxas e somados acréscimos. A ligação
+// é MOVIMENTO_CONTA.documentoOrigemCodigo === CARTAO_REMESSA.cartaoRemessaCodigo.
+// Fonte única usada pela tela de Fluxo de Caixa E pelo relatório de IA de fluxo
+// (antes só a tela ajustava e as entradas da IA saíam infladas pelas taxas).
+//
+// Janela AMPLA (3 meses antes até 3 meses depois do período): a data que o endpoint
+// filtra (remessa/recebimento) pode cair bem fora do mês em que o crédito bate no
+// banco (liquidação de cartão atrasa). Remessa não encontrada → fica no BRUTO.
+// Best-effort: se a busca falhar, devolve o mapa parcial/vazio (mantém bruto).
+export async function buscarLiquidoCartaoPorRemessa(apiKey, empresaCodigos, { dataInicial, dataFinal }, urlBase = DEFAULT_URL_BASE) {
+  const liquidoPorRemessa = new Map(); // cartaoRemessaCodigo -> valorLiquido
+  try {
+    const fmtR = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    const [aI, mI] = String(dataInicial).split('-').map(Number);
+    const [aF, mF] = String(dataFinal).split('-').map(Number);
+    const rIni = fmtR(new Date(aI, mI - 1 - 3, 1));
+    const rFim = fmtR(new Date(aF, mF - 1 + 4, 0));
+    for (const ec of empresaCodigos) {
+      const remessas = await buscarCartaoRemessa(apiKey, {
+        dataInicial: rIni, dataFinal: rFim, empresaCodigo: ec,
+      }, urlBase);
+      (remessas || []).forEach(rm => {
+        const cod = rm.cartaoRemessaCodigo ?? rm.codigo;
+        // Leitura defensiva do líquido (nomes alternativos conforme o schema).
+        const vl = rm.valorLiquido ?? rm.valor_liquido ?? rm.liquido ?? rm.valorLiquidoTotal;
+        if (cod == null || vl == null) return;
+        liquidoPorRemessa.set(Number(cod), Number(vl));
+      });
+    }
+  } catch { /* mantém o valor bruto se a busca falhar */ }
+  return liquidoPorRemessa;
+}
+
+// Troca o valor bruto pelo líquido da remessa (guarda o bruto em valorBrutoCartao).
+export function ajustarMovimentoCartao(m, liquidoPorRemessa) {
+  if (m.tipoDocumentoOrigem !== 'CARTAO_REMESSA' || m.documentoOrigemCodigo == null) return m;
+  const liquido = liquidoPorRemessa.get(Number(m.documentoOrigemCodigo));
+  if (liquido == null) return m;
+  return { ...m, valor: liquido, valorBrutoCartao: m.valor };
+}
+
 // ─── Apuração DRE oficial do Quality (JÁ CLASSIFICADA) ────────
 // GET /INTEGRACAO/DRE (schema DRE) — a apuração já vem na conta gerencial PAI e
 // FILHO (a analítica, formato "CODIGO - DESCRICAO"). É a fonte que o BI usa e

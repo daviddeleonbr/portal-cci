@@ -195,12 +195,14 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
 }
 
 // ─── Fetch helper ──────────────────────────────────────────────
-async function carregarMovimentos(apiKey, empresaCodigos, { dataInicial, dataFinal }) {
+// liquidoPorRemessa: cartão entra pelo LÍQUIDO da remessa (igual à tela de Fluxo
+// de Caixa) — sem isso as entradas saíam infladas pelas taxas de cartão.
+async function carregarMovimentos(apiKey, empresaCodigos, { dataInicial, dataFinal }, liquidoPorRemessa) {
   const all = [];
   for (const ec of empresaCodigos) {
     const filtros = { dataInicial, dataFinal, empresaCodigo: ec };
     const movs = await qualityApi.buscarMovimentoConta(apiKey, filtros).catch(() => []);
-    (movs || []).forEach(m => all.push(m));
+    (movs || []).forEach(m => all.push(qualityApi.ajustarMovimentoCartao(m, liquidoPorRemessa)));
   }
   return { movimentos: all };
 }
@@ -225,9 +227,16 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
   }
   const tipoPorConta = construirTipoPorConta(contasClassif);
 
+  // Remessas de cartão (líquido) numa janela só, do período mais antigo (YoY) ao atual.
+  onProgress?.('Buscando remessas de cartão (valor líquido)...');
+  const liquidoPorRemessa = await qualityApi.buscarLiquidoCartaoPorRemessa(chaveApi, empresaCodigos, {
+    dataInicial: [periodos.yoy, ...periodos.tendencia6m].map(p => p.dataInicial).sort()[0],
+    dataFinal: periodos.atual.dataFinal,
+  });
+
   const fetchPeriodo = async (p, label) => {
     onProgress?.(`Buscando ${label}...`);
-    const m = await carregarMovimentos(chaveApi, empresaCodigos, p);
+    const m = await carregarMovimentos(chaveApi, empresaCodigos, p, liquidoPorRemessa);
     return { [p.key]: m };
   };
 

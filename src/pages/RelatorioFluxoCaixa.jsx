@@ -667,44 +667,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       }));
 
       // ─── Ajuste CARTAO_REMESSA: usa o valor LÍQUIDO no fluxo ──────────
-      // Em MOVIMENTO_CONTA, movimentos com tipoDocumentoOrigem === 'CARTAO_REMESSA'
-      // trazem o valor BRUTO. O que de fato cai no banco é o `valorLiquido` da remessa
-      // (endpoint CARTAO_REMESSA), já descontadas taxas e somados acréscimos. A ligação
-      // é MOVIMENTO_CONTA.documentoOrigemCodigo === CARTAO_REMESSA.cartaoRemessaCodigo.
-      // Trocamos o valor no próprio movimento pra que TODO o fluxo (composição, grupos,
-      // totais, não mapeados) use o líquido. Best-effort: se falhar, mantém o bruto.
-      const liquidoPorRemessa = new Map(); // cartaoRemessaCodigo -> valorLiquido
-      try {
-        const primeiroMes = meses[0];
-        const ultimoMes = meses[meses.length - 1];
-        const fmtR = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-        // Janela AMPLA (3 meses antes até 3 meses depois): a data que o endpoint filtra
-        // (remessa/recebimento) pode cair bem fora do mês em que o crédito bate no banco
-        // (liquidação de cartão atrasa). Se a remessa não é encontrada, o movimento fica
-        // no BRUTO e infla as entradas — então cobrimos uma janela generosa.
-        const rIni = fmtR(new Date(primeiroMes.ano, primeiroMes.mes - 1 - 3, 1));
-        const rFim = fmtR(new Date(ultimoMes.ano, ultimoMes.mes - 1 + 4, 0));
-        setLoadingProgress({ atual: total, total, mensagem: 'Buscando remessas de cartão (valor líquido)...' });
-        for (const ec of empresaCodigos) {
-          const remessas = await qualityApi.buscarCartaoRemessa(chave.chave, {
-            dataInicial: rIni, dataFinal: rFim, empresaCodigo: ec,
-          });
-          (remessas || []).forEach(rm => {
-            const cod = rm.cartaoRemessaCodigo ?? rm.codigo;
-            // Leitura defensiva do líquido (nomes alternativos conforme o schema).
-            const vl = rm.valorLiquido ?? rm.valor_liquido ?? rm.liquido ?? rm.valorLiquidoTotal;
-            if (cod == null || vl == null) return;
-            liquidoPorRemessa.set(Number(cod), Number(vl));
-          });
-        }
-      } catch (_) { /* mantém o valor bruto se a busca falhar */ }
-
-      const ajustarCartao = (m) => {
-        if (m.tipoDocumentoOrigem !== 'CARTAO_REMESSA' || m.documentoOrigemCodigo == null) return m;
-        const liquido = liquidoPorRemessa.get(Number(m.documentoOrigemCodigo));
-        if (liquido == null) return m;
-        return { ...m, valor: liquido, valorBrutoCartao: m.valor };
-      };
+      // Troca o bruto do cartão pelo líquido da remessa no próprio movimento pra que
+      // TODO o fluxo (composição, grupos, totais, não mapeados) use o líquido.
+      // Lógica compartilhada com o relatório de IA (qualityApiService).
+      setLoadingProgress({ atual: total, total, mensagem: 'Buscando remessas de cartão (valor líquido)...' });
+      const liquidoPorRemessa = await qualityApi.buscarLiquidoCartaoPorRemessa(chave.chave, empresaCodigos, {
+        dataInicial: meses[0].dataInicial,
+        dataFinal: meses[meses.length - 1].dataFinal,
+      });
+      const ajustarCartao = (m) => qualityApi.ajustarMovimentoCartao(m, liquidoPorRemessa);
 
       const mapa = {};
       results.forEach(r => { mapa[r.key] = { movimentos: r.movimentos.map(ajustarCartao) }; });
