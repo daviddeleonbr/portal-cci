@@ -412,6 +412,55 @@ export async function buscarTitulosPagar(apiKey, { dataInicial, dataFinal, empre
   });
 }
 
+// ─── Resolução de TITULO_PAGAR_PAGAMENTO no fluxo de caixa ────
+// Em MOVIMENTO_CONTA o pagamento de título (principalmente em LOTE) costuma vir
+// sem planoContaGerencialCodigo. A ligação real é
+// TITULO_PAGAR.pagamento[].codigoDocumento === MOVIMENTO_CONTA.movimentoContaCodigo;
+// um mesmo codigoDocumento em vários títulos = pagamento em lote.
+// Fonte única usada pela tela de Fluxo de Caixa E pelo relatório de IA de fluxo.
+export function indexarTitulosPorPagamento(titulos) {
+  const mapaTitulos = new Map();      // tituloPagarCodigo -> titulo
+  const mapaPorPagamento = new Map(); // codigoDocumento -> [titulos]
+  (titulos || []).forEach(t => {
+    const cod = t.tituloPagarCodigo ?? t.codigo;
+    if (cod != null) mapaTitulos.set(Number(cod), t);
+    if (Array.isArray(t.pagamento)) {
+      t.pagamento.forEach(p => {
+        const codDoc = p?.codigoDocumento;
+        if (codDoc == null) return;
+        const key = Number(codDoc);
+        if (!Number.isFinite(key)) return;
+        if (!mapaPorPagamento.has(key)) mapaPorPagamento.set(key, []);
+        const lista = mapaPorPagamento.get(key);
+        if (!lista.includes(t)) lista.push(t);
+      });
+    }
+  });
+  return { mapaTitulos, mapaPorPagamento };
+}
+
+// Títulos quitados pelo movimento, cada um com seu plano e o valorPago DELE
+// (não m.valor, que pode vir com o total do lote). Preferência:
+// entry.valorPago -> t.valorPago -> t.valor. Devolve null se não resolve
+// (movimento não é pagamento de título, lote não encontrado ou sem plano).
+export function distribuirPagamentoTitulos(m, titulosPorPagamento) {
+  if (m.tipoDocumentoOrigem !== 'TITULO_PAGAR_PAGAMENTO' || m.movimentoContaCodigo == null) return null;
+  const chave = Number(m.movimentoContaCodigo);
+  const lote = titulosPorPagamento?.get(chave);
+  if (!Array.isArray(lote) || lote.length === 0) return null;
+  const partes = lote.map(t => {
+    const entry = Array.isArray(t.pagamento)
+      ? t.pagamento.find(p => Number(p?.codigoDocumento) === chave)
+      : null;
+    const valorDoTitulo = Math.max(0, Number(
+      entry?.valorPago ?? t.valorPago ?? t.valor ?? t.valorTitulo ?? 0
+    ));
+    return { titulo: t, valorTitulo: valorDoTitulo, planoCod: t.planoContaGerencialCodigo };
+  }).filter(x => x.valorTitulo > 0 && x.planoCod != null && x.planoCod !== 0);
+  const total = partes.reduce((s, x) => s + x.valorTitulo, 0);
+  return (partes.length > 0 && total > 0) ? partes : null;
+}
+
 // IMPORTANTE: TITULO_RECEBER aceita `convertido`:
 //   true  → títulos que JÁ FORAM convertidos em Duplicata
 //   false → títulos que AINDA NÃO foram convertidos

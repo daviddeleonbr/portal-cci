@@ -102,7 +102,10 @@ function contaEntra(mapa, contaCodigo) {
 // grupos: lista de grupos da mascara fluxo
 // mapeamentos: [{plano_conta_codigo, grupo_fluxo_id}]
 // tipoPorConta: Map<contaCodigo, 'bancaria'|'caixa'|...>
-export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorConta) {
+// titulosPorPagamento (opcional, Webposto): resolve TITULO_PAGAR_PAGAMENTO sem
+// plano pelos títulos quitados (igual à tela de Fluxo) — sem isso esses
+// pagamentos caíam todos em "Saídas sem classificação".
+export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorConta, titulosPorPagamento = null) {
   // Roteamento sensível à direção (Autosystem, partida dobrada): a mesma conta
   // pode ir a grupos diferentes conforme debitada/creditada. 'C'=crédito (entrada),
   // 'D'=débito (saída), null=ambos. Direção específica tem prioridade sobre 'ambos'.
@@ -130,26 +133,35 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
       const valor = Math.abs(Number(m.valor || 0));
       if (isCredito) entradasTotal += valor; else saidasTotal += valor;
 
-      const codigoPlano = String(m.planoContaGerencialCodigo || '');
-      const grupoId = codigoPlano
-        ? (isCredito
-            ? (mapC.get(codigoPlano) ?? mapNull.get(codigoPlano))
-            : (mapD.get(codigoPlano) ?? mapNull.get(codigoPlano)))
-        : null;
-      if (!grupoId) {
-        if (isCredito) semPlano.entradas += valor; else semPlano.saidas += valor;
+      // Aloca um pedaço (plano, valor) no grupo da máscara ou em "sem plano".
+      const alocar = (codigoPlano, v, nomePlano) => {
+        const grupoId = codigoPlano
+          ? (isCredito
+              ? (mapC.get(codigoPlano) ?? mapNull.get(codigoPlano))
+              : (mapD.get(codigoPlano) ?? mapNull.get(codigoPlano)))
+          : null;
+        if (!grupoId) {
+          if (isCredito) semPlano.entradas += v; else semPlano.saidas += v;
+          return;
+        }
+        const cur = totalPorGrupo.get(grupoId) || { entradas: 0, saidas: 0 };
+        if (isCredito) cur.entradas += v; else cur.saidas += v;
+        totalPorGrupo.set(grupoId, cur);
+
+        const nome = nomePlano || `Plano ${codigoPlano}`;
+        const curConta = totalPorConta.get(codigoPlano) || { nome, entradas: 0, saidas: 0 };
+        if (isCredito) curConta.entradas += v; else curConta.saidas += v;
+        totalPorConta.set(codigoPlano, curConta);
+      };
+
+      // Pagamento de título (em lote): cada título no seu plano, com o valorPago dele.
+      const partes = titulosPorPagamento ? qualityApi.distribuirPagamentoTitulos(m, titulosPorPagamento) : null;
+      if (partes) {
+        partes.forEach(x => alocar(String(x.planoCod), x.valorTitulo, x.titulo.planoContaGerencialDescricao));
         return;
       }
-      const cur = totalPorGrupo.get(grupoId) || { entradas: 0, saidas: 0 };
-      if (isCredito) cur.entradas += valor; else cur.saidas += valor;
-      totalPorGrupo.set(grupoId, cur);
 
-      if (codigoPlano) {
-        const nome = m.planoContaGerencialNome || `Plano ${codigoPlano}`;
-        const curConta = totalPorConta.get(codigoPlano) || { nome, entradas: 0, saidas: 0 };
-        if (isCredito) curConta.entradas += valor; else curConta.saidas += valor;
-        totalPorConta.set(codigoPlano, curConta);
-      }
+      alocar(String(m.planoContaGerencialCodigo || ''), valor, m.planoContaGerencialNome);
     });
   });
 
@@ -207,6 +219,24 @@ async function carregarMovimentos(apiKey, empresaCodigos, { dataInicial, dataFin
   return { movimentos: all };
 }
 
+// Títulos a pagar desde 12 meses antes do início (pega pagamentos de títulos
+// emitidos há mais tempo — mesma janela da tela). Best-effort: se falhar,
+// TITULO_PAGAR_PAGAMENTO volta pra "sem classificação".
+async function carregarTitulosPorPagamento(apiKey, empresaCodigos, dataInicial, dataFinal) {
+  try {
+    const [a, m] = String(dataInicial).split('-').map(Number);
+    const ini = `${a - 1}-${String(m).padStart(2, '0')}-01`;
+    const all = [];
+    for (const ec of empresaCodigos) {
+      const t = await qualityApi.buscarTitulosPagar(apiKey, { dataInicial: ini, dataFinal, empresaCodigo: ec });
+      all.push(...(t || []));
+    }
+    return qualityApi.indexarTitulosPorPagamento(all).mapaPorPagamento;
+  } catch {
+    return new Map();
+  }
+}
+
 // ─── Agregador principal para Fluxo ────────────────────────────
 export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, mascaraFluxoId, chaveApiId, mesRef, onProgress }) {
   const periodos = calcularPeriodos(mesRef);
@@ -227,12 +257,17 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
   }
   const tipoPorConta = construirTipoPorConta(contasClassif);
 
-  // Remessas de cartão (líquido) numa janela só, do período mais antigo (YoY) ao atual.
-  onProgress?.('Buscando remessas de cartão (valor líquido)...');
-  const liquidoPorRemessa = await qualityApi.buscarLiquidoCartaoPorRemessa(chaveApi, empresaCodigos, {
-    dataInicial: [periodos.yoy, ...periodos.tendencia6m].map(p => p.dataInicial).sort()[0],
-    dataFinal: periodos.atual.dataFinal,
-  });
+  // Remessas de cartão (líquido) e títulos a pagar numa janela só, do período
+  // mais antigo (YoY) ao atual — igual à tela de Fluxo de Caixa.
+  const iniMaisAntigo = [periodos.yoy, ...periodos.tendencia6m].map(p => p.dataInicial).sort()[0];
+  onProgress?.('Buscando remessas de cartão e títulos a pagar...');
+  const [liquidoPorRemessa, titulosPorPagamento] = await Promise.all([
+    qualityApi.buscarLiquidoCartaoPorRemessa(chaveApi, empresaCodigos, {
+      dataInicial: iniMaisAntigo,
+      dataFinal: periodos.atual.dataFinal,
+    }),
+    carregarTitulosPorPagamento(chaveApi, empresaCodigos, iniMaisAntigo, periodos.atual.dataFinal),
+  ]);
 
   const fetchPeriodo = async (p, label) => {
     onProgress?.(`Buscando ${label}...`);
@@ -255,13 +290,13 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
   keysTend.slice(-3).forEach(k => { quarterAtualPorMes[k] = tendencia6mPorMes[k]; });
   keysTend.slice(0, 3).forEach(k => { quarterAntPorMes[k] = tendencia6mPorMes[k]; });
 
-  const aggAtual = agregarFluxoPorGrupo(dadosAtual, grupos, mapeamentos, tipoPorConta);
-  const aggYoY = agregarFluxoPorGrupo(dadosYoY, grupos, mapeamentos, tipoPorConta);
-  const aggQuarterAtual = agregarFluxoPorGrupo(quarterAtualPorMes, grupos, mapeamentos, tipoPorConta);
-  const aggQuarterAnt = agregarFluxoPorGrupo(quarterAntPorMes, grupos, mapeamentos, tipoPorConta);
+  const aggAtual = agregarFluxoPorGrupo(dadosAtual, grupos, mapeamentos, tipoPorConta, titulosPorPagamento);
+  const aggYoY = agregarFluxoPorGrupo(dadosYoY, grupos, mapeamentos, tipoPorConta, titulosPorPagamento);
+  const aggQuarterAtual = agregarFluxoPorGrupo(quarterAtualPorMes, grupos, mapeamentos, tipoPorConta, titulosPorPagamento);
+  const aggQuarterAnt = agregarFluxoPorGrupo(quarterAntPorMes, grupos, mapeamentos, tipoPorConta, titulosPorPagamento);
 
   const serieTendencia = periodos.tendencia6m.map(p => {
-    const agg = agregarFluxoPorGrupo({ [p.key]: tendencia6mPorMes[p.key] }, grupos, mapeamentos, tipoPorConta);
+    const agg = agregarFluxoPorGrupo({ [p.key]: tendencia6mPorMes[p.key] }, grupos, mapeamentos, tipoPorConta, titulosPorPagamento);
     return {
       mes: p.label,
       entradas: agg.entradas_total,

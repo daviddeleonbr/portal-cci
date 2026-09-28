@@ -761,28 +761,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           });
           allTitulos.push(...(t || []));
         }
-        const titulos = allTitulos;
-        const mapaTitulos = new Map();
-        // Indice reverso: titulo.pagamento[].codigoDocumento -> lista de titulos.
-        // codigoDocumento casa com MOVIMENTO_CONTA.movimentoContaCodigo (onde
-        // tipoDocumentoOrigem = TITULO_PAGAR_PAGAMENTO). Esta e a ligacao real;
-        // um mesmo codigoDocumento pode aparecer em varios titulos = pagamento em lote.
-        const mapaPorPagamento = new Map();
-        (titulos || []).forEach(t => {
-          const cod = t.tituloPagarCodigo ?? t.codigo;
-          if (cod != null) mapaTitulos.set(Number(cod), t);
-          if (Array.isArray(t.pagamento)) {
-            t.pagamento.forEach(p => {
-              const codDoc = p?.codigoDocumento;
-              if (codDoc == null) return;
-              const key = Number(codDoc);
-              if (!Number.isFinite(key)) return;
-              if (!mapaPorPagamento.has(key)) mapaPorPagamento.set(key, []);
-              const lista = mapaPorPagamento.get(key);
-              if (!lista.includes(t)) lista.push(t);
-            });
-          }
-        });
+        // Indice reverso pagamento -> titulos (lógica compartilhada com a IA).
+        const { mapaTitulos, mapaPorPagamento } = qualityApi.indexarTitulosPorPagamento(allTitulos);
         setTituloPagarMap(mapaTitulos);
         setTitulosPorPagamento(mapaPorPagamento);
       } catch (_) {
@@ -993,58 +973,37 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         //   Valor consumido no fluxo vem do TITULO_PAGAR (pagamento[].valorPago),
         //   NAO do m.valor. Multiplos titulos podem compartilhar o mesmo
         //   movimentoContaCodigo quando o pagamento foi feito em lote.
-        if (m.tipoDocumentoOrigem === 'TITULO_PAGAR_PAGAMENTO' && m.movimentoContaCodigo != null) {
-          const chave = Number(m.movimentoContaCodigo);
-          const lote = titulosPorPagamento.get(chave);
-          if (Array.isArray(lote) && lote.length > 0) {
-            // Para cada titulo do lote: o valor efetivo no fluxo e o valorPago
-            // do PROPRIO titulo (top-level), nao m.valor nem entry.valor (que
-            // pode vir com o total do lote, comum em lotes do Quality).
-            // Preferencia: entry.valorPago -> t.valorPago -> t.valor.
-            const entradas = lote.map(t => {
-              const entry = Array.isArray(t.pagamento)
-                ? t.pagamento.find(p => Number(p?.codigoDocumento) === chave)
-                : null;
-              const valorDoTitulo = Math.max(0, Number(
-                entry?.valorPago ?? t.valorPago ?? t.valor ?? t.valorTitulo ?? 0
-              ));
-              return { titulo: t, valorTitulo: valorDoTitulo, planoCod: t.planoContaGerencialCodigo };
-            }).filter(x => x.valorTitulo > 0);
-
-            const entradasComPlano = entradas.filter(x => x.planoCod != null && x.planoCod !== 0);
-            const totalTitulos = entradasComPlano.reduce((s, x) => s + x.valorTitulo, 0);
-
-            if (entradasComPlano.length > 0 && totalTitulos > 0) {
-              // Distribui cada pedaco no plano do seu titulo, com o valor do TITULO_PAGAR.
-              entradasComPlano.forEach((x, idx) => {
-                const parcela = x.valorTitulo * sinal;
-                const planoKey = String(x.planoCod);
-                if (x.titulo.planoContaGerencialDescricao && !nomes[planoKey]) {
-                  nomes[planoKey] = x.titulo.planoContaGerencialDescricao;
-                }
-                if (!totais[planoKey]) totais[planoKey] = {};
-                totais[planoKey][mesKey] = (totais[planoKey][mesKey] || 0) + parcela;
-                addLado(planoKey, mesKey, parcela, sinal);
-                if (!lancs[planoKey]) lancs[planoKey] = [];
-                const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
-                const partLabel = entradasComPlano.length > 1
-                  ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · título #${tituloCod ?? '—'}`
-                  : ` · título #${tituloCod ?? '—'}`;
-                lancs[planoKey].push({
-                  id: entradasComPlano.length > 1 ? `${idBase}-p${idx}` : idBase,
-                  mesKey,
-                  data: m.dataMovimento,
-                  descricao: `${(m.descricao || '').trim() || '—'}${partLabel}`,
-                  tipoDoc: m.tipoDocumentoOrigem,
-                  movimentoContaCodigo: m.movimentoContaCodigo ?? null,
-                  tituloPagarCodigo: tituloCod,
-                  valor: x.valorTitulo,
-                  sinal,
-                });
-              });
-              return; // movimento distribuido via TITULO_PAGAR, pula o push normal
+        //   Lógica compartilhada com a IA (qualityApiService.distribuirPagamentoTitulos).
+        const entradasComPlano = qualityApi.distribuirPagamentoTitulos(m, titulosPorPagamento);
+        if (entradasComPlano) {
+          // Distribui cada pedaco no plano do seu titulo, com o valor do TITULO_PAGAR.
+          entradasComPlano.forEach((x, idx) => {
+            const parcela = x.valorTitulo * sinal;
+            const planoKey = String(x.planoCod);
+            if (x.titulo.planoContaGerencialDescricao && !nomes[planoKey]) {
+              nomes[planoKey] = x.titulo.planoContaGerencialDescricao;
             }
-          }
+            if (!totais[planoKey]) totais[planoKey] = {};
+            totais[planoKey][mesKey] = (totais[planoKey][mesKey] || 0) + parcela;
+            addLado(planoKey, mesKey, parcela, sinal);
+            if (!lancs[planoKey]) lancs[planoKey] = [];
+            const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
+            const partLabel = entradasComPlano.length > 1
+              ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · título #${tituloCod ?? '—'}`
+              : ` · título #${tituloCod ?? '—'}`;
+            lancs[planoKey].push({
+              id: entradasComPlano.length > 1 ? `${idBase}-p${idx}` : idBase,
+              mesKey,
+              data: m.dataMovimento,
+              descricao: `${(m.descricao || '').trim() || '—'}${partLabel}`,
+              tipoDoc: m.tipoDocumentoOrigem,
+              movimentoContaCodigo: m.movimentoContaCodigo ?? null,
+              tituloPagarCodigo: tituloCod,
+              valor: x.valorTitulo,
+              sinal,
+            });
+          });
+          return; // movimento distribuido via TITULO_PAGAR, pula o push normal
         }
 
         const codigo = temPlano
@@ -2033,48 +1992,32 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       }
 
       // Distribuicao TITULO_PAGAR_PAGAMENTO em lote (mesmo tratamento do memo principal).
-      if (m.tipoDocumentoOrigem === 'TITULO_PAGAR_PAGAMENTO' && m.movimentoContaCodigo != null) {
-        const chave = Number(m.movimentoContaCodigo);
-        const lote = titulosPorPagamento.get(chave);
-        if (Array.isArray(lote) && lote.length > 0) {
-          const entradas = lote.map(t => {
-            const entry = Array.isArray(t.pagamento)
-              ? t.pagamento.find(p => Number(p?.codigoDocumento) === chave)
-              : null;
-            const valorDoTitulo = Math.max(0, Number(
-              entry?.valorPago ?? t.valorPago ?? t.valor ?? t.valorTitulo ?? 0
-            ));
-            return { titulo: t, valorTitulo: valorDoTitulo, planoCod: t.planoContaGerencialCodigo };
-          }).filter(x => x.valorTitulo > 0);
-          const entradasComPlano = entradas.filter(x => x.planoCod != null && x.planoCod !== 0);
-          const totalTitulos = entradasComPlano.reduce((s, x) => s + x.valorTitulo, 0);
-          if (entradasComPlano.length > 0 && totalTitulos > 0) {
-            entradasComPlano.forEach((x, idx) => {
-              const parcela = x.valorTitulo * sinal;
-              const planoKey = String(x.planoCod);
-              if (!totais[planoKey]) totais[planoKey] = {};
-              totais[planoKey][empKey] = (totais[planoKey][empKey] || 0) + parcela;
-              addLado(planoKey, empKey, parcela, sinal);
-              if (!lancs[planoKey]) lancs[planoKey] = [];
-              const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
-              const partLabel = entradasComPlano.length > 1
-                ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · título #${tituloCod ?? '—'}`
-                : ` · título #${tituloCod ?? '—'}`;
-              lancs[planoKey].push({
-                id: entradasComPlano.length > 1 ? `${idBase}-p${idx}-e${empKey}` : `${idBase}-e${empKey}`,
-                mesKey: empKey, // FluxoNodeRows usa l.mesKey pra coluna
-                data: m.dataMovimento,
-                descricao: `${(m.descricao || '').trim() || '—'}${partLabel}`,
-                tipoDoc: m.tipoDocumentoOrigem,
-                movimentoContaCodigo: m.movimentoContaCodigo ?? null,
-                tituloPagarCodigo: tituloCod,
-                valor: x.valorTitulo,
-                sinal,
-              });
-            });
-            return;
-          }
-        }
+      const entradasComPlano = qualityApi.distribuirPagamentoTitulos(m, titulosPorPagamento);
+      if (entradasComPlano) {
+        entradasComPlano.forEach((x, idx) => {
+          const parcela = x.valorTitulo * sinal;
+          const planoKey = String(x.planoCod);
+          if (!totais[planoKey]) totais[planoKey] = {};
+          totais[planoKey][empKey] = (totais[planoKey][empKey] || 0) + parcela;
+          addLado(planoKey, empKey, parcela, sinal);
+          if (!lancs[planoKey]) lancs[planoKey] = [];
+          const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
+          const partLabel = entradasComPlano.length > 1
+            ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · título #${tituloCod ?? '—'}`
+            : ` · título #${tituloCod ?? '—'}`;
+          lancs[planoKey].push({
+            id: entradasComPlano.length > 1 ? `${idBase}-p${idx}-e${empKey}` : `${idBase}-e${empKey}`,
+            mesKey: empKey, // FluxoNodeRows usa l.mesKey pra coluna
+            data: m.dataMovimento,
+            descricao: `${(m.descricao || '').trim() || '—'}${partLabel}`,
+            tipoDoc: m.tipoDocumentoOrigem,
+            movimentoContaCodigo: m.movimentoContaCodigo ?? null,
+            tituloPagarCodigo: tituloCod,
+            valor: x.valorTitulo,
+            sinal,
+          });
+        });
+        return;
       }
 
       const codigo = temPlano
