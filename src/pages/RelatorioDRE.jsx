@@ -17,6 +17,7 @@ import { TIPOS_VENDA } from '../services/mapeamentoVendasService';
 import * as vendasAutosystemMapService from '../services/mapeamentoVendasAutosystemService';
 import * as autosystemService from '../services/autosystemService';
 import * as qualityApi from '../services/qualityApiService';
+import { montarMapasPlanoGerencial, lancamentosApuracaoWebposto } from '../services/dreWebpostoService';
 import { formatCurrency } from '../utils/format';
 import { nomeEmpresa } from '../utils/nomeEmpresa';
 import { useUsarApelido } from '../lib/apelidoPref';
@@ -812,23 +813,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         //  - planoContasMap: GRID → DESCRIÇÃO (fallback de "não mapeadas")
         //  - planoContasHierarquiaMap: GRID → HIERARQUIA ("1.02.06") pra
         //    permitir match por hierarquia em vez do INT.
-        const pcMap = new Map();
-        const pcHierMap = new Map();
-        const hgMap = new Map();
-        (planos || []).forEach(p => {
-          const cod = p.planoContaCodigo ?? p.planoContaGerencialCodigo ?? p.codigo;
-          const desc = p.descricao || p.nome || '';
-          const hier = p.hierarquia || '';
-          if (cod != null) {
-            if (desc) pcMap.set(String(cod), desc.trim());
-            if (hier) {
-              const h = String(hier).trim();
-              pcHierMap.set(String(cod), h);
-              hgMap.set(h, String(cod));          // HIERARQUIA → GRID (ponte apuração)
-              hgMap.set(h.replace(/\b0+(\d)/g, '$1'), String(cod)); // idem sem zeros à esquerda
-            }
-          }
-        });
+        // (lógica compartilhada com a Análise com IA — dreWebpostoService)
+        const { pcMap, pcHierMap, hgMap } = montarMapasPlanoGerencial(planos);
         setProdutosMap(pMap);
         setGruposCatMap(gMap);
         setPlanoContasMap(pcMap);
@@ -1062,29 +1048,8 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
     // na conta gerencial analítica). Despesa vem positiva e é invertida (_sinal -1);
     // receita _sinal +1. AUTOSYSTEM segue pelo caminho legado (títulos), abaixo.
     if (cliente?.usa_webposto) {
-      // A apuração traz a conta pela HIERARQUIA ("2.03.18.002"); a máscara mapeia
-      // pelo GRID interno. Traduz hierarquia→grid pra o match funcionar; se não
-      // achar, mantém a hierarquia (cai em "não mapeadas" com a descrição certa).
-      const hierParaGrid = (h) => {
-        const k = String(h || '').trim();
-        return hierarquiaGridMap.get(k) ?? hierarquiaGridMap.get(k.replace(/\b0+(\d)/g, '$1')) ?? k;
-      };
-      const mapAp = (arr, sinal, tipo) => (arr || []).map((a, i) => ({
-        planoContaGerencialCodigo:    hierParaGrid(a.conta_codigo),
-        planoContaGerencialDescricao: a.conta_descricao,
-        valor:         Math.abs(Number(a.valor || 0)),
-        _sinal:        sinal,
-        _tipo:         tipo,
-        dataMovimento: a.data,
-        descricao:     a.documento,
-        numeroTitulo:  '',
-        codigo:        `${tipo}-${a.conta_codigo}-${i}`,
-        empresaCodigo: a.empresaCodigo,
-      }));
-      return [
-        ...mapAp(dados.apuracaoReceitas, 1, 'apuracao-receita'),
-        ...mapAp(dados.apuracaoDespesas, -1, 'apuracao-despesa'),
-      ];
+      // Hierarquia→GRID + sinais (lógica compartilhada com a IA — dreWebpostoService).
+      return lancamentosApuracaoWebposto(dados, hierarquiaGridMap);
     }
 
     // MOVIMENTO_CONTA: indexa TODOS os movimentos (mapeados ou não) pra

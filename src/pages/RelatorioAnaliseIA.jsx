@@ -374,6 +374,9 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     if (!contexto || !garantirApiKey()) return;
     const { vendas, dre, fluxo } = resultados;
     if (!vendas || !dre || !fluxo) { setErr('Gere primeiro as 3 análises (Vendas, DRE, Fluxo) para este mês.'); return; }
+    if (dre.dados?.mascara_dre?.id && dre.dados.mascara_dre.id !== mascaraDreId) {
+      setErr('A análise de DRE foi gerada com outra máscara. Gere a DRE novamente com a máscara selecionada.'); return;
+    }
     if (vendas.mesKey !== mesKey || dre.mesKey !== mesKey || fluxo.mesKey !== mesKey) {
       setErr('As 3 análises precisam ser do mesmo mês de referência.'); return;
     }
@@ -391,7 +394,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
       persistirResultado('geral', r, dados);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoadingAba(null); setProgress(''); }
-  }, [contexto, apiKey, mesRef, mesKey, resultados, persistirResultado]);
+  }, [contexto, apiKey, mesRef, mesKey, resultados, mascaraDreId, persistirResultado]);
 
   const salvarChave = () => {
     salvarApiKey(tempKey.trim());
@@ -433,8 +436,14 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     { id: 'geral', label: 'Diagnóstico Geral', icon: GitBranch, color: 'violet' },
   ];
 
+  // Análise de DRE salva com OUTRA máscara não vale para a máscara selecionada
+  // (a DRE muda com a estrutura). Análises antigas, sem o id, seguem valendo.
+  const mascaraDaAnaliseDre = resultados.dre?.dados?.mascara_dre?.id;
+  const resDre = resultados.dre && (!mascaraDaAnaliseDre || mascaraDaAnaliseDre === mascaraDreId)
+    ? resultados.dre : null;
+
   const podeGerarGeral = resultados.vendas?.mesKey === mesKey
-    && resultados.dre?.mesKey === mesKey && resultados.fluxo?.mesKey === mesKey;
+    && resDre?.mesKey === mesKey && resultados.fluxo?.mesKey === mesKey;
 
   const voltarHref = modoRede ? '/admin/relatorios-cliente' : `/admin/relatorios-cliente/${contexto.cliente?.id}`;
 
@@ -526,7 +535,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
           {ABAS.map(a => {
             const Icon = a.icon;
             const active = tab === a.id;
-            const temResultado = !!resultados[a.id];
+            const temResultado = a.id === 'dre' ? !!resDre : !!resultados[a.id];
             const bloqueada = a.id === 'geral' && !podeGerarGeral && !resultados.geral;
             return (
               <button key={a.id} onClick={() => setTab(a.id)}
@@ -584,7 +593,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
             descricao="Margens bruta e liquida, linhas críticas, custos e despesas, comparativo YoY + trimestre + tendência 6m."
             carregando={loadingAba === 'dre'}
             progresso={progress}
-            resultado={resultados.dre}
+            resultado={resDre}
             onGerar={gerarDRE}
             aviso={!mascaraDreId ? 'Selecione uma máscara DRE para continuar' : null}
           />
@@ -611,7 +620,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
             aviso={!podeGerarGeral && !resultados.geral
               ? `Gere antes as 3 analises (Vendas/DRE/Fluxo) para ${MESES[mesRef.mes - 1]}/${mesRef.ano}. Estado atual: ${
                   [resultados.vendas?.mesKey === mesKey && 'Vendas',
-                   resultados.dre?.mesKey === mesKey && 'DRE',
+                   resDre?.mesKey === mesKey && 'DRE',
                    resultados.fluxo?.mesKey === mesKey && 'Fluxo'].filter(Boolean).join(', ') || 'nenhuma'}`
               : null}
           />

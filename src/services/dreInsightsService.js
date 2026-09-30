@@ -1,7 +1,10 @@
 // DRE Insights com IA — agregacao por mascara + YoY + trimestre + tendencia 6m
-// Baseado em TITULO_PAGAR + TITULO_RECEBER (regime de competencia), como a DRE gerencial.
+// Webposto: a DRE é montada pela MESMA rotina da tela (dreWebpostoService —
+// apuração Quality + vendas, máscara/mapeamento do cliente). `agregarDrePorGrupo`
+// segue sendo o agregador do Autosystem (dreInsightsAutosystemService).
 
 import * as qualityApi from './qualityApiService';
+import { montarMapasPlanoGerencial, montarDrePeriodoWebposto } from './dreWebpostoService';
 import * as mascaraDreService from './mascaraDreService';
 import * as mapService from './mapeamentoService';
 import * as vendasMapService from './mapeamentoVendasService';
@@ -31,9 +34,24 @@ REGRAS DE LINGUAGEM (OBRIGATORIO — quem le e o DONO do posto, sem formacao con
 
 REGRA CRITICA — ESTRUTURA DA DRE:
 O payload contem \`mascara_dre.estrutura\` com a lista EXATA de grupos da DRE
-parametrizada do cliente (com nomes, tipos base/subtotal/resultado, hierarquia
+parametrizada do cliente (com nomes, tipos grupo/subtotal/resultado, hierarquia
 parent_id). Os valores reais estao em \`periodo_atual.linhas_dre\` (cada linha
 tem \`grupoId\`, \`grupoNome\`, \`tipo\`, \`parentId\`, \`valor\`, \`valor_yoy\`).
+Esses valores sao IDENTICOS aos do relatorio de DRE do sistema para a mesma
+mascara e o mesmo mes.
+
+QUANDO \`periodo_atual.kpis.modelo\` = "mascara" (KPIs vindos da ESTRUTURA):
+- Receita = \`kpis.receita_nome\` / \`kpis.receita_bruta\` (primeira linha da DRE).
+- Lucro/prejuizo do mes = \`kpis.resultado_nome\` / \`kpis.lucro_liquido\` (ultimo
+  resultado da mascara); margem = \`kpis.margem_liquida_pct\`.
+- Subtotais da mascara = \`kpis.subtotais\` (nome, valor, pct_receita). Ao falar de
+  margens intermediarias, use ESSES subtotais pelos nomes deles.
+- \`kpis.lucro_bruto\` / \`margem_bruta_pct\` = o PRIMEIRO subtotal da mascara
+  (\`kpis.lucro_bruto_nome\`) — cite sempre pelo nome, nao como "lucro bruto" se o
+  nome for outro.
+- NAO use conceitos que nao existem como grupo na mascara (ex.: "CMV", "lucro
+  bruto", "despesas operacionais") — fale pelos nomes dos grupos.
+- \`pct_receita\` de cada linha ja vem calculado — use-o.
 
 VOCE DEVE:
 - Usar EXATAMENTE os \`grupoNome\` do payload quando citar linhas da DRE
@@ -52,7 +70,7 @@ VOCE DEVE:
   estrutura — por exemplo "CUSTO DE REVENDA DE PRODUTOS" se este for o
   nome do grupo. Nao traduza, nao reformule, copie literal.
 
-CALCULO DE % RECEITA (OBRIGATORIO calcular, nao copiar):
+CALCULO DE % RECEITA (quando a linha nao trouxer \`pct_receita\`, calcule):
 - BASE: use SEMPRE \`base_receita_para_pct\` do payload como denominador.
   Esse numero vem PRONTO e ja resolve o caso do grupo pai sem mapeamento.
 - FORMULA: pct_receita = round(abs(valor_da_linha) / base_receita_para_pct * 100, 1)
@@ -392,58 +410,87 @@ export function agregarDrePorGrupo(dadosPorMes, grupos, mapeamentos, opcoes = {}
   };
 }
 
-// ─── Fetch helper: carrega titulos + movimentos + remessas + vendas ──
-// Paridade com RelatorioDRE — pega receitas/despesas que vivem fora dos
-// títulos clássicos (MOVIMENTO_CONTA pra receitas financeiras, CARTAO_REMESSA
-// pra taxas de cartão) e títulos a receber convertidos (que o default
-// `convertido=false` da Quality exclui).
+// ─── Fetch: MESMA fonte da tela de DRE Webposto ─────────────────
+// Apuração oficial do Quality (/INTEGRACAO/DRE — despesas/receitas já na conta
+// gerencial analítica) + vendas (VENDA_ITEM/VENDA, pro mapeamento de vendas).
+// Cada item é anotado com empresaCodigo (resultado por empresa da rede).
 async function carregarDadosPeriodo(apiKey, empresaCodigos, { dataInicial, dataFinal }) {
-  const allPagar = [], allReceber = [], allMovimentos = [], allRemessas = [];
-  const allVendaItens = [], allVendas = [];
+  const apuracaoDespesas = [], apuracaoReceitas = [], vendaItens = [], vendas = [];
   for (const ec of empresaCodigos) {
     const filtros = { dataInicial, dataFinal, empresaCodigo: ec };
-    const [pagar, receber, movimentos, remessas, vendaItens, vendas] = await Promise.all([
-      qualityApi.buscarTitulosPagar(apiKey, filtros).catch(() => []),
-      qualityApi.buscarTitulosReceber(apiKey, { ...filtros, convertido: null }).catch(() => []),
-      qualityApi.buscarMovimentoConta(apiKey, filtros).catch(() => []),
-      qualityApi.buscarCartaoRemessa(apiKey, filtros).catch(() => []),
+    const annot = (arr) => (arr || []).map(x => ({ ...x, empresaCodigo: ec }));
+    const [dre, itens, vds] = await Promise.all([
+      qualityApi.buscarApuracaoDRE(apiKey, filtros)
+        .catch((e) => { console.error('Falha na apuração DRE Quality', e); return {}; }),
       qualityApi.buscarVendaItens(apiKey, filtros).catch(() => []),
       qualityApi.buscarVendas(apiKey, filtros).catch(() => []),
     ]);
-    (pagar || []).forEach(t => allPagar.push(t));
-    (receber || []).forEach(t => allReceber.push(t));
-    (movimentos || []).forEach(m => allMovimentos.push(m));
-    (remessas || []).forEach(r => allRemessas.push(r));
-    (vendaItens || []).forEach(v => allVendaItens.push(v));
-    (vendas || []).forEach(v => allVendas.push(v));
+    apuracaoDespesas.push(...annot(qualityApi.apuracaoDespesas(dre)));
+    apuracaoReceitas.push(...annot(qualityApi.apuracaoReceitas(dre)));
+    vendaItens.push(...annot(itens));
+    vendas.push(...annot(vds));
   }
+  return { apuracaoDespesas, apuracaoReceitas, vendaItens, vendas };
+}
+
+// KPIs a partir da ESTRUTURA da máscara (sem adivinhar pelo nome do grupo):
+//  - receita = primeira linha raiz da DRE (base do % da tela)
+//  - resultado = ÚLTIMO 'resultado' da máscara (o "lucro" que a tela mostra)
+//  - subtotais = subtotais/resultados raiz, com o nome do cliente
+//  - custos = grupos raiz negativos (exceto a receita), com o nome do cliente
+// lucro_bruto/margem_bruta_pct = PRIMEIRO subtotal (compat. com o diagnóstico
+// geral e o resultado por empresa; o nome vai em lucro_bruto_nome).
+function kpisDaDre(dre) {
+  const base = dre.base?.valor || 0;
+  const pctBase = (v) => (base > 0 ? round((v / base) * 100, 2) : 0);
+  const subtotais = dre.linhas
+    .filter(l => l.nivel === 0 && (l.tipo === 'subtotal' || l.tipo === 'resultado'))
+    .map(l => ({ nome: l.grupoNome, tipo: l.tipo, valor: round(l.valor), pct_receita: pctBase(l.valor) }));
+  const composicao = dre.raizes
+    .filter(r => r.tipo !== 'subtotal' && r.tipo !== 'resultado' && r.grupoId !== dre.base?.grupoId && r.valor < 0)
+    .map(r => ({ nome: r.grupoNome, valor: round(-r.valor), pct_receita: pctBase(-r.valor) }))
+    .sort((a, b) => b.valor - a.valor);
+  const custos = composicao.reduce((s, c) => s + c.valor, 0);
+  const primeiroSub = subtotais[0] || null;
+  const resultado = dre.resultado?.valor || 0;
   return {
-    titulosPagar: allPagar, titulosReceber: allReceber,
-    movimentos: allMovimentos, remessasCartao: allRemessas,
-    vendaItens: allVendaItens, vendas: allVendas,
+    kpis: {
+      modelo: 'mascara',
+      receita_nome: dre.base?.grupoNome || 'Receita',
+      receita_bruta: round(base),
+      resultado_nome: dre.resultado?.grupoNome || 'Resultado',
+      lucro_liquido: round(resultado),
+      margem_liquida_pct: pctBase(resultado),
+      lucro_bruto_nome: primeiroSub?.nome || null,
+      lucro_bruto: primeiroSub ? primeiroSub.valor : null,
+      margem_bruta_pct: primeiroSub ? primeiroSub.pct_receita : null,
+      custos_totais: round(custos),
+      custos_pct_receita: pctBase(custos),
+      subtotais,
+    },
+    composicao,
   };
 }
 
-// ─── Agregador principal para DRE ──────────────────────────────
-// params: { cliente | redeContexto, mesRef, chaveApi, mascaraId, onProgress }
-// Retorna payload pronto para a IA
+// ─── Agregador principal para DRE (Webposto) ────────────────────
+// Monta a DRE do período EXATAMENTE como a tela de DRE (dreWebpostoService):
+// mesma fonte, mesma máscara, mesmos mapeamentos, subtotais e resultado.
+// params: { cliente, modoRede, chaveApi, chaveApiId, mascaraId, mesRef, onProgress }
 export async function agregarDadosDRE({ cliente, modoRede = false, chaveApi, chaveApiId, mascaraId, mesRef, onProgress }) {
   const periodos = calcularPeriodos(mesRef);
-
-  // Empresa codigos (suporta modo rede)
   const empresaCodigos = modoRede
     ? (cliente?._empresaCodigos || [])
     : [cliente.empresa_codigo];
 
-  // Mascara + grupos + mapeamentos (rede, filtrados pela mascara) + mapeamento de vendas + catalogos
-  onProgress?.('Carregando máscara DRE, mapeamento de vendas e catalogos...');
-  const [todasMascaras, grupos, mapeamentosRede, mapeamentoVendas, produtos, gruposQuality] = await Promise.all([
+  onProgress?.('Carregando máscara DRE, mapeamentos e catálogos...');
+  const [todasMascaras, grupos, mapeamentosRede, mapeamentoVendas, produtos, gruposQuality, planos] = await Promise.all([
     mascaraDreService.listarMascaras().catch(() => []),
     mascaraDreService.listarGrupos(mascaraId),
     mapService.listarMapeamentos(chaveApiId),
     vendasMapService.listarMapeamentoVendas(mascaraId).catch(() => []),
     qualityApi.buscarProdutos(chaveApi).catch(() => []),
     qualityApi.buscarGrupos(chaveApi).catch(() => []),
+    qualityApi.buscarPlanoContasGerencial(chaveApi).catch(() => []),
   ]);
   const mascaraInfo = (todasMascaras || []).find(m => m.id === mascaraId) || null;
   if (!grupos?.length) throw new Error('Máscara DRE não tem grupos configurados');
@@ -457,120 +504,82 @@ export async function agregarDadosDRE({ cliente, modoRede = false, chaveApi, cha
   (produtos || []).forEach(p => produtosMap.set(p.produtoCodigo || p.codigo, p));
   const gruposCatMap = new Map();
   (gruposQuality || []).forEach(g => gruposCatMap.set(g.grupoCodigo || g.codigo, g));
-  const opcoesAgg = { mapeamentoVendas: mapVendasFiltrado, produtosMap, gruposCatMap };
+  const { hgMap } = montarMapasPlanoGerencial(planos);
+  const ctxDre = { grupos, mapeamentos, mapeamentoVendas: mapVendasFiltrado, produtosMap, gruposCatMap, hierarquiaGridMap: hgMap };
 
-  // Fetch de periodo traz titulos + vendas
-  const fetchPeriodo = async (p, label) => {
-    onProgress?.(`Buscando ${label}...`);
-    const dados = await carregarDadosPeriodo(chaveApi, empresaCodigos, p);
-    return { [p.key]: dados };
-  };
+  // Busca cada mês UMA vez (o atual também está na tendência de 6 meses)
+  const mesesUnicos = new Map();
+  [periodos.atual, periodos.yoy, ...periodos.tendencia6m].forEach(p => { if (!mesesUnicos.has(p.key)) mesesUnicos.set(p.key, p); });
+  const dadosPorKey = {};
+  await Promise.all([...mesesUnicos.values()].map(async (p) => {
+    onProgress?.(`Buscando ${p.label}...`);
+    dadosPorKey[p.key] = await carregarDadosPeriodo(chaveApi, empresaCodigos, p);
+  }));
+  const selecionar = (keys) => keys.reduce((o, k) => { o[k] = dadosPorKey[k]; return o; }, {});
 
-  const [dadosAtual, dadosYoY, ...dadosMensais] = await Promise.all([
-    fetchPeriodo(periodos.atual, `${periodos.atual.label} (atual)`),
-    fetchPeriodo(periodos.yoy, `${periodos.yoy.label} (YoY)`),
-    ...periodos.tendencia6m.map(p => fetchPeriodo(p, p.label)),
-  ]);
-
-  const tendencia6mPorMes = {};
-  dadosMensais.forEach(d => { Object.assign(tendencia6mPorMes, d); });
-
+  onProgress?.('Montando a DRE...');
+  const montar = (keys, filtroEmpresa = null) => montarDrePeriodoWebposto(selecionar(keys), { ...ctxDre, filtroEmpresa });
   const keysTend = periodos.tendencia6m.map(p => p.key);
-  const quarterAtualPorMes = {};
-  const quarterAntPorMes = {};
-  keysTend.slice(-3).forEach(k => { quarterAtualPorMes[k] = tendencia6mPorMes[k]; });
-  keysTend.slice(0, 3).forEach(k => { quarterAntPorMes[k] = tendencia6mPorMes[k]; });
 
-  // Agregacoes (todas passam as opcoes com vendas)
-  const aggAtual = agregarDrePorGrupo(dadosAtual, grupos, mapeamentos, opcoesAgg);
-  const aggYoY = agregarDrePorGrupo(dadosYoY, grupos, mapeamentos, opcoesAgg);
-  const aggQuarterAtual = agregarDrePorGrupo(quarterAtualPorMes, grupos, mapeamentos, opcoesAgg);
-  const aggQuarterAnt = agregarDrePorGrupo(quarterAntPorMes, grupos, mapeamentos, opcoesAgg);
+  const dreAtual = montar([periodos.atual.key]);
+  const dreYoY = montar([periodos.yoy.key]);
+  const { kpis: kAtual, composicao } = kpisDaDre(dreAtual);
+  const { kpis: kYoY } = kpisDaDre(dreYoY);
+  const { kpis: kQAtual } = kpisDaDre(montar(keysTend.slice(-3)));
+  const { kpis: kQAnt } = kpisDaDre(montar(keysTend.slice(0, 3)));
 
   const serieTendencia = periodos.tendencia6m.map(p => {
-    const agg = agregarDrePorGrupo({ [p.key]: tendencia6mPorMes[p.key] }, grupos, mapeamentos, opcoesAgg);
+    const { kpis } = kpisDaDre(montar([p.key]));
     return {
       mes: p.label,
       key: p.key,
-      receita_liquida: agg.kpis.receita_liquida,
-      lucro_bruto: agg.kpis.lucro_bruto,
-      margem_bruta_pct: agg.kpis.margem_bruta_pct,
-      lucro_liquido: agg.kpis.lucro_liquido,
-      margem_liquida_pct: agg.kpis.margem_liquida_pct,
+      receita_bruta: kpis.receita_bruta,
+      lucro_liquido: kpis.lucro_liquido,
+      margem_liquida_pct: kpis.margem_liquida_pct,
+      subtotais: kpis.subtotais.map(s => ({ nome: s.nome, valor: s.valor })),
     };
   });
 
-  // Linhas com maior variacao YoY (top 5 por |variacao|)
-  const mapYoY = new Map(aggYoY.linhas.map(l => [l.grupoId, l.valor]));
-  const linhasComVariacao = aggAtual.linhas
+  // Linhas da DRE (ordem de exibição) com YoY e % da receita — iguais à tela
+  const base = kAtual.receita_bruta;
+  const mapYoY = new Map(dreYoY.linhas.map(l => [l.grupoId, l.valor]));
+  const linhasDre = dreAtual.linhas.map(l => ({
+    grupoId: l.grupoId,
+    grupoNome: l.grupoNome,
+    tipo: l.tipo,
+    parentId: l.parentId,
+    nivel: l.nivel,
+    valor: round(l.valor),
+    valor_yoy: round(mapYoY.get(l.grupoId) || 0),
+    pct_receita: base > 0 ? round((Math.abs(l.valor) / base) * 100, 1) : 0,
+  }));
+
+  const linhasComVariacao = linhasDre
     .filter(l => l.tipo !== 'subtotal' && l.tipo !== 'resultado')
-    .map(l => {
-      const valorYoY = mapYoY.get(l.grupoId) || 0;
-      return {
-        linha: l.grupoNome,
-        valor_atual: l.valor,
-        valor_yoy: valorYoY,
-        variacao_pct: variacaoPct(l.valor, valorYoY),
-        variacao_abs: round(l.valor - valorYoY),
-      };
-    })
+    .map(l => ({
+      linha: l.grupoNome,
+      valor_atual: l.valor,
+      valor_yoy: l.valor_yoy,
+      variacao_pct: variacaoPct(l.valor, l.valor_yoy),
+      variacao_abs: round(l.valor - l.valor_yoy),
+    }))
     .filter(l => l.variacao_pct != null && Math.abs(l.variacao_pct) > 10)
     .sort((a, b) => Math.abs(b.variacao_pct) - Math.abs(a.variacao_pct))
     .slice(0, 8);
 
-  // Estrutura hierárquica da máscara (pra IA respeitar agrupamentos pai→filho)
-  const estruturaDre = gruposOrdenados => gruposOrdenados.map(g => ({
-    id: g.id,
-    nome: g.nome,
-    tipo: g.tipo,            // 'base' | 'subtotal' | 'resultado'
-    parent_id: g.parent_id || null,
-    ordem: g.ordem || 0,
-  }));
-  const gruposOrdenadosArr = (grupos || []).slice().sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-
-  // Enriquece linhas com valor YoY no MESMO grupo (atual vs ano anterior)
-  // — assim a IA tem todos os pontos pra calcular variações em qualquer
-  // linha sem filtrar nada.
-  const mapYoYTodas = new Map(aggYoY.linhas.map(l => [l.grupoId, l.valor]));
-  const linhasComYoY = aggAtual.linhas.map(l => ({
-    ...l,
-    valor_yoy: mapYoYTodas.get(l.grupoId) || 0,
-  }));
-
-  // Resultado POR EMPRESA (apenas em modo rede com múltiplas empresas).
-  // Filtra os dados do período atual por empresaCodigo e roda o mesmo
-  // agregador. Assim a IA recebe a DRE de cada empresa individual e pode
-  // comparar performance entre elas.
-  function filtrarPorEmpresa(dadosPeriodo, ec) {
-    const out = {};
-    Object.entries(dadosPeriodo).forEach(([k, v]) => {
-      out[k] = {
-        titulosPagar:   (v.titulosPagar   || []).filter(x => Number(x.empresaCodigo) === ec),
-        titulosReceber: (v.titulosReceber || []).filter(x => Number(x.empresaCodigo) === ec),
-        movimentos:     (v.movimentos     || []).filter(x => Number(x.empresaCodigo) === ec),
-        remessasCartao: (v.remessasCartao || []).filter(x => Number(x.empresaCodigo) === ec),
-        vendaItens:     (v.vendaItens     || []).filter(x => Number(x.empresaCodigo) === ec),
-        vendas:         (v.vendas         || []).filter(x => Number(x.empresaCodigo) === ec),
-      };
-    });
-    return out;
-  }
+  // Resultado POR EMPRESA (modo rede): a mesma DRE, filtrada por empresa
   const empresas = modoRede ? (cliente?._empresas || []) : [];
   const porEmpresa = empresas.map(emp => {
     const ec = Number(emp.empresa_codigo);
-    const dadosAtualEmp = filtrarPorEmpresa(dadosAtual, ec);
-    const dadosYoYEmp = filtrarPorEmpresa(dadosYoY, ec);
-    const aggEmp = agregarDrePorGrupo(dadosAtualEmp, grupos, mapeamentos, opcoesAgg);
-    const aggEmpYoY = agregarDrePorGrupo(dadosYoYEmp, grupos, mapeamentos, opcoesAgg);
+    const dreEmp = montar([periodos.atual.key], ec);
+    const { kpis } = kpisDaDre(dreEmp);
+    const { kpis: kpisYoY } = kpisDaDre(montar([periodos.yoy.key], ec));
     return {
       empresa_codigo: ec,
       nome: demoAtivo() ? mascararEmpresa(emp, true) : (emp.fantasia || emp.nome || `Empresa #${ec}`),
-      kpis: aggEmp.kpis,
-      kpis_yoy: aggEmpYoY.kpis,
-      // Top linhas: receita + lucro bruto + lucro líquido + 3 maiores despesas (sem subtotais/resultados)
-      linhas_resumo: aggEmp.linhas
-        .filter(l => l.tipo !== 'subtotal' && l.tipo !== 'resultado' && !l.parentId)
-        .map(l => ({ grupoNome: l.grupoNome, valor: l.valor })),
+      kpis,
+      kpis_yoy: kpisYoY,
+      linhas_resumo: dreEmp.linhas.filter(l => l.nivel === 0).map(l => ({ grupoNome: l.grupoNome, tipo: l.tipo, valor: round(l.valor) })),
     };
   });
 
@@ -583,49 +592,39 @@ export async function agregarDadosDRE({ cliente, modoRede = false, chaveApi, cha
       qtd_empresas: modoRede ? empresaCodigos.length : 1,
     },
     mascara_dre: {
+      id: mascaraId,
       nome: mascaraInfo?.nome || 'Padrão',
-      // Hierarquia completa: grupos base + subtotais + resultados na ordem
-      // exata. A IA DEVE usar SOMENTE estes nomes ao listar linhas/itens.
-      estrutura: estruturaDre(gruposOrdenadosArr),
+      // Hierarquia completa na ordem exata. A IA DEVE usar SOMENTE estes nomes.
+      estrutura: dreAtual.linhas.map(l => ({ id: l.grupoId, nome: l.grupoNome, tipo: l.tipo, parent_id: l.parentId, nivel: l.nivel })),
     },
-    // Receita usada como base do % Receita — calculada a partir da soma de
-    // todos os grupos cujo tipo='base' SEM parent_id e SEM dedução/custo
-    // (ou seja, valores brutos positivos). Caso o KPI receita_bruta seja 0
-    // por causa do nome do grupo, este valor sempre estará correto.
-    base_receita_para_pct: round(
-      Math.max(
-        aggAtual.kpis.receita_bruta || 0,
-        aggAtual.linhas
-          .filter(l => l.tipo === 'base' && !l.parentId && l.valor > 0)
-          .reduce((s, l) => s + l.valor, 0)
-      )
-    ),
+    // Base do % receita = primeira linha da DRE (mesma base da tela)
+    base_receita_para_pct: base,
     periodo_atual: {
       label: periodos.atual.label,
-      kpis: aggAtual.kpis,
-      // Cada linha já vem com valor_yoy pra IA calcular variações
-      linhas_dre: linhasComYoY,
+      kpis: kAtual,
+      linhas_dre: linhasDre,
+      composicao_custos: composicao,
     },
     comparativo_yoy: {
       label: periodos.yoy.label,
-      kpis: aggYoY.kpis,
-      variacao_receita_pct: variacaoPct(aggAtual.kpis.receita_bruta, aggYoY.kpis.receita_bruta),
-      variacao_lucro_bruto_pct: variacaoPct(aggAtual.kpis.lucro_bruto, aggYoY.kpis.lucro_bruto),
-      variacao_margem_bruta_pp: round(aggAtual.kpis.margem_bruta_pct - aggYoY.kpis.margem_bruta_pct, 2),
-      variacao_margem_liquida_pp: round(aggAtual.kpis.margem_liquida_pct - aggYoY.kpis.margem_liquida_pct, 2),
+      kpis: kYoY,
+      variacao_receita_pct: variacaoPct(kAtual.receita_bruta, kYoY.receita_bruta),
+      variacao_resultado_pct: variacaoPct(kAtual.lucro_liquido, kYoY.lucro_liquido),
+      variacao_lucro_bruto_pct: kAtual.lucro_bruto != null && kYoY.lucro_bruto != null ? variacaoPct(kAtual.lucro_bruto, kYoY.lucro_bruto) : null,
+      variacao_margem_bruta_pp: kAtual.margem_bruta_pct != null && kYoY.margem_bruta_pct != null ? round(kAtual.margem_bruta_pct - kYoY.margem_bruta_pct, 2) : null,
+      variacao_margem_liquida_pp: round(kAtual.margem_liquida_pct - kYoY.margem_liquida_pct, 2),
     },
     comparativo_trimestre: {
       atual_label: periodos.quarterAtual.label,
       anterior_label: periodos.quarterAnterior.label,
-      atual_kpis: aggQuarterAtual.kpis,
-      anterior_kpis: aggQuarterAnt.kpis,
-      variacao_receita_pct: variacaoPct(aggQuarterAtual.kpis.receita_bruta, aggQuarterAnt.kpis.receita_bruta),
-      variacao_lucro_bruto_pct: variacaoPct(aggQuarterAtual.kpis.lucro_bruto, aggQuarterAnt.kpis.lucro_bruto),
-      variacao_margem_bruta_pp: round(aggQuarterAtual.kpis.margem_bruta_pct - aggQuarterAnt.kpis.margem_bruta_pct, 2),
+      atual_kpis: kQAtual,
+      anterior_kpis: kQAnt,
+      variacao_receita_pct: variacaoPct(kQAtual.receita_bruta, kQAnt.receita_bruta),
+      variacao_resultado_pct: variacaoPct(kQAtual.lucro_liquido, kQAnt.lucro_liquido),
+      variacao_margem_liquida_pp: round(kQAtual.margem_liquida_pct - kQAnt.margem_liquida_pct, 2),
     },
     tendencia_6m: serieTendencia,
     linhas_com_maior_variacao: linhasComVariacao,
-    // Apenas em modo rede com múltiplas empresas. Vazio em modo single.
     por_empresa: porEmpresa,
   };
 }

@@ -32,14 +32,19 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
   const yoy = dados?.comparativo_yoy || {};
   const serie = dados?.tendencia_6m || [];
   const baseReceita = Number(dados?.base_receita_para_pct || kpis.receita_bruta || 0);
+  // Webposto: KPIs vêm da ESTRUTURA da máscara do cliente (mesma DRE da tela).
+  // Autosystem ainda usa o modelo antigo (receita/CMV/despesas pelo nome do grupo).
+  const pelaMascara = kpis.modelo === 'mascara';
 
   // ── Detecção de inconsistência (ex.: receita reconhecida ínfima vs custo enorme) ──
-  const custosTotais = Number(kpis.cmv || 0) + Number(kpis.despesas_operacionais || 0);
+  const custosTotais = pelaMascara
+    ? Number(kpis.custos_totais || 0)
+    : Number(kpis.cmv || 0) + Number(kpis.despesas_operacionais || 0);
   const razaoCusto = baseReceita > 0 ? custosTotais / baseReceita : Infinity;
   const inconsistente = baseReceita <= 0 || (custosTotais > 0 && razaoCusto > 3);
 
   // ── vs mês passado (MoM) a partir da série de 6 meses ──
-  const molValor = (s) => Number(s?.receita_liquida ?? 0);
+  const molValor = (s) => Number((pelaMascara ? s?.receita_bruta : s?.receita_liquida) ?? 0);
   const mesAtualSerie = serie[serie.length - 1];
   const mesAnteriorSerie = serie[serie.length - 2];
   const momPct = (mesAnteriorSerie && molValor(mesAnteriorSerie) !== 0)
@@ -71,9 +76,17 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
   const pctOuNota = (v) => inconsistente ? '—' : pct(v); // suprime % absurdo
 
   // ── Cartões de custo para a barra de composição ──
+  // Máscara: grupos de gasto pelos NOMES do cliente (raízes negativas da DRE).
   const itensCusto = [];
-  if (Number(kpis.cmv) > 0) itensCusto.push({ rotulo: 'Custo do combustível/produtos (CMV)', valor: kpis.cmv });
-  if (Number(kpis.despesas_operacionais) > 0) itensCusto.push({ rotulo: 'Despesas para operar', valor: kpis.despesas_operacionais });
+  if (pelaMascara) {
+    (dados?.periodo_atual?.composicao_custos || []).forEach(c => {
+      if (Number(c.valor) > 0) itensCusto.push({ rotulo: c.nome, valor: c.valor });
+    });
+  } else {
+    if (Number(kpis.cmv) > 0) itensCusto.push({ rotulo: 'Custo do combustível/produtos (CMV)', valor: kpis.cmv });
+    if (Number(kpis.despesas_operacionais) > 0) itensCusto.push({ rotulo: 'Despesas para operar', valor: kpis.despesas_operacionais });
+  }
+  const subtotaisMascara = pelaMascara ? (kpis.subtotais || []) : [];
 
   const recomendacoes = insights?.recomendacoes || [];
   const perguntas = insights?.perguntas_gestor || insights?.perguntas_chave_gestor || [];
@@ -113,10 +126,14 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
 
           {/* Cartões-chave */}
           <div className="rd-kpis">
-            <CartaoKpi rotulo="Faturamento" valor={moeda(kpis.receita_bruta)} explica="Tudo o que o posto vendeu no mês." />
-            <CartaoKpi rotulo="Custos e despesas" valor={moeda(custosTotais)} explica="Combustível/produtos comprados + gastos para operar." />
             <CartaoKpi
-              rotulo={lucro < 0 ? 'Prejuízo' : 'Lucro do mês'}
+              rotulo={pelaMascara ? trad(kpis.receita_nome) : 'Faturamento'}
+              valor={moeda(kpis.receita_bruta)}
+              explica={pelaMascara ? 'A primeira linha da sua DRE.' : 'Tudo o que o posto vendeu no mês.'} />
+            <CartaoKpi rotulo="Custos e despesas" valor={moeda(custosTotais)}
+              explica={pelaMascara ? 'Soma dos grupos de gasto da sua DRE.' : 'Combustível/produtos comprados + gastos para operar.'} />
+            <CartaoKpi
+              rotulo={pelaMascara ? trad(kpis.resultado_nome) : (lucro < 0 ? 'Prejuízo' : 'Lucro do mês')}
               valor={moeda(lucro)}
               explica="O que sobrou (ou faltou) depois de pagar tudo." />
             <CartaoKpi
@@ -138,6 +155,22 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
           {/* Nota geral do consultor + nota do resumo (no contexto do topo) */}
           <NotaConsultor texto={nota} />
           {nt('Resumo executivo')}
+
+          {/* ── Resultado pela estrutura da DRE (subtotais da máscara) ── */}
+          {subtotaisMascara.length > 0 && (
+            <section className="rd-secao">
+              <h2>O resultado passo a passo</h2>
+              <p className="rd-oque-e">O que é isso? Os totais da sua DRE, na ordem em que ela é montada — do que entrou até o que sobrou.</p>
+              <TabelaDados
+                colunas={[
+                  { chave: 'nome', titulo: 'Linha da DRE', render: (v) => trad(v) },
+                  { chave: 'valor', titulo: 'Valor', num: true, render: (v) => moeda(v) },
+                  { chave: 'pct_receita', titulo: `% de ${trad(kpis.receita_nome)}`, num: true, render: (v) => pctOuNota(v) },
+                ]}
+                linhas={subtotaisMascara}
+              />
+            </section>
+          )}
 
           {/* ── Margens ── */}
           <section className="rd-secao">
@@ -234,8 +267,8 @@ export default function RelatorioDre({ insights, dados, empresa, periodo, modoRe
               <h2>Como vem evoluindo</h2>
               <p className="rd-oque-e">O que é isso? A linha do faturamento nos últimos meses. Um mês marcado com ⚠ pode ter dado faltando.</p>
               <MiniTendencia
-                titulo="Faturamento líquido por mês"
-                serie={serie.map(s => ({ mes: s.mes, valor: s.receita_liquida }))}
+                titulo={pelaMascara ? `${trad(kpis.receita_nome)} por mês` : 'Faturamento líquido por mês'}
+                serie={serie.map(s => ({ mes: s.mes, valor: pelaMascara ? s.receita_bruta : s.receita_liquida }))}
               />
               {insights?.tendencia?.resumo_6m && <p>{trad(insights.tendencia.resumo_6m)}</p>}
               {nt('Tendência')}
