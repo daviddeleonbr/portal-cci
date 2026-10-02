@@ -5,7 +5,48 @@
 // gerencial analítica) + vendas (VENDA_ITEM/VENDA, via mapeamento de vendas).
 // Estrutura: máscara DRE do cliente (grupos_dre) + mapeamento de contas.
 
+import * as qualityApi from './qualityApiService';
 import { agregarVendasItens, TIPOS_VENDA } from './mapeamentoVendasService';
+
+// ─── Taxas de ADM de cartão: valor REAL da remessa, não a estimativa ──
+// Na apuração por COMPETÊNCIA o Quality não lança a taxa da remessa: ele gera
+// uma "TAXA COMISSÃO CARTÃO" por venda, na data da venda, com o % de comissão
+// configurado pra administradora — e esse % costuma ficar abaixo do que a
+// adquirente cobra (ex.: FITCARD 8,95% real vs ~6,3% configurado → a DRE
+// mostrava R$ 38 mil de taxa de frota num trimestre em que o posto pagou 72).
+// Na apuração por CAIXA a taxa vem certa, uma linha por remessa
+// ("TAXA ADMINISTRADORA REMESSA: 011203"), na data do pagamento.
+// Regra: tira a estimativa por venda da competência e põe no lugar as linhas
+// de remessa da apuração por caixa. O resto da DRE segue por competência.
+// Custo: a taxa cai no mês do pagamento (frota liquida ~1 mês depois da venda).
+const RE_COMISSAO_POR_VENDA = /TAXA COMISS[ÃA]O CART[ÃA]O/i;
+const RE_TAXA_REMESSA = /TAXA ADMINISTRADORA REMESSA/i;
+
+export function mesclarTaxasCartao(despesasCompetencia, despesasCaixa) {
+  // Sem a apuração por caixa (falha na busca) mantém a estimativa — melhor que zerar.
+  if (!despesasCaixa) return despesasCompetencia;
+  return [
+    ...despesasCompetencia.filter(a => !RE_COMISSAO_POR_VENDA.test(a.documento)),
+    ...despesasCaixa.filter(a => RE_TAXA_REMESSA.test(a.documento)),
+  ];
+}
+
+// Apuração do Quality já normalizada e com as taxas de cartão reais.
+// Fonte única da tela de DRE e da Análise com IA.
+export async function buscarApuracaoWebposto(apiKey, filtros) {
+  const [competencia, caixa] = await Promise.all([
+    qualityApi.buscarApuracaoDRE(apiKey, { ...filtros, apuracaoCaixa: false }),
+    qualityApi.buscarApuracaoDRE(apiKey, { ...filtros, apuracaoCaixa: true })
+      .catch((e) => { console.error('Falha na apuração DRE Quality (caixa) — taxas de cartão ficam na estimativa', e); return null; }),
+  ]);
+  return {
+    apuracaoReceitas: qualityApi.apuracaoReceitas(competencia),
+    apuracaoDespesas: mesclarTaxasCartao(
+      qualityApi.apuracaoDespesas(competencia),
+      caixa ? qualityApi.apuracaoDespesas(caixa) : null,
+    ),
+  };
+}
 
 // Plano de contas gerencial → mapas de apoio:
 //  - pcMap:     GRID → DESCRIÇÃO (fallback de "não mapeadas")

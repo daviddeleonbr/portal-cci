@@ -4,7 +4,7 @@
 // segue sendo o agregador do Autosystem (dreInsightsAutosystemService).
 
 import * as qualityApi from './qualityApiService';
-import { montarMapasPlanoGerencial, montarDrePeriodoWebposto } from './dreWebpostoService';
+import { montarMapasPlanoGerencial, montarDrePeriodoWebposto, buscarApuracaoWebposto } from './dreWebpostoService';
 import * as mascaraDreService from './mascaraDreService';
 import * as mapService from './mapeamentoService';
 import * as vendasMapService from './mapeamentoVendasService';
@@ -419,14 +419,14 @@ async function carregarDadosPeriodo(apiKey, empresaCodigos, { dataInicial, dataF
   for (const ec of empresaCodigos) {
     const filtros = { dataInicial, dataFinal, empresaCodigo: ec };
     const annot = (arr) => (arr || []).map(x => ({ ...x, empresaCodigo: ec }));
-    const [dre, itens, vds] = await Promise.all([
-      qualityApi.buscarApuracaoDRE(apiKey, filtros)
-        .catch((e) => { console.error('Falha na apuração DRE Quality', e); return {}; }),
+    const [ap, itens, vds] = await Promise.all([
+      buscarApuracaoWebposto(apiKey, filtros)
+        .catch((e) => { console.error('Falha na apuração DRE Quality', e); return { apuracaoDespesas: [], apuracaoReceitas: [] }; }),
       qualityApi.buscarVendaItens(apiKey, filtros).catch(() => []),
       qualityApi.buscarVendas(apiKey, filtros).catch(() => []),
     ]);
-    apuracaoDespesas.push(...annot(qualityApi.apuracaoDespesas(dre)));
-    apuracaoReceitas.push(...annot(qualityApi.apuracaoReceitas(dre)));
+    apuracaoDespesas.push(...annot(ap.apuracaoDespesas));
+    apuracaoReceitas.push(...annot(ap.apuracaoReceitas));
     vendaItens.push(...annot(itens));
     vendas.push(...annot(vds));
   }

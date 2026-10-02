@@ -842,7 +842,11 @@ export function ajustarMovimentoCartao(m, liquidoPorRemessa) {
 // trazem — ex.: cada taxa de cartão na sua conta (TAXA ADM CARTAO CREDITO/
 // DEBITO/FROTA/CARTEIRA DIGITAL). Autentica por query `CHAVE` (como no BI) +
 // header x-api-key. UMA requisição (sem paginação por cursor). `empresaCodigo`
-// filtra por filial (param `filiais`); sem ele, apura a rede inteira.
+// filtra por filial (param `filiais`); sem ele, a API apura SÓ a empresa
+// principal da chave (não a rede) — em modo rede, iterar os empresaCodigos.
+// `apuracaoCaixa=false` (competência) NÃO traz a taxa real das remessas de
+// cartão (gera "TAXA COMISSÃO CARTÃO" estimada por venda) — ver
+// dreWebpostoService.buscarApuracaoWebposto, que mescla com a apuração por caixa.
 // Resposta (schema DRE): {
 //   empresaCodigo, receitaBruta, vendasGrupo, deducaoFiscal,
 //   apuracaoReceita:    [Apuracao],   // RECEITAS classificadas

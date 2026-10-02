@@ -17,7 +17,7 @@ import { TIPOS_VENDA } from '../services/mapeamentoVendasService';
 import * as vendasAutosystemMapService from '../services/mapeamentoVendasAutosystemService';
 import * as autosystemService from '../services/autosystemService';
 import * as qualityApi from '../services/qualityApiService';
-import { montarMapasPlanoGerencial, lancamentosApuracaoWebposto } from '../services/dreWebpostoService';
+import { montarMapasPlanoGerencial, lancamentosApuracaoWebposto, buscarApuracaoWebposto } from '../services/dreWebpostoService';
 import { formatCurrency } from '../utils/format';
 import { nomeEmpresa } from '../utils/nomeEmpresa';
 import { useUsarApelido } from '../lib/apelidoPref';
@@ -847,12 +847,12 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             const filtros = { dataInicial: p.dataInicial, dataFinal: p.dataFinal, empresaCodigo: ec };
             const annot = modoRede ? (arr) => (arr || []).map(x => ({ ...x, empresaCodigo: ec })) : (arr) => (arr || []);
 
-            // Webposto: fonte oficial classificada do Quality (endpoint DRE).
-            // Despesas/receitas já vêm na conta gerencial analítica.
-            const dre = await qualityApi.buscarApuracaoDRE(chave.chave, filtros)
-              .catch((e) => { console.error('Falha na apuração DRE Quality', e); return {}; });
-            allApuDespesas.push(...annot(qualityApi.apuracaoDespesas(dre)));
-            allApuReceitas.push(...annot(qualityApi.apuracaoReceitas(dre)));
+            // Webposto: fonte oficial classificada do Quality (endpoint DRE), com
+            // as taxas de cartão reais das remessas (dreWebpostoService).
+            const ap = await buscarApuracaoWebposto(chave.chave, filtros)
+              .catch((e) => { console.error('Falha na apuração DRE Quality', e); return { apuracaoDespesas: [], apuracaoReceitas: [] }; });
+            allApuDespesas.push(...annot(ap.apuracaoDespesas));
+            allApuReceitas.push(...annot(ap.apuracaoReceitas));
             // Vendas + CMV têm parametrização própria (mapeamentoVendas) e NÃO
             // vêm na apuração de títulos — busca à parte pra receita/custo aparecerem.
             const [vendaItens, vendas] = await Promise.all([
