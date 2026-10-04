@@ -1,8 +1,8 @@
 import { supabase } from '../lib/supabase';
 
-// Categorias de empresa (Autosystem). "unificado" = posto e conveniência no
-// mesmo CNPJ (rótulo informativo). Usado na aba Categorias (edição da rede) e
-// como opção de agrupamento/filtro nos relatórios.
+// Categorias de empresa (Autosystem e Webposto — coluna clientes.categoria_empresa).
+// "unificado" = posto e conveniência no mesmo CNPJ (rótulo informativo). Usado na
+// aba Categorias (edição da rede) e como opção de filtro nos relatórios (DRE/Fluxo).
 export const CATEGORIAS_EMPRESA_AUTOSYSTEM = [
   { key: 'posto',        label: 'Posto' },
   { key: 'conveniencia', label: 'Conveniência' },

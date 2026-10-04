@@ -216,17 +216,28 @@ export default function Clientes({ embedded = false }) {
     ? clientes.filter(c => c.chave_api_id === hubRede.chaveApiId).map(c => c.empresa_codigo).filter(v => v != null)
     : [];
   const fecharHub = () => setModalRedeHub({ open: false, tipo: null, rede: null });
+  // Categoria salva no hub → atualiza a lista local (sem recarregar a página).
+  const onCategoriaSalva = (id, valor) =>
+    setClientes(prev => prev.map(c => (c.id === id ? { ...c, categoria_empresa: valor } : c)));
+  // Empresas Webposto da rede (mesma chave_api), pra aba Categorias.
+  const hubEmpresasWebposto = hubRede?.chaveApiId
+    ? clientes
+        .filter(c => c.chave_api_id === hubRede.chaveApiId && c.usa_webposto)
+        .slice()
+        .sort((a, b) => (a.nome || a.razao_social || '').localeCompare(b.nome || b.razao_social || ''))
+    : [];
   const paineisRedeHub = !modalRedeHub.open
     ? null
     : modalRedeHub.tipo === 'webposto'
       ? {
           empresas: <WizardNovoCliente inline open preRede={hubRede} empresasJaVinculadas={hubEmpresasVinculadas} onClose={fecharHub} onSaved={carregar} showToast={showToast} />,
+          categorias: <PainelCategoriasEmpresas empresas={hubEmpresasWebposto} showToast={showToast} onCategoriaSalva={onCategoriaSalva} />,
           contas:  <ModalContasBancarias inline open cliente={hubEmp0} onClose={fecharHub} showToast={showToast} />,
           admin:   <ModalAdministradorasFrota inline open cliente={hubEmp0} onClose={fecharHub} showToast={showToast} />,
         }
       : {
           rede:     <WizardNovoCliente inline open editandoRede={hubRede} onClose={fecharHub} onSaved={carregar} showToast={showToast} />,
-          empresas: <ModalEmpresasAutosystem inline open rede={hubRede} clientesExistentes={clientes} onClose={fecharHub} onSaved={carregar} showToast={showToast} />,
+          empresas: <ModalEmpresasAutosystem inline open rede={hubRede} clientesExistentes={clientes} onClose={fecharHub} onSaved={carregar} showToast={showToast} onCategoriaSalva={onCategoriaSalva} />,
           contas:   <ModalContasCategoriaAutosystem inline open rede={hubRede} onClose={fecharHub} showToast={showToast} />,
         };
 
@@ -2534,7 +2545,7 @@ export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, i
 // ═══════════════════════════════════════════════════════════
 // Modal: Importar empresas do Autosystem
 // ═══════════════════════════════════════════════════════════
-export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSaved, showToast, inline = false }) {
+export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClose, onSaved, showToast, inline = false, onCategoriaSalva }) {
   const [modo, setModo] = useState('importar'); // 'importar' | 'manual'
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2549,11 +2560,6 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
   };
   const [formManual, setFormManual] = useState(FORM_MANUAL_VAZIO);
   const [salvandoManual, setSalvandoManual] = useState(false);
-  // Aba "Categorias": categoria por empresa importada (id → categoria)
-  const [categoriasEmp, setCategoriasEmp] = useState({});
-  const [salvandoCategoria, setSalvandoCategoria] = useState(null);
-  const [categoriaBusca, setCategoriaBusca] = useState('');
-
   // Empresas já importadas nesta rede (linhas de `clientes`).
   const empresasImportadas = useMemo(() => {
     if (!rede) return [];
@@ -2562,28 +2568,6 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
       .slice()
       .sort((a, b) => (a.nome || a.razao_social || '').localeCompare(b.nome || b.razao_social || ''));
   }, [clientesExistentes, rede]);
-
-  // Semeia o estado local das categorias a partir dos clientes.
-  useEffect(() => {
-    const seed = {};
-    empresasImportadas.forEach(c => { seed[c.id] = c.categoria_empresa || ''; });
-    setCategoriasEmp(seed);
-  }, [empresasImportadas]);
-
-  const salvarCategoria = async (cliente, categoria) => {
-    const valor = categoria || null;
-    setCategoriasEmp(prev => ({ ...prev, [cliente.id]: valor || '' }));
-    setSalvandoCategoria(cliente.id);
-    try {
-      await clientesService.atualizarCliente(cliente.id, { categoria_empresa: valor });
-      showToast('success', 'Categoria atualizada');
-    } catch (err) {
-      showToast('error', 'Erro ao salvar categoria: ' + err.message);
-      setCategoriasEmp(prev => ({ ...prev, [cliente.id]: cliente.categoria_empresa || '' }));
-    } finally {
-      setSalvandoCategoria(null);
-    }
-  };
 
   // CNPJs já cadastrados nesta rede (para marcar como "já importada")
   const cnpjsExistentes = useMemo(() => {
@@ -2765,13 +2749,10 @@ export function ModalEmpresasAutosystem({ open, rede, clientesExistentes, onClos
             onCancelar={onClose}
           />
         ) : modo === 'categorias' ? (
-          <AbaCategoriasEmpresas
+          <PainelCategoriasEmpresas
             empresas={empresasImportadas}
-            categorias={categoriasEmp}
-            salvandoId={salvandoCategoria}
-            busca={categoriaBusca}
-            setBusca={setCategoriaBusca}
-            onDefinir={salvarCategoria}
+            showToast={showToast}
+            onCategoriaSalva={onCategoriaSalva}
           />
         ) : modo === 'cartoes' ? (
           <AbaContasCartao rede={rede} showToast={showToast} />
@@ -2991,6 +2972,49 @@ function AbaContasCartao({ rede, showToast }) {
           : <p className="text-sm text-gray-400 py-6 text-center">Nenhuma conta encontrada.</p>}
       </div>
     </div>
+  );
+}
+
+// Painel "Categorias" com estado próprio — usado no hub da rede Autosystem
+// (aba Empresas → Categorias) e Webposto (aba Categorias). Salva direto no
+// `clientes.categoria_empresa`; `onCategoriaSalva(id, valor)` deixa o pai
+// atualizar a lista local (sem recarregar tudo).
+export function PainelCategoriasEmpresas({ empresas, showToast, onCategoriaSalva }) {
+  const [categorias, setCategorias] = useState({});
+  const [salvandoId, setSalvandoId] = useState(null);
+  const [busca, setBusca] = useState('');
+
+  useEffect(() => {
+    const seed = {};
+    (empresas || []).forEach(c => { seed[c.id] = c.categoria_empresa || ''; });
+    setCategorias(seed);
+  }, [empresas]);
+
+  const definir = async (cliente, categoria) => {
+    const valor = categoria || null;
+    setCategorias(prev => ({ ...prev, [cliente.id]: valor || '' }));
+    setSalvandoId(cliente.id);
+    try {
+      await clientesService.atualizarCliente(cliente.id, { categoria_empresa: valor });
+      onCategoriaSalva?.(cliente.id, valor);
+      showToast('success', 'Categoria atualizada');
+    } catch (err) {
+      showToast('error', 'Erro ao salvar categoria: ' + err.message);
+      setCategorias(prev => ({ ...prev, [cliente.id]: cliente.categoria_empresa || '' }));
+    } finally {
+      setSalvandoId(null);
+    }
+  };
+
+  return (
+    <AbaCategoriasEmpresas
+      empresas={empresas || []}
+      categorias={categorias}
+      salvandoId={salvandoId}
+      busca={busca}
+      setBusca={setBusca}
+      onDefinir={definir}
+    />
   );
 }
 

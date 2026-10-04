@@ -2263,16 +2263,22 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
             <span className="text-[11px] font-medium text-gray-600">Selecionar por intervalo</span>
           </label>
 
-          {/* Filtro por categoria de empresa (só modo rede, quando há empresas classificadas) */}
+          {/* Gerar DRE geral (todas as empresas) ou por categoria de empresa — só modo
+              rede, quando há empresas classificadas (Autosystem e Webposto). Filtra em
+              cache: trocar não exige "Montar DRE" de novo. */}
           {modoRede && categoriasPresentesRede.length > 0 && (
             <div>
-              <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Categoria</label>
+              <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Gerar DRE</label>
               <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)}
                 className="h-8 rounded-lg border border-gray-200 px-2 text-[11px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-                <option value="">Todas as empresas</option>
-                {categoriasPresentesRede.map(cat => (
-                  <option key={cat.key} value={cat.key}>{cat.label}</option>
-                ))}
+                <option value="">Geral — todas as empresas</option>
+                <optgroup label="Por categoria">
+                  {categoriasPresentesRede.map(cat => (
+                    <option key={cat.key} value={cat.key}>
+                      {cat.label} ({(cliente?._empresas || []).filter(e => e.categoria_empresa === cat.key).length})
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
           )}

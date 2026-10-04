@@ -38,7 +38,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
 
   // Contexto (cliente OU rede virtual)
   const [loading, setLoading] = useState(true);
-  const [contexto, setContexto] = useState(null); // { tipo, cliente?, rede?, empresaCodigos?, chaveApi }
+  // contextoBase = rede/empresa inteira; `contexto` (abaixo) = filtrado pela categoria.
+  const [contextoBase, setContexto] = useState(null); // { tipo, cliente?, rede?, empresaCodigos?, chaveApi }
+  // Categoria de empresa (só rede): '' = geral (todas as empresas).
+  const [categoriaIA, setCategoriaIA] = useState('');
   const [err, setErr] = useState(null);
 
   const hoje = new Date();
@@ -162,7 +165,49 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     setNotaStatus('idle');
   }, [mesKey]);
 
+  // ─── Categoria de empresa (só rede) ─────────────────────────────
+  // Categorias presentes entre as empresas da rede (monta o seletor).
+  const categoriasPresentes = useMemo(() => {
+    const emps = contextoBase?.tipo !== 'empresa' ? (contextoBase?.empresas || []) : [];
+    return clientesService.CATEGORIAS_EMPRESA_AUTOSYSTEM
+      .map(cat => ({ ...cat, qtd: emps.filter(e => e.categoria_empresa === cat.key).length }))
+      .filter(cat => cat.qtd > 0);
+  }, [contextoBase]);
+  const rotuloCategoriaIA = categoriaIA ? clientesService.rotuloCategoriaEmpresa(categoriaIA) : null;
+
+  // Contexto efetivo: com categoria, a rede vira só as empresas daquela categoria
+  // (todas as análises — vendas/DRE/fluxo/geral — leem empresas daqui). O nome
+  // ganha o sufixo da categoria, que vai pro payload e pro relatório.
+  const contexto = useMemo(() => {
+    if (!contextoBase || !categoriaIA || contextoBase.tipo === 'empresa') return contextoBase;
+    const empresas = (contextoBase.empresas || []).filter(e => e.categoria_empresa === categoriaIA);
+    const empresaCodigos = empresas.map(e => Number(e.empresa_codigo));
+    const sufixo = ` · ${rotuloCategoriaIA}`;
+    return {
+      ...contextoBase,
+      empresas,
+      empresaCodigos,
+      rede: contextoBase.rede ? { ...contextoBase.rede, nome: `${contextoBase.rede.nome || ''}${sufixo}` } : contextoBase.rede,
+      cliente: {
+        ...contextoBase.cliente,
+        nome: `${contextoBase.cliente?.nome || ''}${sufixo}`,
+        _empresas: empresas,
+        _empresaCodigos: empresaCodigos,
+      },
+    };
+  }, [contextoBase, categoriaIA, rotuloCategoriaIA]);
+
+  // Trocar a categoria limpa a tela na hora (o cache da categoria repopula).
+  useEffect(() => {
+    setResultados({ vendas: null, dre: null, fluxo: null, geral: null });
+    setNotas({ vendas: '', dre: '', fluxo: '', geral: '' });
+    setNotasItens({ vendas: {}, dre: {}, fluxo: {}, geral: {} });
+    setNotaStatus('idle');
+  }, [categoriaIA]);
+
   // ─── Escopo estavel (empresa | rede | rede-as) p/ cache + notas ──
+  // Com categoria, o escopo ganha o sufixo `|cat:<categoria>`: cada categoria
+  // tem a sua análise salva e as suas notas, separadas da análise geral.
   const escopoCtx = useMemo(() => {
     if (!contexto) return null;
     const tipo = contexto.tipo;
@@ -176,9 +221,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     } else if (tipo === 'rede-as') {
       asId = asRedeId || null;
     }
-    const escopo = montarEscopo({ tipo, clienteId: cliId, chaveApiId: chvId, asRedeId: asId });
+    const base = montarEscopo({ tipo, clienteId: cliId, chaveApiId: chvId, asRedeId: asId });
+    const escopo = base && categoriaIA && tipo !== 'empresa' ? `${base}|cat:${categoriaIA}` : base;
     return escopo ? { escopo, tipo, clienteId: cliId, chaveApiId: chvId, asRedeId: asId } : null;
-  }, [contexto, clienteId, chaveApiId, asRedeId]);
+  }, [contexto, clienteId, chaveApiId, asRedeId, categoriaIA]);
 
   // ─── Carrega o cache (resultado da IA + nota) do periodo ─────────
   // Evita regenerar (economiza tokens) e traz de volta as notas ja escritas.
@@ -465,10 +511,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
             </h2>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               {modoRede ? <Network className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
-              <span className="truncate">{modoRede ? labelRede(contexto.cliente?.nome, chaveApiId || asRedeId) : labelEmpresa(contexto.cliente)}</span>
+              <span className="truncate">{modoRede ? labelRede(contextoBase.cliente?.nome, chaveApiId || asRedeId) : labelEmpresa(contexto.cliente)}</span>
               {modoRede && (
                 <span className="inline-flex items-center gap-1 text-blue-600 ml-1">
-                  · {contexto.empresas?.length} empresas
+                  · {contexto.empresas?.length} empresas{rotuloCategoriaIA ? ` (${rotuloCategoriaIA})` : ''}
                 </span>
               )}
               {contexto.cliente?.usa_webposto && (
@@ -492,7 +538,8 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
 
       {/* Seletor de mes + mascaras (sempre visiveis) */}
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm no-print">
-        <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr_auto] gap-3 items-end">
+        <div className={`grid grid-cols-1 gap-3 items-end ${categoriasPresentes.length > 0
+          ? 'sm:grid-cols-[auto_1fr_1fr_1fr_auto]' : 'sm:grid-cols-[auto_1fr_1fr_auto]'}`}>
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês de referência</label>
             <div className="flex items-center gap-1 bg-gray-50 rounded-lg p-1">
@@ -501,6 +548,23 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
               <button onClick={() => navegarMes(1)} className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:bg-white hover:text-gray-800">→</button>
             </div>
           </div>
+          {/* Gerar geral (rede inteira) ou por categoria de empresa — só rede com
+              empresas classificadas. Cada opção tem a sua análise salva. */}
+          {categoriasPresentes.length > 0 && (
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Gerar análise</label>
+              <select value={categoriaIA} onChange={e => setCategoriaIA(e.target.value)}
+                disabled={!!loadingAba}
+                className="w-full h-10 rounded-lg border border-gray-200 bg-white px-2.5 text-xs disabled:opacity-60">
+                <option value="">Geral — todas as empresas ({contextoBase.empresas?.length || 0})</option>
+                <optgroup label="Por categoria">
+                  {categoriasPresentes.map(cat => (
+                    <option key={cat.key} value={cat.key}>{cat.label} ({cat.qtd})</option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Máscara DRE</label>
             <select value={mascaraDreId} onChange={e => setMascaraDreId(e.target.value)}
@@ -567,7 +631,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
         const periodoLabel = `${MESES[mesRef.mes - 1]}/${mesRef.ano}`;
         const empresaInfo = {
           nome: modoRede
-            ? labelRede(contexto.cliente?.nome, chaveApiId)
+            ? `${labelRede(contextoBase.cliente?.nome, chaveApiId || asRedeId)}${rotuloCategoriaIA ? ` · ${rotuloCategoriaIA}` : ''}`
             : labelEmpresa(contexto.cliente),
           cnpj: labelCnpj(contexto.cliente?.cnpj),
         };

@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import {
   X, Link2, Landmark, CreditCard, Layers, Network,
   Database, Wallet, Trash2, Settings2,
-  BarChart3, TrendingUp, Loader2, Eye,
+  BarChart3, TrendingUp, Loader2, Eye, Tags,
 } from 'lucide-react';
 import SeletorMascarasRede from './SeletorMascarasRede';
 
@@ -59,6 +59,7 @@ export default function ModalEditarRedeHub({
   const abas = webposto
     ? [
         { key: 'empresas',  label: 'Empresas',            icon: Link2 },
+        { key: 'categorias', label: 'Categorias',         icon: Tags },
         { key: 'contas',    label: 'Contas bancárias',    icon: Landmark },
         { key: 'admin',     label: 'Administradoras',     icon: CreditCard },
         { key: 'mascaras',  label: 'Máscaras',            icon: Layers },
