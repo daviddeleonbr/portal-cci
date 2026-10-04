@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ChevronDown, ChevronLeft, ChevronRight, LogOut,
+  ChevronDown, ChevronLeft, LogOut,
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
   MessageCircle, RefreshCw, Eye, AlertTriangle,
@@ -128,7 +128,11 @@ function isSubtreeActive(item, pathname) {
   return false;
 }
 
-export default function Sidebar({ collapsed, onToggle }) {
+// Texto da sidebar: no desktop some com a sidebar recolhida e aparece ao
+// passar o mouse (padrão Visor360). No mobile (gaveta) fica sempre visível.
+const FADE = 'whitespace-nowrap lg:opacity-0 lg:group-hover:opacity-100 lg:transition-opacity lg:duration-200';
+
+export default function Sidebar({ mobileOpen = false, onMobileClose }) {
   const location = useLocation();
   const navigate = useNavigate();
   const session = useAdminSession();
@@ -231,44 +235,53 @@ export default function Sidebar({ collapsed, onToggle }) {
   const emailUsuario = usuario?.email || '';
   const initials = nomeUsuario.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
+  // Desktop (≥lg): igual ao Visor360 — recolhida (rail de ícones, 64px) por padrão
+  // e expande ao passar o mouse, SOBREPONDO o conteúdo (não empurra a página).
+  // Textos ficam montados e só esmaecem (FADE), então nada pula ao expandir.
+  // Mobile (<lg): gaveta que desliza da lateral (largura cheia), aberta pelo
+  // botão de menu do Header.
   return (
     <aside
-      className={`group fixed left-0 top-0 z-40 flex h-screen flex-col bg-white border-r border-gray-200/70 transition-all duration-300 ${
-        collapsed ? 'w-[72px]' : 'w-[260px]'
-      }`}
+      className={`group fixed left-0 top-0 z-40 flex h-screen w-[260px] flex-col overflow-hidden bg-white border-r border-gray-200/70 transition-[width,transform] duration-300 ease-in-out
+        ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'} lg:translate-x-0
+        lg:w-16 lg:hover:w-[260px] lg:hover:shadow-2xl lg:hover:shadow-gray-900/10`}
     >
-      {/* Floating toggle button on the right edge */}
+      {/* Close button (mobile only) */}
       <button
-        onClick={onToggle}
-        title={collapsed ? 'Expandir' : 'Recolher'}
-        className="absolute -right-3 top-20 z-50 flex h-6 w-6 items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:shadow transition-all opacity-0 group-hover:opacity-100"
+        onClick={onMobileClose}
+        aria-label="Fechar menu"
+        className="lg:hidden absolute right-2 top-3.5 z-50 flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
       >
-        {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+        <ChevronLeft className="h-4 w-4" />
       </button>
 
       {/* Logo */}
       <div className="flex h-16 items-center px-5 flex-shrink-0 border-b border-gray-100">
-        <Link to="/admin/dashboard" className={`flex items-center gap-3 ${collapsed ? 'mx-auto' : ''}`}>
-          <div className="h-7 w-7 flex-shrink-0">
-            <LogoCCI className="h-7 w-7" title="CCI Admin" />
+        <Link to="/admin/dashboard" className="flex items-center gap-3">
+          <div className="h-6 w-6 flex-shrink-0">
+            <LogoCCI className="h-6 w-6" title="CCI Admin" />
           </div>
-          {!collapsed && (
-            <div>
-              <p className="font-display text-[14px] font-semibold text-gray-900 tracking-tight leading-tight">CCI Admin</p>
-              <p className="text-[11px] text-gray-400 leading-tight">Portal interno</p>
-            </div>
-          )}
+          <div className={FADE}>
+            <p className="font-display text-[14px] font-semibold text-gray-900 tracking-tight leading-tight">CCI Admin</p>
+            <p className="text-[11px] text-gray-400 leading-tight">Portal interno</p>
+          </div>
         </Link>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        {navigation.map((section) => (
+      <nav className="menu-lateral flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-0.5">
+        {navigation.map((section, idx) => (
           <div key={section.section}>
-            {!collapsed && (
-              <p className="px-3 mb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-[0.15em]">
+            {/* Título da seção (expandida) ↔ linha divisória (recolhida). "Principal" não tem título. */}
+            {section.section !== 'Principal' && (
+            <div className="relative mt-2 mb-2.5 h-[14px]">
+              <p className={`absolute inset-x-3 top-0 text-[10px] font-semibold text-gray-400 uppercase tracking-[0.15em] leading-[14px] ${FADE}`}>
                 {section.section}
               </p>
+              {idx > 0 && (
+                <div className="absolute left-2 right-2 top-1/2 h-px bg-gray-200 hidden lg:block lg:group-hover:opacity-0 transition-opacity duration-200" aria-hidden />
+              )}
+            </div>
             )}
             <div className="space-y-0.5">
               {section.items.map((item) => {
@@ -277,57 +290,40 @@ export default function Sidebar({ collapsed, onToggle }) {
                 // Simple link
                 if (!item.children) {
                   const isActive = item.href === hrefAtivo;
+                  const badge = item.badgeKey ? badges[item.badgeKey] : 0;
                   return (
                     <NavLink
                       key={item.name}
                       to={item.href}
-                      title={collapsed ? item.name : undefined}
-                      className={`relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-all duration-200 ${
+                      title={item.name}
+                      className={`relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
                         isActive
                           ? 'bg-blue-50 text-blue-700'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      } ${collapsed ? 'justify-center' : ''}`}
+                      }`}
                     >
-                      {isActive && !collapsed && (
+                      {isActive && (
                         <motion.span
                           layoutId="activeBar"
                           className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r bg-blue-600"
                         />
                       )}
                       {Icon && <Icon className={`h-[17px] w-[17px] flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
-                      {!collapsed && <span>{item.name}</span>}
-                      {!collapsed && item.badgeKey && badges[item.badgeKey] > 0 && (
-                        <span className="ml-auto inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white tabular-nums">
-                          {badges[item.badgeKey] > 99 ? '99+' : badges[item.badgeKey]}
-                        </span>
-                      )}
-                      {/* Quando sidebar colapsada — ponto vermelho discreto */}
-                      {collapsed && item.badgeKey && badges[item.badgeKey] > 0 && (
-                        <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
+                      <span className={FADE}>{item.name}</span>
+                      {badge > 0 && (
+                        <>
+                          <span className={`ml-auto inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white tabular-nums ${FADE}`}>
+                            {badge > 99 ? '99+' : badge}
+                          </span>
+                          {/* Recolhida: ponto vermelho discreto sobre o ícone */}
+                          <span className="absolute top-1.5 left-[26px] h-2 w-2 rounded-full bg-rose-500 hidden lg:block lg:group-hover:opacity-0 transition-opacity duration-200" />
+                        </>
                       )}
                     </NavLink>
                   );
                 }
 
-                // Collapsed with children
-                if (collapsed) {
-                  const firstHref = item.children.find(c => c.href)?.href || item.children[0]?.children?.[0]?.href;
-                  const isActive = isSubtreeActive(item, location.pathname);
-                  return (
-                    <Link
-                      key={item.name}
-                      to={firstHref || '#'}
-                      title={item.name}
-                      className={`flex items-center justify-center rounded-md px-3 py-2.5 transition-all duration-200 ${
-                        isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
-                    >
-                      {Icon && <Icon className={`h-[17px] w-[17px] ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
-                    </Link>
-                  );
-                }
-
-                // Expandable item
+                // Expandable item (submenu só aparece com a sidebar expandida)
                 const isActive = isSubtreeActive(item, location.pathname);
                 const isOpen = expanded.has(item.name);
 
@@ -335,7 +331,8 @@ export default function Sidebar({ collapsed, onToggle }) {
                   <div key={item.name}>
                     <button
                       onClick={() => toggleExpand(item.name)}
-                      className={`relative w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-all duration-200 ${
+                      title={item.name}
+                      className={`relative w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
                         isActive
                           ? 'bg-blue-50 text-blue-700'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -345,12 +342,13 @@ export default function Sidebar({ collapsed, onToggle }) {
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r bg-blue-600" />
                       )}
                       {Icon && <Icon className={`h-[17px] w-[17px] flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
-                      <span className="flex-1 text-left">{item.name}</span>
+                      <span className={`flex-1 text-left ${FADE}`}>{item.name}</span>
                       <ChevronDown
-                        className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180 text-gray-600' : 'text-gray-400'}`}
+                        className={`h-3.5 w-3.5 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-gray-600' : 'text-gray-400'} lg:opacity-0 lg:group-hover:opacity-100`}
                       />
                     </button>
 
+                    <div className="lg:hidden lg:group-hover:block">
                     <AnimatePresence initial={false}>
                       {isOpen && (
                         <motion.div
@@ -371,7 +369,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                                   <div key={child.name}>
                                     <button
                                       onClick={() => toggleExpand(child.name)}
-                                      className={`relative w-full flex items-center justify-between rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-all duration-200 ${
+                                      className={`relative w-full flex items-center justify-between rounded-md px-3 py-1.5 text-[12.5px] font-medium whitespace-nowrap transition-all duration-200 ${
                                         childActive ? 'text-gray-900' : 'text-gray-500 hover:text-gray-800'
                                       }`}
                                     >
@@ -399,7 +397,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                                                 key={gc.name}
                                                 to={gc.href}
                                                 className={({ isActive: gcActive }) =>
-                                                  `block rounded-md px-3 py-1.5 text-[12px] transition-all duration-200 ${
+                                                  `block rounded-md px-3 py-1.5 text-[12px] whitespace-nowrap transition-all duration-200 ${
                                                     gcActive
                                                       ? 'text-blue-700 font-medium bg-blue-50/60'
                                                       : 'text-gray-400 hover:text-gray-700'
@@ -422,7 +420,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                                   key={child.name}
                                   to={child.href}
                                   className={({ isActive: childActive }) =>
-                                    `relative flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[12.5px] transition-all duration-200 ${
+                                    `relative flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[12.5px] whitespace-nowrap transition-all duration-200 ${
                                       childActive
                                         ? 'text-blue-700 font-medium bg-blue-50/60'
                                         : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
@@ -442,6 +440,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                         </motion.div>
                       )}
                     </AnimatePresence>
+                    </div>
                   </div>
                 );
               })}
@@ -450,35 +449,25 @@ export default function Sidebar({ collapsed, onToggle }) {
         ))}
       </nav>
 
-      {/* Bottom: User */}
-      <div className="flex-shrink-0 border-t border-gray-100 p-3">
-        {!collapsed ? (
-          <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-2.5 border border-gray-100">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 flex-shrink-0">
-              {initials}
-              <div className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-50" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-medium text-gray-900 truncate leading-tight">{nomeUsuario}</p>
-              <p className="text-[10.5px] text-gray-400 truncate leading-tight mt-0.5">{emailUsuario}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              title="Sair"
-              className="rounded-md p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-            </button>
+      {/* Bottom: User — recolhida: só o avatar; expandida: avatar + nome + sair */}
+      <div className="flex-shrink-0 border-t border-gray-100 p-2">
+        <div className="flex items-center gap-2.5 overflow-hidden rounded-lg bg-gray-50 p-2 border border-gray-100">
+          <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 flex-shrink-0">
+            {initials}
+            <div className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-50" />
           </div>
-        ) : (
+          <div className={`flex-1 min-w-0 ${FADE}`}>
+            <p className="text-[12px] font-medium text-gray-900 truncate leading-tight">{nomeUsuario}</p>
+            <p className="text-[10.5px] text-gray-400 truncate leading-tight mt-0.5">{emailUsuario}</p>
+          </div>
           <button
             onClick={handleLogout}
             title="Sair"
-            className="w-full flex items-center justify-center rounded-md py-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            className={`rounded-md p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 ${FADE}`}
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-3.5 w-3.5" />
           </button>
-        )}
+        </div>
       </div>
     </aside>
   );

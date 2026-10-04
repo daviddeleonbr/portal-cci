@@ -119,6 +119,12 @@ input, select, textarea, button {
 html.dark .app-bg { background-color: #0b1220; }
 html.dark .app-vignette { background: linear-gradient(to bottom, transparent, transparent, rgba(11, 18, 32, 0.55)); }
 
+/* Navegação das sidebars (admin/cliente): rola sem mostrar a barra — senão, com a
+   sidebar recolhida (64px), a barra come a lateral direita e desalinha os ícones.
+   Mesmo padrão do Visor360. */
+.menu-lateral { scrollbar-width: none; }
+.menu-lateral::-webkit-scrollbar { display: none; }
+
 /* Degrade sutil em cards com fundo branco e bordas arredondadas.
    Evita afetar inputs, selects e outros elementos interativos. */
 .bg-white.rounded-xl,

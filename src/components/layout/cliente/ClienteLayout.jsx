@@ -12,8 +12,8 @@ import { registrarPageview } from '../../../services/usoPortalService';
 import { EmpresaAtivaProvider } from '../../../contexts/EmpresaAtivaContext';
 
 export default function ClienteLayout() {
-  // collapsed: controla largura no desktop (≥lg). mobileOpen: drawer overlay no mobile.
-  const [collapsed, setCollapsed] = useState(false);
+  // Desktop: sidebar recolhida que expande ao passar o mouse (sem estado).
+  // mobileOpen: drawer overlay no mobile.
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Telemetria: 1 pageview a cada mudança de rota (fire-and-forget).
@@ -58,16 +58,11 @@ export default function ClienteLayout() {
       )}
 
       <ClienteSidebar
-        collapsed={collapsed}
         mobileOpen={mobileOpen}
-        onToggle={() => setCollapsed(!collapsed)}
         onMobileClose={() => setMobileOpen(false)}
       />
-      <div
-        className={`relative transition-all duration-300 ${
-          collapsed ? 'lg:ml-[72px]' : 'lg:ml-[260px]'
-        }`}
-      >
+      {/* Margem = largura recolhida; a sidebar expandida (hover) sobrepõe o conteúdo */}
+      <div className="relative lg:ml-16">
         <ClienteHeader onMenuClick={() => setMobileOpen(true)} />
         <main className="p-4 sm:p-6 lg:p-8">
           {/* Fade simples (sem transform) — um `transform` remanescente do

@@ -14,7 +14,7 @@ export default function Header({ onMenuClick }) {
   const { title: pageTitle, description: pageDescription } = usePageHeader();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-md px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-md px-3 sm:px-6">
       <div className="flex items-center gap-4 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
