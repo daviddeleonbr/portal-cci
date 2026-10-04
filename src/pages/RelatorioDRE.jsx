@@ -2186,9 +2186,11 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
       {filtrosVisiveis && (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-xl border border-gray-200/60 px-3 py-2.5 mb-5 shadow-sm no-print">
-        <div className="flex flex-wrap items-end gap-2.5">
+        {/* Uma linha só em telas largas (xl+). Quebra em telas estreitas e quando o
+            portal injeta o seletor de empresas (mais largo). */}
+        <div className={`flex flex-wrap items-end gap-2 ${seletorEmpresas ? '' : 'xl:flex-nowrap'}`}>
           {/* Mascara */}
-          <div className="min-w-[180px]">
+          <div className="w-[160px] min-w-0 shrink">
             <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Máscara DRE</label>
             <select value={mascaraSelecionada?.id || ''}
               onChange={(e) => setMascaraSelecionada(mascaras.find(m => m.id === e.target.value))}
@@ -2200,7 +2202,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           {!usarIntervalo ? (
             <>
               {/* Mes final (selecionado) — sistema busca 2 meses anteriores automaticamente */}
-              <div>
+              <div className="shrink-0">
                 <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Mês (referência)</label>
                 <div className="flex items-center gap-0.5 h-8 rounded-lg border border-gray-200 bg-white px-0.5">
                   <button onClick={() => navMes(-1)} className="rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-50">
@@ -2223,7 +2225,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
               </div>
 
               {/* Quantidade de meses (1 ou 3) */}
-              <div>
+              <div className="shrink-0">
                 <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Análise</label>
                 <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
                   {[1, 3, 6].map(q => (
@@ -2240,13 +2242,13 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           ) : (
             <>
               {/* Intervalo por datas (máx. 12 meses) */}
-              <div>
+              <div className="shrink-0">
                 <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data início</label>
                 <input type="date" value={intervaloInicio} max={intervaloFim || hojeStr}
                   onChange={(e) => setIntervaloInicio(e.target.value)}
                   className="h-8 rounded-lg border border-gray-200 px-2 text-[11px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
-              <div>
+              <div className="shrink-0">
                 <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data fim</label>
                 <input type="date" value={intervaloFim} min={intervaloInicio || undefined}
                   onChange={(e) => setIntervaloFim(e.target.value)}
@@ -2256,22 +2258,24 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           )}
 
           {/* Checkbox: selecionar por intervalo */}
-          <label className="flex items-center gap-1.5 h-8 cursor-pointer select-none pb-0.5">
+          <label title="Selecionar por intervalo de datas (máx. 12 meses)"
+            className="flex items-center gap-1.5 h-8 cursor-pointer select-none pb-0.5 shrink-0">
             <input type="checkbox" checked={usarIntervalo}
               onChange={(e) => setUsarIntervalo(e.target.checked)}
               className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400 cursor-pointer" />
-            <span className="text-[11px] font-medium text-gray-600">Selecionar por intervalo</span>
+            <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Intervalo</span>
           </label>
 
           {/* Gerar DRE geral (todas as empresas) ou por categoria de empresa — só modo
               rede, quando há empresas classificadas (Autosystem e Webposto). Filtra em
               cache: trocar não exige "Montar DRE" de novo. */}
           {modoRede && categoriasPresentesRede.length > 0 && (
-            <div>
+            <div className="shrink-0">
               <label className="block text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Gerar DRE</label>
               <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)}
+                title="Geral = todas as empresas da rede; ou só as empresas de uma categoria"
                 className="h-8 rounded-lg border border-gray-200 px-2 text-[11px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-                <option value="">Geral — todas as empresas</option>
+                <option value="">Geral ({(cliente?._empresas || []).length})</option>
                 <optgroup label="Por categoria">
                   {categoriasPresentesRede.map(cat => (
                     <option key={cat.key} value={cat.key}>
@@ -2289,16 +2293,16 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           )}
 
           {/* Montar DRE */}
-          <div>
+          <div className="shrink-0">
             <button onClick={handleMontarDRE} disabled={loadingDados || !mascaraSelecionada || meses.length === 0}
-              className="flex items-center gap-1.5 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 text-[11px] font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              className="flex items-center gap-1.5 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 text-[11px] font-semibold text-white whitespace-nowrap shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {loadingDados ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileBarChart className="h-3.5 w-3.5" />}
               Montar DRE
             </button>
           </div>
 
           {/* Toggles — ficam à direita, na mesma linha quando couber */}
-          <div className="flex items-center gap-1.5 ml-auto h-8">
+          <div className="flex items-center gap-1.5 ml-auto h-8 shrink-0 whitespace-nowrap">
             <ApelidoToggle empresas={redeContexto?.empresas} somenteQuandoHaApelidos={false} />
             <button onClick={() => setOcultarZeradas(!ocultarZeradas)}
               title={ocultarZeradas ? 'Mostrar contas zeradas' : 'Ocultar contas zeradas'}
