@@ -169,6 +169,7 @@ export default function App() {
           <Route path="/admin/financeiro"                 element={<Financeiro />} />
           <Route path="/admin/financeiro/contas-pagar"    element={<Financeiro />} />
           <Route path="/admin/financeiro/contas-receber"  element={<Financeiro />} />
+          <Route path="/admin/financeiro/banco-inter"     element={<Financeiro />} />
           <Route path="/admin/boletos" element={<Boletos />} />
 
           {/* Fiscal */}
