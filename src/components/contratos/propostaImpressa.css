@@ -1,0 +1,40 @@
+/* Impressão da proposta (admin) — complementa relatorioImpressao.css. */
+
+/* Enquanto imprime a proposta, o app inteiro some: só o portal vai pro papel. */
+@media print {
+  body.imprimindo-proposta #root { display: none !important; }
+}
+
+/* O portal fica no <body> (fora do #root): no tema escuro herdaria texto claro.
+   O documento é sempre papel branco → texto escuro fixo, independente do tema. */
+.rd-proposta-impressa,
+.rd-proposta-impressa .rd-doc,
+.rd-proposta-impressa .rd-tabela td,
+.rd-proposta-impressa .rd-pi-markdown,
+.rd-proposta-impressa .rd-pi-markdown * { color: var(--grafite); }
+.rd-proposta-impressa .rd-tabela td .rd-forte { color: var(--grafite); }
+
+.rd-proposta-impressa .rd-pi-sobretitulo {
+  margin: 0 0 1mm; font-family: var(--fonte-titulo); font-size: 9pt; font-weight: 700;
+  color: var(--teal); text-transform: uppercase; letter-spacing: .6px;
+}
+.rd-proposta-impressa .rd-pi-meta {
+  display: flex; flex-wrap: wrap; gap: 3mm 8mm; margin: 4mm 0 6mm; padding: 3mm 4mm;
+  border: 1px solid var(--linha); border-radius: 5px; background: var(--fundo-suave);
+}
+.rd-proposta-impressa .rd-pi-meta .rot {
+  display: block; font-size: 8pt; color: var(--cinza); text-transform: uppercase; letter-spacing: .4px; font-weight: 600;
+}
+.rd-proposta-impressa .rd-pi-meta .val { font-family: var(--fonte-titulo); font-size: 11pt; font-weight: 700; color: var(--grafite); }
+.rd-proposta-impressa .rd-pi-lead { font-size: 10.5pt; line-height: 1.55; color: var(--grafite); }
+.rd-proposta-impressa .rd-pi-grupo { margin: 0 0 4mm; }
+.rd-proposta-impressa .rd-pi-grupo h3 { margin: 3mm 0 1.5mm; }
+.rd-proposta-impressa .rd-pi-desc { display: block; font-size: 8.5pt; color: var(--cinza); margin-top: .5mm; }
+.rd-proposta-impressa .rd-pi-total {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 4mm;
+  padding: 4mm 5mm; border-radius: 5px; background: var(--grafite); color: #fff; break-inside: avoid;
+}
+.rd-proposta-impressa .rd-pi-total .rot { font-size: 9pt; text-transform: uppercase; letter-spacing: .5px; opacity: .75; }
+.rd-proposta-impressa .rd-pi-total .val { font-family: var(--fonte-titulo); font-size: 18pt; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rd-proposta-impressa .rd-pi-notas { margin: 2.5mm 0 0; padding-left: 5mm; font-size: 9pt; color: var(--cinza); }
+.rd-proposta-impressa .rd-pi-markdown { font-size: 10pt; line-height: 1.55; }

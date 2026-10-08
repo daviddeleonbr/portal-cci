@@ -7,8 +7,9 @@ import { motion } from 'framer-motion';
 import {
   Plus, Search, Pencil, Trash2, Send, CheckCircle2, XCircle, Loader2,
   Link2 as LinkIcon, Eye, ShieldCheck, MapPin,
-  FileText, MoreHorizontal, Receipt,
+  FileText, MoreHorizontal, Receipt, FileDown,
 } from 'lucide-react';
+import PropostaImpressa from '../../components/contratos/PropostaImpressa';
 import Modal from '../../components/ui/Modal';
 import { TableSkeleton } from '../../components/ui/LoadingSkeleton';
 import { formatCurrency, formatDate } from '../../utils/format';
@@ -93,6 +94,18 @@ export default function AbaPropostas({ showToast }) {
     } catch (err) { showToast('error', 'Não foi possível abrir a prévia: ' + err.message); }
   };
 
+  // PDF da proposta (admin) — funciona mesmo expirada: lê a proposta completa
+  // direto (não pela página pública) e imprime no papel timbrado da CCI.
+  const [imprimindo, setImprimindo] = useState(null);   // proposta completa em impressão
+  const [gerandoPdfId, setGerandoPdfId] = useState(null);
+  const gerarPdf = async (p) => {
+    setGerandoPdfId(p.id);
+    try { setImprimindo(await propostasService.buscarProposta(p.id)); }
+    catch (err) { showToast('error', 'Não foi possível gerar o PDF: ' + err.message); }
+    finally { setGerandoPdfId(null); }
+  };
+  const fimImpressao = useCallback(() => setImprimindo(null), []);
+
   // Gera (ou reaproveita) o token e copia o link público da proposta.
   const copiarLink = async (p) => {
     try {
@@ -124,6 +137,9 @@ export default function AbaPropostas({ showToast }) {
 
   return (
     <div>
+      {/* Documento de impressão (portal fora do app) — some ao fechar a impressão */}
+      <PropostaImpressa proposta={imprimindo} onFim={fimImpressao} />
+
       {/* Header da aba */}
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div>
@@ -246,6 +262,10 @@ export default function AbaPropostas({ showToast }) {
                               <ShieldCheck className="h-3.5 w-3.5" />
                             </button>
                           )}
+                          <button onClick={() => gerarPdf(p)} disabled={gerandoPdfId === p.id}
+                            className="rounded-md p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors disabled:opacity-50" title="Gerar PDF da proposta">
+                            {gerandoPdfId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                          </button>
                           <button onClick={() => visualizar(p)}
                             className="rounded-md p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Pré-visualizar como o cliente vê">
                             <Eye className="h-3.5 w-3.5" />
