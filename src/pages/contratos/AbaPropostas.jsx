@@ -2,13 +2,14 @@
 // Lista propostas + modal de criação/edição com seleção de itens do
 // catálogo de Serviços Oferecidos.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Plus, Search, Pencil, Trash2, Send, CheckCircle2, XCircle, Loader2,
   Link2 as LinkIcon, Eye, ShieldCheck, MapPin,
-  FileText, MoreHorizontal, Receipt, FileDown,
+  FileText, MoreHorizontal, Receipt, FileDown, Users,
 } from 'lucide-react';
+import { calcularCustoFuncionario } from '../../utils/custoFuncionario';
 import PropostaImpressa from '../../components/contratos/PropostaImpressa';
 import Modal from '../../components/ui/Modal';
 import { TableSkeleton } from '../../components/ui/LoadingSkeleton';
@@ -52,6 +53,7 @@ export default function AbaPropostas({ showToast }) {
   const [modal, setModal] = useState({ open: false, propostaId: null });
   const [converterId, setConverterId] = useState(null);
   const [aceitesProp, setAceitesProp] = useState(null); // proposta p/ ver comprovante
+  const [custoFuncAberto, setCustoFuncAberto] = useState(false); // parâmetros do custo do funcionário
 
   const carregar = useCallback(async () => {
     try {
@@ -100,7 +102,14 @@ export default function AbaPropostas({ showToast }) {
   const [gerandoPdfId, setGerandoPdfId] = useState(null);
   const gerarPdf = async (p) => {
     setGerandoPdfId(p.id);
-    try { setImprimindo(await propostasService.buscarProposta(p.id)); }
+    try {
+      const completa = await propostasService.buscarProposta(p.id);
+      // Argumento "custo de um funcionário" (se ligado): parâmetros gerais.
+      if (completa.mostrar_custo_funcionario && completa.modelo !== 'consultiva') {
+        completa._custoParams = await propostasService.buscarParamsCustoFuncionario().catch(() => null);
+      }
+      setImprimindo(completa);
+    }
     catch (err) { showToast('error', 'Não foi possível gerar o PDF: ' + err.message); }
     finally { setGerandoPdfId(null); }
   };
@@ -148,11 +157,20 @@ export default function AbaPropostas({ showToast }) {
             Monte propostas usando o catálogo de serviços oferecidos.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        <button onClick={() => setCustoFuncAberto(true)}
+          title="Parâmetros do argumento 'custo mensal de um funcionário'"
+          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+          <Users className="h-4 w-4" /> Custo do funcionário
+        </button>
         <button onClick={() => setModal({ open: true, propostaId: null })}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
           <Plus className="h-4 w-4" /> Nova proposta
         </button>
+        </div>
       </div>
+
+      <ModalCustoFuncionario open={custoFuncAberto} onClose={() => setCustoFuncAberto(false)} showToast={showToast} />
 
       {/* KPIs */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-4 px-4 py-2.5 bg-white rounded-lg border border-gray-200/60">
@@ -594,6 +612,7 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
       status: 'rascunho',
       // Modelo da proposta: 'calculadora' (padrão) | 'consultiva'
       modelo: 'calculadora', conteudo_md: '', investimento_valor: '', investimento_periodicidade: 'mensal',
+      mostrar_custo_funcionario: false,
     };
   }
 
@@ -638,6 +657,7 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
           conteudo_md:         p.conteudo_md ?? '',
           investimento_valor:  p.investimento_valor ?? '',
           investimento_periodicidade: p.investimento_periodicidade || 'mensal',
+          mostrar_custo_funcionario: !!p.mostrar_custo_funcionario,
         });
         setItens(p.itens || []);
       } catch (err) {
@@ -1049,6 +1069,23 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
             </div>
             <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">Use só um dos dois — o que preencher zera o outro.</p>
           </div>
+
+          {/* Argumento de venda: custo mensal de um funcionário */}
+          <label className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+            form.mostrar_custo_funcionario
+              ? 'border-teal-200 bg-teal-50/60 dark:border-teal-800 dark:bg-teal-900/20'
+              : 'border-gray-200 dark:border-white/10'}`}>
+            <input type="checkbox" checked={!!form.mostrar_custo_funcionario}
+              onChange={e => setForm(f => ({ ...f, mostrar_custo_funcionario: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-400" />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              <span className="font-medium">Mostrar o custo mensal de um funcionário</span>
+              <span className="block text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                Compara o valor da proposta com quanto custa um empregado do posto (salário + encargos + benefícios + provisões).
+                O cliente pode trocar o salário na página. Parâmetros em “Custo do funcionário”.
+              </span>
+            </span>
+          </label>
           </>)}
 
           {/* Observações */}
@@ -1060,6 +1097,120 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
               className="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
           </div>
         </form>
+      )}
+    </Modal>
+  );
+}
+
+// ─── Parâmetros do argumento "custo mensal de um funcionário" ─────
+// Configuração GERAL (uma linha) usada por todas as propostas que ligam o
+// argumento. Prévia ao vivo: salário mínimo e um salário de conferência
+// (R$ 2.000 = planilha de referência → R$ 4.992,21).
+const CAMPOS_CUSTO = [
+  { k: 'salario_minimo',     rot: 'Salário mínimo (valor inicial)', suf: 'R$' },
+  { k: 'pct_periculosidade', rot: 'Periculosidade',                 suf: '%' },
+  { k: 'pct_assiduidade',    rot: 'Assiduidade',                    suf: '%' },
+  { k: 'pct_inss_empresa',   rot: 'INSS da empresa',                suf: '%' },
+  { k: 'pct_fgts',           rot: 'FGTS',                           suf: '%' },
+  { k: 'pct_rat',            rot: 'RAT',                            suf: '%' },
+  { k: 'pct_terceiros',      rot: 'Terceiros',                      suf: '%' },
+  { k: 'vt_unidades',        rot: 'Vale-transporte (passagens/mês)', suf: 'un.' },
+  { k: 'vt_valor_unitario',  rot: 'Valor da passagem',              suf: 'R$' },
+  { k: 'pct_desconto_vt',    rot: 'Desconto do VT no salário',      suf: '%' },
+  { k: 'valor_alimentacao',  rot: 'Ticket alimentação (mês)',       suf: 'R$' },
+];
+
+function ModalCustoFuncionario({ open, onClose, showToast }) {
+  const [form, setForm] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [salarioTeste, setSalarioTeste] = useState('2000');
+
+  // Carrega só ao ABRIR (callbacks do pai mudam a cada render — via ref, para
+  // não recarregar e apagar o que está sendo digitado).
+  const cbRef = useRef({ showToast, onClose });
+  cbRef.current = { showToast, onClose };
+  useEffect(() => {
+    if (!open) return;
+    setForm(null);
+    propostasService.buscarParamsCustoFuncionario()
+      .then(p => setForm(p || {}))
+      .catch(e => { cbRef.current.showToast('error', 'Erro ao carregar parâmetros: ' + e.message); cbRef.current.onClose(); });
+  }, [open]);
+
+  const custoMinimo = form ? calcularCustoFuncionario(form.salario_minimo, form) : null;
+  const custoTeste = form ? calcularCustoFuncionario(Number(salarioTeste) || 0, form) : null;
+
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      await propostasService.salvarParamsCustoFuncionario(form);
+      showToast('success', 'Parâmetros do custo do funcionário salvos');
+      onClose();
+    } catch (e) { showToast('error', 'Erro ao salvar: ' + e.message); }
+    finally { setSalvando(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Custo mensal de um funcionário" size="lg"
+      footer={(
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100">Cancelar</button>
+          <button onClick={salvar} disabled={!form || salvando}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            {salvando && <Loader2 className="h-4 w-4 animate-spin" />} Salvar
+          </button>
+        </div>
+      )}>
+      {!form ? (
+        <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Valores usados em todas as propostas com o argumento ligado. Periculosidade, assiduidade, RAT e Terceiros
+            incidem sobre o salário; INSS da empresa e FGTS sobre salário + adicionais; 13º e férias são provisionados.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {CAMPOS_CUSTO.map(c => (
+              <div key={c.k}>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1">{c.rot}</label>
+                <div className="flex items-center h-9 rounded-lg border border-gray-200 px-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+                  {c.suf === 'R$' && <span className="text-xs text-gray-400 mr-1">R$</span>}
+                  <input type="number" step="0.01" value={form[c.k] ?? ''}
+                    onChange={e => setForm(f => ({ ...f, [c.k]: e.target.value }))}
+                    className="w-full bg-transparent text-sm tabular-nums outline-none" />
+                  {c.suf !== 'R$' && <span className="text-xs text-gray-400 ml-1">{c.suf}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Prévia */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-lg bg-teal-50 border border-teal-100 p-3">
+              <p className="text-[11px] text-teal-700">Com o salário mínimo ({formatCurrency(Number(form.salario_minimo) || 0)})</p>
+              <p className="text-lg font-bold text-teal-800 tabular-nums">{formatCurrency(custoMinimo.total)}<span className="text-xs font-medium"> /mês</span></p>
+            </div>
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+              <div className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                Conferência com salário de R$
+                <input type="number" value={salarioTeste} onChange={e => setSalarioTeste(e.target.value)}
+                  className="w-20 h-6 rounded border border-gray-200 px-1 text-[11px] tabular-nums" />
+              </div>
+              <p className="text-lg font-bold text-gray-800 tabular-nums">{formatCurrency(custoTeste.total)}<span className="text-xs font-medium"> /mês</span></p>
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-100 divide-y divide-gray-100">
+            {custoMinimo.grupos.map(g => (
+              <div key={g.rotulo} className="flex items-baseline justify-between gap-3 px-3 py-2">
+                <div>
+                  <p className="text-xs font-medium text-gray-800">{g.rotulo}</p>
+                  <p className="text-[10.5px] text-gray-400">{g.detalhe}</p>
+                </div>
+                <span className="text-xs font-semibold text-gray-800 tabular-nums">{formatCurrency(g.valor)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </Modal>
   );

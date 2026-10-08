@@ -158,6 +158,22 @@ export function montarLinkPublico(token) {
   return `${origem}/proposta/${token}`;
 }
 
+// ─── Parâmetros do "custo mensal de um funcionário" (configuração geral) ──
+// Uma linha (id = 1). Cálculo em src/utils/custoFuncionario.js.
+export async function buscarParamsCustoFuncionario() {
+  const { data, error } = await supabase
+    .from('cci_custo_funcionario_param').select('*').eq('id', 1).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function salvarParamsCustoFuncionario(campos) {
+  const { id: _id, updated_at: _u, ...resto } = campos || {};
+  const linha = Object.fromEntries(Object.entries(resto).map(([k, v]) => [k, Number(v) || 0]));
+  const { error } = await supabase.from('cci_custo_funcionario_param').update(linha).eq('id', 1);
+  if (error) throw error;
+}
+
 export async function excluirProposta(id) {
   // Itens caem em cascade (FK on delete cascade)
   const { error } = await supabase.from('cci_propostas').delete().eq('id', id);

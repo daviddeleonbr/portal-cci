@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import PapelTimbrado from '../ia/PapelTimbrado';
 import Markdown from '../ui/Markdown';
+import { calcularCustoFuncionario } from '../../utils/custoFuncionario';
 import '../ia/relatorioImpressao.css';
 import './propostaImpressa.css';
 
@@ -157,6 +158,8 @@ function Documento({ proposta: p }) {
               {itens.some(i => i.tipo_valor === 'unitario') && <li>Serviços unitários calculados pelas quantidades desta proposta.</li>}
             </ul>
           </section>
+
+          {p._custoParams && <SecaoCustoFuncionario params={p._custoParams} valorMensal={tot.mensalMedio} />}
         </>
       )}
 
@@ -172,6 +175,49 @@ function Documento({ proposta: p }) {
         {' '}Documento gerado em {dataHoraBR(new Date().toISOString())}.
       </div>
     </div>
+  );
+}
+
+// Argumento de venda no PDF: custo mensal de 1 funcionário (salário mínimo) x proposta.
+function SecaoCustoFuncionario({ params, valorMensal }) {
+  const salario = Number(params.salario_minimo) || 0;
+  const c = calcularCustoFuncionario(salario, params);
+  const pct = c.total > 0 ? (valorMensal / c.total) * 100 : 0;
+  const pctFmt = (v) => `${(Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+  return (
+    <section className="rd-secao">
+      <h2>Quanto custa um funcionário no seu posto?</h2>
+      <p>
+        Um empregado com salário de <span className="rd-forte">{moeda(salario)}</span> (salário mínimo) custa ao posto,
+        {' '}somando encargos, benefícios e provisões de 13º e férias:
+      </p>
+      <div className="rd-pi-total">
+        <span className="rot">Custo mensal de 1 funcionário</span>
+        <span className="val">{moeda(c.total)} /mês</span>
+      </div>
+      <table className="rd-tabela" style={{ marginTop: '3mm' }}>
+        <tbody>
+          {c.grupos.map(g => (
+            <tr key={g.rotulo}>
+              <td><span className="rd-forte">{g.rotulo}</span><span className="rd-pi-desc">{g.detalhe}</span></td>
+              <td className="num">{moeda(g.valor)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {valorMensal > 0 && c.total > 0 && (
+        <p className="rd-pi-lead" style={{ marginTop: '3mm' }}>
+          {pct <= 100
+            ? <>Esta proposta (<span className="rd-forte">{moeda(valorMensal)}/mês</span>) representa <span className="rd-forte">{pct.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span> do custo de um único funcionário, com uma equipe especializada cuidando do seu posto.</>
+            : <>Esta proposta (<span className="rd-forte">{moeda(valorMensal)}/mês</span>) equivale a <span className="rd-forte">{(valorMensal / c.total).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} funcionário(s)</span>, com uma equipe especializada e sem encargos trabalhistas para você.</>}
+        </p>
+      )}
+      <p className="rd-muted" style={{ fontSize: '8pt' }}>
+        Estimativa com periculosidade {pctFmt(params.pct_periculosidade)}, assiduidade {pctFmt(params.pct_assiduidade)},
+        {' '}INSS patronal {pctFmt(params.pct_inss_empresa)}, FGTS {pctFmt(params.pct_fgts)}, RAT {pctFmt(params.pct_rat)},
+        {' '}terceiros {pctFmt(params.pct_terceiros)}, vale-transporte, alimentação e provisões de 13º e férias.
+      </p>
+    </section>
   );
 }
 

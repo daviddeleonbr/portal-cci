@@ -19,6 +19,7 @@ import {
 import { obterPropostaPublica, aceitarPropostaPublica } from '../services/propostaPublicaService';
 import { formatCurrency } from '../utils/format';
 import Markdown from '../components/ui/Markdown';
+import ArgumentoCustoFuncionario from '../components/contratos/ArgumentoCustoFuncionario';
 
 const FONTE_BASE = 16;               // px — base do conteúdo (1em)
 
@@ -160,7 +161,7 @@ export default function PropostaPublica() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 pb-40">
+    <div className="min-h-screen bg-slate-50 text-slate-800 pb-10">
       <Cabecalho prop={prop} interativa />
 
       <main className="mx-auto max-w-2xl px-5" style={estiloFonte}>
@@ -200,6 +201,34 @@ export default function PropostaPublica() {
           )}
         </div>
 
+        {/* Valor mensal estimado (no corpo da página, não mais fixo no rodapé),
+            junto com a argumentação de venda (custo de um funcionário). */}
+        <section className="mt-6 rounded-2xl bg-slate-900 text-white shadow-lg ring-1 ring-black/10 px-5 py-4">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[0.69em] uppercase tracking-wider text-white/60">Valor mensal estimado</p>
+              <AnimatePresence mode="wait">
+                <motion.p key={Math.round(totais.mensalMedio * 100)}
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18 }}
+                  className="text-[1.62em] font-bold leading-none tabular-nums">
+                  {formatCurrency(totais.mensalMedio)}<span className="text-[0.55em] font-medium text-white/60"> /mês</span>
+                </motion.p>
+              </AnimatePresence>
+              {totais.anual > 0 && <p className="mt-1 text-[0.66em] text-white/50">inclui serviços anuais rateados no mês</p>}
+            </div>
+            <div className="text-right text-[0.69em] text-white/70 space-y-0.5 flex-shrink-0">
+              {descPct > 0 && <div className="text-emerald-300">{descPct}% de desconto aplicado</div>}
+              {temUnico && <div>+ {formatCurrency(totais.unico)} <span className="text-white/50">implantação (único)</span></div>}
+            </div>
+          </div>
+        </section>
+
+        {/* Argumento de venda: custo mensal de um funcionário x proposta */}
+        {prop.custo_funcionario && (
+          <ArgumentoCustoFuncionario params={prop.custo_funcionario} valorMensalProposta={totais.mensalMedio} />
+        )}
+
         <AceiteProposta token={token} prop={prop} />
 
         <p className="mt-6 text-[0.72em] text-slate-400 leading-relaxed flex items-start gap-1.5">
@@ -209,31 +238,6 @@ export default function PropostaPublica() {
         </p>
       </main>
 
-      {/* ── Barra fixa com o total ── */}
-      <div className="fixed bottom-0 inset-x-0 z-30" style={estiloFonte}>
-        <div className="mx-auto max-w-2xl px-4 pb-4">
-          <div className="rounded-2xl bg-slate-900 text-white shadow-2xl ring-1 ring-black/10 px-5 py-4">
-            <div className="flex items-end justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[0.69em] uppercase tracking-wider text-white/60">Valor mensal estimado</p>
-                <AnimatePresence mode="wait">
-                  <motion.p key={Math.round(totais.mensalMedio * 100)}
-                    initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.18 }}
-                    className="text-[1.62em] font-bold leading-none tabular-nums">
-                    {formatCurrency(totais.mensalMedio)}<span className="text-[0.55em] font-medium text-white/60"> /mês</span>
-                  </motion.p>
-                </AnimatePresence>
-                {totais.anual > 0 && <p className="mt-1 text-[0.66em] text-white/50">inclui serviços anuais rateados no mês</p>}
-              </div>
-              <div className="text-right text-[0.69em] text-white/70 space-y-0.5 flex-shrink-0">
-                {descPct > 0 && <div className="text-emerald-300">{descPct}% de desconto aplicado</div>}
-                {temUnico && <div>+ {formatCurrency(totais.unico)} <span className="text-white/50">implantação (único)</span></div>}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
