@@ -289,7 +289,9 @@ export default function CciUsuarios({ embedded = false }) {
                   <p className="text-[10.5px] text-gray-400 truncate">
                     {rede ? <><Network className="inline h-3 w-3 mr-0.5 -mt-0.5 text-gray-400" />{rede.nome} · {redeTipo} · {qtdEmp} empresa(s)</> : 'Admin CCI'}
                     <span className="mx-1.5 text-gray-300">·</span>
-                    {nPerms} {nPerms === 1 ? 'permissão' : 'permissões'}
+                    {usuariosService.nivelAdmin(u) === 3
+                      ? <span className="text-emerald-600 font-medium">acesso total (N3)</span>
+                      : <>{nPerms} {nPerms === 1 ? 'permissão' : 'permissões'}</>}
                     {u.tipo === 'cliente' && <>{' · '}{restrito ? `${u.empresas_permitidas.length} empresa(s)` : 'todas as empresas'}</>}
                   </p>
                 </div>

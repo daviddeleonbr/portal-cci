@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { setItemResiliente } from './storageSafe';
+import { expandirSessaoAdmin } from '../services/usuariosSistemaService';
 
 // Chaves de sessao no localStorage (portais independentes)
 const ADMIN_KEY = 'cci_session_admin';
@@ -10,7 +11,8 @@ const CLIENTE_KEY = 'cci_session_cliente';
 export function getAdminSession() {
   try {
     const raw = localStorage.getItem(ADMIN_KEY);
-    return raw ? JSON.parse(raw) : null;
+    // Admin N3 = todas as permissões de admin (ver expandirSessaoAdmin).
+    return raw ? expandirSessaoAdmin(JSON.parse(raw)) : null;
   } catch { return null; }
 }
 

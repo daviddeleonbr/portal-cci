@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { expandirSessaoAdmin } from '../services/usuariosSistemaService';
 
 // useSyncExternalStore exige que getSnapshot retorne a MESMA referencia
 // quando o estado nao mudou. Como o localStorage guarda string, cacheamos
@@ -18,7 +19,11 @@ function snapshot(key) {
   const entry = cache[key];
   if (entry.raw === raw) return entry.parsed;
   entry.raw = raw;
-  try { entry.parsed = raw ? JSON.parse(raw) : null; }
+  try {
+    const s = raw ? JSON.parse(raw) : null;
+    // Admin N3 = todas as permissões de admin (ver expandirSessaoAdmin).
+    entry.parsed = key === ADMIN_KEY ? expandirSessaoAdmin(s) : s;
+  }
   catch { entry.parsed = null; }
   return entry.parsed;
 }

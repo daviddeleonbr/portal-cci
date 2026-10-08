@@ -19,6 +19,18 @@ export function nivelAdmin(usuario) {
   return usuario.nivel_admin ?? (usuario.is_master ? 3 : 1);
 }
 
+// Admin N3 = acesso total: tem TODAS as permissões de admin, inclusive as que
+// forem criadas depois (não depende da lista marcada — ninguém gere um N3,
+// nem ele mesmo). Aplicado ao ler a sessão (useAdminSession/getAdminSession);
+// no servidor, o equivalente é o claim cci_nivel_admin = 3.
+export function expandirSessaoAdmin(session) {
+  const usuario = session?.usuario;
+  if (nivelAdmin(usuario) !== 3) return session;
+  const todas = PERMISSOES_ADMIN.map(p => p.key);
+  const permissoes = [...new Set([...(usuario.permissoes || []), ...todas])];
+  return { ...session, usuario: { ...usuario, permissoes } };
+}
+
 // O ator (sessão) pode gerir a área de usuários? (N2+)
 export function podeGerirUsuarios(ator) {
   return nivelAdmin(ator) >= 2;
@@ -63,6 +75,7 @@ export const PERMISSOES_ADMIN = [
   { key: 'motivos', label: 'Motivos de Movimentação', grupo: 'Cadastros' },
   { key: 'contas_pagar', label: 'Contas a Pagar', grupo: 'Financeiro' },
   { key: 'contas_receber', label: 'Contas a Receber', grupo: 'Financeiro' },
+  { key: 'banco_inter', label: 'Banco Inter (extrato e saldo da CCI)', grupo: 'Financeiro' },
   { key: 'fiscal', label: 'Notas Fiscais e Agendamento', grupo: 'Fiscal' },
   { key: 'notas_fiscais', label: 'Manifestação de Notas (validar e lançar)', grupo: 'Fiscal' },
   { key: 'outras_contas', label: 'Outras contas a pagar (BPO)', grupo: 'BPO' },
