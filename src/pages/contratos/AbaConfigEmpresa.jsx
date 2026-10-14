@@ -43,7 +43,7 @@ export default function AbaConfigEmpresa({ showToast }) {
     (async () => {
       try {
         const c = await obterConfigEmpresa();
-        setCfg({ ...c, regras: { vigencia: {}, reajuste: {}, rescisao: {}, pagamento: {}, foro: {}, lgpd: {}, ...(c.regras || {}) } });
+        setCfg({ ...c, regras: { vigencia: {}, reajuste: {}, rescisao: {}, pagamento: {}, foro: {}, lgpd: {}, entregas: {}, ...(c.regras || {}) } });
       } catch (e) {
         showToast?.('error', 'Erro ao carregar config: ' + e.message);
       } finally {
@@ -60,7 +60,7 @@ export default function AbaConfigEmpresa({ showToast }) {
     setSalvando(true);
     try {
       const salvo = await salvarConfigEmpresa(cfg);
-      setCfg({ ...salvo, regras: { vigencia: {}, reajuste: {}, rescisao: {}, pagamento: {}, foro: {}, lgpd: {}, ...(salvo.regras || {}) } });
+      setCfg({ ...salvo, regras: { vigencia: {}, reajuste: {}, rescisao: {}, pagamento: {}, foro: {}, lgpd: {}, entregas: {}, ...(salvo.regras || {}) } });
       showToast?.('success', 'Configuração salva.');
     } catch (e) {
       showToast?.('error', 'Erro ao salvar: ' + e.message);
@@ -169,12 +169,16 @@ export default function AbaConfigEmpresa({ showToast }) {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Cancelamento / Rescisão</p>
             <div className="grid grid-cols-3 gap-3">
               <Campo label="Aviso prévio (dias)" value={r.rescisao.aviso_previo_dias} onChange={v => setRegra('rescisao', 'aviso_previo_dias', v)} type="number" placeholder="30" />
-              <div className="col-span-3">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Multa por rescisão antecipada <span className="text-amber-600">(revisar com jurídico)</span></label>
-                <textarea rows={2} value={r.rescisao.multa_descricao ?? ''} onChange={e => setRegra('rescisao', 'multa_descricao', e.target.value)}
-                  placeholder="Ex.: Na rescisão antecipada e imotivada, a parte que der causa pagará multa equivalente a uma mensalidade."
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-              </div>
+              <p className="col-span-2 self-end pb-2 text-[11px] text-gray-500">Cancelamento sem multa; a mensalidade é cobrada proporcionalmente durante o aviso.</p>
+            </div>
+          </div>
+
+          {/* Prazos e entregas */}
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Prazos e entregas</p>
+            <div className="grid grid-cols-3 gap-3">
+              <Campo label="Relatórios (DRE/Fluxo) até o dia" value={r.entregas.dia_relatorios} onChange={v => setRegra('entregas', 'dia_relatorios', v)} type="number" placeholder="10" />
+              <Campo label="Retorno de pendências (horas)" value={r.entregas.prazo_retorno_horas} onChange={v => setRegra('entregas', 'prazo_retorno_horas', v)} type="number" placeholder="24" />
             </div>
           </div>
 

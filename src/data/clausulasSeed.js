@@ -157,6 +157,51 @@ export const CLAUSULAS_SEED = [
   },
 
   // ═══════════════════════════════════════════════════════════
+  // PRAZOS E ENTREGAS — dia dos relatórios e prazo de retorno vêm da config
+  // (regras.entregas), com padrão 10 / 24h no motor.
+  // ═══════════════════════════════════════════════════════════
+  {
+    chave: 'geral_prazos_entregas',
+    titulo: 'Dos Prazos, das Entregas e das Condições de Execução',
+    tipo: 'geral',
+    obrigatoria: true,
+    condicao: { modo: 'sempre' },
+    ordem: 68,
+    revisar_juridico: false,
+    variaveis: ['entregas.diaRelatorios', 'entregas.prazoRetorno'],
+    corpo: [
+      {
+        "tipo": "subtitulo",
+        "texto": "Entrega dos relatórios mensais"
+      },
+      {
+        "tipo": "paragrafo",
+        "texto": "A CONTRATADA entregará os relatórios mensais de Demonstração do Resultado do Exercício (DRE) e de Fluxo de Caixa até o dia {{entregas.diaRelatorios}} do mês subsequente ao da competência a que se referem."
+      },
+      {
+        "tipo": "paragrafo",
+        "texto": "A entrega dos relatórios de DRE e de Fluxo de Caixa no prazo acima está condicionada à execução prévia, completa e tempestiva, pela equipe da CONTRATANTE, dos trabalhos sob sua responsabilidade, tais como o envio de documentos, os lançamentos, os fechamentos de caixa e o retorno às pendências apontadas. Não executados esses trabalhos no tempo devido, o prazo de entrega fica prorrogado pelo mesmo período do atraso, sem que isso caracterize descumprimento contratual pela CONTRATADA."
+      },
+      {
+        "tipo": "subtitulo",
+        "texto": "Retorno de dúvidas e inconsistências"
+      },
+      {
+        "tipo": "paragrafo",
+        "texto": "As partes deverão responder uma à outra, pelos canais definidos entre elas, no prazo máximo de {{entregas.prazoRetorno}}, contado do envio da comunicação: a CONTRATANTE, quanto às dúvidas e às inconsistências identificadas e comunicadas pela CONTRATADA; e a CONTRATADA, quanto às dúvidas apresentadas pela CONTRATANTE. O retorno da CONTRATANTE fora desse prazo prorroga, na mesma proporção, os prazos de entrega a cargo da CONTRATADA que dele dependam."
+      },
+      {
+        "tipo": "subtitulo",
+        "texto": "Acompanhamento do Fluxo de Caixa"
+      },
+      {
+        "tipo": "paragrafo",
+        "texto": "O acompanhamento do Fluxo de Caixa somente poderá ser realizado mediante a realização correta e tempestiva dos lançamentos e das conciliações. A CONTRATADA não responde por divergências, atrasos ou imprecisões do Fluxo de Caixa decorrentes de lançamentos ou conciliações não realizados, incompletos ou incorretos sob a responsabilidade da CONTRATANTE."
+      }
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════
   // OBRIGAÇÕES DAS PARTES (gerais)
   // ═══════════════════════════════════════════════════════════
   {
@@ -200,6 +245,30 @@ export const CLAUSULAS_SEED = [
   },
 
   // ═══════════════════════════════════════════════════════════
+  // SERVIÇOS ADICIONAIS — só com autorização prévia
+  // ═══════════════════════════════════════════════════════════
+  {
+    chave: 'geral_servicos_adicionais',
+    titulo: 'Dos Serviços Adicionais',
+    tipo: 'geral',
+    obrigatoria: true,
+    condicao: { modo: 'sempre' },
+    ordem: 72,
+    revisar_juridico: false,
+    variaveis: [],
+    corpo: [
+      {
+        "tipo": "paragrafo",
+        "texto": "Os serviços não compreendidos no escopo deste contrato somente serão executados mediante autorização prévia e expressa da CONTRATANTE, por escrito (inclusive por e-mail ou aplicativo de mensagens), após a apresentação, pela CONTRATADA, do respectivo escopo, valor e prazo de execução."
+      },
+      {
+        "tipo": "paragrafo",
+        "texto": "Nenhum serviço adicional será executado ou cobrado sem a autorização prévia de que trata esta cláusula. Os serviços adicionais autorizados serão cobrados conforme o valor aprovado, juntamente com a mensalidade subsequente à sua execução, salvo condição diversa acordada."
+      }
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════
   // SUSPENSÃO
   // ═══════════════════════════════════════════════════════════
   {
@@ -231,18 +300,25 @@ export const CLAUSULAS_SEED = [
     condicao: { modo: 'sempre' },
     ordem: 80,
     revisar_juridico: true,
-    variaveis: ['rescisao.avisoPrevio', 'rescisao.multa'],
+    variaveis: ['rescisao.avisoPrevio'],
+    // Sem multa: cancelamento livre com aviso prévio, mensalidade proporcional no aviso.
     corpo: [
-      { tipo: 'paragrafo', texto:
-        'Qualquer das partes poderá denunciar este contrato, imotivadamente, mediante aviso prévio por ' +
-        'escrito de {{rescisao.avisoPrevio}}.' },
-      { tipo: 'paragrafo', texto:
-        'O contrato poderá ser rescindido de pleno direito, independentemente de aviso, em caso de ' +
-        'descumprimento de obrigação essencial não sanada no prazo concedido pela parte prejudicada.' },
-      { tipo: 'paragrafo', texto: '{{rescisao.multa}}' },
-      { tipo: 'paragrafo', texto:
-        'O encerramento não afasta as obrigações pendentes até a data do término, especialmente o pagamento ' +
-        'dos serviços já prestados e a devolução ou eliminação de informações na forma acordada.' },
+      {
+        "tipo": "paragrafo",
+        "texto": "Qualquer das partes poderá cancelar este contrato a qualquer tempo, sem incidência de multa, mediante aviso prévio por escrito de {{rescisao.avisoPrevio}}."
+      },
+      {
+        "tipo": "paragrafo",
+        "texto": "Durante o período de aviso prévio, os serviços continuarão a ser prestados normalmente e a mensalidade continuará sendo cobrada, de forma proporcional aos dias do aviso que recaírem em cada mês, nas mesmas condições de pagamento deste contrato."
+      },
+      {
+        "tipo": "paragrafo",
+        "texto": "O contrato poderá ser rescindido de pleno direito, independentemente de aviso, em caso de descumprimento de obrigação essencial não sanada no prazo concedido pela parte prejudicada."
+      },
+      {
+        "tipo": "paragrafo",
+        "texto": "O encerramento não afasta as obrigações pendentes até a data do término, especialmente o pagamento dos serviços já prestados e a devolução ou eliminação de informações na forma acordada."
+      }
     ],
   },
 

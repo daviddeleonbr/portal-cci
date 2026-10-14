@@ -121,7 +121,7 @@ export function construirValores({ contratada = {}, contratante = {}, contrato =
   set('servicos', nomes.join('; '));
 
   // REGRAS GERAIS (derivadas da config)
-  const { vigencia, reajuste, rescisao, pagamento, foro, lgpd } = regras || {};
+  const { vigencia, reajuste, rescisao, pagamento, foro, lgpd, entregas } = regras || {};
 
   if (vigencia?.tipo) set('vigencia.descricao', descreverVigencia(vigencia));
 
@@ -130,7 +130,11 @@ export function construirValores({ contratada = {}, contratante = {}, contrato =
 
   if (rescisao?.aviso_previo_dias != null && rescisao.aviso_previo_dias !== '')
     set('rescisao.avisoPrevio', `${rescisao.aviso_previo_dias} dias`);
-  set('rescisao.multa', rescisao?.multa_descricao);
+
+  // Prazos de entrega: padrão dia 10 (relatórios) e 24h (retorno de pendências).
+  set('entregas.diaRelatorios', String(entregas?.dia_relatorios || 10));
+  const horas = Number(entregas?.prazo_retorno_horas) || 24;
+  set('entregas.prazoRetorno', horas === 24 ? '24 (vinte e quatro) horas' : horas === 48 ? '48 (quarenta e oito) horas' : `${horas} horas`);
 
   if (pagamento?.vencimento_dia != null && pagamento.vencimento_dia !== '')
     set('pagamento.vencimentoDia', String(pagamento.vencimento_dia));
