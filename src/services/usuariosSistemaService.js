@@ -76,6 +76,7 @@ export const PERMISSOES_ADMIN = [
   { key: 'contas_pagar', label: 'Contas a Pagar', grupo: 'Financeiro' },
   { key: 'contas_receber', label: 'Contas a Receber', grupo: 'Financeiro' },
   { key: 'banco_inter', label: 'Banco Inter (extrato e saldo da CCI)', grupo: 'Financeiro' },
+  { key: 'tarefas', label: 'Tarefas (rotinas e validação dos funcionários dos clientes)', grupo: 'Consultoria' },
   { key: 'fiscal', label: 'Notas Fiscais e Agendamento', grupo: 'Fiscal' },
   { key: 'notas_fiscais', label: 'Manifestação de Notas (validar e lançar)', grupo: 'Fiscal' },
   { key: 'outras_contas', label: 'Outras contas a pagar (BPO)', grupo: 'BPO' },
@@ -95,6 +96,7 @@ export const PERMISSOES_ADMIN = [
 
 export const PERMISSOES_CLIENTE = [
   { key: 'dashboard', label: 'Visão Geral', grupo: 'Principal' },
+  { key: 'tarefas', label: 'Minhas tarefas (rotinas definidas pela CCI)', grupo: 'Principal' },
   { key: 'dre', label: 'DRE', grupo: 'Relatórios' },
   { key: 'fluxo_caixa', label: 'Fluxo de Caixa', grupo: 'Relatórios' },
   { key: 'relatorios_bi', label: 'Relatórios de BI (Power BI)', grupo: 'Relatórios' },

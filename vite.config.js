@@ -37,7 +37,7 @@ export default defineConfig({
       },
       workbox: {
         // Cresce o limite — bundles do app têm chunks >2MB.
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // bundle único (sem code-splitting) já passa de 5 MiB
         // Precaches o shell estático (HTML/JS/CSS/imagens do build).
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         // Network-first pra dados dinâmicos: tenta rede primeiro, cai pro cache se offline.

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
   MessageCircle, RefreshCw, Eye, AlertTriangle,
-  Activity, FileSpreadsheet, Receipt, FileSignature, FileDown,
+  Activity, FileSpreadsheet, Receipt, FileSignature, FileDown, ListChecks,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { nivelAdmin } from '../../services/usuariosSistemaService';
@@ -56,6 +56,7 @@ const navigationAll = [
       { name: 'Parâmetros', href: '/admin/parametros', icon: Settings2, permissao: 'parametros' },
       { name: 'Relatórios Cliente', href: '/admin/relatorios-cliente', icon: BarChart3, permissao: 'relatorios_cliente' },
       { name: 'Relatórios BI', href: '/admin/relatorios-bi', icon: PieChart, permissao: 'relatorios_bi' },
+      { name: 'Tarefas', href: '/admin/tarefas', icon: ListChecks, permissao: 'tarefas' },
     ],
   },
   {

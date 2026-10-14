@@ -22,6 +22,7 @@ function buildNavigation(prefix, tipoCliente = 'webposto') {
       section: 'Principal',
       items: [
         { name: 'Visão Geral', href: `${prefix}/dashboard`, icon: LayoutDashboard, permissao: 'dashboard' },
+        { name: 'Minhas tarefas', href: `${prefix}/tarefas`, icon: ClipboardCheck, permissao: 'tarefas' },
       ],
     },
     {

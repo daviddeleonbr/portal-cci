@@ -14,6 +14,8 @@
 //   - requerFlag: nome da flag no `cliente` (Webposto) ou `asRede` (Autosystem)
 const PAGINAS_ORDEM = [
   { rota: '/dashboard',                  permissao: 'dashboard' },
+  // Funcionário só com Tarefas cai direto nas tarefas.
+  { rota: '/tarefas',                    permissao: 'tarefas' },
   { rota: '/dre',                        permissao: 'dre',                  requerFlag: 'exibir_dre' },
   { rota: '/fluxo-caixa',                permissao: 'fluxo_caixa',          requerFlag: 'exibir_fluxo_caixa' },
   { rota: '/relatorios-bi',              permissao: 'relatorios_bi' },
@@ -28,11 +30,11 @@ const PAGINAS_ORDEM = [
   { rota: '/bpo/outras-contas',          permissao: 'outras_contas' },
   { rota: '/bpo',                        permissao: 'bpo' },
   { rota: '/suporte',                    permissao: 'suporte' },
-  // Sem permissão obrigatória (sempre aparecem na sidebar)
-  { rota: '/melhorias',                  permissao: null },
+  // Também dependem de permissão (iguais à sidebar e às rotas).
+  { rota: '/melhorias',                  permissao: 'melhorias' },
   // Administração da rede (só pra quem gerencia)
   { rota: '/usuarios',                   permissao: 'gerenciar_usuarios' },
-  { rota: '/configuracoes',              permissao: null },
+  { rota: '/configuracoes',              permissao: 'configuracoes' },
 ];
 
 // Resolve qual objeto de flags usar: Webposto → `session.cliente`,
