@@ -21,6 +21,7 @@ import AbaPropostas from './contratos/AbaPropostas';
 import AbaRascunhos from './contratos/AbaRascunhos';
 import AbaConfigEmpresa from './contratos/AbaConfigEmpresa';
 import AbaClausulas from './contratos/AbaClausulas';
+import DescricaoEstruturada from '../components/contratos/DescricaoEstruturada';
 
 const TABS = [
   { key: 'ativos',        label: 'Ativos',              icon: FileCheck  },
@@ -341,7 +342,7 @@ function ModalServico({ open, servico, onClose, onSave }) {
     <Modal
       open={open} onClose={onClose}
       title={isEdit ? 'Editar serviço' : 'Novo serviço oferecido'}
-      size="md"
+      size="xl"
       footer={(
         <div className="flex justify-end gap-3">
           <button type="button" onClick={onClose}
@@ -365,12 +366,27 @@ function ModalServico({ open, servico, onClose, onSave }) {
             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 
+        {/* Detalhamento: o texto é ESTRUTURADO automaticamente (títulos, seções
+            numeradas, itens "Termo: explicação") no contrato, na proposta e no PDF. */}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Descrição</label>
-          <textarea rows={2} value={form.descricao || ''}
-            onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
-            placeholder="O que está incluído nesse serviço?"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+          <label className="block text-xs font-medium text-gray-700 mb-1">Detalhamento do serviço</label>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <textarea rows={12} value={form.descricao || ''}
+              onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+              placeholder={'Escopo do acompanhamento mensal\n1. Acompanhamento das rotinas\nFechamento de caixa: conferência dos fechamentos diários;\nConciliação bancária: contas conciliadas em dia;\n\nEntregas\nRelatório gerencial mensal;\nReunião mensal com a gestão.'}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[13px] leading-relaxed resize-y focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 max-h-[19rem] overflow-y-auto">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Prévia — como aparece no contrato e na proposta</p>
+              {form.descricao?.trim()
+                ? <DescricaoEstruturada texto={form.descricao} className="text-[12px] text-gray-600" corForte="#111827" />
+                : <p className="text-xs italic text-gray-400">Digite o detalhamento ao lado.</p>}
+            </div>
+          </div>
+          <p className="mt-1.5 text-[11px] text-gray-500 leading-relaxed">
+            Como estruturar: <strong>linha curta sem pontuação</strong> vira título · <strong>“1. Nome”</strong> vira seção numerada ·
+            cada linha seguinte vira um item · <strong>“Termo: explicação”</strong> destaca o termo · linha em branco separa blocos ·
+            <strong> **texto**</strong> fica em negrito.
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

@@ -20,6 +20,7 @@ import { obterPropostaPublica, aceitarPropostaPublica } from '../services/propos
 import { formatCurrency } from '../utils/format';
 import Markdown from '../components/ui/Markdown';
 import ArgumentoCustoFuncionario from '../components/contratos/ArgumentoCustoFuncionario';
+import DescricaoEstruturada from '../components/contratos/DescricaoEstruturada';
 
 const FONTE_BASE = 16;               // px — base do conteúdo (1em)
 
@@ -450,7 +451,11 @@ function ServicoCard({ it, idx, ativo, qtd, onToggle, onQtd, base }) {
               <h3 className={`text-[0.91em] font-semibold ${ativo ? 'text-slate-900' : 'text-slate-400'}`}>{it.nome}</h3>
               <span className="text-[0.63em] uppercase tracking-wide rounded-full bg-slate-100 text-slate-500 px-2 py-0.5">{per.label}</span>
             </div>
-            {it.descricao && <p className={`mt-1 text-[0.78em] leading-relaxed ${ativo ? 'text-slate-500' : 'text-slate-300'}`}>{it.descricao}</p>}
+            {it.descricao && (
+              <DescricaoEstruturada texto={it.descricao}
+                className={`mt-1 text-[0.78em] leading-relaxed ${ativo ? 'text-slate-500' : 'text-slate-300'}`}
+                corTitulo={ativo ? '#0f766e' : undefined} corForte={ativo ? '#334155' : 'inherit'} />
+            )}
             <p className={`mt-2 text-[0.75em] ${ativo ? 'text-slate-500' : 'text-slate-300'}`}>
               {ehUnitario
                 ? <>{formatCurrency(unit)} <span className="text-slate-400">por {unidade}{per.sufixo}</span></>

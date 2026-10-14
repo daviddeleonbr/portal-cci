@@ -139,7 +139,7 @@ export default function AbaPropostas({ showToast }) {
     propostas.forEach(p => {
       if (p.status === 'rascunho') acc.rascunho++;
       if (p.status === 'enviada')  acc.enviada++;
-      if (p.status === 'aceita')   { acc.aceita++; acc.valorAceita += Number(p.valor_total || 0); }
+      if (p.status === 'aceita')   { acc.aceita++; acc.valorAceita += contratosService.valorDaProposta(p).valor; }
     });
     return acc;
   }, [propostas]);
@@ -549,7 +549,11 @@ function ModalConverter({ propostaId, onClose, onDone, showToast }) {
           <div className="rounded-lg border border-gray-200 px-3 py-2.5">
             <p className="text-sm font-semibold text-gray-900">{proposta.cliente_nome}</p>
             {proposta.cliente_cnpj && <p className="text-[11px] text-gray-400 font-mono">{proposta.cliente_cnpj}</p>}
-            <p className="text-[13px] font-semibold text-gray-800 mt-1">{formatCurrency(Number(proposta.valor_total || 0))}/mês</p>
+            {(() => {
+              const { valor, periodicidade } = contratosService.valorDaProposta(proposta);
+              const suf = periodicidade === 'anual' ? '/ano' : periodicidade === 'unico' ? ' (único)' : '/mês';
+              return <p className="text-[13px] font-semibold text-gray-800 mt-1">{formatCurrency(valor)}{suf}</p>;
+            })()}
           </div>
         </div>
       )}

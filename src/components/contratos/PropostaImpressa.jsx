@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import PapelTimbrado from '../ia/PapelTimbrado';
 import Markdown from '../ui/Markdown';
 import { calcularCustoFuncionario } from '../../utils/custoFuncionario';
+import DescricaoEstruturada from './DescricaoEstruturada';
 import '../ia/relatorioImpressao.css';
 import './propostaImpressa.css';
 
@@ -128,7 +129,7 @@ function Documento({ proposta: p }) {
                         <tr key={it.id}>
                           <td>
                             <span className="rd-forte">{it.nome}</span>
-                            {it.descricao && <span className="rd-pi-desc">{it.descricao}</span>}
+                            {it.descricao && <DescricaoEstruturada texto={it.descricao} className="rd-pi-desc" corTitulo="#0f766e" corForte="#191a1c" />}
                           </td>
                           <td>{PERIODO[it.periodicidade] || 'Mensal'}</td>
                           <td className="num">

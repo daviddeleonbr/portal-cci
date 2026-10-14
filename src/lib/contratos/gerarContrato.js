@@ -25,9 +25,15 @@ export async function montarDocumentoDeContrato(contrato) {
     (servicos || []).map(s => [s.id, { categoria: s.categoria, contrato_meta: s.contrato_meta || {} }]),
   );
 
-  // CONTRATANTE: dados do cadastro do cliente + fallback no snapshot do contrato.
+  // CONTRATANTE: cadastro do cliente, sobreposto pelos dados informados no
+  // próprio contrato (conteudo.contratante — editáveis no rascunho), com
+  // fallback no snapshot do contrato.
+  const doContrato = Object.fromEntries(
+    Object.entries(contrato.conteudo?.contratante || {}).filter(([, v]) => v != null && String(v).trim() !== ''),
+  );
   const contratante = {
     ...(cliente || {}),
+    ...doContrato,
     cliente_nome: contrato.cliente_nome,
     cliente_cnpj: contrato.cliente_cnpj,
   };
@@ -44,6 +50,7 @@ export async function montarDocumentoDeContrato(contrato) {
       numero: contrato.numero || contrato.id?.slice(0, 8) || '',
       data: dataExtenso,
       valorTotal: contrato.valor_total,
+      tipo: contrato.conteudo?.tipo_contrato || null,   // 'bpo' | 'consultoria' (null = sugerido)
     },
     itens: contrato.conteudo?.itens || [],
     regras: config.regras || {},

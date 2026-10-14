@@ -31,21 +31,23 @@ export const CLAUSULAS_SEED = [
     condicao: { modo: 'sempre' },
     ordem: 10,
     revisar_juridico: false,
-    variaveis: ['contratante.razaoSocial', 'servicos'],
+    // {{contrato.natureza}} / {{contrato.finalidade}} seguem o TIPO do contrato
+    // (BPO | Consultoria — escolhido no rascunho). Ver TIPOS_CONTRATO em motor.js.
+    variaveis: ['contratante.razaoSocial', 'servicos', 'contrato.natureza', 'contrato.finalidade'],
     corpo: [
       { tipo: 'paragrafo', texto:
         'O presente contrato tem por objeto a prestação, pela CONTRATADA à CONTRATANTE ' +
-        '{{contratante.razaoSocial}}, dos serviços de terceirização de rotinas administrativas e ' +
-        'financeiras (BPO) adiante especificados, compreendendo: {{servicos}}.' },
+        '{{contratante.razaoSocial}}, dos serviços de {{contrato.natureza}} adiante especificados, ' +
+        'compreendendo: {{servicos}}.' },
       { tipo: 'paragrafo', texto:
-        'A finalidade é permitir que a CONTRATANTE concentre-se em sua atividade-fim, transferindo à ' +
-        'CONTRATADA a execução das rotinas de apoio contratadas, nos termos e limites deste instrumento.' },
+        'A finalidade é {{contrato.finalidade}}, nos termos e limites deste instrumento.' },
     ],
   },
 
   // ═══════════════════════════════════════════════════════════
-  // SERVIÇOS CONTRATADOS — a tabela de itens é injetada pelo renderizador
-  // no marcador {{tabela_servicos}} (não é texto fixo).
+  // SERVIÇOS CONTRATADOS — o detalhamento dos serviços (descrição do serviço
+  // cadastrado, estruturada) é injetado pelo renderizador no marcador
+  // {{tabela_servicos}} (não é texto fixo). O valor fica na cláusula de preço.
   // ═══════════════════════════════════════════════════════════
   {
     chave: 'geral_servicos_contratados',
@@ -58,12 +60,9 @@ export const CLAUSULAS_SEED = [
     variaveis: [],
     corpo: [
       { tipo: 'paragrafo', texto:
-        'Os serviços efetivamente contratados, com sua forma de cobrança, quantidade, unidade e valor, ' +
-        'são os relacionados no quadro a seguir, que integra este contrato para todos os fins:' },
+        'Os serviços contratados, com o respectivo escopo, são os descritos a seguir, que integram ' +
+        'este contrato para todos os fins:' },
       { tipo: 'marcador', nome: 'tabela_servicos' },
-      { tipo: 'paragrafo', texto:
-        'As condições, o escopo e as limitações específicas de cada serviço constam das cláusulas próprias ' +
-        'deste instrumento, quando aplicável.' },
     ],
   },
 

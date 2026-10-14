@@ -112,6 +112,9 @@ export function construirValores({ contratada = {}, contratante = {}, contrato =
   set('contrato.numero', contrato.numero);
   set('contrato.data', contrato.data);
   set('contrato.valorTotal', contrato.valorTotal != null ? formatarMoeda(contrato.valorTotal) : null);
+  const tipoContrato = TIPOS_CONTRATO[resolverTipoContrato(contrato.tipo, itens)];
+  set('contrato.natureza', tipoContrato.natureza);
+  set('contrato.finalidade', tipoContrato.finalidade);
 
   // SERVIÇOS (lista textual)
   const nomes = itens.map(i => i.nome).filter(Boolean);
@@ -260,6 +263,36 @@ export function validarContrato({ contratada = {}, contratante = {}, itens = [],
   return { ok: erros.length === 0, erros, avisos, chavesSelecionadas: [...chavesSelecionadas] };
 }
 
+// ── Tipo do contrato (natureza) ─────────────────────────────
+// Define o título, o texto do preâmbulo e a natureza usada na cláusula do
+// objeto ({{contrato.natureza}}). Escolhido no rascunho; sugerido pelos
+// serviços (todos de categoria "consultoria" → consultoria).
+export const TIPOS_CONTRATO = {
+  bpo: {
+    label: 'BPO',
+    titulo: 'Contrato de Prestação de Serviços de BPO',
+    preambulo: 'Contrato de Prestação de Serviços de Terceirização de Processos de Negócios (BPO)',
+    natureza: 'terceirização de rotinas administrativas e financeiras (BPO)',
+    finalidade: 'permitir que a CONTRATANTE concentre-se em sua atividade-fim, transferindo à CONTRATADA a execução das rotinas de apoio contratadas',
+  },
+  consultoria: {
+    label: 'Consultoria',
+    titulo: 'Contrato de Prestação de Serviços de Consultoria',
+    preambulo: 'Contrato de Prestação de Serviços de Consultoria',
+    natureza: 'consultoria econômico-financeira',
+    finalidade: 'oferecer à CONTRATANTE acompanhamento e análise especializados de sua gestão econômico-financeira, apoiando a tomada de decisão',
+  },
+};
+
+export function sugerirTipoContrato(itens = []) {
+  const cats = (itens || []).map(i => String(i.categoria || '').toLowerCase()).filter(Boolean);
+  return cats.length > 0 && cats.every(c => c === 'consultoria') ? 'consultoria' : 'bpo';
+}
+
+export function resolverTipoContrato(tipo, itens) {
+  return TIPOS_CONTRATO[tipo] ? tipo : sugerirTipoContrato(itens);
+}
+
 // ── Imutabilidade e versionamento ───────────────────────────
 // Um contrato assinado/ativo não pode ser alterado silenciosamente — qualquer
 // mudança gera nova versão/aditivo (Fase 2). Helpers puros usados pela UI/serviço.
@@ -294,8 +327,11 @@ export function montarDocumento({ catalogoClausulas = [], contratada = {}, contr
     faltantesVariaveis: faltantesTotais,
   });
 
+  const tipo = resolverTipoContrato(contrato.tipo, itens);
   return {
-    titulo: 'Contrato de Prestação de Serviços de BPO',
+    tipo,
+    titulo: TIPOS_CONTRATO[tipo].titulo,
+    preambulo: TIPOS_CONTRATO[tipo].preambulo,
     clausulas,
     valores,
     contexto: { categorias: [...ctx.categorias], servicoChaves: [...ctx.servicoChaves], flags: [...ctx.flags] },
