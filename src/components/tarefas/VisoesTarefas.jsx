@@ -13,11 +13,12 @@ const VISOES = [
   { k: 'kanban', rot: 'Kanban', icon: Columns3 },
   { k: 'agenda', rot: 'Agenda', icon: CalendarDays },
 ];
-const lerVisao = () => { try { return localStorage.getItem('tarefas_visao') || 'lista'; } catch { return 'lista'; } };
+// Padrão: Kanban. A escolha do usuário fica salva (chave v2 = todos recomeçam no Kanban).
+const lerVisao = () => { try { return localStorage.getItem('tarefas_visao_v2') || 'kanban'; } catch { return 'kanban'; } };
 
 export default function VisoesTarefas({ tarefas, rotinas = [], gestor = false, onAbrir, onAlterado, onErro, abaInicial, vazio }) {
   const [visao, setVisao] = useState(lerVisao);
-  const trocar = (v) => { setVisao(v); try { localStorage.setItem('tarefas_visao', v); } catch { /* sem storage */ } };
+  const trocar = (v) => { setVisao(v); try { localStorage.setItem('tarefas_visao_v2', v); } catch { /* sem storage */ } };
 
   return (
     <div>
