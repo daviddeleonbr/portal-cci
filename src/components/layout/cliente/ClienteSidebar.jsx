@@ -7,7 +7,7 @@ import {
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
   ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet, Receipt,
-  Boxes, AlertTriangle,
+  Boxes, AlertTriangle, KeyRound,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import LogoCCI from '../../ui/LogoCCI';
@@ -58,6 +58,7 @@ function buildNavigation(prefix, tipoCliente = 'webposto') {
         { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais' },
         { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas' },
         { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo' },
+        { name: 'Acessos', href: `${prefix}/acessos`, icon: KeyRound, permissao: 'acessos' },
       ],
     },
     {

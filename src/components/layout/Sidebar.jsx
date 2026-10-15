@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
   Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
   MessageCircle, RefreshCw, Eye, AlertTriangle,
-  Activity, FileSpreadsheet, Receipt, FileSignature, FileDown, ListChecks,
+  Activity, FileSpreadsheet, Receipt, FileSignature, FileDown, ListChecks, KeyRound,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { nivelAdmin } from '../../services/usuariosSistemaService';
@@ -66,6 +66,7 @@ const navigationAll = [
       { name: 'Caixa Administrativo', href: '/admin/bpo/caixa-administrativo', icon: WalletCards, permissao: 'caixa_administrativo' },
       { name: 'Manifestação de Notas', href: '/admin/fiscal/manifestacao', icon: FileSpreadsheet, permissao: 'notas_fiscais' },
       { name: 'Outras Contas a Pagar', href: '/admin/bpo/outras-contas', icon: Receipt, permissao: 'outras_contas' },
+      { name: 'Acessos', href: '/admin/acessos', icon: KeyRound, permissao: 'acessos' },
     ],
   },
   {

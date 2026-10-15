@@ -29,6 +29,7 @@ const PAGINAS_ORDEM = [
   { rota: '/financeiro/notas-fiscais',   permissao: 'notas_fiscais' },
   { rota: '/bpo/outras-contas',          permissao: 'outras_contas' },
   { rota: '/bpo',                        permissao: 'bpo' },
+  { rota: '/acessos',                    permissao: 'acessos' },
   { rota: '/suporte',                    permissao: 'suporte' },
   // Também dependem de permissão (iguais à sidebar e às rotas).
   { rota: '/melhorias',                  permissao: 'melhorias' },

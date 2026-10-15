@@ -103,6 +103,8 @@ import AsSuporte from './pages/cliente/autosystem/ClienteSuporte';
 import AsSangrias from './pages/cliente/autosystem/ClienteSangrias';
 import ClienteTarefas from './pages/cliente/ClienteTarefas';
 import AdminTarefas from './pages/AdminTarefas';
+import ClienteAcessos from './pages/cliente/ClienteAcessos';
+import AdminAcessos from './pages/AdminAcessos';
 import AsUsuarios from './pages/cliente/autosystem/ClienteUsuarios';
 import AsComercialVendas from './pages/cliente/autosystem/ClienteComercialVendas';
 import AsComercialOperacao from './pages/cliente/autosystem/ClienteComercialOperacao';
@@ -184,6 +186,7 @@ export default function App() {
           <Route path="/admin/portal-demo" element={<AdminPortalDemo />} />
           <Route path="/admin/pendencias" element={<AdminPendencias />} />
           <Route path="/admin/tarefas" element={<AdminTarefas />} />
+          <Route path="/admin/acessos" element={<AdminAcessos />} />
           {/* Rota desativada temporariamente — uso futuro */}
           {/* <Route path="/admin/orcamento-solicitacoes" element={<AdminOrcamentoSolicitacoes />} /> */}
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
@@ -250,6 +253,7 @@ export default function App() {
           <Route path="/cliente/webposto/bpo/outras-contas" element={<RequirePermissaoCliente permissao="outras_contas"><WpOutrasContas /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/sangrias" element={<RequirePermissaoCliente permissao="sangrias"><WpSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/tarefas" element={<RequirePermissaoCliente permissao="tarefas"><ClienteTarefas /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/acessos" element={<RequirePermissaoCliente permissao="acessos"><ClienteAcessos /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/suporte" element={<RequirePermissaoCliente permissao="suporte"><WpSuporte /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/pendencias" element={<RequirePermissaoCliente permissao="pendencias"><WpPendencias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/pendencias" element={<RequirePermissaoCliente permissao="pendencias"><WpPendencias /></RequirePermissaoCliente>} />
@@ -278,6 +282,7 @@ export default function App() {
           <Route path="/cliente/autosystem/financeiro/notas-fiscais/:id" element={<RequirePermissaoCliente permissao="notas_fiscais"><WpNotaFiscalDetalhe /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/sangrias" element={<RequirePermissaoCliente permissao="sangrias"><AsSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/tarefas" element={<RequirePermissaoCliente permissao="tarefas"><ClienteTarefas /></RequirePermissaoCliente>} />
+          <Route path="/cliente/autosystem/acessos" element={<RequirePermissaoCliente permissao="acessos"><ClienteAcessos /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/suporte" element={<RequirePermissaoCliente permissao="suporte"><AsSuporte /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/melhorias" element={<RequirePermissaoCliente permissao="melhorias"><ClienteMelhorias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/usuarios" element={<AsUsuarios />} />
