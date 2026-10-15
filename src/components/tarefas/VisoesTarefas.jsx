@@ -79,7 +79,7 @@ function Kanban({ tarefas, gestor, onAbrir, onAlterado, onErro }) {
     <div className="flex gap-3 overflow-x-auto pb-2">
       {COLUNAS.map(c => (
         <div key={c.k} onDragOver={e => e.preventDefault()} onDrop={() => soltar(c.k)}
-          className={`flex w-72 flex-shrink-0 flex-col rounded-xl bg-gray-50 p-2 ${arrastando ? 'ring-1 ring-dashed ring-gray-300' : ''}`}>
+          className={`flex min-w-[15rem] flex-1 flex-col rounded-xl bg-gray-50 p-2 ${arrastando ? 'ring-1 ring-dashed ring-gray-300' : ''}`}>
           <div className="mb-2 flex items-center justify-between px-1">
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_TAREFA[c.k].cls}`}>{c.rot}</span>
             <span className="text-xs tabular-nums text-gray-400">{porColuna[c.k].length}</span>
