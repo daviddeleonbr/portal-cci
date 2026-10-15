@@ -16,6 +16,8 @@ import * as qualityApi from '../../../services/qualityApiService';
 import * as sangriasService from '../../../services/clienteSangriasService';
 import * as contasBancariasService from '../../../services/clienteContasBancariasService';
 import { formatCurrency } from '../../../utils/format';
+import { SecaoRetiradas, ResumoDepositoModal } from '../../../components/sangrias/RetiradasDeposito';
+import { erroRetiradas, resumoRetiradas, PERMISSAO_TAREFA_DEPOSITO } from '../../../utils/sangriasDeposito';
 
 // Usa componentes locais (nao UTC) para evitar que, a noite no Brasil,
 // o "hoje UTC" ja seja o dia seguinte do "hoje local" e libere o dia atual.
@@ -54,6 +56,10 @@ export default function ClienteSangrias() {
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
   const [cienciaConfirmada, setCienciaConfirmada] = useState(false);
   const [modalConfirmacao, setModalConfirmacao] = useState(false);
+  // Retiradas em dinheiro antes do depósito + responsável da tarefa de depósito
+  const [retiradas, setRetiradas] = useState([]);
+  const [respDeposito, setRespDeposito] = useState('');
+  const podeCriarTarefa = (usuario?.permissoes || []).includes(PERMISSAO_TAREFA_DEPOSITO);
   // Catálogo de funcionários da Quality, usado no form de "adicionar
   // sangria manual" (cobre os casos em que o funcionário esqueceu de
   // registrar no sistema).
@@ -98,6 +104,8 @@ export default function ClienteSangrias() {
     setError(null);
     setRegistros([]);
     setFechamento(null);
+    setRetiradas([]);
+    setRespDeposito('');
     try {
       // 1. Consulta fechamento ja salvo
       const existente = await sangriasService.buscarFechamento(cliente.id, data);
@@ -257,6 +265,8 @@ export default function ClienteSangrias() {
       showToast('error', 'Informe o nome do responsavel pela contagem.');
       return;
     }
+    const erroRet = erroRetiradas(retiradas, totais.apresentado);
+    if (erroRet) { showToast('error', erroRet); return; }
     if (!cienciaConfirmada) {
       showToast('error', 'Confirme a ciência dos valores antes de salvar.');
       return;
@@ -282,8 +292,19 @@ export default function ClienteSangrias() {
         registros: regsParaSalvar,
         confirmado_por: responsavel.trim(),
         observacoes: observacoes.trim() || null,
+        retiradas: totais.apresentado > 0 ? retiradas : [],
       });
-      setFechamento(row);
+      let fechado = row;
+      if (podeCriarTarefa && Number(row.valor_deposito) > 0) {
+        try {
+          await sangriasService.criarTarefaDeposito(row.id, respDeposito);
+          fechado = await sangriasService.buscarFechamento(cliente.id, data) || row;
+        } catch (e) {
+          showToast('error', 'Fechamento salvo, mas a tarefa de depósito não foi criada: ' + e.message);
+        }
+      }
+      setRetiradas([]);
+      setFechamento(fechado);
       setRegistros(row.registros);
       setModalConfirmacao(false);
       showToast('success', 'Fechamento confirmado e salvo.');
@@ -567,6 +588,10 @@ export default function ClienteSangrias() {
             />
           )}
 
+          <SecaoRetiradas travado={travado} fechamento={fechamento} retiradas={retiradas} setRetiradas={setRetiradas}
+            totalApresentado={totais.apresentado} podeCriarTarefa={podeCriarTarefa} clienteId={cliente?.id} showToast={showToast}
+            onTarefaCriada={async () => setFechamento(await sangriasService.buscarFechamento(cliente.id, data))} />
+
           {/* Observacoes + Ciencia + Botão confirmar */}
           {!travado && (
             <div className="mt-4 bg-white rounded-xl border border-gray-200/60 p-4 shadow-sm space-y-4">
@@ -684,7 +709,8 @@ export default function ClienteSangrias() {
               className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50">
               Revisar novamente
             </button>
-            <button onClick={confirmarSalvamento} disabled={salvando}
+            <button onClick={confirmarSalvamento}
+              disabled={salvando || (podeCriarTarefa && resumoRetiradas(retiradas, totais.apresentado).deposito > 0 && !respDeposito)}
               className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
               {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Sim, confirmar e salvar
@@ -737,6 +763,9 @@ export default function ClienteSangrias() {
               }`}>{formatCurrency(totais.diferenca)}</p>
             </div>
           </div>
+
+          <ResumoDepositoModal retiradas={retiradas} totalApresentado={totais.apresentado} podeCriarTarefa={podeCriarTarefa}
+            clienteId={cliente?.id} respDeposito={respDeposito} setRespDeposito={setRespDeposito} />
 
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
             <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />

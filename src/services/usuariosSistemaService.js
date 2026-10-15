@@ -124,6 +124,7 @@ export const PERMISSOES_CLIENTE = [
   { key: 'compras',           label: 'Compras · Criar pedidos',         grupo: 'Comercial' },
   { key: 'compras_liberar',   label: 'Compras · Liberar pedidos',       grupo: 'Comercial' },
   { key: 'sangrias', label: 'Sangrias', grupo: 'Operacional' },
+  { key: 'sangrias_tarefa_deposito', label: 'Sangrias · Criar tarefa de depósito em banco', grupo: 'Operacional' },
   { key: 'bpo', label: 'Serviços BPO', grupo: 'Operacional' },
   { key: 'documentos', label: 'Documentos', grupo: 'Operacional' },
   { key: 'financeiro', label: 'Financeiro', grupo: 'Operacional' },
