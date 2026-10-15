@@ -13,6 +13,8 @@ import TarefaDetalhe from '../components/tarefas/TarefaDetalhe';
 import { RotinaModal, DuplicarRotinaModal, NovaTarefaModal, SetoresModal } from '../components/tarefas/FormulariosTarefas';
 import * as tarefasService from '../services/tarefasService';
 import * as clientesService from '../services/clientesService';
+import { useRedesClientes, redeDe } from '../hooks/useRedesClientes';
+import { SelectBusca } from '../components/tarefas/CamposTarefas';
 import {
   indicadores, corExecucao, estaAtrasada, descreverRecorrencia, fmtDataHora, hojeYmd, somarDiasYmd, STATUS_TAREFA, statusEfetivo,
   PRIORIDADES, REFERENCIAS, proximaExecucao, fmtDiaMes,
@@ -25,6 +27,7 @@ export default function AdminTarefas() {
   const [clientes, setClientes] = useState([]);
   const [setores, setSetores] = useState([]);
   const [clienteId, setClienteId] = useState('');
+  const [redeK, setRedeK] = useState(''); // 'w:<chave_api_id>' | 'a:<as_rede_id>'
   const [dias, setDias] = useState(30);
   const [lista, setLista] = useState([]);
   const [rotinas, setRotinas] = useState([]);
@@ -47,24 +50,32 @@ export default function AdminTarefas() {
       .catch(e => showToast('error', e.message));
   }, [showToast]);
 
+  const redes = useRedesClientes(clientes);
+  const empresasFiltro = useMemo(() => clientes.filter(c => !redeK || redeDe(c) === redeK)
+    .sort((a, b) => nomeCliente(a).localeCompare(nomeCliente(b))), [clientes, redeK]);
+  // Filtro efetivo: empresa escolhida, ou todas as empresas da rede.
+  const idsRede = useMemo(() => (redeK ? empresasFiltro.map(c => c.id) : null), [redeK, empresasFiltro]);
+
   // Período: últimos N dias até +60 (avulsas futuras) + pendentes mais antigas.
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
       const de = somarDiasYmd(hojeYmd(), -dias);
+      const filtro = { clienteId: clienteId || undefined, clienteIds: clienteId ? undefined : idsRede || undefined };
       const [noPeriodo, antigas, rots, peds] = await Promise.all([
-        tarefasService.listarTarefas({ clienteId: clienteId || undefined, de, ate: somarDiasYmd(hojeYmd(), 60) }),
-        tarefasService.listarPendentesAntigas({ clienteId: clienteId || undefined, antesDe: de }),
-        tarefasService.listarRotinas({ clienteId: clienteId || undefined }),
+        tarefasService.listarTarefas({ ...filtro, de, ate: somarDiasYmd(hojeYmd(), 60) }),
+        tarefasService.listarPendentesAntigas({ ...filtro, antesDe: de }),
+        tarefasService.listarRotinas(filtro),
         tarefasService.listarPedidosPendentes(),
       ]);
-      setPedidos(clienteId ? peds.filter(p => p.tarefa?.cliente?.id === clienteId) : peds);
+      setPedidos(clienteId ? peds.filter(p => p.tarefa?.cliente?.id === clienteId)
+        : idsRede ? peds.filter(p => idsRede.includes(p.tarefa?.cliente?.id)) : peds);
       const vistos = new Set();
       setLista([...noPeriodo, ...antigas].filter(t => (vistos.has(t.id) ? false : vistos.add(t.id))));
       setRotinas(rots);
     } catch (e) { showToast('error', 'Erro ao carregar tarefas: ' + e.message); }
     finally { setCarregando(false); }
-  }, [clienteId, dias, showToast]);
+  }, [clienteId, idsRede, dias, showToast]);
   useEffect(() => { carregar(); }, [carregar]);
 
   const recarregarSetores = () => tarefasService.listarSetores().then(setSetores).catch(() => {});
@@ -107,10 +118,15 @@ export default function AdminTarefas() {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={clienteId} onChange={e => setClienteId(e.target.value)} className="h-9 max-w-xs rounded-lg border border-gray-200 bg-white px-2 text-sm">
-            <option value="">Todas as empresas</option>
-            {[...clientes].sort((a, b) => nomeCliente(a).localeCompare(nomeCliente(b))).map(c => <option key={c.id} value={c.id}>{nomeCliente(c)}</option>)}
-          </select>
+          <div className="w-56">
+            <SelectBusca value={redeK} onChange={v => { setRedeK(v); setClienteId(''); }} vazio="Todas as redes"
+              placeholderBusca="Buscar rede…" vazioLista="Nenhuma rede encontrada." opcoes={redes} />
+          </div>
+          <div className="w-64">
+            <SelectBusca value={clienteId} onChange={setClienteId} vazio={redeK ? 'Todas as empresas da rede' : 'Todas as empresas'}
+              placeholderBusca="Buscar empresa…" vazioLista="Nenhuma empresa encontrada."
+              opcoes={empresasFiltro.map(c => ({ value: c.id, label: nomeCliente(c) }))} />
+          </div>
           <select value={dias} onChange={e => setDias(Number(e.target.value))} className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm">
             {[7, 30, 90].map(d => <option key={d} value={d}>Últimos {d} dias</option>)}
           </select>

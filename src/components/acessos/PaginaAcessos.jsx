@@ -7,6 +7,7 @@ import { Check, Copy, Eye, EyeOff, ExternalLink, KeyRound, Loader2, Pencil, Plus
 import Modal from '../ui/Modal';
 import { SelectBusca } from '../tarefas/CamposTarefas';
 import * as acessosService from '../../services/acessosService';
+import { useRedesClientes, redeDe } from '../../hooks/useRedesClientes';
 
 const { CATEGORIAS_ACESSO } = acessosService;
 const nomeCliente = (c) => c?.razao_social || c?.nome || '';
@@ -26,6 +27,7 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
   const [busca, setBusca] = useState('');
   const [categoria, setCategoria] = useState('');
   const [empresaF, setEmpresaF] = useState('');
+  const [redeF, setRedeF] = useState(''); // só CCI (cliente já está numa rede)
   const [editando, setEditando] = useState(null); // objeto | 'novo' | null
 
   const carregar = useCallback(async () => {
@@ -37,6 +39,8 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
   useEffect(() => { carregar(); }, [carregar]);
 
   const ordenados = useMemo(() => [...clientes].sort((a, b) => nomeCliente(a).localeCompare(nomeCliente(b))), [clientes]);
+  const redes = useRedesClientes(clientes, admin);
+  const empresasFiltro = useMemo(() => ordenados.filter(c => !redeF || redeDe(c) === redeF), [ordenados, redeF]);
   // rede → empresas (para mostrar "Toda a rede" com contexto)
   const empresasDaRede = useMemo(() => {
     const m = new Map();
@@ -50,10 +54,11 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
     return lista.filter(a => {
       if (categoria && a.categoria !== categoria) return false;
       if (emp && !(a.cliente_id === emp.id || (!a.cliente_id && chaveRede(a) === chaveRede(emp)))) return false;
+      if (!emp && redeF && redeDe(a) !== redeF) return false;
       if (q && !`${a.plataforma} ${a.login || ''} ${nomeCliente(a.cliente)} ${a.observacao || ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [lista, busca, categoria, empresaF, clientes]);
+  }, [lista, busca, categoria, empresaF, redeF, clientes]);
 
   const excluir = async (a) => {
     if (!confirm(`Excluir o acesso "${a.plataforma}"?`)) return;
@@ -69,10 +74,17 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
           <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar plataforma, login…"
             className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-teal-500" />
         </div>
+        {admin && redes.length > 1 && (
+          <div className="min-w-0 flex-1 sm:w-56 sm:flex-none">
+            <SelectBusca value={redeF} onChange={v => { setRedeF(v); setEmpresaF(''); }} vazio="Todas as redes"
+              placeholderBusca="Buscar rede…" vazioLista="Nenhuma rede encontrada." opcoes={redes} />
+          </div>
+        )}
         {clientes.length > 1 && (
           <div className="min-w-0 flex-1 sm:w-64 sm:flex-none">
-            <SelectBusca value={empresaF} onChange={setEmpresaF} vazio="Todas as empresas" placeholderBusca="Buscar empresa…"
-              vazioLista="Nenhuma empresa encontrada." opcoes={ordenados.map(c => ({ value: c.id, label: nomeCliente(c) }))} />
+            <SelectBusca value={empresaF} onChange={setEmpresaF} vazio={redeF ? 'Todas as empresas da rede' : 'Todas as empresas'}
+              placeholderBusca="Buscar empresa…" vazioLista="Nenhuma empresa encontrada."
+              opcoes={empresasFiltro.map(c => ({ value: c.id, label: nomeCliente(c) }))} />
           </div>
         )}
         <select value={categoria} onChange={e => setCategoria(e.target.value)}
@@ -136,7 +148,9 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
       )}
 
       {editando && (
-        <AcessoModal acesso={editando === 'novo' ? null : editando} clientes={ordenados} empresaInicial={empresaF}
+        <AcessoModal acesso={editando === 'novo' ? null : editando} clientes={ordenados} redes={redes}
+          empresaInicial={empresaF || (redeF && empresasFiltro.length === 1 ? empresasFiltro[0].id : '')}
+          redeInicial={redeF || redeDe(clientes.find(c => c.id === empresaF))}
           onClose={() => setEditando(null)} showToast={showToast}
           onSalvo={() => { setEditando(null); carregar(); }} />
       )}
@@ -175,10 +189,12 @@ function CampoSegredo({ rot, valor, oculto = false }) {
 const inp = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100';
 const lbl = 'mb-1 block text-xs font-medium text-gray-500';
 
-function AcessoModal({ acesso, clientes, empresaInicial, onClose, onSalvo, showToast }) {
-  // Acesso da rede toda: pré-seleciona uma empresa da mesma rede (define a rede).
-  const empresaDaRede = acesso && !acesso.cliente_id ? clientes.find(c => chaveRede(c) === chaveRede(acesso))?.id : null;
-  const [empresa, setEmpresa] = useState(acesso?.cliente_id || empresaDaRede || empresaInicial || (clientes.length === 1 ? clientes[0].id : ''));
+// "Toda a rede": a CCI escolhe a rede; o cliente usa a própria (todas as suas
+// empresas são da mesma rede).
+function AcessoModal({ acesso, clientes, redes, empresaInicial, redeInicial, onClose, onSalvo, showToast }) {
+  const unicaRede = new Set(clientes.map(redeDe)).size <= 1;
+  const [empresa, setEmpresa] = useState(acesso?.cliente_id || empresaInicial || (clientes.length === 1 ? clientes[0].id : ''));
+  const [rede, setRede] = useState(acesso && !acesso.cliente_id ? redeDe(acesso) : (redeInicial || (unicaRede ? redeDe(clientes[0]) : '')));
   const [toda, setToda] = useState(!!acesso && !acesso.cliente_id);
   const [f, setF] = useState({
     plataforma: acesso?.plataforma || '', categoria: acesso?.categoria || 'adquirente', url: acesso?.url || '',
@@ -193,12 +209,15 @@ function AcessoModal({ acesso, clientes, empresaInicial, onClose, onSalvo, showT
     e.preventDefault(); setErro(null);
     if (f.plataforma.trim().length < 2) return setErro('Informe a plataforma.');
     const emp = clientes.find(c => c.id === empresa);
-    if (!emp) return setErro('Escolha a empresa.');
+    if (toda && !rede) return setErro('Escolha a rede.');
+    if (!toda && !emp) return setErro('Escolha a empresa.');
     setSalvando(true);
     try {
       await acessosService.salvarAcesso({
         id: acesso?.id, ...f,
-        ...(toda ? { cliente_id: null, chave_api_id: emp.chave_api_id || null, as_rede_id: emp.as_rede_id || null } : { cliente_id: emp.id }),
+        ...(toda
+          ? { cliente_id: null, chave_api_id: rede.startsWith('w:') ? rede.slice(2) : null, as_rede_id: rede.startsWith('a:') ? rede.slice(2) : null }
+          : { cliente_id: emp.id }),
       });
       showToast('success', acesso ? 'Acesso atualizado' : 'Acesso cadastrado');
       onSalvo();
@@ -229,16 +248,25 @@ function AcessoModal({ acesso, clientes, empresaInicial, onClose, onSalvo, showT
             </select></div>
         </div>
         <div>
-          <label className={lbl}>Empresa</label>
-          <SelectBusca value={empresa} onChange={setEmpresa} vazio="Selecione…" placeholderBusca="Buscar empresa…"
-            vazioLista="Nenhuma empresa encontrada." opcoes={clientes.map(c => ({ value: c.id, label: nomeCliente(c) }))} />
-          <div className="mt-2 flex gap-1.5">
-            {[[false, 'Somente esta empresa'], [true, 'Toda a rede']].map(([v, l]) => (
+          <label className={lbl}>Vale para</label>
+          <div className="mb-2 flex gap-1.5">
+            {[[false, 'Uma empresa'], [true, 'Toda a rede']].map(([v, l]) => (
               <button type="button" key={l} onClick={() => setToda(v)}
                 className={`rounded-md border px-2.5 py-1.5 text-[12px] font-medium ${toda === v ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>{l}</button>
             ))}
           </div>
-          {toda && <p className="mt-1 text-[11px] text-gray-400">O acesso aparece para todas as empresas da rede desta empresa.</p>}
+          {!toda ? (
+            <SelectBusca value={empresa} onChange={setEmpresa} vazio="Selecione a empresa…" placeholderBusca="Buscar empresa…"
+              vazioLista="Nenhuma empresa encontrada." opcoes={clientes.map(c => ({ value: c.id, label: nomeCliente(c) }))} />
+          ) : unicaRede ? (
+            <p className="text-[11px] text-gray-400">O acesso aparece para todas as empresas da rede.</p>
+          ) : (
+            <>
+              <SelectBusca value={rede} onChange={setRede} vazio="Selecione a rede…" placeholderBusca="Buscar rede…"
+                vazioLista="Nenhuma rede encontrada." opcoes={redes} />
+              <p className="mt-1 text-[11px] text-gray-400">O acesso aparece para todas as empresas desta rede.</p>
+            </>
+          )}
         </div>
         <div><label className={lbl}>Site / link de acesso (opcional)</label>
           <input value={f.url} onChange={e => set({ url: e.target.value })} placeholder="Ex.: www.cielo.com.br" className={inp} /></div>

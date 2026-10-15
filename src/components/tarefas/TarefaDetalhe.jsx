@@ -6,10 +6,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   X, Loader2, CheckCircle2, Circle, Camera, Paperclip, Send, Trash2, FileText, Image as ImageIcon,
-  MessageSquare, History, ShieldCheck, Undo2, Ban, RotateCcw, Plus, AlertTriangle, Clock,
+  MessageSquare, History, ShieldCheck, Undo2, Ban, RotateCcw, Plus, AlertTriangle, Clock, Pencil,
 } from 'lucide-react';
 import * as tarefas from '../../services/tarefasService';
-import { ReferenciaBadge } from './CamposTarefas';
+import { ReferenciaBadge, SelectBusca, DocumentosEditor } from './CamposTarefas';
 import { STATUS_TAREFA, PRIORIDADES, statusEfetivo, bloqueioEnvio, fmtDataHora } from '../../utils/tarefas';
 
 export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAlterado }) {
@@ -20,6 +20,7 @@ export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAl
   const [novoItem, setNovoItem] = useState('');
   const [devolvendo, setDevolvendo] = useState(false);
   const [motivo, setMotivo] = useState('');
+  const [editando, setEditando] = useState(false);
   const inputArquivo = useRef(null);
   const inputCamera = useRef(null);
   const docAlvo = useRef(null);
@@ -33,8 +34,8 @@ export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAl
   // Executa uma ação, recarrega e avisa a lista.
   const acao = async (fn) => {
     setOcupado(true); setErro('');
-    try { await fn(); await carregar(); onAlterado?.(); }
-    catch (e) { setErro(e.message); }
+    try { await fn(); await carregar(); onAlterado?.(); return true; }
+    catch (e) { setErro(e.message); return false; }
     finally { setOcupado(false); }
   };
 
@@ -90,7 +91,12 @@ export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAl
               {t.responsavel?.nome ? ` · ${t.responsavel.nome}` : ''}
             </p>
           </div>
-          <button onClick={onFechar} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+          <div className="flex flex-shrink-0 items-center gap-1">
+            {gestor && t.status !== 'cancelada' && !editando && (
+              <button onClick={() => setEditando(true)} title="Editar tarefa" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Pencil className="h-4 w-4" /></button>
+            )}
+            <button onClick={onFechar} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+          </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-gray-500">
           <span className={`inline-flex items-center gap-1 ${st === 'atrasada' ? 'text-rose-600 font-medium' : ''}`}>
@@ -107,7 +113,11 @@ export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAl
             <AlertTriangle className="h-4 w-4 flex-shrink-0" /> {erro}
           </div>
         )}
-        {t.descricao && <p className="text-sm text-gray-700 whitespace-pre-line">{t.descricao}</p>}
+        {editando && (
+          <EditarTarefa t={t} onCancelar={() => setEditando(false)}
+            onSalvar={campos => acao(() => tarefas.atualizarTarefa(t.id, campos)).then(ok => { if (ok) setEditando(false); })} />
+        )}
+        {!editando && t.descricao && <p className="text-sm text-gray-700 whitespace-pre-line">{t.descricao}</p>}
 
         {/* Checklist */}
         {(t.checklist.length > 0 || gestor) && (
@@ -401,5 +411,86 @@ function PedidosTarefa({ t, gestor, acao }) {
         </ul>
       )}
     </Secao>
+  );
+}
+
+// ─── Editar a tarefa (CCI) ──────────────────────────────────────
+const inpEd = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100';
+const lblEd = 'mb-1 block text-xs font-medium text-gray-500';
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function EditarTarefa({ t, onCancelar, onSalvar }) {
+  const v = new Date(t.vence_em);
+  const [f, setF] = useState({
+    titulo: t.titulo, descricao: t.descricao || '', responsavel_id: t.responsavel_id || '', setor_id: t.setor_id || '',
+    prioridade: t.prioridade, data: `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())}`,
+    hora: `${pad2(v.getHours())}:${pad2(v.getMinutes())}`, exige_evidencia: t.exige_evidencia, documentos: t.documentos || [],
+  });
+  const [pessoas, setPessoas] = useState([]);
+  const [setores, setSetores] = useState([]);
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const set = (p) => setF(x => ({ ...x, ...p }));
+
+  useEffect(() => {
+    let cancel = false;
+    Promise.all([tarefas.listarResponsaveisPorClientes([t.cliente]), tarefas.listarSetores()])
+      .then(([mapa, ss]) => { if (!cancel) { setPessoas(mapa[t.cliente.id] || []); setSetores(ss); } })
+      .catch(e => { if (!cancel) setErro(e.message); });
+    return () => { cancel = true; };
+  }, [t.cliente]);
+
+  const salvar = async () => {
+    if (f.titulo.trim().length < 2) return setErro('Informe o título.');
+    if (!f.responsavel_id) return setErro('Escolha o responsável.');
+    setSalvando(true); setErro('');
+    try {
+      await onSalvar({
+        titulo: f.titulo.trim(), descricao: f.descricao.trim() || null, responsavel_id: f.responsavel_id,
+        setor_id: f.setor_id || null, prioridade: f.prioridade, vence_em: new Date(`${f.data}T${f.hora}:00`).toISOString(),
+        exige_evidencia: f.exige_evidencia, documentos: f.exige_evidencia ? f.documentos : [],
+      });
+    } catch (e) { setErro(e.message); setSalvando(false); }
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl border border-teal-200 bg-gray-50 p-4">
+      <p className="text-sm font-semibold text-gray-800">Editar tarefa</p>
+      {t.rotina_id && <p className="text-[11px] text-gray-500">Vale só para esta tarefa — para as próximas, edite a rotina.</p>}
+      <div><label className={lblEd}>Título</label><input value={f.titulo} onChange={e => set({ titulo: e.target.value })} className={inpEd} /></div>
+      <div><label className={lblEd}>Descrição / instruções</label>
+        <textarea rows={2} value={f.descricao} onChange={e => set({ descricao: e.target.value })} className={inpEd} /></div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div><label className={lblEd}>Responsável</label>
+          <SelectBusca value={pessoas.some(p => p.id === f.responsavel_id) ? f.responsavel_id : ''} onChange={v2 => set({ responsavel_id: v2 })}
+            vazio={t.responsavel?.nome && !pessoas.length ? t.responsavel.nome : 'Selecione…'} placeholderBusca="Buscar pessoa…"
+            vazioLista="Nenhum funcionário com acesso a Tarefas." opcoes={pessoas.map(p => ({ value: p.id, label: p.nome }))} /></div>
+        <div><label className={lblEd}>Setor</label>
+          <select value={f.setor_id} onChange={e => set({ setor_id: e.target.value })} className={inpEd}>
+            <option value="">Sem setor</option>
+            {setores.filter(s => s.ativo || s.id === f.setor_id).map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+          </select></div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div><label className={lblEd}>Vence em</label><input type="date" value={f.data} onChange={e => set({ data: e.target.value })} className={inpEd} /></div>
+        <div><label className={lblEd}>Hora</label><input type="time" value={f.hora} onChange={e => set({ hora: e.target.value })} className={inpEd} /></div>
+        <div><label className={lblEd}>Prioridade</label>
+          <select value={f.prioridade} onChange={e => set({ prioridade: e.target.value })} className={inpEd}>
+            {['critica', 'alta', 'media', 'baixa'].map(p => <option key={p} value={p}>{PRIORIDADES[p].rotulo}</option>)}
+          </select></div>
+      </div>
+      <label className="flex items-center gap-2 text-[13px] text-gray-600">
+        <input type="checkbox" checked={f.exige_evidencia} onChange={e => set({ exige_evidencia: e.target.checked })} /> Exigir foto ou documento para concluir
+      </label>
+      {f.exige_evidencia && <DocumentosEditor valor={f.documentos} onChange={d => set({ documentos: d })} />}
+      {erro && <p className="text-[12px] text-red-600">{erro}</p>}
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancelar} className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">Cancelar</button>
+        <button onClick={salvar} disabled={salvando}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50">
+          {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Salvar
+        </button>
+      </div>
+    </div>
   );
 }

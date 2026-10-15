@@ -86,11 +86,12 @@ const hojeYmdLocal = () => {
 };
 
 // ─── Rotinas (só CCI) ───────────────────────────────────────────
-export async function listarRotinas({ clienteId } = {}) {
+export async function listarRotinas({ clienteId, clienteIds } = {}) {
   let q = supabase.from('cci_rotina')
     .select('*, cliente:clientes(id, nome, razao_social), setor:cci_tarefa_setor(id, nome), responsavel:cci_usuarios_sistema(id, nome)')
     .order('nome');
   if (clienteId) q = q.eq('cliente_id', clienteId);
+  else if (clienteIds) q = q.in('cliente_id', clienteIds);
   const { data, error } = await q;
   if (error) throw error;
   return data || [];
@@ -111,9 +112,10 @@ export async function excluirRotina(id) {
 
 // ─── Tarefas ────────────────────────────────────────────────────
 // Admin: todas (filtros). Cliente: o RLS já devolve só as do usuário.
-export async function listarTarefas({ clienteId, de, ate, status } = {}) {
+export async function listarTarefas({ clienteId, clienteIds, de, ate, status } = {}) {
   let q = supabase.from('cci_tarefa').select(COLS_TAREFA).order('vence_em', { ascending: true });
   if (clienteId) q = q.eq('cliente_id', clienteId);
+  else if (clienteIds) q = q.in('cliente_id', clienteIds);
   if (de) q = q.gte('vence_em', `${de}T00:00:00-03:00`);
   if (ate) q = q.lte('vence_em', `${ate}T23:59:59-03:00`);
   if (status?.length) q = q.in('status', status);
@@ -124,11 +126,12 @@ export async function listarTarefas({ clienteId, de, ate, status } = {}) {
 
 // Abertas fora do período (atrasadas antigas / aguardando validação) — o
 // funcionário e a CCI precisam vê-las mesmo com o filtro de datas.
-export async function listarPendentesAntigas({ clienteId, antesDe } = {}) {
+export async function listarPendentesAntigas({ clienteId, clienteIds, antesDe } = {}) {
   let q = supabase.from('cci_tarefa').select(COLS_TAREFA)
     .in('status', ['a_fazer', 'em_andamento', 'aguardando_validacao'])
     .lt('vence_em', `${antesDe}T00:00:00-03:00`);
   if (clienteId) q = q.eq('cliente_id', clienteId);
+  else if (clienteIds) q = q.in('cliente_id', clienteIds);
   const { data, error } = await q.limit(2000);
   if (error) throw error;
   return data || [];

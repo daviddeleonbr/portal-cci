@@ -8,6 +8,7 @@ import {
   DIAS_SEMANA, PRIORIDADES, REFERENCIAS, MODOS_PERSONALIZADA, ehPersonalizada, descreverRecorrencia, hojeYmd, somarDiasYmd,
 } from '../../utils/tarefas';
 import { EmpresasMultiSelect, SelectBusca, DocumentosEditor } from './CamposTarefas';
+import { useRedesClientes, redeDe } from '../../hooks/useRedesClientes';
 
 const input = 'w-full h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const rotuloCls = 'block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1';
@@ -37,50 +38,6 @@ function ListaTextos({ valores, onChange, placeholder }) {
         <button type="button" onClick={add} className="rounded-lg border border-gray-200 px-3 text-gray-600 hover:bg-gray-50"><Plus className="h-4 w-4" /></button>
       </div>
     </div>
-  );
-}
-
-// Cliente + responsável (funcionários do cliente com permissão de Tarefas).
-// Guarda o resultado junto com o cliente consultado: "carregando" e a lista
-// são derivados (sem setState síncrono dentro do efeito).
-function useResponsaveis(clientes, clienteId) {
-  const [res, setRes] = useState({ clienteId: null, lista: [] });
-  useEffect(() => {
-    const c = clientes.find(x => x.id === clienteId);
-    if (!c) return undefined;
-    let cancel = false;
-    tarefas.listarResponsaveis(c)
-      .catch(() => [])
-      .then(l => { if (!cancel) setRes({ clienteId, lista: l }); });
-    return () => { cancel = true; };
-  }, [clientes, clienteId]);
-  const atual = res.clienteId === clienteId;
-  return { lista: atual ? res.lista : [], carregando: !!clienteId && !atual };
-}
-
-function CamposClienteResponsavel({ clientes, form, set, setores }) {
-  const { lista, carregando } = useResponsaveis(clientes, form.cliente_id);
-  const ordenados = useMemo(() => [...clientes].sort((a, b) => nomeCliente(a).localeCompare(nomeCliente(b))), [clientes]);
-  return (
-    <>
-      <Campo rot="Empresa (cliente)" className="sm:col-span-2">
-        <SelectBusca value={form.cliente_id || ''} onChange={v => set({ cliente_id: v, responsavel_id: '' })}
-          vazio="Selecione…" placeholderBusca="Buscar empresa…" vazioLista="Nenhuma empresa encontrada."
-          opcoes={ordenados.map(c => ({ value: c.id, label: nomeCliente(c) }))} />
-      </Campo>
-      <Campo rot={carregando ? 'Responsável (carregando…)' : 'Responsável'}>
-        <select className={input} value={form.responsavel_id || ''} onChange={e => set({ responsavel_id: e.target.value })} disabled={!form.cliente_id}>
-          <option value="">{form.cliente_id ? (lista.length ? 'Selecione…' : 'Nenhum funcionário com acesso a Tarefas') : 'Escolha a empresa'}</option>
-          {lista.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-        </select>
-      </Campo>
-      <Campo rot="Setor">
-        <select className={input} value={form.setor_id || ''} onChange={e => set({ setor_id: e.target.value })}>
-          <option value="">Sem setor</option>
-          {setores.filter(s => s.ativo || s.id === form.setor_id).map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-        </select>
-      </Campo>
-    </>
   );
 }
 
@@ -398,30 +355,53 @@ export function DuplicarRotinaModal({ rotina, clientes, rotinas, onClose, onSalv
 }
 
 // ─── Tarefa avulsa ──────────────────────────────────────────────
-export function NovaTarefaModal({ open, clientes, setores, onClose, onSalvo, showToast }) {
-  const vazio = () => ({
-    cliente_id: '', responsavel_id: '', setor_id: '', titulo: '', descricao: '', prioridade: 'media',
+export function NovaTarefaModal({ open, ...props }) {
+  return open ? <NovaTarefaForm {...props} /> : null;
+}
+
+// Rede → uma ou mais empresas → responsável de cada empresa (uma tarefa por empresa).
+function NovaTarefaForm({ clientes, setores, onClose, onSalvo, showToast }) {
+  const redes = useRedesClientes(clientes);
+  const [rede, setRede] = useState('');
+  const [emps, setEmps] = useState([]);
+  const [respPor, setRespPor] = useState({});
+  const [form, setForm] = useState({
+    setor_id: '', titulo: '', descricao: '', prioridade: 'media',
     data: somarDiasYmd(hojeYmd(), 1), hora: '18:00', exige_evidencia: false, documentos: [], checklist: [],
   });
-  const [form, setForm] = useState(vazio);
   const [salvando, setSalvando] = useState(false);
-  useEffect(() => { if (open) setForm(vazio()); }, [open]);
   const set = (p) => setForm(f => ({ ...f, ...p }));
-  const faltando = [!form.cliente_id && 'empresa', !form.responsavel_id && 'responsável', form.titulo.trim().length < 2 && 'título'].filter(Boolean);
+
+  const empresasRede = useMemo(() => clientes.filter(c => redeDe(c) === rede)
+    .map(c => ({ id: c.id, nome: nomeCliente(c) })).sort((a, b) => a.nome.localeCompare(b.nome)), [clientes, rede]);
+  const { mapa, carregando } = useResponsaveisPor(clientes, emps);
+  const valido = (id) => ((mapa[id] || []).some(u => u.id === respPor[id]) ? respPor[id] : '');
+  // "Aplicar a todas": só quem tem acesso a todas as empresas escolhidas.
+  const comuns = emps.length > 1
+    ? (mapa[emps[0]] || []).filter(u => emps.every(id => (mapa[id] || []).some(x => x.id === u.id))) : [];
+
+  const faltando = [
+    !rede && 'rede', !emps.length && 'empresa', emps.some(id => !valido(id)) && 'responsável',
+    form.titulo.trim().length < 2 && 'título',
+  ].filter(Boolean);
 
   const salvar = async () => {
     setSalvando(true);
     try {
       const { data, hora, ...resto } = form;
-      await tarefas.criarTarefa({ ...resto, titulo: resto.titulo.trim(), vence_em: new Date(`${data}T${hora}:00`).toISOString() });
-      showToast('success', 'Tarefa criada');
+      const vence_em = new Date(`${data}T${hora}:00`).toISOString();
+      for (const id of emps) {
+        await tarefas.criarTarefa({ ...resto, titulo: resto.titulo.trim(), cliente_id: id, responsavel_id: valido(id), vence_em });
+      }
+      showToast('success', emps.length > 1 ? `${emps.length} tarefas criadas` : 'Tarefa criada');
       onSalvo();
     } catch (e) { showToast('error', 'Erro ao criar a tarefa: ' + e.message); }
     finally { setSalvando(false); }
   };
 
+  const nomeEmp = (id) => empresasRede.find(e => e.id === id)?.nome || 'Empresa';
   return (
-    <Modal open={open} onClose={onClose} title="Nova tarefa avulsa" size="lg"
+    <Modal open onClose={onClose} title="Nova tarefa avulsa" size="lg"
       footer={(
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] text-amber-700">{faltando.length ? `Falta: ${faltando.join(', ')}.` : ''}</p>
@@ -429,7 +409,7 @@ export function NovaTarefaModal({ open, clientes, setores, onClose, onSalvo, sho
             <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100">Cancelar</button>
             <button onClick={salvar} disabled={salvando || faltando.length > 0}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-              {salvando && <Loader2 className="h-4 w-4 animate-spin" />} Criar tarefa
+              {salvando && <Loader2 className="h-4 w-4 animate-spin" />} {emps.length > 1 ? `Criar ${emps.length} tarefas` : 'Criar tarefa'}
             </button>
           </div>
         </div>
@@ -438,19 +418,59 @@ export function NovaTarefaModal({ open, clientes, setores, onClose, onSalvo, sho
         <Campo rot="Título" className="sm:col-span-2">
           <input className={input} value={form.titulo} onChange={e => set({ titulo: e.target.value })} />
         </Campo>
-        <CamposClienteResponsavel clientes={clientes} form={form} set={set} setores={setores} />
-        <Campo rot="Descrição / instruções" className="sm:col-span-2">
-          <textarea rows={2} className={`${input} h-auto py-2`} value={form.descricao} onChange={e => set({ descricao: e.target.value })} />
+        <Campo rot="Rede" className="sm:col-span-2">
+          <SelectBusca value={rede} onChange={v => { setRede(v); setEmps([]); setRespPor({}); }} vazio="Selecione a rede…"
+            placeholderBusca="Buscar rede…" vazioLista="Nenhuma rede encontrada." opcoes={redes} />
         </Campo>
-        <div className="grid grid-cols-2 gap-3">
-          <Campo rot="Vence em"><input type="date" className={input} value={form.data} onChange={e => set({ data: e.target.value })} /></Campo>
-          <Campo rot="Hora"><input type="time" className={input} value={form.hora} onChange={e => set({ hora: e.target.value })} /></Campo>
-        </div>
+        {rede && (
+          <Campo rot={`Empresas${emps.length > 1 ? ' — uma tarefa por empresa' : ''}`} className="sm:col-span-2">
+            <EmpresasMultiSelect empresas={empresasRede} value={emps} onChange={setEmps} />
+          </Campo>
+        )}
+        {emps.length > 0 && (
+          <Campo rot={`${emps.length > 1 ? 'Responsável por empresa' : 'Responsável'}${carregando ? ' (carregando…)' : ''}`} className="sm:col-span-2">
+            {emps.length === 1 ? (
+              <SelectBusca value={valido(emps[0])} onChange={v => setRespPor({ [emps[0]]: v })} vazio="Selecione o responsável…"
+                placeholderBusca="Buscar pessoa…" vazioLista="Nenhum funcionário com acesso a Tarefas."
+                opcoes={(mapa[emps[0]] || []).map(u => ({ value: u.id, label: u.nome }))} />
+            ) : (
+              <div className="space-y-1.5 rounded-lg border border-gray-100 p-3">
+                {comuns.length > 0 && (
+                  <div className="mb-1 flex items-center justify-end gap-2 text-[11.5px] text-gray-500">
+                    Aplicar a todas:
+                    <span className="w-56"><SelectBusca value="" vazio="—" placeholderBusca="Buscar pessoa…"
+                      opcoes={comuns.map(u => ({ value: u.id, label: u.nome }))}
+                      onChange={v => setRespPor(Object.fromEntries(emps.map(id => [id, v])))} /></span>
+                  </div>
+                )}
+                {emps.map(id => (
+                  <div key={id} className="grid grid-cols-1 items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_260px]">
+                    <span className="truncate text-[13px] text-gray-700" title={nomeEmp(id)}>{nomeEmp(id)}</span>
+                    <SelectBusca value={valido(id)} onChange={v => setRespPor(m => ({ ...m, [id]: v }))} vazio="Selecione…"
+                      placeholderBusca="Buscar pessoa…" vazioLista="Nenhum funcionário com acesso a Tarefas."
+                      opcoes={(mapa[id] || []).map(u => ({ value: u.id, label: u.nome }))} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Campo>
+        )}
+        <Campo rot="Setor">
+          <select className={input} value={form.setor_id} onChange={e => set({ setor_id: e.target.value })}>
+            <option value="">Sem setor</option>
+            {setores.filter(s => s.ativo).map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+          </select>
+        </Campo>
         <Campo rot="Prioridade">
           <select className={input} value={form.prioridade} onChange={e => set({ prioridade: e.target.value })}>
             {Object.entries(PRIORIDADES).map(([k, p]) => <option key={k} value={k}>{p.rotulo}</option>)}
           </select>
         </Campo>
+        <Campo rot="Descrição / instruções" className="sm:col-span-2">
+          <textarea rows={2} className={`${input} h-auto py-2`} value={form.descricao} onChange={e => set({ descricao: e.target.value })} />
+        </Campo>
+        <Campo rot="Vence em"><input type="date" className={input} value={form.data} onChange={e => set({ data: e.target.value })} /></Campo>
+        <Campo rot="Hora"><input type="time" className={input} value={form.hora} onChange={e => set({ hora: e.target.value })} /></Campo>
         <Campo rot="Checklist" className="sm:col-span-2">
           <ListaTextos valores={form.checklist} onChange={v => set({ checklist: v })} placeholder="Adicionar item (Enter)" />
         </Campo>
