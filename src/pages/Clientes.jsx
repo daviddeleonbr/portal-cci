@@ -91,12 +91,12 @@ export default function Clientes({ embedded = false }) {
   // vínculo (FK set null); parametrizações da rede são apagadas (cascade).
   // Usuários da rede saem junto (usuário de cliente precisa de uma rede).
   const idRede = (tipo, rede) => (tipo === 'webposto' ? { chave_api_id: rede.chaveApiId } : { as_rede_id: rede.id });
-  const handleExcluirRede = async (tipo, rede, usuarios = []) => {
+  // Exclusão completa no banco (RPC cci_excluir_rede, migration 199): empresas,
+  // cadastros e parâmetros da rede, usuários e a rede — tudo ou nada.
+  const handleExcluirRede = async (tipo, rede) => {
     try {
-      for (const u of usuarios) await usuariosSistemaService.excluirUsuario(u.id);
-      if (tipo === 'webposto') await mapService.excluirChaveApi(rede.chaveApiId);
-      else await autosystemService.excluirRede(rede.id);
-      showToast('success', `Rede "${rede.nome || rede.chaveApi?.nome || ''}" excluída`);
+      const r = await clientesService.excluirRedeCompleta(idRede(tipo, rede));
+      showToast('success', `Rede "${rede.nome || rede.chaveApi?.nome || ''}" excluída (${r?.empresas ?? 0} empresa(s), ${r?.usuarios ?? 0} usuário(s))`);
       await carregar();
     } catch (err) {
       showToast('error', err.message);
@@ -550,10 +550,10 @@ export default function Clientes({ embedded = false }) {
           const nomes = usuarios.map(u => u.nome).join(', ');
           setModalConfirm({
             open: true,
-            message: `Excluir a rede "${rede?.nome || rede?.chaveApi?.nome || ''}"? As parametrizações da rede serão apagadas e as empresas ficarão sem rede.`
+            message: `Excluir a rede "${rede?.nome || rede?.chaveApi?.nome || ''}"? Serão apagadas TODAS as empresas da rede (${(tipo === 'webposto' ? rede?.empresas?.length : null) ?? 'todas'}) com seus cadastros e lançamentos (tarefas, sangrias, extratos, conciliações, mapeamentos) e os parâmetros da rede.`
               + (usuarios.length ? ` ${usuarios.length === 1 ? 'O usuário' : `Os ${usuarios.length} usuários`} da rede também ${usuarios.length === 1 ? 'será excluído' : 'serão excluídos'}: ${nomes}.` : '')
               + ' Esta ação não pode ser desfeita.',
-            onConfirm: () => { handleExcluirRede(tipo, rede, usuarios); setModalConfirm({ open: false }); setModalRedeHub({ open: false, tipo: null, rede: null }); },
+            onConfirm: () => { handleExcluirRede(tipo, rede); setModalConfirm({ open: false }); setModalRedeHub({ open: false, tipo: null, rede: null }); },
           });
         }}
         onToggleRelatorio={handleToggleRelatorioAS}

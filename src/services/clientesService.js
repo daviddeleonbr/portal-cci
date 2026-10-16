@@ -137,3 +137,11 @@ export async function definirMascarasRedeDre(rede, mascaraIds) {
 export async function definirMascarasRedeFluxo(rede, mascaraIds) {
   return _definirMascarasRede('mascara_fluxo_rede', rede, mascaraIds);
 }
+
+// Exclui a rede inteira: empresas (e tudo delas), usuários, parâmetros e a rede.
+// `rede`: { chave_api_id } (Webposto) ou { as_rede_id } (Autosystem). Só admin.
+export async function excluirRedeCompleta({ chave_api_id = null, as_rede_id = null }) {
+  const { data, error } = await supabase.rpc('cci_excluir_rede', { p_chave_api_id: chave_api_id, p_as_rede_id: as_rede_id });
+  if (error) throw error;
+  return data;
+}

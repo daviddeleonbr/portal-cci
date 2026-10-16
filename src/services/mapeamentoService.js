@@ -7,6 +7,7 @@ export async function listarChavesApi() {
   const { data: chaves, error } = await supabase
     .from('chaves_api')
     .select('*')
+    .is('excluida_em', null) // rede excluída aguardando a purga do cache (migration 200)
     .order('created_at', { ascending: false });
   if (error) throw error;
 
