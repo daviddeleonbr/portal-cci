@@ -16,6 +16,7 @@ import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import * as autosystemService from '../services/autosystemService';
+import * as usuariosSistemaService from '../services/usuariosSistemaService';
 import * as catalogoCartaoService from '../services/bpoCartaoCatalogoService';
 import * as contasBancariasService from '../services/clienteContasBancariasService';
 import * as administradorasService from '../services/clienteAdministradorasService';
@@ -88,8 +89,11 @@ export default function Clientes({ embedded = false }) {
 
   // Webposto = chaves_api; Autosystem = as_rede. Empresas da rede ficam sem
   // vínculo (FK set null); parametrizações da rede são apagadas (cascade).
-  const handleExcluirRede = async (tipo, rede) => {
+  // Usuários da rede saem junto (usuário de cliente precisa de uma rede).
+  const idRede = (tipo, rede) => (tipo === 'webposto' ? { chave_api_id: rede.chaveApiId } : { as_rede_id: rede.id });
+  const handleExcluirRede = async (tipo, rede, usuarios = []) => {
     try {
+      for (const u of usuarios) await usuariosSistemaService.excluirUsuario(u.id);
       if (tipo === 'webposto') await mapService.excluirChaveApi(rede.chaveApiId);
       else await autosystemService.excluirRede(rede.id);
       showToast('success', `Rede "${rede.nome || rede.chaveApi?.nome || ''}" excluída`);
@@ -538,11 +542,20 @@ export default function Clientes({ embedded = false }) {
         onClose={() => setModalRedeHub({ open: false, tipo: null, rede: null })}
         showToast={showToast}
         paineis={paineisRedeHub}
-        onExcluirRede={() => setModalConfirm({
-          open: true,
-          message: `Excluir a rede "${modalRedeHub.rede?.nome || modalRedeHub.rede?.chaveApi?.nome || ''}"? As parametrizações da rede serão apagadas e as empresas ficarão sem rede. Esta ação não pode ser desfeita.`,
-          onConfirm: () => { handleExcluirRede(modalRedeHub.tipo, modalRedeHub.rede); setModalConfirm({ open: false }); setModalRedeHub({ open: false, tipo: null, rede: null }); },
-        })}
+        onExcluirRede={async () => {
+          const { tipo, rede } = modalRedeHub;
+          let usuarios = [];
+          try { usuarios = await usuariosSistemaService.listarUsuariosDaRede(idRede(tipo, rede)); }
+          catch (err) { showToast('error', 'Erro ao listar os usuários da rede: ' + err.message); return; }
+          const nomes = usuarios.map(u => u.nome).join(', ');
+          setModalConfirm({
+            open: true,
+            message: `Excluir a rede "${rede?.nome || rede?.chaveApi?.nome || ''}"? As parametrizações da rede serão apagadas e as empresas ficarão sem rede.`
+              + (usuarios.length ? ` ${usuarios.length === 1 ? 'O usuário' : `Os ${usuarios.length} usuários`} da rede também ${usuarios.length === 1 ? 'será excluído' : 'serão excluídos'}: ${nomes}.` : '')
+              + ' Esta ação não pode ser desfeita.',
+            onConfirm: () => { handleExcluirRede(tipo, rede, usuarios); setModalConfirm({ open: false }); setModalRedeHub({ open: false, tipo: null, rede: null }); },
+          });
+        }}
         onToggleRelatorio={handleToggleRelatorioAS}
         togglesAtivos={togglesAtivosAS}
       />
