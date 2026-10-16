@@ -86,10 +86,13 @@ export default function Clientes({ embedded = false }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const handleExcluirRedeAS = async (rede) => {
+  // Webposto = chaves_api; Autosystem = as_rede. Empresas da rede ficam sem
+  // vínculo (FK set null); parametrizações da rede são apagadas (cascade).
+  const handleExcluirRede = async (tipo, rede) => {
     try {
-      await autosystemService.excluirRede(rede.id);
-      showToast('success', `Rede "${rede.nome}" excluída`);
+      if (tipo === 'webposto') await mapService.excluirChaveApi(rede.chaveApiId);
+      else await autosystemService.excluirRede(rede.id);
+      showToast('success', `Rede "${rede.nome || rede.chaveApi?.nome || ''}" excluída`);
       await carregar();
     } catch (err) {
       showToast('error', err.message);
@@ -537,8 +540,8 @@ export default function Clientes({ embedded = false }) {
         paineis={paineisRedeHub}
         onExcluirRede={() => setModalConfirm({
           open: true,
-          message: `Excluir a rede "${modalRedeHub.rede?.nome}"? Esta ação não pode ser desfeita.`,
-          onConfirm: () => { handleExcluirRedeAS(modalRedeHub.rede); setModalConfirm({ open: false }); setModalRedeHub({ open: false, tipo: null, rede: null }); },
+          message: `Excluir a rede "${modalRedeHub.rede?.nome || modalRedeHub.rede?.chaveApi?.nome || ''}"? As parametrizações da rede serão apagadas e as empresas ficarão sem rede. Esta ação não pode ser desfeita.`,
+          onConfirm: () => { handleExcluirRede(modalRedeHub.tipo, modalRedeHub.rede); setModalConfirm({ open: false }); setModalRedeHub({ open: false, tipo: null, rede: null }); },
         })}
         onToggleRelatorio={handleToggleRelatorioAS}
         togglesAtivos={togglesAtivosAS}

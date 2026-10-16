@@ -86,7 +86,7 @@ export const PERMISSOES_ADMIN = [
   { key: 'relatorios_bi', label: 'Relatórios de BI (Power BI)', grupo: 'Consultoria' },
   { key: 'analise_ia', label: 'Análise com IA (Claude)', grupo: 'Consultoria' },
   { key: 'conciliacao_caixas', label: 'Conciliação de Caixas', grupo: 'BPO' },
-  { key: 'caixa_administrativo', label: 'Caixa Administrativo', grupo: 'BPO' },
+  { key: 'caixa_administrativo', label: 'Caixa Administrativo', grupo: 'Consultoria' },
   { key: 'notificacoes', label: 'Notificações (enviar)', grupo: 'Comunicação' },
   { key: 'mensagens_iniciais', label: 'Mensagens Iniciais (modal cliente)', grupo: 'Comunicação' },
   { key: 'melhorias', label: 'Melhorias de Sistema (sugestões clientes)', grupo: 'Comunicação' },

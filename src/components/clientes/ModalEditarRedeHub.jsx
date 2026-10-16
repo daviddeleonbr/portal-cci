@@ -134,15 +134,13 @@ export default function ModalEditarRedeHub({
           )}
         </div>
 
-        {/* Footer (Autosystem: excluir rede) */}
-        {!webposto && (
-          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center">
-            <button onClick={onExcluirRede}
-              className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-red-600 hover:text-red-700">
-              <Trash2 className="h-3.5 w-3.5" /> Excluir rede
-            </button>
-          </div>
-        )}
+        {/* Footer: excluir rede (Webposto e Autosystem) */}
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center">
+          <button onClick={onExcluirRede}
+            className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-red-600 hover:text-red-700">
+            <Trash2 className="h-3.5 w-3.5" /> Excluir rede
+          </button>
+        </div>
       </div>
     </div>
   );
