@@ -106,44 +106,67 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
           {lista.length === 0 ? 'Nenhum acesso cadastrado — clique em “Novo acesso”.' : 'Nenhum acesso para esse filtro.'}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {filtrada.map(a => {
-            const rede = empresasDaRede.get(chaveRede(a)) || [];
-            return (
-              <div key={a.id} className="flex flex-col rounded-xl border border-gray-200/70 bg-white p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-[15px] font-semibold text-gray-900" title={a.plataforma}>{a.plataforma}</span>
-                      <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${CAT_CLS[a.categoria] || CAT_CLS.outro}`}>{rotCategoria(a.categoria)}</span>
-                    </div>
-                    <p className="mt-0.5 truncate text-[11.5px] text-gray-500" title={a.cliente_id ? nomeCliente(a.cliente) : rede.join(', ')}>
-                      {a.cliente_id ? nomeCliente(a.cliente) : `Toda a rede${rede.length ? ` · ${rede.length} empresa${rede.length > 1 ? 's' : ''}` : ''}`}
-                    </p>
-                  </div>
-                  <div className="flex flex-shrink-0 gap-0.5">
-                    <button onClick={() => setEditando(a)} title="Editar" className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Pencil className="h-4 w-4" /></button>
-                    {admin && <button onClick={() => excluir(a)} title="Excluir" className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}
-                  </div>
-                </div>
-                {a.url && (
-                  <a href={linkUrl(a.url)} target="_blank" rel="noopener noreferrer"
-                    className="mt-1.5 inline-flex max-w-full items-center gap-1 truncate text-[12px] text-teal-700 hover:underline">
-                    <ExternalLink className="h-3 w-3 flex-shrink-0" /><span className="truncate">{a.url}</span>
-                  </a>
-                )}
-                <div className="mt-3 space-y-1.5">
-                  <CampoSegredo rot="Login" valor={a.login} />
-                  <CampoSegredo rot="Senha" valor={a.senha} oculto />
-                  {a.contrassenha && <CampoSegredo rot="Contrassenha" valor={a.contrassenha} oculto />}
-                </div>
-                {a.observacao && <p className="mt-2 whitespace-pre-line text-[12px] text-gray-500">{a.observacao}</p>}
-                <p className="mt-auto pt-3 text-[10.5px] text-gray-400">
-                  Atualizado {a.atualizado_por_nome ? `por ${a.atualizado_por_nome} ` : ''}em {fmtData(a.updated_at)}
-                </p>
-              </div>
-            );
-          })}
+        <div className="overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] text-sm">
+              <thead className="border-b border-gray-100 bg-gray-50 text-left text-[10px] uppercase tracking-wider text-gray-400">
+                <tr>
+                  <th className="px-4 py-2.5">Plataforma</th>
+                  <th className="px-3 py-2.5">Empresa</th>
+                  <th className="px-3 py-2.5">Login</th>
+                  <th className="px-3 py-2.5">Senha</th>
+                  <th className="px-3 py-2.5">Contrassenha</th>
+                  <th className="px-3 py-2.5">Atualizado</th>
+                  <th className="w-20 px-3 py-2.5 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtrada.map(a => {
+                  const rede = empresasDaRede.get(chaveRede(a)) || [];
+                  const nomeRede = admin ? redes.find(r => r.value === redeDe(a))?.label : null;
+                  return (
+                    <tr key={a.id} className="align-top hover:bg-gray-50/70">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-gray-900">{a.plataforma}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${CAT_CLS[a.categoria] || CAT_CLS.outro}`}>{rotCategoria(a.categoria)}</span>
+                        </div>
+                        {a.url && (
+                          <a href={linkUrl(a.url)} target="_blank" rel="noopener noreferrer" title={a.url}
+                            className="mt-0.5 inline-flex max-w-[260px] items-center gap-1 text-[11.5px] text-teal-700 hover:underline">
+                            <ExternalLink className="h-3 w-3 flex-shrink-0" /><span className="truncate">{a.url.replace(/^https?:\/\//, '')}</span>
+                          </a>
+                        )}
+                        {a.observacao && <p className="mt-0.5 max-w-[300px] whitespace-pre-line text-[11.5px] text-gray-500">{a.observacao}</p>}
+                      </td>
+                      <td className="px-3 py-2.5 text-[12.5px] text-gray-700">
+                        {a.cliente_id ? nomeCliente(a.cliente) : (
+                          <span title={rede.join(', ')}>
+                            Toda a rede{nomeRede ? ` · ${nomeRede}` : ''}
+                            <span className="block text-[11px] text-gray-400">{rede.length} empresa{rede.length !== 1 ? 's' : ''}</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5"><CampoSegredo valor={a.login} /></td>
+                      <td className="px-3 py-2.5"><CampoSegredo valor={a.senha} oculto /></td>
+                      <td className="px-3 py-2.5"><CampoSegredo valor={a.contrassenha} oculto /></td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-[11.5px] text-gray-500">
+                        {fmtData(a.updated_at)}
+                        {a.atualizado_por_nome && <span className="block text-gray-400">{a.atualizado_por_nome}</span>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex justify-end gap-0.5">
+                          <button onClick={() => setEditando(a)} title="Editar" className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Pencil className="h-4 w-4" /></button>
+                          {admin && <button onClick={() => excluir(a)} title="Excluir" className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-400">{filtrada.length} acesso(s)</div>
         </div>
       )}
 
@@ -158,8 +181,8 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
   );
 }
 
-// Valor com copiar e (para senhas) mostrar/ocultar.
-function CampoSegredo({ rot, valor, oculto = false }) {
+// Célula da tabela: valor com copiar e (para senhas) mostrar/ocultar.
+function CampoSegredo({ valor, oculto = false }) {
   const [ver, setVer] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const copiar = async () => {
@@ -167,9 +190,8 @@ function CampoSegredo({ rot, valor, oculto = false }) {
     catch { /* sem permissão de área de transferência */ }
   };
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-2.5 py-1.5">
-      <span className="w-[5.5rem] flex-shrink-0 text-[10.5px] font-semibold uppercase tracking-wide text-gray-400">{rot}</span>
-      <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-gray-800">
+    <div className="flex max-w-[240px] items-center gap-1">
+      <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-gray-800" title={oculto ? undefined : valor || undefined}>
         {!valor ? <span className="font-sans text-gray-300">—</span> : oculto && !ver ? '••••••••' : valor}
       </span>
       {valor && oculto && (
