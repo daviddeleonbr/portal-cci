@@ -3,6 +3,7 @@
 // "ref. sex 02/10" (período a que a tarefa se refere).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Building2, CalendarClock, Check, ChevronDown, FileText, Plus, Search, X } from 'lucide-react';
 import { rotuloReferencia } from '../../utils/tarefas';
 
@@ -94,12 +95,51 @@ export function EmpresasMultiSelect({ empresas, value, onChange, placeholder = '
   );
 }
 
+// Posição do painel flutuante (fixed, relativo à janela): abre para baixo ou,
+// sem espaço, para cima. Vai num portal no <body> para não ser cortado pelo
+// overflow de modais/tabelas.
+function posicaoPainel(el) {
+  const r = el.getBoundingClientRect();
+  const alturaMax = 300;
+  const abaixo = window.innerHeight - r.bottom;
+  const paraCima = abaixo < alturaMax && r.top > abaixo;
+  return {
+    left: r.left, width: Math.max(r.width, 220),
+    ...(paraCima ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
+  };
+}
+
 // Escolha ÚNICA com busca (ex.: responsável). `vazio` é a opção sem valor (''),
-// sempre no topo. O painel flutua sobre o conteúdo.
+// sempre no topo. O painel flutua sobre o conteúdo (portal, não é cortado).
 export function SelectBusca({ opcoes, value, onChange, vazio, placeholderBusca = 'Buscar…', vazioLista = 'Ninguém encontrado.' }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
-  const ref = useFechaFora(aberto, setAberto);
+  const [pos, setPos] = useState(null);
+  const ref = useRef(null);
+  const painelRef = useRef(null);
+
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const fora = (ev) => {
+      if (ref.current?.contains(ev.target) || painelRef.current?.contains(ev.target)) return;
+      setAberto(false);
+    };
+    const esc = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); setAberto(false); } };
+    const reposiciona = (ev) => {
+      if (painelRef.current?.contains(ev?.target)) return; // rolagem da própria lista
+      if (ref.current) setPos(posicaoPainel(ref.current));
+    };
+    document.addEventListener('mousedown', fora);
+    document.addEventListener('keydown', esc, true);
+    window.addEventListener('resize', reposiciona);
+    window.addEventListener('scroll', reposiciona, true);
+    return () => {
+      document.removeEventListener('mousedown', fora);
+      document.removeEventListener('keydown', esc, true);
+      window.removeEventListener('resize', reposiciona);
+      window.removeEventListener('scroll', reposiciona, true);
+    };
+  }, [aberto]);
 
   const filtradas = useMemo(() => {
     const q = norm(busca.trim());
@@ -120,13 +160,14 @@ export function SelectBusca({ opcoes, value, onChange, vazio, placeholderBusca =
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => { setBusca(''); setAberto(!aberto); }}
+      <button type="button" onClick={() => { setBusca(''); if (!aberto) setPos(posicaoPainel(ref.current)); setAberto(!aberto); }}
         className={`flex w-full items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-left text-sm outline-none transition-colors ${aberto ? 'border-teal-500 ring-2 ring-teal-100' : 'border-gray-200 hover:border-gray-300'}`}>
         <span className={`min-w-0 flex-1 truncate ${atual ? 'text-gray-900' : 'text-gray-500'}`}>{atual?.label ?? vazio ?? 'Selecione'}</span>
         <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-400 transition-transform ${aberto ? 'rotate-180' : ''}`} />
       </button>
-      {aberto && (
-        <div className="absolute left-0 right-0 z-30 mt-1 min-w-[220px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+      {aberto && pos && createPortal(
+        <div ref={painelRef} style={{ position: 'fixed', ...pos }}
+          className="z-[70] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
           <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2">
             <Search className="h-4 w-4 text-gray-400" />
             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder={placeholderBusca} autoFocus
@@ -138,7 +179,8 @@ export function SelectBusca({ opcoes, value, onChange, vazio, placeholderBusca =
             {filtradas.map(o => item(o.value, o.label))}
             {filtradas.length === 0 && <li className="px-3 py-3 text-center text-[12px] text-gray-400">{vazioLista}</li>}
           </ul>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

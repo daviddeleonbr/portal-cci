@@ -5,8 +5,9 @@ import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, Wallet, Printer,
   EyeOff, Eye, ChevronLeft as ChevLeft, Download,
-  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale, Activity, Truck,
+  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale, Activity, Truck, Sparkles,
 } from 'lucide-react';
+import AnaliseQuedasFluxo from '../components/ia/AnaliseQuedasFluxo';
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as RTooltip, ReferenceLine, Layer, useXAxisScale, usePlotArea,
@@ -131,6 +132,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
   const [activeTab, setActiveTab] = useState('fluxo'); // 'fluxo' | 'empresa' | 'evolucao'
+  const [analiseQuedasAberta, setAnaliseQuedasAberta] = useState(false); // IA das quedas (só admin)
+  // Durante a impressão da análise de quedas, o CSS de impressão desta tela
+  // (margens de página, tabelas, títulos) fica desligado para não deformar o timbrado.
+  const [imprimindoQuedas, setImprimindoQuedas] = useState(false);
   // Granularidade do gráfico de Evolução: 'auto' (pelo período) | 'dia' | 'semana' | 'mes'.
   // Granularidade da Evolução — default 'dia' (o usuário pode trocar p/ Semana/Mês).
   const [granEvol, setGranEvol] = useState('dia');
@@ -2218,7 +2223,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   return (
     <div>
       <style>{`
-        @media print {
+        @media ${imprimindoQuedas ? 'not all' : 'print'} {
           html, body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           html *, body * { background: transparent !important; background-color: transparent !important; box-shadow: none !important; }
           .no-print { display: none !important; }
@@ -2341,12 +2346,33 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Atualizar
           </button>
+          {!modoCliente && (
+            <button onClick={() => setAnaliseQuedasAberta(true)} disabled={!reportReady}
+              title="Análise de IA das quedas do caixa, por empresa"
+              className="flex items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50">
+              <Sparkles className="h-4 w-4" /> Análise de quedas (IA)
+            </button>
+          )}
           <button onClick={handlePrint} disabled={!reportReady}
             className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors disabled:opacity-50">
             <Printer className="h-4 w-4" /> Gerar PDF
           </button>
         </div>
       </motion.div>
+
+      {analiseQuedasAberta && !modoCliente && (
+        <AnaliseQuedasFluxo
+          onFechar={() => setAnaliseQuedasAberta(false)}
+          onImprimindo={setImprimindoQuedas}
+          empresas={(modoRede ? (cliente?._empresas || []) : [cliente])
+            .filter(e => e && (!modoRede || e.empresa_codigo != null))
+            .map(e => ({ id: e.id, nome: e.razao_social || e.nome, cnpj: e.cnpj, empresa_codigo: e.empresa_codigo }))
+            .sort((a, b) => String(a.nome).localeCompare(String(b.nome)))}
+          contexto={{
+            dadosPorMes, meses, grupos, mapeamentos, tipoPorConta, titulosPorPagamento, modoRede,
+            chaveApiId: cliente?.chave_api_id || null, asRedeId: cliente?.as_rede_id || null,
+          }} />
+      )}
 
       {/* Print header — identidade CCI (logo autêntico + régua-assinatura teal/âmbar) */}
       <div className="print-only" style={{ display: 'none', marginBottom: 14 }}>

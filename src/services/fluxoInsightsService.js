@@ -99,7 +99,8 @@ function construirTipoPorConta(contasClassificadas) {
 }
 
 function contaEntra(mapa, contaCodigo) {
-  const tipo = mapa.get(Number(contaCodigo));
+  // Mapa por Number (Webposto) ou por String (tela de Fluxo / Autosystem).
+  const tipo = mapa.get(Number(contaCodigo)) ?? mapa.get(String(contaCodigo));
   return tipo === 'bancaria' || tipo === 'caixa';
 }
 
