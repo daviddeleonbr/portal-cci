@@ -74,6 +74,12 @@ function useAlturaAteFim(margem = 24) {
   return [ref, altura];
 }
 
+// Borda suave de cada coluna, na cor do status (claro e escuro — ver index.css).
+const BORDA_STATUS = {
+  a_fazer: 'border-gray-200', em_andamento: 'border-blue-200', atrasada: 'border-rose-200',
+  aguardando_validacao: 'border-purple-200', concluida: 'border-emerald-200',
+};
+
 function Kanban({ tarefas, gestor, onAbrir, onAlterado, onErro }) {
   const [arrastando, setArrastando] = useState(null);
   const [quadroRef, altura] = useAlturaAteFim();
@@ -102,7 +108,7 @@ function Kanban({ tarefas, gestor, onAbrir, onAlterado, onErro }) {
     <div ref={quadroRef} className="flex gap-3 overflow-x-auto pb-2" style={altura ? { height: altura } : undefined}>
       {COLUNAS.map(c => (
         <div key={c.k} onDragOver={e => e.preventDefault()} onDrop={() => soltar(c.k)}
-          className={`flex min-h-0 min-w-[15rem] flex-1 flex-col rounded-xl bg-gray-50 p-2 ${arrastando ? 'ring-1 ring-dashed ring-gray-300' : ''}`}>
+          className={`flex min-h-0 min-w-[15rem] flex-1 flex-col rounded-xl border bg-gray-50 p-2 ${BORDA_STATUS[c.k]} ${arrastando ? 'ring-1 ring-dashed ring-gray-300' : ''}`}>
           <div className="mb-2 flex items-center justify-between px-1">
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_TAREFA[c.k].cls}`}>{c.rot}</span>
             <span className="text-xs tabular-nums text-gray-400">{porColuna[c.k].length}</span>
