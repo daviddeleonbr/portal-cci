@@ -73,17 +73,17 @@ export default function PapelTimbrado() {
         </defs>
         <rect className="st3" width="2100" height="2970"/>
         <g>
-          <text className="st4" transform="translate(1638.1 215)"><tspan x="0" y="0">CNPJ 57.268.175/0001-00</tspan></text>
-          <text className="st7" transform="translate(1568.4 245)"><tspan x="0" y="0">Rua Humaitá, Divino Espírito Santo</tspan></text>
-          <text className="st7" transform="translate(1652.9 272)"><tspan x="0" y="0">Vila Velha · ES · 29.107-250</tspan></text>
+          <text className="st4" x="1638.1" y="215"><tspan>CNPJ 57.268.175/0001-00</tspan></text>
+          <text className="st7" x="1568.4" y="245"><tspan>Rua Humaitá, Divino Espírito Santo</tspan></text>
+          <text className="st7" x="1652.9" y="272"><tspan>Vila Velha · ES · 29.107-250</tspan></text>
         </g>
         <line className="st1" x1="180" y1="380" x2="1920" y2="380"/>
         <line className="st0" x1="180" y1="380" x2="290" y2="380"/>
         <line className="st2" x1="120" y1="500" x2="120" y2="2680"/>
         <line className="st1" x1="180" y1="2740" x2="1920" y2="2740"/>
         <g>
-          <text className="st6" transform="translate(1530.1 2790)"><tspan x="0" y="0">+55 (27) 99925-0088 · contato@cci.app.br</tspan></text>
-          <text className="st5" transform="translate(1657.8 2818)"><tspan x="0" y="0">cci.app.br · @cci.consultoria</tspan></text>
+          <text className="st6" x="1530.1" y="2790"><tspan>+55 (27) 99925-0088 · contato@cci.app.br</tspan></text>
+          <text className="st5" x="1657.8" y="2818"><tspan>cci.app.br · @cci.consultoria</tspan></text>
         </g>
         <rect className="st9" x="1860" y="2880" width="60" height="6"/>
         <g>
