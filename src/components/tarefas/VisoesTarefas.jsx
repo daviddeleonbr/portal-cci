@@ -1,7 +1,7 @@
 // Visões das tarefas: Lista | Kanban | Agenda (a escolhida fica salva no
 // navegador). Usado pela CCI (gestor) e pelo funcionário.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { List, Columns3, CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import ListaTarefas from './ListaTarefas';
 import { ReferenciaBadge } from './CamposTarefas';
@@ -53,8 +53,30 @@ const COLUNAS = [
   { k: 'concluida', rot: 'Concluída' },
 ];
 
+// Altura do quadro = do topo dele até o fim da janela (as colunas rolam por dentro).
+function useAlturaAteFim(margem = 24) {
+  const ref = useRef(null);
+  const [altura, setAltura] = useState(null);
+  useEffect(() => {
+    let raf = 0;
+    const medir = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!ref.current) return;
+        const topo = ref.current.getBoundingClientRect().top + window.scrollY;
+        setAltura(Math.max(320, window.innerHeight - topo - margem));
+      });
+    };
+    medir();
+    window.addEventListener('resize', medir);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', medir); };
+  }, [margem]);
+  return [ref, altura];
+}
+
 function Kanban({ tarefas, gestor, onAbrir, onAlterado, onErro }) {
   const [arrastando, setArrastando] = useState(null);
+  const [quadroRef, altura] = useAlturaAteFim();
   const porColuna = useMemo(() => {
     const m = Object.fromEntries(COLUNAS.map(c => [c.k, []]));
     tarefas.forEach(t => { const st = statusEfetivo(t); if (m[st]) m[st].push(t); });
@@ -77,15 +99,15 @@ function Kanban({ tarefas, gestor, onAbrir, onAlterado, onErro }) {
   };
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
+    <div ref={quadroRef} className="flex gap-3 overflow-x-auto pb-2" style={altura ? { height: altura } : undefined}>
       {COLUNAS.map(c => (
         <div key={c.k} onDragOver={e => e.preventDefault()} onDrop={() => soltar(c.k)}
-          className={`flex min-w-[15rem] flex-1 flex-col rounded-xl bg-gray-50 p-2 ${arrastando ? 'ring-1 ring-dashed ring-gray-300' : ''}`}>
+          className={`flex min-h-0 min-w-[15rem] flex-1 flex-col rounded-xl bg-gray-50 p-2 ${arrastando ? 'ring-1 ring-dashed ring-gray-300' : ''}`}>
           <div className="mb-2 flex items-center justify-between px-1">
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_TAREFA[c.k].cls}`}>{c.rot}</span>
             <span className="text-xs tabular-nums text-gray-400">{porColuna[c.k].length}</span>
           </div>
-          <div className="flex-1 space-y-2 min-h-[4rem]">
+          <div className="min-h-[4rem] flex-1 space-y-2 overflow-y-auto pr-0.5">
             {porColuna[c.k].map(t => (
               <div key={t.id} draggable onDragStart={() => setArrastando(t)} onDragEnd={() => setArrastando(null)}
                 onClick={() => onAbrir(t)}
@@ -114,9 +136,16 @@ const DIAS_SEM = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 const chaveDia = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 function inicioSemana(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
 
+// Cor do ponto de status na Agenda.
+const PONTO_STATUS = {
+  a_fazer: 'bg-slate-400', em_andamento: 'bg-blue-500', atrasada: 'bg-rose-500',
+  aguardando_validacao: 'bg-violet-500', concluida: 'bg-emerald-500', cancelada: 'bg-gray-300',
+};
+
 function Agenda({ tarefas, rotinas, onAbrir }) {
   const [modo, setModo] = useState('semana');
   const [ref, setRef] = useState(() => new Date());
+  const [quadroRef, altura] = useAlturaAteFim();
 
   const dias = useMemo(() => {
     if (modo === 'semana') {
@@ -152,8 +181,9 @@ function Agenda({ tarefas, rotinas, onAbrir }) {
     : ref.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="rounded-xl border border-gray-200/70 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
+    <div ref={quadroRef} className="flex flex-col overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-sm"
+      style={altura ? { height: altura } : undefined}>
+      <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
         <div className="flex items-center gap-1">
           <button onClick={() => andar(-1)} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"><ChevronLeft className="h-4 w-4" /></button>
           <button onClick={() => setRef(new Date())} className="rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">Hoje</button>
@@ -167,44 +197,46 @@ function Agenda({ tarefas, rotinas, onAbrir }) {
           ))}
         </div>
       </div>
-      <div className="grid grid-cols-7 border-b border-gray-100 text-center text-[10.5px] font-semibold uppercase tracking-wider text-gray-400">
+      <div className="grid flex-shrink-0 grid-cols-7 border-b border-gray-100 text-center text-[10.5px] font-semibold uppercase tracking-wider text-gray-400">
         {DIAS_SEM.map(d => <div key={d} className="py-1.5">{d}</div>)}
       </div>
-      <div className="grid grid-cols-7">
+      {/* Linhas dividem a altura disponível; cada dia rola por dentro. */}
+      <div className="grid min-h-0 flex-1 grid-cols-7 auto-rows-fr overflow-y-auto">
         {dias.map(d => {
           const lista = porDia.get(chaveDia(d)) || [];
           const prev = previstas(d);
           const foraMes = modo === 'mes' && d.getMonth() !== ref.getMonth();
           const ehHoje = d.getTime() === hoje.getTime();
-          const limite = modo === 'semana' ? 50 : 3;
+          const limite = modo === 'semana' ? 50 : 8;
           return (
-            <div key={d.toISOString()} className={`border-b border-r border-gray-100 p-1.5 ${modo === 'semana' ? 'min-h-[12rem]' : 'min-h-[6.5rem]'} ${foraMes ? 'bg-gray-50/60' : ''}`}>
+            <div key={d.toISOString()} className={`overflow-y-auto border-b border-r border-gray-100 p-1.5 ${modo === 'semana' ? 'min-h-[12rem]' : 'min-h-[5rem]'} ${foraMes ? 'bg-gray-50/60' : ''}`}>
               <p className={`mb-1 text-right text-[11px] ${ehHoje ? 'font-bold text-blue-600' : foraMes ? 'text-gray-300' : 'text-gray-500'}`}>{d.getDate()}</p>
               <div className="space-y-1">
                 {lista.slice(0, limite).map(t => {
                   const st = statusEfetivo(t);
                   return (
-                    <button key={t.id} onClick={() => onAbrir(t)} title={t.titulo}
-                      className={`block w-full truncate rounded px-1.5 py-0.5 text-left text-[10.5px] font-medium ${STATUS_TAREFA[st].cls}`}>
-                      {t.titulo}
+                    <button key={t.id} onClick={() => onAbrir(t)} title={`${t.titulo} — ${STATUS_TAREFA[st].rotulo}`}
+                      className={`flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[10.5px] font-medium ${STATUS_TAREFA[st].cls}`}>
+                      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${PONTO_STATUS[st] || 'bg-gray-400'}`} aria-hidden="true" />
+                      <span className="min-w-0 truncate">{t.titulo}</span>
                     </button>
                   );
                 })}
                 {lista.length > limite && <p className="px-1 text-[10px] text-gray-400">+{lista.length - limite} mais</p>}
-                {prev.slice(0, modo === 'semana' ? 20 : 2).map(r => (
+                {prev.slice(0, modo === 'semana' ? 20 : 4).map(r => (
                   <p key={r.id} title={`Prevista — rotina ${r.nome}`}
                     className="truncate rounded border border-dashed border-gray-300 px-1.5 py-0.5 text-[10.5px] text-gray-400">
                     {r.nome}
                   </p>
                 ))}
-                {modo === 'mes' && prev.length > 2 && <p className="px-1 text-[10px] text-gray-300">+{prev.length - 2} previstas</p>}
+                {modo === 'mes' && prev.length > 4 && <p className="px-1 text-[10px] text-gray-300">+{prev.length - 4} previstas</p>}
               </div>
             </div>
           );
         })}
       </div>
       {rotinas.length > 0 && (
-        <p className="px-3 py-2 text-[11px] text-gray-400">Contorno tracejado = ocorrência prevista de rotina (a tarefa é gerada no próprio dia).</p>
+        <p className="flex-shrink-0 px-3 py-2 text-[11px] text-gray-400">Contorno tracejado = ocorrência prevista de rotina (a tarefa é gerada no próprio dia).</p>
       )}
     </div>
   );
