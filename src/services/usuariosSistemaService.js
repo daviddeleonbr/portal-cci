@@ -257,6 +257,13 @@ export async function atualizarUsuario(id, campos) {
   return { id };
 }
 
+// O próprio usuário troca a senha (modal "Meu perfil"): o servidor confere a
+// senha atual (hash) e grava a nova — migration 202.
+export async function alterarMinhaSenha(atual, nova) {
+  const { error } = await supabase.rpc('cci_alterar_minha_senha', { p_atual: atual, p_nova: nova });
+  if (error) throw error;
+}
+
 export async function excluirUsuario(id) {
   const { error } = await supabase.rpc('cci_gerir_excluir_usuario', { p_id: id });
   if (error) throw error;

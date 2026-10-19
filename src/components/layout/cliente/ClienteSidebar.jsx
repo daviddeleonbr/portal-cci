@@ -12,6 +12,7 @@ import {
 import { useClienteSession } from '../../../hooks/useAuth';
 import LogoCCI from '../../ui/LogoCCI';
 import { logoutCliente } from '../../../lib/auth';
+import PerfilModalCliente from './PerfilModalCliente';
 import * as pendenciasService from '../../../services/pendenciasService';
 
 // Os hrefs são montados em runtime com prefixo `/cliente/<tipoCliente>`
@@ -206,8 +207,10 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
     });
   };
 
+  const [perfilAberto, setPerfilAberto] = useState(false);
   const handleLogout = (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
+    setPerfilAberto(false);
     logoutCliente();
     navigate('/cliente/login', { replace: true });
   };
@@ -388,6 +391,8 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
       {/* Bottom: User — recolhida: só o avatar; expandida: avatar + nome + sair */}
       <div className="flex-shrink-0 border-t border-gray-100 p-2">
         <div className="flex items-center gap-2.5 overflow-hidden rounded-lg bg-gray-50 p-2 border border-gray-100">
+          <button type="button" onClick={() => setPerfilAberto(true)} title="Meu perfil"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left hover:opacity-80">
           <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 flex-shrink-0">
             {initials}
             <div className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-gray-50" />
@@ -396,12 +401,14 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
             <p className="text-[12px] font-medium text-gray-900 truncate leading-tight">{nomeCliente}</p>
             <p className="text-[10.5px] text-gray-400 truncate leading-tight mt-0.5">{cnpjCliente}</p>
           </div>
+          </button>
           <button onClick={handleLogout} title="Sair"
             className={`rounded-md p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 ${FADE}`}>
             <LogOut className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
+      {perfilAberto && <PerfilModalCliente onClose={() => setPerfilAberto(false)} onSair={handleLogout} />}
     </aside>
   );
 }
