@@ -2463,7 +2463,11 @@ export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, i
     } finally { setSincronizando(false); }
   };
 
-  const mudarFrota = (item, frota) => salvarCampos(item, { frota });
+  // Frota = sempre crédito: ao marcar, a modalidade vira crédito (se o catálogo tiver).
+  const mudarFrota = (item, frota) => {
+    const credito = catalogo.modalidades.find(m => /cr[eé]dito/i.test(m.nome) && !/pr[eé]/i.test(m.nome))?.nome;
+    salvarCampos(item, frota && credito ? { frota, modalidade: credito } : { frota });
+  };
   // Salva na hora (frota ou adquirente/bandeira/modalidade).
   const salvarCampos = async (item, campos) => {
     try {

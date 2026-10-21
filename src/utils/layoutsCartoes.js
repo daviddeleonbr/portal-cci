@@ -152,7 +152,7 @@ const normCol = (h) => semAcento(h).replace(/\s+/g, ' ').trim();
 // existir; desempata pela semelhança do cabeçalho inteiro.
 export function pontuarModelo(modelo, headers) {
   const hs = new Set(headers.map(normCol));
-  const mapeadas = Object.values(modelo.mapeamento || {}).filter(Boolean).map(normCol);
+  const mapeadas = CAMPOS_ARQUIVO.map(c => modelo.mapeamento?.[c]).filter(Boolean).map(normCol);
   if (!mapeadas.length || !mapeadas.every(c => hs.has(c))) return 0;
   const orig = (modelo.colunas || []).map(normCol);
   const comuns = orig.filter(c => hs.has(c)).length;
@@ -181,3 +181,9 @@ export function mapeamentoPorNome(cols, headers) {
 }
 
 export const CAMPOS_ARQUIVO = ['adquirente', 'bandeira', 'modalidade', 'autorizacao', 'valor', 'total', 'parcelas', 'hora'];
+
+// Valores FIXOS quando o arquivo não tem a coluna (ex.: cartão frota é sempre
+// crédito e o arquivo da Good Card não traz débito/crédito). Guardados no
+// modelo em mapeamento.fixos.
+export const CAMPOS_FIXOS = ['bandeira', 'modalidade'];
+export const fixosDoModelo = (modelo) => ({ bandeira: '', modalidade: '', ...(modelo?.mapeamento?.fixos || {}) });

@@ -12,9 +12,10 @@ import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 import { formatCurrency } from '../utils/format';
 import {
   LAYOUTS, layoutPorChave, lerArquivoVendas, detectarLayout, adivinharColunas, sugerirAdquirente,
-  melhorModelo, colsDoModelo, mapeamentoPorNome,
+  melhorModelo, colsDoModelo, mapeamentoPorNome, fixosDoModelo,
 } from '../utils/layoutsCartoes';
 import * as modelosService from '../services/layoutsArquivoCartaoService';
+import * as catalogoCartaoService from '../services/bpoCartaoCatalogoService';
 
 // Layout do arquivo: embutido (Equals, Cielo…) ou modelo salvo ("m:<id>").
 // Modelo sem adquirente fixa = a adquirente vem de uma coluna (como a Equals).
@@ -95,6 +96,8 @@ export default function BpoDiagnosticarCartoes() {
   const [arquivos, setArquivos] = useState([]);
   const [adquirentesRede, setAdquirentesRede] = useState([]); // das contas de cartão da rede
   const [modelos, setModelos] = useState([]); // modelos de layout salvos
+  const [adquirentesCatalogo, setAdquirentesCatalogo] = useState([]); // catálogo (BPO → adquirentes)
+  const [catalogoFixos, setCatalogoFixos] = useState({ bandeiras: [], modalidades: [] }); // p/ valores fixos
   const fileRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
@@ -130,6 +133,12 @@ export default function BpoDiagnosticarCartoes() {
 
   useEffect(() => {
     modelosService.listarModelos().then(setModelos).catch(() => {});
+    catalogoCartaoService.listarCatalogoCartao()
+      .then(c => {
+        setAdquirentesCatalogo((c.adquirentes || []).map(a => a.nome).filter(Boolean));
+        setCatalogoFixos({ bandeiras: (c.bandeiras || []).map(b => b.nome), modalidades: (c.modalidades || []).map(m => m.nome) });
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -164,6 +173,7 @@ export default function BpoDiagnosticarCartoes() {
           id: crypto.randomUUID(), nome: file.name, layout, headers, rows,
           adquirente: modelo ? (modelo.adquirente || '') : sugerirAdquirente(layout, adquirentesRede),
           cols: modelo ? colsDoModelo(modelo, headers) : adivinharColunas(layout, headers),
+          fixos: fixosDoModelo(modelo),
         }]);
         setError(null);
       } catch (err) { setError(`Falha ao ler ${file.name}: ${err.message}`); }
@@ -174,7 +184,7 @@ export default function BpoDiagnosticarCartoes() {
   const trocarLayout = (arq, layout) => {
     const lay = resolverLayout(layout, modelos);
     if (lay.modelo) {
-      alterarArquivo(arq.id, { layout, cols: colsDoModelo(lay.modelo, arq.headers), adquirente: lay.modelo.adquirente || '' });
+      alterarArquivo(arq.id, { layout, cols: colsDoModelo(lay.modelo, arq.headers), adquirente: lay.modelo.adquirente || '', fixos: fixosDoModelo(lay.modelo) });
     } else {
       alterarArquivo(arq.id, { layout, cols: adivinharColunas(layout, arq.headers), adquirente: sugerirAdquirente(layout, adquirentesRede) });
     }
@@ -187,7 +197,7 @@ export default function BpoDiagnosticarCartoes() {
       id: atualizar ? lay.modelo?.id : undefined,
       nome: atualizar ? lay.modelo?.nome : nome,
       adquirente: lay.multi ? null : (arq.adquirente || null),
-      mapeamento: mapeamentoPorNome(arq.cols, arq.headers),
+      mapeamento: { ...mapeamentoPorNome(arq.cols, arq.headers), fixos: arq.fixos || {} },
       colunas: arq.headers,
     });
     setModelos(l => [...l.filter(m => m.id !== salvo.id), salvo].sort((a, b) => a.nome.localeCompare(b.nome)));
@@ -236,8 +246,9 @@ export default function BpoDiagnosticarCartoes() {
         // Linha TOTALIZADORA do relatório: tem valor mas nenhum dado de cartão.
         if (mapeouMeta && ehVazio(r[qi]) && ehVazio(r[bi]) && ehVazio(r[mi])) { ign++; return; }
         const adq = lay.multi ? (qi >= 0 ? normBandeira(r[qi]) : '') : adqFixa;
-        const band = bi >= 0 ? normBandeira(r[bi]) : '';
-        const modal = mi >= 0 ? normModalidade(r[mi]) : '';
+        // Sem a coluna: usa o valor fixo do arquivo (ex.: frota = sempre crédito).
+        const band = bi >= 0 ? normBandeira(r[bi]) : normBandeira(arq.fixos?.bandeira || '');
+        const modal = mi >= 0 ? normModalidade(r[mi]) : (arq.fixos?.modalidade ? normModalidade(arq.fixos.modalidade) : '');
         // Parcelado? Pela coluna de parcelas (>1) ou pelo texto da modalidade ("Parcelado…").
         const nParc = pi >= 0 ? (parseInt(String(r[pi]).replace(/[^\d]/g, ''), 10) || 0) : 0;
         const parceladoEquals = nParc > 1 || (mi >= 0 && textoIndicaParcelado(r[mi]));
@@ -318,7 +329,8 @@ export default function BpoDiagnosticarCartoes() {
           const func = (venda?.funcionarioNome || '').trim();
           sistemaRaw.push({
             adquirente: normBandeira(cfg.adquirente), bandeira: normBandeira(cfg.bandeira || ''),
-            modalidade: normModalidade(cfg.modalidade || ''), autorizacao: aut,
+            // Frota é sempre crédito (vale mesmo sem modalidade informada).
+            modalidade: normModalidade(cfg.frota ? 'Crédito' : (cfg.modalidade || '')), autorizacao: aut,
             parcela: Number(c.parcela) || null, valor: Number(c.valor) || 0,
             conta: String(c.administradoraCodigo), contaNome: cfg.descricao || c.adiministradoraDescricao || c.administradoraDescricao || '',
             data: c.dataMovimento || c.dataFiscal, turno: venda?.caixaCodigo ?? null,
@@ -400,66 +412,60 @@ export default function BpoDiagnosticarCartoes() {
         });
       });
 
-      // 4) Conciliação por chave.
-      const idxSis = new Map();
-      sistemaTx.forEach(t => { const arr = idxSis.get(t.key) || []; arr.push(t); idxSis.set(t.key, arr); });
+      // 4) Conciliação. Adquirente, autorização e valor precisam bater; bandeira
+      //    e modalidade só contam quando OS DOIS lados têm o valor (vazio = não
+      //    se aplica — ex.: Good Card sem bandeira no sistema, arquivo sem débito/crédito).
+      const v2 = t => t.valor.toFixed(2);
+      const compat = (x, y) => !x || !y || x === y;
+      const usados = new Set();
+      const idxSis = new Map(); // adquirente|autorização|valor → [sistema]
+      sistemaTx.forEach(t => {
+        const k = `${t.adquirente}|${t.autorizacao}|${v2(t)}`;
+        const arr = idxSis.get(k) || []; arr.push(t); idxSis.set(k, arr);
+      });
       const conciliadas = [], soEquals = [];
       equalsTx.lista.forEach(e => {
-        const arr = idxSis.get(e.key);
-        if (arr && arr.length) conciliadas.push({ equals: e, sistema: arr.shift() });
+        const s = (idxSis.get(`${e.adquirente}|${e.autorizacao}|${v2(e)}`) || [])
+          .find(t => !usados.has(t) && compat(e.bandeira, t.bandeira) && compat(e.modalidade, t.modalidade));
+        if (s) { usados.add(s); conciliadas.push({ equals: e, sistema: s }); }
         else soEquals.push(e);
       });
-      const soSistema = [];
-      idxSis.forEach(arr => arr.forEach(t => soSistema.push(t)));
+      const soSistema = sistemaTx.filter(t => !usados.has(t));
 
       // 5) PROVÁVEIS conciliações: dos restantes, casa quando SÓ um (ou um par
-      //    específico) dos campos diverge, mantendo o resto igual. Cada padrão
-      //    define a "chave em comum" (campos que devem bater) e o `difere`
-      //    (o que precisa estar diferente). Processa do mais confiável (1 campo)
-      //    para o menos (bandeira + tipo). O adquirente sempre precisa bater.
-      const v2 = t => t.valor.toFixed(2);
+      //    específico) dos campos diverge, mantendo o resto igual. Processa do mais
+      //    confiável (1 campo) para o menos (bandeira + tipo). O adquirente sempre
+      //    precisa bater; bandeira/tipo só "divergem" se os dois lados tiverem valor.
+      const difBand = (e, s) => e.bandeira && s.bandeira && e.bandeira !== s.bandeira;
+      const difModal = (e, s) => e.modalidade && s.modalidade && e.modalidade !== s.modalidade;
       const PADROES_PROVAVEL = [
-        { motivo: 'valor',       label: 'Valor diferente',
-          chave: t => `${t.adquirente}|${t.bandeira}|${t.modalidade}|${t.autorizacao}`,
-          difere: (e, s) => v2(e) !== v2(s) },
+        { motivo: 'valor', label: 'Valor diferente',
+          casa: (e, s) => e.autorizacao === s.autorizacao && v2(e) !== v2(s) && compat(e.bandeira, s.bandeira) && compat(e.modalidade, s.modalidade) },
         { motivo: 'autorizacao', label: 'Autorização diferente',
-          chave: t => `${t.adquirente}|${t.bandeira}|${t.modalidade}|${v2(t)}`,
-          difere: (e, s) => e.autorizacao !== s.autorizacao },
-        { motivo: 'bandeira',    label: 'Bandeira diferente',
-          chave: t => `${t.adquirente}|${t.modalidade}|${t.autorizacao}|${v2(t)}`,
-          difere: (e, s) => e.bandeira !== s.bandeira },
-        { motivo: 'modalidade',  label: 'Tipo diferente',
-          chave: t => `${t.adquirente}|${t.bandeira}|${t.autorizacao}|${v2(t)}`,
-          difere: (e, s) => e.modalidade !== s.modalidade },
+          casa: (e, s) => v2(e) === v2(s) && e.autorizacao !== s.autorizacao && compat(e.bandeira, s.bandeira) && compat(e.modalidade, s.modalidade) },
+        { motivo: 'bandeira', label: 'Bandeira diferente',
+          casa: (e, s) => e.autorizacao === s.autorizacao && v2(e) === v2(s) && difBand(e, s) && compat(e.modalidade, s.modalidade) },
+        { motivo: 'modalidade', label: 'Tipo diferente',
+          casa: (e, s) => e.autorizacao === s.autorizacao && v2(e) === v2(s) && difModal(e, s) && compat(e.bandeira, s.bandeira) },
         { motivo: 'bandeira_modalidade', label: 'Bandeira e tipo diferentes',
-          chave: t => `${t.adquirente}|${t.autorizacao}|${v2(t)}`,
-          difere: (e, s) => e.bandeira !== s.bandeira && e.modalidade !== s.modalidade },
+          casa: (e, s) => e.autorizacao === s.autorizacao && v2(e) === v2(s) && difBand(e, s) && difModal(e, s) },
       ];
 
       let restEquals = soEquals.slice();
       let restSistema = soSistema.slice();
       const provaveis = [];
       PADROES_PROVAVEL.forEach(padrao => {
-        const idx = new Map();
-        restSistema.forEach((s, i) => {
-          const k = padrao.chave(s);
-          const arr = idx.get(k) || []; arr.push(i); idx.set(k, arr);
-        });
+        const porAdq = new Map();
+        restSistema.forEach(t => { const arr = porAdq.get(t.adquirente) || []; arr.push(t); porAdq.set(t.adquirente, arr); });
         const sisUsado = new Set(), eqUsado = new Set();
         restEquals.forEach((e, ei) => {
-          const arr = idx.get(padrao.chave(e));
-          if (!arr) return;
-          for (const si of arr) {
-            if (sisUsado.has(si)) continue;
-            if (padrao.difere(e, restSistema[si])) {
-              provaveis.push({ equals: e, sistema: restSistema[si], motivo: padrao.motivo, motivoLabel: padrao.label });
-              sisUsado.add(si); eqUsado.add(ei);
-              break;
-            }
-          }
+          const s = (porAdq.get(e.adquirente) || []).find(t => !sisUsado.has(t) && padrao.casa(e, t));
+          if (!s) return;
+          provaveis.push({ equals: e, sistema: s, motivo: padrao.motivo, motivoLabel: padrao.label });
+          sisUsado.add(s); eqUsado.add(ei);
         });
         restEquals = restEquals.filter((_, i) => !eqUsado.has(i));
-        restSistema = restSistema.filter((_, i) => !sisUsado.has(i));
+        restSistema = restSistema.filter(t => !sisUsado.has(t));
       });
       const soEqualsFinal = restEquals;
       const soSistemaFinal = restSistema;
@@ -559,7 +565,8 @@ export default function BpoDiagnosticarCartoes() {
         </div>
 
         {arquivos.map(arq => (
-          <ArquivoVendas key={arq.id} arq={arq} adquirentesRede={adquirentesRede} modelos={modelos}
+          <ArquivoVendas key={arq.id} arq={arq} adquirentesRede={adquirentesRede} adquirentesCatalogo={adquirentesCatalogo} modelos={modelos}
+            catalogoFixos={catalogoFixos} onFixo={(campo, v) => alterarArquivo(arq.id, { fixos: { ...(arq.fixos || {}), [campo]: v } })}
             lay={resolverLayout(arq.layout, modelos)}
             onSalvarModelo={(opts) => salvarModeloDoArquivo(arq, opts)}
             onExcluirModelo={() => excluirModeloDoArquivo(arq).catch(e => setError(e.message))}
@@ -1022,7 +1029,7 @@ const MAP_FIELDS = [
   { campo: 'hora', label: 'Hora', cor: 'bg-rose-50 text-rose-700' },
 ];
 
-function ArquivoVendas({ arq, lay, modelos, adquirentesRede, resumo, onLayout, onAdquirente, onCol, onRemover, onSalvarModelo, onExcluirModelo }) {
+function ArquivoVendas({ arq, lay, modelos, adquirentesRede, adquirentesCatalogo = [], catalogoFixos = { bandeiras: [], modalidades: [] }, onFixo, resumo, onLayout, onAdquirente, onCol, onRemover, onSalvarModelo, onExcluirModelo }) {
   const [salvarAberto, setSalvarAberto] = useState(false);
   const [nomeModelo, setNomeModelo] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -1038,7 +1045,10 @@ function ArquivoVendas({ arq, lay, modelos, adquirentesRede, resumo, onLayout, o
   };
   const campos = MAP_FIELDS.filter(f => !f.soMulti || lay.multi);
   const corColuna = (i) => campos.find(x => String(arq.cols[x.campo]) === String(i))?.cor || '';
-  const opcoesAdq = [...new Set([...adquirentesRede, ...(arq.adquirente ? [arq.adquirente] : [])])].sort();
+  // Adquirentes da rede (já parametrizadas) primeiro; depois o restante do catálogo.
+  const daRede = [...new Set(adquirentesRede)].sort();
+  const outrasAdq = [...new Set([...adquirentesCatalogo, ...(arq.adquirente ? [arq.adquirente] : [])])]
+    .filter(a => !daRede.includes(a)).sort();
   const sel = 'h-9 rounded-lg border border-gray-200 bg-white px-2 text-[12px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
   return (
@@ -1077,7 +1087,16 @@ function ArquivoVendas({ arq, lay, modelos, adquirentesRede, resumo, onLayout, o
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Adquirente do arquivo *</label>
             <select value={arq.adquirente} onChange={(e) => onAdquirente(e.target.value)} className={sel}>
               <option value="">— selecione —</option>
-              {opcoesAdq.map(a => <option key={a} value={a}>{a}</option>)}
+              {daRede.length > 0 && (
+                <optgroup label="Parametrizadas nesta rede">
+                  {daRede.map(a => <option key={a} value={a}>{a}</option>)}
+                </optgroup>
+              )}
+              {outrasAdq.length > 0 && (
+                <optgroup label={daRede.length ? 'Outras do catálogo' : 'Catálogo'}>
+                  {outrasAdq.map(a => <option key={a} value={a}>{a}</option>)}
+                </optgroup>
+              )}
             </select>
           </div>
         )}
@@ -1088,6 +1107,15 @@ function ArquivoVendas({ arq, lay, modelos, adquirentesRede, resumo, onLayout, o
               <option value="">— selecione —</option>
               {arq.headers.map((h, i) => <option key={i} value={i}>{h || `(coluna ${i + 1})`}</option>)}
             </select>
+            {/* Sem coluna no arquivo: valor fixo para todas as linhas */}
+            {(f.campo === 'modalidade' || f.campo === 'bandeira') && arq.cols[f.campo] === '' && (
+              <select value={arq.fixos?.[f.campo] || ''} onChange={(e) => onFixo(f.campo, e.target.value)}
+                title="O arquivo não tem esta coluna? Use um valor fixo para todas as linhas."
+                className={`${sel} mt-1 block w-full border-dashed`}>
+                <option value="">{f.campo === 'modalidade' ? 'ou fixo: ex. Crédito' : 'ou fixo…'}</option>
+                {(f.campo === 'modalidade' ? catalogoFixos.modalidades : catalogoFixos.bandeiras).map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            )}
           </div>
         ))}
       </div>
