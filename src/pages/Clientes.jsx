@@ -2407,7 +2407,8 @@ export function ModalContasBancarias({ open, cliente, onClose, showToast, inline
 }
 
 // ═══════════════════════════════════════════════════════════
-// Modal: Administradoras de cartão — marcar quais são FROTA
+// Modal: Administradoras de cartão — FROTA + parametrização de cartões
+// (adquirente/bandeira/modalidade, equivalente às "Contas de cartão" do Autosystem)
 // ═══════════════════════════════════════════════════════════
 export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, inline = false }) {
   const [loading, setLoading] = useState(false);
@@ -2416,6 +2417,14 @@ export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, i
   const [itens, setItens] = useState([]);
   const [salvandoId, setSalvandoId] = useState(null);
   const [busca, setBusca] = useState('');
+  const [catalogo, setCatalogo] = useState({ adquirentes: [], bandeiras: [], modalidades: [] });
+
+  useEffect(() => {
+    if (!open) return;
+    catalogoCartaoService.listarCatalogoCartao()
+      .then(c => setCatalogo({ adquirentes: c.adquirentes || [], bandeiras: c.bandeiras || [], modalidades: c.modalidades || [] }))
+      .catch(() => {});
+  }, [open]);
 
   useEffect(() => {
     if (!open || !cliente?.chave_api_id) return;
@@ -2454,10 +2463,13 @@ export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, i
     } finally { setSincronizando(false); }
   };
 
-  const mudarFrota = async (item, frota) => {
+  const mudarFrota = (item, frota) => salvarCampos(item, { frota });
+  // Salva na hora (frota ou adquirente/bandeira/modalidade).
+  const salvarCampos = async (item, campos) => {
     try {
       setSalvandoId(item.id);
-      const atualizado = await administradorasService.atualizar(item.id, { frota });
+      setItens(prev => prev.map(i => i.id === item.id ? { ...i, ...campos } : i));
+      const atualizado = await administradorasService.atualizar(item.id, campos);
       setItens(prev => prev.map(i => i.id === item.id ? atualizado : i));
     } catch (err) {
       showToast?.('error', 'Erro ao salvar: ' + err.message);
@@ -2468,22 +2480,32 @@ export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, i
 
   const redeNome = cliente.chaves_api?.nome || 'Rede';
   const qtdFrota = itens.filter(i => i.frota).length;
+  const qtdParam = itens.filter(i => i.adquirente || i.bandeira || i.modalidade).length;
+  const selCls = 'h-8 w-full min-w-[8rem] rounded-lg border border-gray-200 bg-white px-2 text-[12px] disabled:opacity-50';
+  const opcoes = (lista, atual) => (
+    <>
+      {lista.map(o => <option key={o.id} value={o.nome}>{o.nome}</option>)}
+      {atual && !lista.some(o => o.nome === atual) && <option value={atual}>{atual}</option>}
+    </>
+  );
   const filtrados = busca.trim()
     ? itens.filter(i => (i.descricao || '').toLowerCase().includes(busca.trim().toLowerCase())
         || String(i.administradora_codigo).includes(busca.trim()))
     : itens;
 
   return (
-    <Modal open={open} onClose={onClose} title={`Administradoras · cartões frota — ${redeNome}`} size="lg" inline={inline}>
+    <Modal open={open} onClose={onClose} title={`Administradoras de cartão — ${redeNome}`} size="xl" inline={inline}>
       <div className="space-y-4">
         <div className="rounded-lg bg-violet-50/60 border border-violet-200 p-3 text-[11px] text-violet-800">
-          Marque quais administradoras são de <strong>cartão frota</strong>. A classificação é por
-          <strong> rede</strong> — vale para todas as empresas da {redeNome}.
+          Para cada administradora informe <strong>adquirente</strong>, <strong>bandeira</strong> e <strong>modalidade</strong>
+          (parametrização usada no diagnóstico de cartões, igual às contas de cartão do Autosystem) e marque as de
+          <strong> cartão frota</strong>. A configuração é por <strong>rede</strong> — vale para todas as empresas da {redeNome}.
+          Salva automaticamente.
         </div>
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-gray-700">
-            {qtdFrota} de {itens.length} marcada{qtdFrota === 1 ? '' : 's'} como frota
+            {qtdParam} de {itens.length} parametrizada{qtdParam === 1 ? '' : 's'} · {qtdFrota} frota
           </p>
           <button type="button" onClick={executarSincronizacao} disabled={sincronizando || loading}
             className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
@@ -2524,6 +2546,9 @@ export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, i
               <thead className="bg-gray-100 border-b border-gray-100 sticky top-0 z-10">
                 <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="px-3 py-2">Administradora</th>
+                  <th className="px-2 py-2">Adquirente</th>
+                  <th className="px-2 py-2">Bandeira</th>
+                  <th className="px-2 py-2">Modalidade</th>
                   <th className="px-3 py-2 text-center">Frota</th>
                 </tr>
               </thead>
@@ -2538,6 +2563,24 @@ export function ModalAdministradorasFrota({ open, cliente, onClose, showToast, i
                           <p className="text-[10px] text-gray-400 font-mono">#{item.administradora_codigo}</p>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <select value={item.adquirente || ''} onChange={e => salvarCampos(item, { adquirente: e.target.value || null })}
+                        disabled={salvandoId === item.id} className={selCls}>
+                        <option value="">—</option>{opcoes(catalogo.adquirentes, item.adquirente)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <select value={item.bandeira || ''} onChange={e => salvarCampos(item, { bandeira: e.target.value || null })}
+                        disabled={salvandoId === item.id} className={selCls}>
+                        <option value="">—</option>{opcoes(catalogo.bandeiras, item.bandeira)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <select value={item.modalidade || ''} onChange={e => salvarCampos(item, { modalidade: e.target.value || null })}
+                        disabled={salvandoId === item.id} className={selCls}>
+                        <option value="">—</option>{opcoes(catalogo.modalidades, item.modalidade)}
+                      </select>
                     </td>
                     <td className="px-3 py-2 text-center">
                       <label className="inline-flex items-center cursor-pointer">

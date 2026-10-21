@@ -6,48 +6,30 @@ import {
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as autosystemService from '../services/autosystemService';
+import * as qualityApi from '../services/qualityApiService';
+import * as administradorasService from '../services/clienteAdministradorasService';
 import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 import { formatCurrency } from '../utils/format';
+import {
+  LAYOUTS, layoutPorChave, lerArquivoVendas, detectarLayout, adivinharColunas, sugerirAdquirente,
+  melhorModelo, colsDoModelo, mapeamentoPorNome,
+} from '../utils/layoutsCartoes';
+import * as modelosService from '../services/layoutsArquivoCartaoService';
+
+// Layout do arquivo: embutido (Equals, Cielo…) ou modelo salvo ("m:<id>").
+// Modelo sem adquirente fixa = a adquirente vem de uma coluna (como a Equals).
+function resolverLayout(chave, modelos) {
+  if (String(chave).startsWith('m:')) {
+    const m = (modelos || []).find(x => `m:${x.id}` === chave);
+    return { k: chave, rot: m?.nome || 'Modelo', multi: !m?.adquirente, modelo: m || null };
+  }
+  return layoutPorChave(chave);
+}
 
 // ─── Helpers de datas ─────────────────────────────────────────
 function ymd(d) { return d.toISOString().split('T')[0]; }
 function hojeStr() { return ymd(new Date()); }
 function inicioMesStr() { const d = new Date(); return ymd(new Date(d.getFullYear(), d.getMonth(), 1)); }
-
-// ─── Parser de CSV (robusto a `;`/`,`/tab, aspas e BOM) ────────
-function detectarDelimitador(primeiraLinha) {
-  const cands = [';', ',', '\t', '|'];
-  let melhor = ';', max = -1;
-  cands.forEach(d => { const n = primeiraLinha.split(d).length; if (n > max) { max = n; melhor = d; } });
-  return melhor;
-}
-
-function parseCSV(texto) {
-  let t = String(texto || ''); if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1); // remove BOM
-  t = t.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const primeiraLinha = (t.split('\n').find(l => l.trim().length > 0)) || '';
-  const delim = detectarDelimitador(primeiraLinha);
-
-  const linhas = [];
-  let campo = '', linha = [], dentroAspas = false;
-  for (let i = 0; i < t.length; i++) {
-    const c = t[i];
-    if (dentroAspas) {
-      if (c === '"') { if (t[i + 1] === '"') { campo += '"'; i++; } else dentroAspas = false; }
-      else campo += c;
-    } else if (c === '"') dentroAspas = true;
-    else if (c === delim) { linha.push(campo); campo = ''; }
-    else if (c === '\n') { linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
-    else campo += c;
-  }
-  if (campo.length > 0 || linha.length > 0) { linha.push(campo); linhas.push(linha); }
-
-  const limpas = linhas.filter(l => l.some(v => String(v).trim().length > 0));
-  if (limpas.length === 0) return { headers: [], rows: [] };
-  const headers = limpas[0].map(h => String(h).trim());
-  const rows = limpas.slice(1).map(l => headers.map((_, idx) => String(l[idx] ?? '').trim()));
-  return { headers, rows };
-}
 
 // "1.234,56" | "1234.56" | "R$ 1.234,56" → number
 function parseValorBR(s) {
@@ -98,14 +80,6 @@ function parseDocParcela(doc) {
   return { base: s, parcela: null };
 }
 
-function adivinharColuna(headers, chaves) {
-  for (const chave of chaves) {
-    const idx = headers.findIndex(h => semAcento(h).includes(chave));
-    if (idx >= 0) return String(idx);
-  }
-  return '';
-}
-
 export default function BpoDiagnosticarCartoes() {
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [chavesApi, setChavesApi] = useState([]);
@@ -116,10 +90,11 @@ export default function BpoDiagnosticarCartoes() {
   const [dataDe, setDataDe] = useState(inicioMesStr());
   const [dataAte, setDataAte] = useState(hojeStr());
 
-  const [csv, setCsv] = useState(null); // { nome, headers, rows }
+  // Arquivos de vendas (Equals e/ou adquirentes): { id, nome, layout, adquirente, headers, rows, cols }.
   // Mapeamento de colunas. Chave: adquirente · bandeira · modalidade · autorização · valor (bruto).
-  const COLS_VAZIO = { adquirente: '', bandeira: '', modalidade: '', autorizacao: '', valor: '', parcelas: '', hora: '' };
-  const [cols, setCols] = useState(COLS_VAZIO);
+  const [arquivos, setArquivos] = useState([]);
+  const [adquirentesRede, setAdquirentesRede] = useState([]); // das contas de cartão da rede
+  const [modelos, setModelos] = useState([]); // modelos de layout salvos
   const fileRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
@@ -144,133 +119,256 @@ export default function BpoDiagnosticarCartoes() {
   }, []);
 
   const empresasDaRede = useMemo(() => {
-    if (!redeSel || redeSel.tipo !== 'autosystem') return [];
+    if (!redeSel) return [];
+    const daRede = redeSel.tipo === 'webposto'
+      ? (c) => c.chave_api_id === redeSel.id && c.usa_webposto !== false
+      : (c) => c.as_rede_id === redeSel.id;
     return (clientes || [])
-      .filter(c => c.as_rede_id === redeSel.id && c.empresa_codigo != null && c.status === 'ativo')
+      .filter(c => daRede(c) && c.empresa_codigo != null && c.status === 'ativo')
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   }, [clientes, redeSel]);
+
+  useEffect(() => {
+    modelosService.listarModelos().then(setModelos).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!redeSel) return undefined;
+    let cancel = false;
+    (redeSel.tipo === 'webposto' ? administradorasService.listarPorRede(redeSel.id) : autosystemService.listarContasCartaoRede(redeSel.id))
+      .then(cs => { if (!cancel) setAdquirentesRede([...new Set((cs || []).map(c => String(c.adquirente || '').trim()).filter(Boolean))].sort()); })
+      .catch(() => { if (!cancel) setAdquirentesRede([]); });
+    return () => { cancel = true; };
+  }, [redeSel]);
 
   const empresaSel = useMemo(
     () => empresasDaRede.find(e => e.id === empresaId) || null,
     [empresasDaRede, empresaId],
   );
 
-  const setCol = (campo, idx) => { setCols(p => ({ ...p, [campo]: idx })); setResultado(null); };
+  const alterarArquivo = (id, patch) => { setArquivos(l => l.map(a => (a.id === id ? { ...a, ...patch } : a))); setResultado(null); };
+  const removerArquivo = (id) => { setArquivos(l => l.filter(a => a.id !== id)); setResultado(null); };
 
-  const onArquivo = useCallback((file) => {
-    if (!file) return;
+  const adicionarArquivos = useCallback(async (files) => {
+    const lista = [...(files || [])];
+    if (!lista.length) return;
     setResultado(null);
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    for (const file of lista) {
       try {
-        // Decodifica UTF-8; se vier lixo (�), tenta windows-1252 (padrão de export BR).
-        const buf = e.target.result;
-        let texto = new TextDecoder('utf-8').decode(buf);
-        if (texto.includes('�')) {
-          try { texto = new TextDecoder('windows-1252').decode(buf); } catch { /* mantém utf-8 */ }
-        }
-        const { headers, rows } = parseCSV(texto);
-        if (headers.length === 0) { setError('CSV vazio ou ilegível.'); return; }
-        setCsv({ nome: file.name, headers, rows });
-        setCols({
-          adquirente:  adivinharColuna(headers, ['adquirente', 'credenciadora', 'rede']),
-          bandeira:    adivinharColuna(headers, ['bandeira', 'produto']),
-          modalidade:  adivinharColuna(headers, ['modalidade', 'tipo', 'debito', 'credito']),
-          autorizacao: adivinharColuna(headers, ['autorizacao', 'autorizac', 'codigo autorizacao']),
-          valor:       adivinharColuna(headers, ['valor bruto', 'bruto', 'valor da venda', 'valor']),
-          parcelas:    adivinharColuna(headers, ['qtd parcela', 'qtde parcela', 'total parcela', 'num parcela', 'parcela']),
-          hora:        adivinharColuna(headers, ['hora', 'horario', 'hr venda', 'hora venda']),
-        });
+        const { headers, rows } = await lerArquivoVendas(file);
+        if (headers.length === 0) { setError(`${file.name}: arquivo vazio ou ilegível.`); continue; }
+        // 1º um modelo salvo que reconheça o cabeçalho; senão o layout embutido.
+        const modelo = melhorModelo(modelos, headers);
+        const layout = modelo ? `m:${modelo.id}` : detectarLayout(file.name, headers);
+        setArquivos(l => [...l, {
+          id: crypto.randomUUID(), nome: file.name, layout, headers, rows,
+          adquirente: modelo ? (modelo.adquirente || '') : sugerirAdquirente(layout, adquirentesRede),
+          cols: modelo ? colsDoModelo(modelo, headers) : adivinharColunas(layout, headers),
+        }]);
         setError(null);
-      } catch (err) { setError('Falha ao ler o CSV: ' + err.message); }
-    };
-    reader.onerror = () => setError('Não foi possível ler o arquivo.');
-    reader.readAsArrayBuffer(file);
-  }, []);
+      } catch (err) { setError(`Falha ao ler ${file.name}: ${err.message}`); }
+    }
+    if (fileRef.current) fileRef.current.value = '';
+  }, [adquirentesRede, modelos]);
 
-  // Transações da Equals (lista normalizada + chave de conferência)
-  const equalsTx = useMemo(() => {
-    const { adquirente, bandeira, modalidade, autorizacao, valor, parcelas, hora } = cols;
-    if (!csv || valor === '' || autorizacao === '') return null;
-    const qi = adquirente === '' ? -1 : Number(adquirente);
-    const bi = bandeira === '' ? -1 : Number(bandeira);
-    const mi = modalidade === '' ? -1 : Number(modalidade);
-    const ai = Number(autorizacao), vi = Number(valor);
-    const pi = parcelas === '' ? -1 : Number(parcelas);
-    const hi = hora === '' ? -1 : Number(hora);
-    const mapeouMeta = qi >= 0 || bi >= 0 || mi >= 0;
-    const ehVazio = s => !/[a-z0-9]/i.test(String(s || '')); // '', '-', '—' → vazio
-    const lista = [];
-    let ignoradas = 0;
-    csv.rows.forEach((r) => {
-      const v = parseValorBR(r[vi]);
-      const aut = normAutorizacao(r[ai]);
-      if (v == null || !aut) { ignoradas++; return; }
-      // Linha TOTALIZADORA do relatório: tem valor mas nenhum dado de cartão.
-      if (mapeouMeta && ehVazio(r[qi]) && ehVazio(r[bi]) && ehVazio(r[mi])) { ignoradas++; return; }
-      const adq = qi >= 0 ? normBandeira(r[qi]) : '';
-      const band = bi >= 0 ? normBandeira(r[bi]) : '';
-      const modal = mi >= 0 ? normModalidade(r[mi]) : '';
-      // Parcelado? Pela coluna de parcelas (>1) ou pelo texto da modalidade ("Parcelado…").
-      const nParc = pi >= 0 ? (parseInt(String(r[pi]).replace(/[^\d]/g, ''), 10) || 0) : 0;
-      const parceladoEquals = nParc > 1 || (mi >= 0 && textoIndicaParcelado(r[mi]));
-      const hora = hi >= 0 ? String(r[hi] || '').trim() : '';
-      lista.push({ adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, valor: v, hora, parceladoEquals, parcelasEquals: nParc || null, key: `${adq}|${band}|${modal}|${aut}|${v.toFixed(2)}` });
+  const trocarLayout = (arq, layout) => {
+    const lay = resolverLayout(layout, modelos);
+    if (lay.modelo) {
+      alterarArquivo(arq.id, { layout, cols: colsDoModelo(lay.modelo, arq.headers), adquirente: lay.modelo.adquirente || '' });
+    } else {
+      alterarArquivo(arq.id, { layout, cols: adivinharColunas(layout, arq.headers), adquirente: sugerirAdquirente(layout, adquirentesRede) });
+    }
+  };
+
+  // Salva o mapeamento atual do arquivo como modelo (novo ou atualizando o selecionado).
+  const salvarModeloDoArquivo = async (arq, { nome, atualizar }) => {
+    const lay = resolverLayout(arq.layout, modelos);
+    const salvo = await modelosService.salvarModelo({
+      id: atualizar ? lay.modelo?.id : undefined,
+      nome: atualizar ? lay.modelo?.nome : nome,
+      adquirente: lay.multi ? null : (arq.adquirente || null),
+      mapeamento: mapeamentoPorNome(arq.cols, arq.headers),
+      colunas: arq.headers,
     });
-    const total = lista.reduce((s, t) => s + t.valor, 0);
-    return { lista, total, ignoradas };
-  }, [csv, cols]);
+    setModelos(l => [...l.filter(m => m.id !== salvo.id), salvo].sort((a, b) => a.nome.localeCompare(b.nome)));
+    alterarArquivo(arq.id, { layout: `m:${salvo.id}` });
+    return salvo;
+  };
+  const excluirModeloDoArquivo = async (arq) => {
+    const lay = resolverLayout(arq.layout, modelos);
+    if (!lay.modelo || !confirm(`Excluir o modelo "${lay.modelo.nome}"?`)) return;
+    await modelosService.excluirModelo(lay.modelo.id);
+    setModelos(l => l.filter(m => m.id !== lay.modelo.id));
+    alterarArquivo(arq.id, { layout: lay.multi ? 'equals' : 'outro' });
+  };
 
-  const podeDiagnosticar = redeSel?.tipo === 'autosystem' && empresaId && dataDe && dataAte && equalsTx;
+  // Transações dos arquivos (lista normalizada + chave de conferência) e as
+  // adquirentes que eles cobrem — o sistema só é cobrado nessas adquirentes.
+  const equalsTx = useMemo(() => {
+    if (!arquivos.length) return null;
+    const pronto = (a) => a.cols.valor !== '' && a.cols.autorizacao !== '' && (resolverLayout(a.layout, modelos).multi || a.adquirente);
+    if (!arquivos.every(pronto)) return null;
+    const ehVazio = x => !/[a-z0-9]/i.test(String(x || '')); // '', '-', '—' → vazio
+    const lista = [];
+    const porArquivo = {};
+    const cobertos = new Set();
+    let ignoradas = 0, coberturaDesconhecida = false;
+    arquivos.forEach(arq => {
+      const lay = resolverLayout(arq.layout, modelos);
+      const { adquirente, bandeira, modalidade, autorizacao, valor, total: totalCol, parcelas, hora } = arq.cols;
+      const ti = totalCol === '' || totalCol == null ? -1 : Number(totalCol);
+      const qi = lay.multi && adquirente !== '' ? Number(adquirente) : -1;
+      const bi = bandeira === '' ? -1 : Number(bandeira);
+      const mi = modalidade === '' ? -1 : Number(modalidade);
+      const ai = Number(autorizacao), vi = Number(valor);
+      const pi = parcelas === '' ? -1 : Number(parcelas);
+      const hi = hora === '' ? -1 : Number(hora);
+      const mapeouMeta = qi >= 0 || bi >= 0 || mi >= 0;
+      const adqFixa = lay.multi ? '' : normBandeira(arq.adquirente);
+      let qtd = 0, total = 0, ign = 0;
+      // Venda parcelada em várias linhas (uma por parcela, mesma autorização):
+      // vira UMA transação com o total da venda (coluna "total" ou soma das parcelas).
+      const parceladas = new Map();
+      arq.rows.forEach((r) => {
+        const v = parseValorBR(r[vi]);
+        const aut = normAutorizacao(r[ai]);
+        if (v == null || !aut) { ign++; return; }
+        // Linha TOTALIZADORA do relatório: tem valor mas nenhum dado de cartão.
+        if (mapeouMeta && ehVazio(r[qi]) && ehVazio(r[bi]) && ehVazio(r[mi])) { ign++; return; }
+        const adq = lay.multi ? (qi >= 0 ? normBandeira(r[qi]) : '') : adqFixa;
+        const band = bi >= 0 ? normBandeira(r[bi]) : '';
+        const modal = mi >= 0 ? normModalidade(r[mi]) : '';
+        // Parcelado? Pela coluna de parcelas (>1) ou pelo texto da modalidade ("Parcelado…").
+        const nParc = pi >= 0 ? (parseInt(String(r[pi]).replace(/[^\d]/g, ''), 10) || 0) : 0;
+        const parceladoEquals = nParc > 1 || (mi >= 0 && textoIndicaParcelado(r[mi]));
+        const h = hi >= 0 ? String(r[hi] || '').trim() : '';
+        const origem = lay.multi ? lay.rot.split(' ')[0] : (arq.adquirente || lay.rot);
+        if (nParc > 1) {
+          const gk = `${adq}|${band}|${modal}|${aut}`;
+          const g = parceladas.get(gk) || { adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, hora: h, origem, nParc, soma: 0, totalVenda: null, linhas: 0 };
+          g.soma += v; g.linhas++;
+          const tv = ti >= 0 ? parseValorBR(r[ti]) : null;
+          if (tv != null) g.totalVenda = tv;
+          parceladas.set(gk, g);
+        } else {
+          lista.push({ adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, valor: v, hora: h, parceladoEquals, parcelasEquals: nParc || null, origem, key: `${adq}|${band}|${modal}|${aut}|${v.toFixed(2)}` });
+          qtd++; total += v;
+        }
+        if (adq) cobertos.add(adq);
+      });
+      parceladas.forEach(g => {
+        const v = Number((g.totalVenda ?? g.soma).toFixed(2));
+        lista.push({ adquirente: g.adquirente, bandeira: g.bandeira, modalidade: g.modalidade, autorizacao: g.autorizacao, valor: v, hora: g.hora, parceladoEquals: true, parcelasEquals: g.nParc, origem: g.origem, key: `${g.adquirente}|${g.bandeira}|${g.modalidade}|${g.autorizacao}|${v.toFixed(2)}` });
+        qtd++; total += v;
+      });
+      if (lay.multi && qi < 0) coberturaDesconhecida = true; // sem coluna de adquirente: não dá para limitar
+      if (!lay.multi && adqFixa) cobertos.add(adqFixa);
+      ignoradas += ign;
+      porArquivo[arq.id] = { qtd, total, ignoradas: ign };
+    });
+    const total = lista.reduce((acc, t) => acc + t.valor, 0);
+    return { lista, total, ignoradas, porArquivo, cobertos: coberturaDesconhecida ? null : cobertos };
+  }, [arquivos, modelos]);
+
+  const podeDiagnosticar = !!redeSel && empresaId && dataDe && dataAte && equalsTx;
 
   const diagnosticar = useCallback(async () => {
     if (!podeDiagnosticar) return;
     setLoading(true); setError(null); setResultado(null);
     try {
-      // 1) Contas de cartão configuradas (Editar rede → Empresas → Contas de cartão).
-      const contasCartao = await autosystemService.listarContasCartaoRede(redeSel.id);
-      const cfgPorConta = new Map();
-      contasCartao.forEach(c => cfgPorConta.set(String(c.codigo).trim(), c));
-      const codigosCartao = [...cfgPorConta.keys()];
-      if (codigosCartao.length === 0) {
-        setResultado({ semConfig: true, totalEquals: equalsTx.lista.length });
-        return;
-      }
-
-      // 2) Lançamentos do movto nessas contas (o edge traz `documento` = autorização).
-      const lancs = await autosystemService.buscarLancamentosAutosystem(
-        redeSel.id, [empresaSel.empresa_codigo],
-        { data_de: dataDe, data_ate: dataAte, contas_codigos: codigosCartao },
-      );
-
-      // 3) Cada lançamento vira uma transação do sistema (adquirente/bandeira/modalidade
-      //    da conta marcada; autorização = documento; valor = valor). O documento
-      //    do parcelado vem como "327811/1", "327811/2"… — guardamos a base e a parcela.
       const sistemaRaw = [];
+      const foraCobertura = new Map(); // adquirente → nº de lançamentos não conferidos
       let semDocumento = 0;
-      (lancs || []).forEach(l => {
-        const deb = String(l.debito_codigo ?? '').trim();
-        // Só considera o lançamento quando a conta de cartão está no DÉBITO.
-        const cfg = cfgPorConta.get(deb);
-        if (!cfg) return;
-        // ...e a contrapartida (crédito) precisa ser conta de ativo (começa com "1").
-        const cred = String(l.credito_codigo ?? '').trim();
-        if (!cred.startsWith('1')) return;
-        const { base, parcela } = parseDocParcela(l.documento);
-        const aut = normAutorizacao(base);
-        const valor = Number(l.valor) || 0;
-        if (!aut) { semDocumento++; return; }
-        const adq = normBandeira(cfg.adquirente || '');
-        const band = normBandeira(cfg.bandeira || '');
-        const modal = normModalidade(cfg.modalidade || '');
-        sistemaRaw.push({
-          adquirente: adq, bandeira: band, modalidade: modal, autorizacao: aut, parcela, valor,
-          conta: cfg.codigo, contaNome: cfg.nome, data: l.data, turno: l.turno,
-          documento: l.documento || '', obs: (l.obs || '').trim(), pessoa: l.pessoa_nome || '',
-          funcionario: (l.usuario_nome || '').trim(), usuario: (l.usuario || '').trim(),
-          responsavel: (l.responsavel_nome || '').trim(),
+      // Adquirente que nenhum arquivo cobre (ex.: fora da Equals e sem arquivo próprio): não cobra.
+      const coberto = (adqNome) => {
+        if (!equalsTx.cobertos || equalsTx.cobertos.has(normBandeira(adqNome || ''))) return true;
+        const k = adqNome || '(sem adquirente)';
+        foraCobertura.set(k, (foraCobertura.get(k) || 0) + 1);
+        return false;
+      };
+
+      if (redeSel.tipo === 'webposto') {
+        // Webposto: transações de cartão da Quality (CARTAO — autorização, valor,
+        // parcela, administradora) + parametrização das administradoras da rede
+        // (Editar rede → Administradoras: adquirente/bandeira/modalidade).
+        const adms = await administradorasService.listarPorRede(redeSel.id);
+        const cfgPorAdm = new Map();
+        (adms || []).filter(a => a.ativo !== false && a.adquirente)
+          .forEach(a => cfgPorAdm.set(Number(a.administradora_codigo), a));
+        if (cfgPorAdm.size === 0) {
+          setResultado({ semConfig: true, webposto: true, totalEquals: equalsTx.lista.length });
+          return;
+        }
+        const chave = chavesApi.find(c => c.id === redeSel.id)?.chave;
+        if (!chave) throw new Error('Chave da API Quality não encontrada para esta rede.');
+        const filtros = { dataInicial: dataDe, dataFinal: dataAte, empresaCodigo: empresaSel.empresa_codigo };
+        // VENDA traz funcionário e caixa de cada venda (para agrupar os ajustes).
+        const [cartoes, vendas] = await Promise.all([
+          qualityApi.buscarCartoes(chave, filtros),
+          qualityApi.buscarVendas(chave, filtros).catch(() => []),
+        ]);
+        const vendaPorCodigo = new Map((vendas || []).map(v => [Number(v.vendaCodigo ?? v.codigo), v]));
+        (cartoes || []).forEach(c => {
+          const cfg = cfgPorAdm.get(Number(c.administradoraCodigo));
+          if (!cfg) return; // administradora não parametrizada (ex.: PIX) — fora do diagnóstico
+          const aut = normAutorizacao(c.autorizacao);
+          if (!aut) { semDocumento++; return; }
+          if (!coberto(cfg.adquirente)) return;
+          const venda = vendaPorCodigo.get(Number(c.vendaCodigo));
+          const func = (venda?.funcionarioNome || '').trim();
+          sistemaRaw.push({
+            adquirente: normBandeira(cfg.adquirente), bandeira: normBandeira(cfg.bandeira || ''),
+            modalidade: normModalidade(cfg.modalidade || ''), autorizacao: aut,
+            parcela: Number(c.parcela) || null, valor: Number(c.valor) || 0,
+            conta: String(c.administradoraCodigo), contaNome: cfg.descricao || c.adiministradoraDescricao || c.administradoraDescricao || '',
+            data: c.dataMovimento || c.dataFiscal, turno: venda?.caixaCodigo ?? null,
+            documento: String(c.autorizacao || ''), obs: c.horaMovimento ? `${c.horaMovimento}` : '', pessoa: c.clienteRazao || '',
+            funcionario: func, usuario: '', responsavel: '',
+          });
         });
-      });
+      } else {
+        // 1) Contas de cartão configuradas (Editar rede → Empresas → Contas de cartão).
+        const contasCartao = await autosystemService.listarContasCartaoRede(redeSel.id);
+        const cfgPorConta = new Map();
+        contasCartao.forEach(c => cfgPorConta.set(String(c.codigo).trim(), c));
+        const codigosCartao = [...cfgPorConta.keys()];
+        if (codigosCartao.length === 0) {
+          setResultado({ semConfig: true, totalEquals: equalsTx.lista.length });
+          return;
+        }
+
+        // 2) Lançamentos do movto nessas contas (o edge traz `documento` = autorização).
+        const lancs = await autosystemService.buscarLancamentosAutosystem(
+          redeSel.id, [empresaSel.empresa_codigo],
+          { data_de: dataDe, data_ate: dataAte, contas_codigos: codigosCartao },
+        );
+
+        // 3) Cada lançamento vira uma transação do sistema (adquirente/bandeira/modalidade
+        //    da conta marcada; autorização = documento; valor = valor). O documento
+        //    do parcelado vem como "327811/1", "327811/2"… — guardamos a base e a parcela.
+        (lancs || []).forEach(l => {
+          const deb = String(l.debito_codigo ?? '').trim();
+          // Só considera o lançamento quando a conta de cartão está no DÉBITO.
+          const cfg = cfgPorConta.get(deb);
+          if (!cfg) return;
+          // ...e a contrapartida (crédito) precisa ser conta de ativo (começa com "1").
+          const cred = String(l.credito_codigo ?? '').trim();
+          if (!cred.startsWith('1')) return;
+          const { base, parcela } = parseDocParcela(l.documento);
+          const aut = normAutorizacao(base);
+          const valor = Number(l.valor) || 0;
+          if (!aut) { semDocumento++; return; }
+          if (!coberto(cfg.adquirente)) return;
+          sistemaRaw.push({
+            adquirente: normBandeira(cfg.adquirente || ''), bandeira: normBandeira(cfg.bandeira || ''),
+            modalidade: normModalidade(cfg.modalidade || ''), autorizacao: aut, parcela, valor,
+            conta: cfg.codigo, contaNome: cfg.nome, data: l.data, turno: l.turno,
+            documento: l.documento || '', obs: (l.obs || '').trim(), pessoa: l.pessoa_nome || '',
+            funcionario: (l.usuario_nome || '').trim(), usuario: (l.usuario || '').trim(),
+            responsavel: (l.responsavel_nome || '').trim(),
+          });
+        });
+      }
 
       // 3b) Consolida as parcelas: lançamentos com a MESMA base de autorização
       //     (mesmo adquirente/bandeira/modalidade) viram UMA transação com o valor
@@ -383,29 +481,16 @@ export default function BpoDiagnosticarCartoes() {
         totalEquals: equalsTx.lista.length,
         totalSistema: sistemaTx.length,
         conciliadas, provaveis, soEquals: soEqualsFinal, soSistema: soSistemaFinal, semDocumento,
+        foraCobertura: [...foraCobertura.entries()],
         alertasParcelamento,
         valorEquals: equalsTx.total,
         valorSistema: sistemaTx.reduce((s, t) => s + t.valor, 0),
       });
     } catch (err) { setError(err.message || 'Falha ao diagnosticar.'); }
     finally { setLoading(false); }
-  }, [podeDiagnosticar, equalsTx, redeSel, empresaSel, dataDe, dataAte]);
+  }, [podeDiagnosticar, equalsTx, redeSel, empresaSel, dataDe, dataAte, chavesApi]);
 
   if (loadingMeta) return <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
-
-  const MAP_FIELDS = [
-    { campo: 'adquirente', label: 'Adquirente', cor: 'bg-sky-50 text-sky-700' },
-    { campo: 'bandeira', label: 'Bandeira', cor: 'bg-purple-50 text-purple-700' },
-    { campo: 'modalidade', label: 'Modalidade (déb/créd)', cor: 'bg-amber-50 text-amber-700' },
-    { campo: 'autorizacao', label: 'Autorização *', cor: 'bg-blue-50 text-blue-700' },
-    { campo: 'valor', label: 'Valor bruto *', cor: 'bg-emerald-50 text-emerald-700' },
-    { campo: 'parcelas', label: 'Parcelas', cor: 'bg-indigo-50 text-indigo-700' },
-    { campo: 'hora', label: 'Hora', cor: 'bg-rose-50 text-rose-700' },
-  ];
-  const corColuna = (i) => {
-    const f = MAP_FIELDS.find(x => String(cols[x.campo]) === String(i));
-    return f ? f.cor : '';
-  };
 
   return (
     <div className="space-y-4">
@@ -420,16 +505,17 @@ export default function BpoDiagnosticarCartoes() {
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Stethoscope className="h-4 w-4 text-blue-600" />
-          <h3 className="text-sm font-semibold text-gray-800">Diagnóstico de cartões — Sistema (Autosystem) × Equals</h3>
+          <h3 className="text-sm font-semibold text-gray-800">Diagnóstico de cartões — Sistema (Autosystem/Webposto) × Equals / adquirentes</h3>
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Rede</label>
           <SeletorRedeBPO chavesApi={chavesApi} redesAutosystem={redesAutosystem}
             value={redeSel} onChange={(r) => { setRedeSel(r); setEmpresaId(''); setResultado(null); }}
-            placeholder="Selecione uma rede Autosystem..." />
+            placeholder="Selecione uma rede..." />
           {redeSel?.tipo === 'webposto' && (
-            <p className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
-              Nesta primeira versão o diagnóstico é só para redes Autosystem.
+            <p className="mt-2 text-[11px] text-gray-500">
+              Webposto: o sistema é lido das transações de cartão da Quality, usando a parametrização das administradoras
+              (Editar rede → Administradoras).
             </p>
           )}
         </div>
@@ -462,72 +548,42 @@ export default function BpoDiagnosticarCartoes() {
         </div>
       </div>
 
-      {/* Upload do CSV da Equals */}
+      {/* Arquivos de vendas: Equals e/ou adquirentes (Cielo, Rede, Getnet, Sipag…) */}
       <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 space-y-4">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-gray-800">Extrato da Equals (CSV)</h3>
-          {csv && (
-            <button onClick={() => { setCsv(null); setCols(COLS_VAZIO); setResultado(null); if (fileRef.current) fileRef.current.value = ''; }}
-              className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-800">
-              <X className="h-3.5 w-3.5" /> Remover
-            </button>
-          )}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">Arquivos de vendas (Equals e/ou adquirentes)</h3>
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            Envie a Equals e, se a empresa tiver adquirente fora dela, o relatório da própria adquirente. O sistema é conferido só
+            nas adquirentes cobertas pelos arquivos.
+          </p>
         </div>
 
-        {!csv ? (
-          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl px-6 py-8 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors">
-            <UploadCloud className="h-7 w-7 text-gray-400" />
-            <span className="text-sm text-gray-600">Arraste ou clique para enviar o CSV baixado do portal da Equals</span>
-            <span className="text-[11px] text-gray-400">Detecta o separador automaticamente (; , tab)</span>
-            <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" className="hidden"
-              onChange={(e) => onArquivo(e.target.files?.[0])} />
-          </label>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 text-[12px] text-gray-600">
-              <FileText className="h-4 w-4 text-blue-600" />
-              <span className="font-medium">{csv.nome}</span>
-              <span className="text-gray-400">· {csv.rows.length} linhas · {csv.headers.length} colunas</span>
-            </div>
+        {arquivos.map(arq => (
+          <ArquivoVendas key={arq.id} arq={arq} adquirentesRede={adquirentesRede} modelos={modelos}
+            lay={resolverLayout(arq.layout, modelos)}
+            onSalvarModelo={(opts) => salvarModeloDoArquivo(arq, opts)}
+            onExcluirModelo={() => excluirModeloDoArquivo(arq).catch(e => setError(e.message))}
+            resumo={equalsTx?.porArquivo?.[arq.id]}
+            onLayout={(l) => trocarLayout(arq, l)}
+            onAdquirente={(v) => alterarArquivo(arq.id, { adquirente: v })}
+            onCol={(campo, idx) => alterarArquivo(arq.id, { cols: { ...arq.cols, [campo]: idx } })}
+            onRemover={() => removerArquivo(arq.id)} />
+        ))}
 
-            <div className="flex flex-wrap gap-3">
-              {MAP_FIELDS.map(f => (
-                <div key={f.campo}>
-                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{f.label}</label>
-                  <select value={cols[f.campo]} onChange={(e) => setCol(f.campo, e.target.value)}
-                    className="h-9 rounded-lg border border-gray-200 px-2 text-[12px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-                    <option value="">— selecione —</option>
-                    {csv.headers.map((h, i) => <option key={i} value={i}>{h || `(coluna ${i + 1})`}</option>)}
-                  </select>
-                </div>
-              ))}
-              {equalsTx && (
-                <div className="self-end text-[11px] text-gray-500">
-                  Equals: <strong className="text-gray-800">{equalsTx.lista.length} transações</strong> · {formatCurrency(equalsTx.total)}
-                  {equalsTx.ignoradas > 0 && <span className="text-amber-600"> · {equalsTx.ignoradas} sem autorização/valor</span>}
-                </div>
-              )}
-            </div>
-            <p className="text-[10px] text-gray-400">* obrigatórios. A conferência casa por <strong>bandeira · modalidade · autorização · valor bruto</strong>.</p>
+        <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl px-6 py-6 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors">
+          <UploadCloud className="h-7 w-7 text-gray-400" />
+          <span className="text-sm text-gray-600">{arquivos.length ? 'Adicionar outro arquivo' : 'Arraste ou clique para enviar os arquivos de vendas'}</span>
+          <span className="text-[11px] text-gray-400">CSV ou Excel (.xlsx/.xls) · Equals, Cielo, Rede, Getnet, Sipag ou outra adquirente · pode enviar vários</span>
+          <input ref={fileRef} type="file" multiple accept=".csv,.xlsx,.xls,.xlsm,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="hidden"
+            onChange={(e) => adicionarArquivos(e.target.files)} />
+        </label>
 
-            <div className="overflow-x-auto border border-gray-100 rounded-lg">
-              <table className="w-full text-[11px]">
-                <thead className="bg-gray-50 text-gray-500">
-                  <tr>{csv.headers.map((h, i) => (
-                    <th key={i} className={`text-left px-2 py-1.5 font-semibold whitespace-nowrap ${corColuna(i)}`}>{h || `col ${i + 1}`}</th>
-                  ))}</tr>
-                </thead>
-                <tbody>
-                  {csv.rows.slice(0, 8).map((r, ri) => (
-                    <tr key={ri} className="border-t border-gray-50">
-                      {csv.headers.map((_, ci) => <td key={ci} className="px-2 py-1 text-gray-600 whitespace-nowrap">{r[ci]}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {csv.rows.length > 8 && <p className="text-[10px] text-gray-400">Mostrando 8 de {csv.rows.length} linhas.</p>}
-          </>
+        {equalsTx && (
+          <p className="text-[11px] text-gray-500">
+            Total dos arquivos: <strong className="text-gray-800">{equalsTx.lista.length} transações</strong> · {formatCurrency(equalsTx.total)}
+            {equalsTx.cobertos && equalsTx.cobertos.size > 0 && <> · adquirentes conferidas: <strong className="text-gray-700">{[...equalsTx.cobertos].join(', ')}</strong></>}
+            {!equalsTx.cobertos && <span className="text-amber-600"> · a Equals está sem a coluna Adquirente mapeada: todas as adquirentes do sistema serão conferidas</span>}
+          </p>
         )}
       </div>
 
@@ -538,7 +594,7 @@ export default function BpoDiagnosticarCartoes() {
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Diagnosticar
         </button>
-        {!podeDiagnosticar && <span className="text-[11px] text-gray-400">Selecione rede Autosystem + empresa + período e mapeie ao menos Autorização e Valor no CSV.</span>}
+        {!podeDiagnosticar && <span className="text-[11px] text-gray-400">Selecione rede + empresa + período, envie os arquivos e mapeie ao menos Autorização e Valor (e a adquirente de cada arquivo).</span>}
       </div>
 
       {/* Resultado */}
@@ -546,8 +602,13 @@ export default function BpoDiagnosticarCartoes() {
         <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 flex items-start gap-2">
           <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-800">
-            Nenhuma <strong>conta de cartão</strong> configurada para esta rede. Marque as contas em
-            <strong> Cadastros → Clientes → Editar rede → Empresas → Contas de cartão</strong> e tente de novo.
+            {resultado.webposto ? (
+              <>Nenhuma <strong>administradora</strong> parametrizada para esta rede. Informe adquirente, bandeira e modalidade em
+              <strong> Cadastros → Clientes → Editar rede → Administradoras</strong> e tente de novo.</>
+            ) : (
+              <>Nenhuma <strong>conta de cartão</strong> configurada para esta rede. Marque as contas em
+              <strong> Cadastros → Clientes → Editar rede → Empresas → Contas de cartão</strong> e tente de novo.</>
+            )}
           </p>
         </div>
       )}
@@ -557,20 +618,23 @@ export default function BpoDiagnosticarCartoes() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Card titulo="Conciliadas" valor={resultado.conciliadas.length} cor="emerald" icon={<CheckCircle2 className="h-6 w-6" />} />
             <Card titulo="Prováveis" valor={(resultado.provaveis || []).length} cor="sky" icon={<AlertCircle className="h-6 w-6" />} />
-            <Card titulo="Só na Equals" valor={resultado.soEquals.length} cor="rose" icon={<XCircle className="h-6 w-6" />} />
+            <Card titulo="Só nos arquivos" valor={resultado.soEquals.length} cor="rose" icon={<XCircle className="h-6 w-6" />} />
             <Card titulo="Só no sistema" valor={resultado.soSistema.length} cor="amber" icon={<XCircle className="h-6 w-6" />} />
           </div>
           <div className="flex flex-wrap gap-4 text-[12px] text-gray-600 px-1">
-            <span>Equals: <strong>{resultado.totalEquals}</strong> · {formatCurrency(resultado.valorEquals)}</span>
+            <span>Arquivos: <strong>{resultado.totalEquals}</strong> · {formatCurrency(resultado.valorEquals)}</span>
             <span>Sistema: <strong>{resultado.totalSistema}</strong> · {formatCurrency(resultado.valorSistema)}</span>
             {resultado.semDocumento > 0 && <span className="text-amber-600">{resultado.semDocumento} lançamento(s) do sistema sem documento (autorização)</span>}
+            {resultado.foraCobertura?.length > 0 && (
+              <span className="text-gray-500">Não conferidos (adquirente sem arquivo): {resultado.foraCobertura.map(([a, n]) => `${a} (${n})`).join(', ')}</span>
+            )}
           </div>
 
           <AjustesSugeridos resultado={resultado} />
           <AlertasParcelamento itens={resultado.alertasParcelamento || []} />
           <ListaProvaveis itens={resultado.provaveis || []} />
-          <ListaDivergencia titulo="Só na Equals (não achou no sistema)" itens={resultado.soEquals} cor="rose" />
-          <ListaDivergencia titulo="Só no sistema (não achou na Equals)" itens={resultado.soSistema} cor="amber" />
+          <ListaDivergencia titulo="Só nos arquivos (não achou no sistema)" itens={resultado.soEquals} cor="rose" />
+          <ListaDivergencia titulo="Só no sistema (não achou nos arquivos)" itens={resultado.soSistema} cor="amber" />
         </div>
       )}
     </div>
@@ -632,7 +696,7 @@ function AjustesSugeridos({ resultado }) {
 //  2) transações da Equals sem correspondência no sistema
 //  3) prováveis conciliações
 const SUBGRUPOS_AJUSTE = [
-  { tipo: 'semEquals',  titulo: 'Sem correspondência na Equals' },
+  { tipo: 'semEquals',  titulo: 'Sem correspondência nos arquivos' },
   { tipo: 'semSistema', titulo: 'Sem correspondência no sistema' },
   { tipo: 'provavel',   titulo: 'Prováveis conciliações' },
 ];
@@ -735,15 +799,15 @@ function DiferencaProvavel({ p }) {
   const eq = (v) => <span className="font-mono text-emerald-700">{v}</span>;
   switch (p.motivo) {
     case 'valor':
-      return <>valor no sistema {sis(formatCurrency(s.valor))} ≠ Equals {eq(formatCurrency(e.valor))}</>;
+      return <>valor no sistema {sis(formatCurrency(s.valor))} ≠ {e.origem || 'arquivo'} {eq(formatCurrency(e.valor))}</>;
     case 'bandeira':
-      return <>bandeira no sistema {sis(s.bandeira || '—')} ≠ Equals {eq(e.bandeira || '—')}</>;
+      return <>bandeira no sistema {sis(s.bandeira || '—')} ≠ {e.origem || 'arquivo'} {eq(e.bandeira || '—')}</>;
     case 'modalidade':
-      return <>tipo no sistema {sis(s.modalidade || '—')} ≠ Equals {eq(e.modalidade || '—')}</>;
+      return <>tipo no sistema {sis(s.modalidade || '—')} ≠ {e.origem || 'arquivo'} {eq(e.modalidade || '—')}</>;
     case 'bandeira_modalidade':
       return <>bandeira {sis(s.bandeira || '—')} ≠ {eq(e.bandeira || '—')} e tipo {sis(s.modalidade || '—')} ≠ {eq(e.modalidade || '—')}</>;
     default: // autorizacao
-      return <>autorização no sistema {sis(s.autorizacao)} ≠ Equals {eq(e.autorizacao)}</>;
+      return <>autorização no sistema {sis(s.autorizacao)} ≠ {e.origem || 'arquivo'} {eq(e.autorizacao)}</>;
   }
 }
 
@@ -769,7 +833,7 @@ function LinhaAjuste({ item }) {
       <div className="pl-16 pr-4 py-2 flex items-start gap-3">
         <span className="mt-0.5 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Revisar no sistema</span>
         <p className="text-[12.5px] text-gray-700 leading-relaxed">
-          Lançamento no sistema (conta <strong>{rotuloConta(s.conta, s.contaNome)}</strong>, {fmtDataBR(s.data)}) sem correspondência na Equals: autorização <span className="font-mono">{s.autorizacao}</span> · {formatCurrency(s.valor)}. → Revisar (valor/autorização errada, duplicidade ou lançamento indevido).
+          Lançamento no sistema (conta <strong>{rotuloConta(s.conta, s.contaNome)}</strong>, {fmtDataBR(s.data)}) sem correspondência nos arquivos das adquirentes: autorização <span className="font-mono">{s.autorizacao}</span> · {formatCurrency(s.valor)}. → Revisar (valor/autorização errada, duplicidade ou lançamento indevido).
         </p>
       </div>
     );
@@ -780,7 +844,7 @@ function LinhaAjuste({ item }) {
     <div className="pl-16 pr-4 py-2 flex items-start gap-3">
       <span className="mt-0.5 inline-flex items-center rounded-full bg-rose-100 text-rose-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Falta no sistema</span>
       <p className="text-[12.5px] text-gray-700 leading-relaxed">
-        Transação na Equals sem correspondência: <strong>{e.adquirente}/{e.bandeira}/{e.modalidade}</strong> · autorização <span className="font-mono">{e.autorizacao}</span> · {formatCurrency(e.valor)}{e.hora ? <> · {e.hora}</> : null}. → Lançar no sistema.
+        Transação {e.origem ? `(${e.origem}) ` : ''}sem correspondência no sistema: <strong>{e.adquirente}/{e.bandeira}/{e.modalidade}</strong> · autorização <span className="font-mono">{e.autorizacao}</span> · {formatCurrency(e.valor)}{e.hora ? <> · {e.hora}</> : null}. → Lançar no sistema.
       </p>
     </div>
   );
@@ -804,13 +868,13 @@ function AlertasParcelamento({ itens }) {
                   <span className="mt-0.5 inline-flex items-center rounded-full bg-orange-100 text-orange-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Sistema parcelou</span>
                   <p className="text-[12.5px] text-gray-700 leading-relaxed">
                     Conta <strong>{a.sistema.conta}</strong> ({a.equals.adquirente}/{a.equals.bandeira}/{a.equals.modalidade}) · autorização <span className="font-mono">{a.sistema.autorizacao}</span> · {formatCurrency(a.sistema.valor)}:
-                    o sistema fatiou em <strong>{a.sistema.parcelas}x</strong> ({a.sistema.membros.map(m => m.documento).join(', ')}), mas na Equals <strong>não é parcelado</strong>. → Verificar: lançamento à vista foi parcelado indevidamente.
+                    o sistema fatiou em <strong>{a.sistema.parcelas}x</strong> ({a.sistema.membros.map(m => m.documento).join(', ')}), mas no arquivo da adquirente <strong>não é parcelado</strong>. → Verificar: lançamento à vista foi parcelado indevidamente.
                     {a.sistema.funcionario && <span className="text-indigo-600 font-medium"> · caixa de {a.sistema.funcionario}</span>}
                   </p>
                 </>
               ) : (
                 <>
-                  <span className="mt-0.5 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Equals parcelada</span>
+                  <span className="mt-0.5 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">Adquirente parcelada</span>
                   <p className="text-[12.5px] text-gray-700 leading-relaxed">
                     Conta <strong>{a.sistema.conta}</strong> ({a.equals.adquirente}/{a.equals.bandeira}/{a.equals.modalidade}) · autorização <span className="font-mono">{a.sistema.autorizacao}</span> · {formatCurrency(a.equals.valor)}:
                     na Equals é <strong>parcelada{a.equals.parcelasEquals ? ` (${a.equals.parcelasEquals}x)` : ''}</strong>, mas o sistema lançou em parcela única. → Verificar o parcelamento no sistema.
@@ -842,12 +906,12 @@ function ListaProvaveis({ itens }) {
               <tr>
                 <th className="text-left px-3 py-1.5 font-semibold">Divergência</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Adquirente</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Bandeira (Sist. / Equals)</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Tipo (Sist. / Equals)</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Autorização (Sist. / Equals)</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Bandeira (Sist. / Arquivo)</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Tipo (Sist. / Arquivo)</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Autorização (Sist. / Arquivo)</th>
                 <th className="text-center px-3 py-1.5 font-semibold">Turno</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Funcionário / Resp.</th>
-                <th className="text-right px-3 py-1.5 font-semibold">Valor (Sist. / Equals)</th>
+                <th className="text-right px-3 py-1.5 font-semibold">Valor (Sist. / Arquivo)</th>
               </tr>
             </thead>
             <tbody>
@@ -941,6 +1005,144 @@ function Card({ titulo, valor, cor, icon }) {
         <p className="text-2xl font-bold tabular-nums">{valor}</p>
       </div>
       <span className="opacity-60">{icon}</span>
+    </div>
+  );
+}
+
+// Um arquivo de vendas: layout, adquirente (quando o arquivo é de uma só),
+// mapeamento das colunas e prévia das primeiras linhas.
+const MAP_FIELDS = [
+  { campo: 'adquirente', label: 'Adquirente', cor: 'bg-sky-50 text-sky-700', soMulti: true },
+  { campo: 'bandeira', label: 'Bandeira', cor: 'bg-purple-50 text-purple-700' },
+  { campo: 'modalidade', label: 'Modalidade (déb/créd)', cor: 'bg-amber-50 text-amber-700' },
+  { campo: 'autorizacao', label: 'Autorização *', cor: 'bg-blue-50 text-blue-700' },
+  { campo: 'valor', label: 'Valor bruto *', cor: 'bg-emerald-50 text-emerald-700' },
+  { campo: 'total', label: 'Total da venda (parcelado)', cor: 'bg-teal-50 text-teal-700' },
+  { campo: 'parcelas', label: 'Parcelas', cor: 'bg-indigo-50 text-indigo-700' },
+  { campo: 'hora', label: 'Hora', cor: 'bg-rose-50 text-rose-700' },
+];
+
+function ArquivoVendas({ arq, lay, modelos, adquirentesRede, resumo, onLayout, onAdquirente, onCol, onRemover, onSalvarModelo, onExcluirModelo }) {
+  const [salvarAberto, setSalvarAberto] = useState(false);
+  const [nomeModelo, setNomeModelo] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [msgModelo, setMsgModelo] = useState('');
+  const salvarModelo = async (atualizar) => {
+    setSalvando(true); setMsgModelo('');
+    try {
+      const m = await onSalvarModelo({ nome: nomeModelo.trim(), atualizar });
+      setSalvarAberto(false); setNomeModelo('');
+      setMsgModelo(`Modelo "${m.nome}" salvo — será aplicado automaticamente em arquivos com estas colunas.`);
+    } catch (e) { setMsgModelo(e.message); }
+    finally { setSalvando(false); }
+  };
+  const campos = MAP_FIELDS.filter(f => !f.soMulti || lay.multi);
+  const corColuna = (i) => campos.find(x => String(arq.cols[x.campo]) === String(i))?.cor || '';
+  const opcoesAdq = [...new Set([...adquirentesRede, ...(arq.adquirente ? [arq.adquirente] : [])])].sort();
+  const sel = 'h-9 rounded-lg border border-gray-200 bg-white px-2 text-[12px] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
+
+  return (
+    <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <FileText className="h-4 w-4 text-blue-600" />
+        <span className="text-[12px] font-medium text-gray-800">{arq.nome}</span>
+        <span className="text-[11px] text-gray-400">· {arq.rows.length} linhas · {arq.headers.length} colunas</span>
+        {resumo && (
+          <span className="text-[11px] text-gray-500">
+            · <strong className="text-gray-700">{resumo.qtd} transações</strong> · {formatCurrency(resumo.total)}
+            {resumo.ignoradas > 0 && <span className="text-amber-600"> · {resumo.ignoradas} sem autorização/valor</span>}
+          </span>
+        )}
+        <button onClick={onRemover} className="ml-auto inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-800">
+          <X className="h-3.5 w-3.5" /> Remover
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Layout</label>
+          <select value={arq.layout} onChange={(e) => onLayout(e.target.value)} className={sel}>
+            {modelos.length > 0 && (
+              <optgroup label="Modelos salvos">
+                {modelos.map(m => <option key={m.id} value={`m:${m.id}`}>{m.nome}{m.adquirente ? ` · ${m.adquirente}` : ''}</option>)}
+              </optgroup>
+            )}
+            <optgroup label="Padrões">
+              {LAYOUTS.map(l => <option key={l.k} value={l.k}>{l.rot}</option>)}
+            </optgroup>
+          </select>
+        </div>
+        {!lay.multi && (
+          <div>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Adquirente do arquivo *</label>
+            <select value={arq.adquirente} onChange={(e) => onAdquirente(e.target.value)} className={sel}>
+              <option value="">— selecione —</option>
+              {opcoesAdq.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        )}
+        {campos.map(f => (
+          <div key={f.campo}>
+            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{f.label}</label>
+            <select value={arq.cols[f.campo]} onChange={(e) => onCol(f.campo, e.target.value)} className={sel}>
+              <option value="">— selecione —</option>
+              {arq.headers.map((h, i) => <option key={i} value={i}>{h || `(coluna ${i + 1})`}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+      {/* Modelo de layout: salva este mapeamento para os próximos arquivos com as mesmas colunas */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+        <span className="text-[11px] text-gray-500">
+          {lay.modelo ? <>Usando o modelo <strong className="text-gray-700">{lay.modelo.nome}</strong>.</> : 'Mapeou as colunas? Salve como modelo para não repetir no próximo arquivo.'}
+        </span>
+        {salvarAberto ? (
+          <>
+            <input value={nomeModelo} onChange={e => setNomeModelo(e.target.value)} placeholder="Nome do modelo (ex.: Sipag)" autoFocus
+              className="h-8 w-56 rounded-lg border border-gray-200 bg-white px-2 text-[12px] focus:border-blue-400 focus:outline-none" />
+            <button onClick={() => salvarModelo(false)} disabled={salvando || nomeModelo.trim().length < 2 || (!lay.multi && !arq.adquirente)}
+              className="h-8 rounded-lg bg-blue-600 px-3 text-[12px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Salvar</button>
+            <button onClick={() => setSalvarAberto(false)} className="h-8 rounded-lg px-2 text-[12px] text-gray-500 hover:text-gray-800">Cancelar</button>
+          </>
+        ) : (
+          <div className="ml-auto flex gap-2">
+            {lay.modelo && (
+              <>
+                <button onClick={() => salvarModelo(true)} disabled={salvando}
+                  className="h-8 rounded-lg border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Atualizar modelo</button>
+                <button onClick={onExcluirModelo}
+                  className="h-8 rounded-lg px-2 text-[12px] text-red-600 hover:bg-red-50">Excluir modelo</button>
+              </>
+            )}
+            <button onClick={() => { setSalvarAberto(true); setNomeModelo(lay.modelo ? '' : (arq.adquirente || '')); }}
+              className="h-8 rounded-lg border border-blue-200 bg-white px-3 text-[12px] font-medium text-blue-700 hover:bg-blue-50">Salvar como novo modelo</button>
+          </div>
+        )}
+        {msgModelo && <p className="basis-full text-[11px] text-gray-600">{msgModelo}</p>}
+      </div>
+
+      <p className="text-[10px] text-gray-400">
+        * obrigatórios. A conferência casa por <strong>adquirente · bandeira · modalidade · autorização · valor bruto</strong>.
+        {!lay.multi && ' A adquirente deve ser a mesma usada nas contas de cartão da rede.'}
+      </p>
+
+      <div className="overflow-x-auto border border-gray-100 rounded-lg">
+        <table className="w-full text-[11px]">
+          <thead className="bg-gray-50 text-gray-500">
+            <tr>{arq.headers.map((h, i) => (
+              <th key={i} className={`text-left px-2 py-1.5 font-semibold whitespace-nowrap ${corColuna(i)}`}>{h || `col ${i + 1}`}</th>
+            ))}</tr>
+          </thead>
+          <tbody>
+            {arq.rows.slice(0, 6).map((r, ri) => (
+              <tr key={ri} className="border-t border-gray-50">
+                {arq.headers.map((_, ci) => <td key={ci} className="px-2 py-1 text-gray-600 whitespace-nowrap">{r[ci]}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {arq.rows.length > 6 && <p className="text-[10px] text-gray-400">Mostrando 6 de {arq.rows.length} linhas.</p>}
     </div>
   );
 }
