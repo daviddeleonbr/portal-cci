@@ -10,6 +10,7 @@ import PageHeader from '../components/ui/PageHeader';
 import BpoAlteracoesCaixas from './BpoAlteracoesCaixas';
 import BpoAnaliseCartoes from './BpoAnaliseCartoes';
 import BpoDiagnosticarCartoes from './BpoDiagnosticarCartoes';
+import ConsultaConferencias from '../components/conferencia/ConsultaConferencias';
 import Modal from '../components/ui/Modal';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
@@ -895,7 +896,18 @@ export default function BpoConciliacaoCaixas({
             }`}>
             <Stethoscope className="h-4 w-4" /> Diagnosticar
           </button>
+          <button onClick={() => setAbaAtiva('conferencias')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              abaAtiva === 'conferencias' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <CheckCircle2 className="h-4 w-4" /> Conferências do cliente
+          </button>
         </div>
+      )}
+
+      {/* Aba: conferências de recebimentos enviadas pelos clientes (portal) */}
+      {!modoCliente && abaAtiva === 'conferencias' && (
+        <ConsultaConferencias empresas={clientes} />
       )}
 
       {/* Aba: Alterações em caixas (embed do componente standalone) */}

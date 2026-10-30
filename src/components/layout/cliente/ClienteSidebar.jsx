@@ -55,7 +55,8 @@ function buildNavigation(prefix, tipoCliente = 'webposto') {
     {
       section: 'BPO',
       items: [
-        { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: 'sangrias' },
+        { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: ['sangrias', 'sangrias_consultar'] },
+        { name: 'Conferência de recebimentos', href: `${prefix}/conferencia-recebimentos`, icon: ClipboardCheck, permissao: ['conferencia_recebimentos', 'conferencia_recebimentos_consultar'] },
         { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais' },
         { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas' },
         { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo' },
@@ -86,7 +87,7 @@ function buildNavigation(prefix, tipoCliente = 'webposto') {
 function filtrarNavegacao(navigationAll, permissoes, flagSource) {
   const perms = new Set(permissoes || []);
   const visivel = (item) => {
-    if (item.permissao && !perms.has(item.permissao)) return false;
+    if (item.permissao && ![].concat(item.permissao).some(p => perms.has(p))) return false; // lista = qualquer uma
     if (item.requerFlag && !flagSource?.[item.requerFlag]) return false;
     return true;
   };

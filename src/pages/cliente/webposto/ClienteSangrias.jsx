@@ -17,6 +17,7 @@ import * as sangriasService from '../../../services/clienteSangriasService';
 import * as contasBancariasService from '../../../services/clienteContasBancariasService';
 import { formatCurrency } from '../../../utils/format';
 import { SecaoRetiradas, ResumoDepositoModal } from '../../../components/sangrias/RetiradasDeposito';
+import ConsultaSangrias from '../../../components/sangrias/ConsultaSangrias';
 import { erroRetiradas, resumoRetiradas, PERMISSAO_TAREFA_DEPOSITO } from '../../../utils/sangriasDeposito';
 
 // Usa componentes locais (nao UTC) para evitar que, a noite no Brasil,
@@ -54,6 +55,9 @@ export default function ClienteSangrias() {
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
   const [historico, setHistorico] = useState([]);
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
+  // Quem tem só "Consultar sangrias" vê apenas a aba Consulta.
+  const podeContar = (usuario?.permissoes || []).includes('sangrias');
+  const [aba, setAba] = useState(podeContar ? 'contagem' : 'consulta');
   const [cienciaConfirmada, setCienciaConfirmada] = useState(false);
   const [modalConfirmacao, setModalConfirmacao] = useState(false);
   // Retiradas em dinheiro antes do depósito + responsável da tarefa de depósito
@@ -355,11 +359,25 @@ export default function ClienteSangrias() {
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
 
       <PageHeader title="Sangrias - Contagem de Caixa" description="Confira o dinheiro apurado no sistema e registre o apresentado no fechamento de cada funcionário">
-        <button onClick={() => setMostrarHistorico(!mostrarHistorico)}
-          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-          <History className="h-4 w-4" /> {mostrarHistorico ? 'Ocultar histórico' : 'Ver histórico'}
-        </button>
+        {aba === 'contagem' && (
+          <button onClick={() => setMostrarHistorico(!mostrarHistorico)}
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            <History className="h-4 w-4" /> {mostrarHistorico ? 'Ocultar histórico' : 'Ver histórico'}
+          </button>
+        )}
       </PageHeader>
+
+      {/* Contagem (lança) × Consulta (fechamentos enviados por todos os usuários) */}
+      <div className="mb-4 inline-flex rounded-lg bg-gray-100 p-1">
+        {podeContar && (
+          <button onClick={() => setAba('contagem')}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${aba === 'contagem' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Contagem</button>
+        )}
+        <button onClick={() => setAba('consulta')}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium ${aba === 'consulta' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Consulta</button>
+      </div>
+
+      {aba === 'consulta' ? <ConsultaSangrias empresas={session?.clientesRede || []} /> : (<>
 
       {/* Empresa ativa (troca inline se tiver >1 empresa e permissão) */}
       <CardEmpresaAtiva
@@ -775,6 +793,7 @@ export default function ClienteSangrias() {
           </div>
         </div>
       </Modal>
+      </>)}
     </div>
   );
 }

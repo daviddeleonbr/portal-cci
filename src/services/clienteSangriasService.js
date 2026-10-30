@@ -101,3 +101,20 @@ export async function criarTarefaDeposito(fechamentoId, responsavelId) {
   if (error) throw error;
   return data;
 }
+
+// Consulta: fechamentos enviados (todas as empresas informadas, no período).
+// O RLS já limita às empresas que o usuário pode ver.
+export async function listarFechamentos({ clienteIds, de, ate }) {
+  if (!clienteIds?.length) return [];
+  let q = supabase
+    .from('cliente_sangrias_fechamento')
+    .select('id, cliente_id, data, registros, total_apurado, total_apresentado, total_diferenca, confirmado_em, confirmado_por, observacoes, retiradas, total_retiradas, valor_deposito, tarefa_deposito_id, deposito_responsavel_nome')
+    .in('cliente_id', clienteIds)
+    .order('data', { ascending: false })
+    .order('confirmado_em', { ascending: false });
+  if (de) q = q.gte('data', de);
+  if (ate) q = q.lte('data', ate);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}

@@ -25,7 +25,8 @@ const PAGINAS_ORDEM = [
   { rota: '/comercial/estoques',         permissao: 'comercial_estoques' },
   { rota: '/financeiro/contas-pagar',    permissao: 'financeiro' },
   { rota: '/financeiro/contas-receber',  permissao: 'financeiro' },
-  { rota: '/sangrias',                   permissao: 'sangrias' },
+  { rota: '/sangrias',                   permissao: ['sangrias', 'sangrias_consultar'] },
+  { rota: '/conferencia-recebimentos',   permissao: ['conferencia_recebimentos', 'conferencia_recebimentos_consultar'] },
   { rota: '/financeiro/notas-fiscais',   permissao: 'notas_fiscais' },
   { rota: '/bpo/outras-contas',          permissao: 'outras_contas' },
   { rota: '/bpo',                        permissao: 'bpo' },
@@ -51,7 +52,7 @@ export function primeiraRotaPermitida(session) {
   const perms = new Set(session?.usuario?.permissoes || []);
   const flags = getFlagSource(session) || {};
   for (const pagina of PAGINAS_ORDEM) {
-    if (pagina.permissao && !perms.has(pagina.permissao)) continue;
+    if (pagina.permissao && ![].concat(pagina.permissao).some(p => perms.has(p))) continue;
     if (pagina.requerFlag && !flags?.[pagina.requerFlag])  continue;
     return pagina.rota;
   }

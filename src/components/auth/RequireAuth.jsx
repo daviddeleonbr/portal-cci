@@ -73,7 +73,9 @@ export function RequirePermissaoCliente({ permissao, children }) {
   if (!session) {
     return <Navigate to="/cliente/login" replace />;
   }
-  const tem = (session.usuario?.permissoes || []).includes(permissao);
+  // `permissao` pode ser uma lista: basta ter qualquer uma delas.
+  const lista = Array.isArray(permissao) ? permissao : [permissao];
+  const tem = lista.some(p => (session.usuario?.permissoes || []).includes(p));
   if (!tem) {
     return (
       <div className="px-6 py-16">
