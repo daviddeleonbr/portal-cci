@@ -157,6 +157,15 @@ export async function obterCredenciais(id) {
   return Array.isArray(data) ? data[0] : data;
 }
 
+// Token do túnel HTTPS em texto puro — só admin N3 (o banco valida o claim
+// cci_nivel_admin = 3; para os demais a RPC lança erro). Usado no botão
+// "Copiar token" da edição da rede.
+export async function obterTokenHttps(id) {
+  const { data, error } = await supabase.rpc('as_rede_get_https_token', { p_id: id });
+  if (error) throw error;
+  return data || null;
+}
+
 // Quando o volume de dados estoura o worker Deno da Edge Function, o gateway
 // mata a função e devolve WORKER_RESOURCE_LIMIT. Nesse caso não adianta mostrar
 // o erro tecnico — orientamos o usuario a reduzir o periodo.

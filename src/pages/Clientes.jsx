@@ -4,8 +4,9 @@ import {
   Search, Plus, Building2, Mail, Phone, MapPin, Users as UsersIcon,
   Loader2, AlertCircle, Pencil, Trash2, ChevronRight, ChevronDown,
   Check, Zap, ArrowLeft, RefreshCw, Key, Network, Landmark, Wallet, Coins, Boxes,
-  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock, CreditCard, X, Settings2, Tags,
+  Link2, BarChart3, TrendingUp, Eye, EyeOff, Server, Database, Lock, CreditCard, X, Settings2, Tags, Copy,
 } from 'lucide-react';
+import { useAdminSession } from '../hooks/useAuth';
 import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -741,6 +742,27 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
   const [redeHttpsUrlMascarada, setRedeHttpsUrlMascarada] = useState('');
   const [redeHttpsToken, setRedeHttpsToken] = useState('');
   const [mostrarToken, setMostrarToken] = useState(false);
+  // Admin N3 pode copiar o token já salvo (RPC valida o nível no banco).
+  const adminSession = useAdminSession();
+  const ehN3 = usuariosSistemaService.nivelAdmin(adminSession?.usuario) === 3;
+  const [copiandoToken, setCopiandoToken] = useState(false);
+  const [tokenCopiado, setTokenCopiado] = useState(false);
+  const copiarToken = async () => {
+    if (!editandoRede?.id) return;
+    setCopiandoToken(true);
+    try {
+      const token = await autosystemService.obterTokenHttps(editandoRede.id);
+      if (!token) { showToast?.('error', 'Nenhum token salvo para esta rede.'); return; }
+      await navigator.clipboard.writeText(token);
+      setTokenCopiado(true);
+      setTimeout(() => setTokenCopiado(false), 2000);
+      showToast?.('success', 'Token copiado para a área de transferência.');
+    } catch (err) {
+      showToast?.('error', err?.message || 'Não foi possível copiar o token.');
+    } finally {
+      setCopiandoToken(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -1438,9 +1460,21 @@ export function WizardNovoCliente({ open, onClose, onSaved, showToast, preRede =
                       {mostrarToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">
-                    Enviado em <code className="font-mono">Authorization: Bearer …</code> a cada request.
-                  </p>
+                  <div className="flex items-start justify-between gap-3 mt-1">
+                    <p className="text-[10.5px] text-gray-400 dark:text-gray-500">
+                      Enviado em <code className="font-mono">Authorization: Bearer …</code> a cada request.
+                    </p>
+                    {editandoRede?.id && ehN3 && (
+                      <button type="button" onClick={copiarToken} disabled={copiandoToken}
+                        title="Copia o token salvo (somente admin N3)"
+                        className="shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-gray-200 dark:border-white/10 text-[11px] font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.05] disabled:opacity-60">
+                        {copiandoToken ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : tokenCopiado ? <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          : <Copy className="h-3.5 w-3.5" />}
+                        {tokenCopiado ? 'Copiado' : 'Copiar token salvo'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
