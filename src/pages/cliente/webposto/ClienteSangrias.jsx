@@ -409,7 +409,7 @@ export default function ClienteSangrias() {
               placeholder="Nome completo"
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-600" />
           </div>
-          <button onClick={carregarDia} disabled={loadingDados || !cliente}
+          <button onClick={() => { qualityApi.limparCacheTransacional(); carregarDia(); }} disabled={loadingDados || !cliente}
             className="flex items-center gap-2 h-10 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Recarregar

@@ -98,6 +98,13 @@ function setLocalCache(key, data, ttl = CACHE_TTL_CATALOGO_MS) {
   } catch (_) { /* ignore quota */ }
 }
 
+// Descarta só o cache em memória de dados transacionais (vendas, formas de
+// pagamento, sangrias…), mantendo os catálogos. Usado pelos botões "Recarregar"
+// para trazer o que acabou de ser lançado no sistema sem esperar os 5 min.
+export function limparCacheTransacional() {
+  memCache.clear();
+}
+
 export function limparCache() {
   memCache.clear();
   Object.keys(localStorage)

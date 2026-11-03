@@ -85,7 +85,8 @@ async function autosystem(cliente, data) {
 }
 
 // [{ chave, rotulo, tipo, sistema }] do dia, para a empresa.
-export async function carregarRecebimentosDia(cliente, data, tipoCliente) {
+export async function carregarRecebimentosDia(cliente, data, tipoCliente, { forcar = false } = {}) {
+  if (forcar) qualityApi.limparCacheTransacional(); // "Recarregar": ignora o cache de 5 min
   return tipoCliente === 'autosystem' ? autosystem(cliente, data) : webposto(cliente, data);
 }
 

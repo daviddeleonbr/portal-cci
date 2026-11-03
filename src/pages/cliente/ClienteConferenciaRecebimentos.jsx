@@ -45,14 +45,14 @@ export default function ClienteConferenciaRecebimentos() {
   const empresa = empresas.find(e => e.id === empresaId) || null;
   const hoje = ymd(new Date());
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async (forcar = false) => {
     if (!empresa || !data) return;
     setCarregando(true); setErro(''); setItens([]); setSalva(null); setObservacoes('');
     try {
       const existente = await conferenciaService.buscarConferencia(empresa.id, data);
       if (existente) { setSalva(existente); return; }
       if (data >= hoje) { setErro('Só é possível conferir dias anteriores a hoje.'); return; }
-      const linhas = await conferenciaService.carregarRecebimentosDia(empresa, data, tipoCliente);
+      const linhas = await conferenciaService.carregarRecebimentosDia(empresa, data, tipoCliente, { forcar });
       setItens(linhas.map(l => ({ ...l, conferido: '' })));
       if (!linhas.length) setErro('Nenhum recebimento no sistema para este dia.');
     } catch (e) { setErro(e.message || 'Falha ao carregar os recebimentos.'); }
@@ -110,7 +110,7 @@ export default function ClienteConferenciaRecebimentos() {
               <input type="date" value={data} max={ontem()} onChange={e => setData(e.target.value)}
                 className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm" />
             </div>
-            <button onClick={carregar} disabled={carregando || !empresa}
+            <button onClick={() => carregar(true)} disabled={carregando || !empresa}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} /> Recarregar
             </button>
