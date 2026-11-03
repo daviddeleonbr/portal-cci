@@ -900,7 +900,7 @@ export default function BpoConciliacaoCaixas({
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
               abaAtiva === 'conferencias' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}>
-            <CheckCircle2 className="h-4 w-4" /> Conferências do cliente
+            <CheckCircle2 className="h-4 w-4" /> Resumos de caixa do cliente
           </button>
         </div>
       )}

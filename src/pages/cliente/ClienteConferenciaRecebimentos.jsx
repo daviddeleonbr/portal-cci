@@ -74,7 +74,7 @@ export default function ClienteConferenciaRecebimentos() {
         itens: itens.map(i => ({ ...i, conferido: num(i.conferido) })),
       });
       setSalva(row); setConfirmar(false);
-      showToast('success', 'Conferência confirmada e salva.');
+      showToast('success', 'Resumo de caixa confirmado e salvo.');
     } catch (e) { showToast('error', e.message); }
     finally { setSalvando(false); }
   };
@@ -82,7 +82,7 @@ export default function ClienteConferenciaRecebimentos() {
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-      <PageHeader title="Conferência de Recebimentos" description="Confira o que o sistema recebeu no dia, por forma de pagamento, com os portais e extratos" />
+      <PageHeader title="Resumo de Caixa" description="Confira o que o sistema recebeu no dia, por forma de pagamento, com os portais e extratos" />
 
       <div className="mb-4 inline-flex rounded-lg bg-gray-100 p-1">
         {podeConferir && (
@@ -120,7 +120,7 @@ export default function ClienteConferenciaRecebimentos() {
             <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
               <Lock className="mt-0.5 h-4 w-4 text-emerald-600" />
               <p className="text-sm text-emerald-900">
-                <strong>Conferência confirmada</strong> em {new Date(salva.confirmado_em).toLocaleString('pt-BR')} por <strong>{salva.confirmado_por || '—'}</strong>. Os valores não podem mais ser alterados.
+                <strong>Resumo de caixa confirmado</strong> em {new Date(salva.confirmado_em).toLocaleString('pt-BR')} por <strong>{salva.confirmado_por || '—'}</strong>. Os valores não podem mais ser alterados.
               </p>
             </div>
           )}
@@ -208,7 +208,7 @@ export default function ClienteConferenciaRecebimentos() {
         </div>
       )}
 
-      <Modal open={confirmar} onClose={() => !salvando && setConfirmar(false)} title="Confirmar conferência de recebimentos" size="md"
+      <Modal open={confirmar} onClose={() => !salvando && setConfirmar(false)} title="Confirmar resumo de caixa" size="md"
         footer={(
           <div className="flex justify-end gap-3">
             <button onClick={() => setConfirmar(false)} disabled={salvando} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Revisar</button>
@@ -225,7 +225,7 @@ export default function ClienteConferenciaRecebimentos() {
             <div className="rounded-lg border border-gray-200 p-3"><p className="text-[10px] uppercase text-gray-400">Conferido</p><p className="font-mono font-semibold">{formatCurrency(totConferido)}</p></div>
             <div className="rounded-lg border border-gray-200 p-3"><p className="text-[10px] uppercase text-gray-400">Diferença</p><p className={`font-mono font-semibold ${corDif(totDif)}`}>{formatCurrency(totDif)}</p></div>
           </div>
-          <p className="text-[12px] text-amber-700">Após salvar, a conferência deste dia fica travada e não pode mais ser alterada.</p>
+          <p className="text-[12px] text-amber-700">Após salvar, o resumo de caixa deste dia fica travado e não pode mais ser alterada.</p>
         </div>
       </Modal>
     </div>

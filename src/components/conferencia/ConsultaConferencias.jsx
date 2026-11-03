@@ -62,7 +62,7 @@ export default function ConsultaConferencias({ empresas }) {
         {carregando && lista.length === 0 ? (
           <div className="flex justify-center py-14"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
         ) : lista.length === 0 ? (
-          <p className="py-14 text-center text-sm text-gray-400">Nenhuma conferência de recebimentos no período.</p>
+          <p className="py-14 text-center text-sm text-gray-400">Nenhum resumo de caixa no período.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
@@ -85,7 +85,7 @@ export default function ConsultaConferencias({ empresas }) {
                 ))}
               </tbody>
               <tfoot className="border-t border-gray-200 bg-gray-50 text-sm font-semibold">
-                <tr><td className="px-4 py-3" colSpan={3}>{lista.length} conferência(s)</td>
+                <tr><td className="px-4 py-3" colSpan={3}>{lista.length} resumo(s)</td>
                   <td className="px-3 py-3 text-right font-mono tabular-nums">{formatCurrency(tot.s)}</td>
                   <td className="px-3 py-3 text-right font-mono tabular-nums">{formatCurrency(tot.c)}</td>
                   <td className={`px-3 py-3 text-right font-mono tabular-nums ${corDif(tot.d)}`}>{formatCurrency(tot.d)}</td><td /></tr>

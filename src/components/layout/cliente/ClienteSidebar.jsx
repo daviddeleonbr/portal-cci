@@ -56,7 +56,7 @@ function buildNavigation(prefix, tipoCliente = 'webposto') {
       section: 'BPO',
       items: [
         { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: ['sangrias', 'sangrias_consultar'] },
-        { name: 'Conferência de recebimentos', href: `${prefix}/conferencia-recebimentos`, icon: ClipboardCheck, permissao: ['conferencia_recebimentos', 'conferencia_recebimentos_consultar'] },
+        { name: 'Resumo de caixa', href: `${prefix}/conferencia-recebimentos`, icon: ClipboardCheck, permissao: ['conferencia_recebimentos', 'conferencia_recebimentos_consultar'] },
         { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais' },
         { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas' },
         { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo' },
