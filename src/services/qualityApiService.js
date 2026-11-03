@@ -961,3 +961,32 @@ export async function buscarSangriasCaixa(apiKey, { dataInicial, dataFinal, empr
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
   });
 }
+
+// ─── Compras (Webposto) para a aba "Compras" do Fluxo de Caixa ────────
+// Títulos a pagar originados de NOTA DE ENTRADA (= compra de mercadoria/
+// combustível) no período, no mesmo formato da versão Autosystem
+// (buscarComprasFornecedorAutosystem): categoria = conta gerencial do título.
+export async function buscarComprasFornecedorWebposto(apiKey, empresaCodigos, { data_de, data_ate } = {}, urlBase = DEFAULT_URL_BASE) {
+  const todos = [];
+  for (const ec of empresaCodigos || []) {
+    const titulos = await buscarTitulosPagar(apiKey, { dataInicial: data_de, dataFinal: data_ate, empresaCodigo: ec }, urlBase);
+    (titulos || []).forEach(t => {
+      if (!t.notaEntradaCodigo) return; // só compras (nota de entrada)
+      const pago = String(t.situacao || '').toLowerCase().startsWith('pago') || !!t.dataPagamento;
+      todos.push({
+        empresa: t.empresaCodigo ?? ec,
+        data_compra: t.dataMovimento,
+        vencimento: t.vencimento,
+        data_pagamento: pago ? (t.dataPagamento || null) : null,
+        valor: Number(t.valor) || 0,
+        fornecedor: t.nomeFornecedor || '—',
+        documento: t.numeroTitulo || String(t.tituloPagarCodigo || ''),
+        categoria_codigo: t.planoContaGerencialNivel || String(t.planoContaGerencialCodigo || ''),
+        categoria_nome: t.planoContaGerencialDescricao || '',
+        despesa_nome: t.descricao || t.planoContaGerencialDescricao || '',
+        parcela: t.parcela, parcelas: t.quantidadeParcelas,
+      });
+    });
+  }
+  return todos;
+}

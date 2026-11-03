@@ -2622,7 +2622,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             }`}>
             <LineChartIcon className="h-3.5 w-3.5" /> Evolução
           </button>
-          {cliente?.as_rede_id && (
+          {(cliente?.as_rede_id || cliente?.chave_api_id) && (
             <button onClick={() => setActiveTab('compras')}
               className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
                 activeTab === 'compras' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -3103,6 +3103,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           <motion.div key="compras" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
             <ComprasFornecedorView
               asRedeId={cliente?.as_rede_id}
+              chaveApiId={cliente?.as_rede_id ? null : cliente?.chave_api_id}
               empresaCodigos={modoRede ? (empresaCodigosDaCategoria || []) : (cliente?.empresa_codigo != null ? [cliente.empresa_codigo] : [])}
               dataDe={meses[0]?.dataInicial}
               dataAte={meses[meses.length - 1]?.dataFinal}
@@ -4389,7 +4390,9 @@ function fmtDataCompra(d) {
   return dd ? `${dd}/${m}/${y}` : (s || '—');
 }
 
-function ComprasFornecedorView({ asRedeId, empresaCodigos, dataDe, dataAte }) {
+// Autosystem: movto/títulos do ERP. Webposto: títulos a pagar da Quality vindos
+// de nota de entrada (buscarComprasFornecedorWebposto) — mesmo formato de linha.
+function ComprasFornecedorView({ asRedeId, chaveApiId, empresaCodigos, dataDe, dataAte }) {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [compras, setCompras] = useState(null);
@@ -4401,19 +4404,26 @@ function ComprasFornecedorView({ asRedeId, empresaCodigos, dataDe, dataAte }) {
 
   const empKey = (empresaCodigos || []).join(',');
   useEffect(() => {
-    if (!asRedeId || !empresaCodigos?.length || !dataDe || !dataAte) { setCompras(null); return; }
+    if ((!asRedeId && !chaveApiId) || !empresaCodigos?.length || !dataDe || !dataAte) { setCompras(null); return; }
     let vivo = true;
     (async () => {
       try {
         setLoading(true); setErro('');
-        const data = await autosystemService.buscarComprasFornecedorAutosystem(asRedeId, empresaCodigos, { data_de: dataDe, data_ate: dataAte });
+        let data;
+        if (asRedeId) {
+          data = await autosystemService.buscarComprasFornecedorAutosystem(asRedeId, empresaCodigos, { data_de: dataDe, data_ate: dataAte });
+        } else {
+          const chave = (await mapService.listarChavesApi()).find(c => c.id === chaveApiId)?.chave;
+          if (!chave) throw new Error('Chave da API Quality não encontrada para esta rede.');
+          data = await qualityApi.buscarComprasFornecedorWebposto(chave, empresaCodigos, { data_de: dataDe, data_ate: dataAte });
+        }
         if (vivo) setCompras(data || []);
       } catch (e) { if (vivo) setErro(e.message || 'Falha ao buscar compras.'); }
       finally { if (vivo) setLoading(false); }
     })();
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asRedeId, empKey, dataDe, dataAte]);
+  }, [asRedeId, chaveApiId, empKey, dataDe, dataAte]);
 
   const filtradas = useMemo(() => {
     if (!compras) return [];
@@ -4547,7 +4557,7 @@ function ComprasFornecedorView({ asRedeId, empresaCodigos, dataDe, dataAte }) {
 
       {visao === 'arvore' && (
       <div className="max-h-[64vh] overflow-auto">
-        {arvore.length === 0 && <p className="px-4 py-8 text-center text-gray-400 text-sm">Nenhuma compra de estoque (1.4) no período/filtro.</p>}
+        {arvore.length === 0 && <p className="px-4 py-8 text-center text-gray-400 text-sm">Nenhuma compra no período/filtro.</p>}
         {arvore.map(nd => {
           const abertoD = autoOpen || expData.has(nd.label);
           return (
@@ -4670,7 +4680,7 @@ function TabelaPivotCompras({ titulo, meses, linhas }) {
 
 function AnaliseComprasView({ analise }) {
   if (!analise || analise.meses.length === 0) {
-    return <p className="px-5 py-10 text-center text-gray-400 text-sm">Sem compras de estoque (1.4) no período para analisar.</p>;
+    return <p className="px-5 py-10 text-center text-gray-400 text-sm">Sem compras no período para analisar.</p>;
   }
   const { meses, total, fornecedores } = analise;
   return (
