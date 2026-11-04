@@ -413,7 +413,7 @@ export default function BpoConciliacaoCaixas({
       const p = m.get(k);
       p.quantidade += Number(v.quantidade) || 0;
       p.valor += Number(v.valor) || 0;
-      p.itens += 1;
+      if (!v.devolucao) p.itens += 1;
     });
     return Array.from(m.values()).sort((a, b) => b.valor - a.valor);
   }, [isAutosystem, vendasAutosystem, mapaGruposAutosystem]);
@@ -612,15 +612,17 @@ export default function BpoConciliacaoCaixas({
 
   // Ajustes (acréscimos / descontos) Autosystem.
   // Convenção: lancto.valor_desconto > 0 => acréscimo, < 0 => desconto.
-  // Devoluções (operacao = 'DC') já são excluídas pela Edge Function de vendas.
+  // Devoluções (operacao = 'DC') vêm com sinal negativo e `devolucao: true`:
+  // estornam o acréscimo/desconto do item devolvido (no dia da devolução).
   const ajustesAutosystem = useMemo(() => {
     let acrescimos = 0, descontos = 0;
     let itensComAcrescimo = 0, itensComDesconto = 0;
     if (!isAutosystem) return { acrescimos, descontos, itensComAcrescimo, itensComDesconto };
     vendasAutosystem.forEach(v => {
       const vd = Number(v.valor_desconto || 0);
-      if (vd > 0) { acrescimos += vd; itensComAcrescimo += 1; }
-      else if (vd < 0) { descontos += Math.abs(vd); itensComDesconto += 1; }
+      const orig = v.devolucao ? -vd : vd; // sinal original do ajuste
+      if (orig > 0) { acrescimos += vd; if (!v.devolucao) itensComAcrescimo += 1; }
+      else if (orig < 0) { descontos -= vd; if (!v.devolucao) itensComDesconto += 1; }
     });
     return { acrescimos, descontos, itensComAcrescimo, itensComDesconto };
   }, [isAutosystem, vendasAutosystem]);

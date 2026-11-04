@@ -14,6 +14,10 @@
 //       SELECT 1 FROM lancto d WHERE d.mlid = l.mlid AND d.operacao = 'DC'
 //     )
 //
+// ATUALIZAÇÃO: devolução não exclui mais a venda inteira — a linha 'DC' entra
+// com sinal negativo NO DIA DA DEVOLUÇÃO, abatendo só o que foi devolvido
+// (igual ao Visor360). Ver `SINAL` abaixo. (pares_carrinho mantém a exclusão.)
+//
 // Acrescentamos:
 //   - filtro por l.empresa = ANY($empresa_codigos)
 //   - filtro por l.data BETWEEN $data_de AND $data_ate
@@ -200,22 +204,44 @@ serve(async (req) => {
     // `preco_custo_empresa_f(produto, empresa)` — versão que comprovadamente
     // bateu com R$ 2.232,00 no produto 920 (CAPUCCINO TRADICIONAL UN,
     // período 01-30/04/2026).
+    // Devolução (operacao='DC'): subtrai SÓ o item devolvido, no dia da
+    // devolução (mesma regra do Visor360). A venda original continua inteira no
+    // dia dela; a DC entra com sinal -1 (quantidade, valor, desconto e custo).
+    // Custo da DC: `estoque_lancto` da própria DC; p/ produto composto, o custo
+    // das SRs da V original, proporcional à quantidade devolvida.
+    const SINAL = `(case when l.operacao = 'DC' then -1 else 1 end)`;
     const cteCustoComposto = `
       with custo_composto_v as (
-        select v.grid as v_grid,
+        select x.grid as v_grid,
                coalesce(
-                 (select sum(sr.quantidade * preco_custo_empresa_f(sr.produto, v.empresa))
+                 (select sum(sr.quantidade * preco_custo_empresa_f(sr.produto, x.empresa))
                   from lancto sr
-                  where sr.mlid = v.mlid
-                    and sr.seq_cupom = v.seq_cupom
+                  where sr.mlid = x.mlid
+                    and sr.seq_cupom = x.seq_ref
                     and sr.operacao = 'SR'),
                  0
-               ) as custo
-        from lancto v
-        where v.operacao = 'V'
-          and v.empresa = any($1::bigint[])
-          and v.data between $2 and $3
-          and exists (select 1 from produto_composicao pc where pc.produto = v.produto)
+               ) * x.fator as custo
+        from (
+          select v.grid, v.empresa, v.mlid, v.seq_cupom as seq_ref, 1.0::float8 as fator
+          from lancto v
+          where v.operacao = 'V'
+            and v.empresa = any($1::bigint[])
+            and v.data between $2 and $3
+            and exists (select 1 from produto_composicao pc where pc.produto = v.produto)
+          union all
+          select d.grid, d.empresa, d.mlid, o.seq_cupom,
+                 coalesce(d.quantidade / nullif(o.quantidade, 0), 1)::float8
+          from lancto d
+          join lateral (
+            select v.seq_cupom, v.quantidade from lancto v
+             where v.mlid = d.mlid and v.produto = d.produto and v.operacao = 'V'
+             order by abs(v.quantidade - d.quantidade) limit 1
+          ) o on true
+          where d.operacao = 'DC'
+            and d.empresa = any($1::bigint[])
+            and d.data between $2 and $3
+            and exists (select 1 from produto_composicao pc where pc.produto = d.produto)
+        ) x
       )
     `;
 
@@ -226,9 +252,9 @@ serve(async (req) => {
         l.produto                                                  as produto_codigo,
         convert_to(coalesce(prod.nome::text, ''), 'LATIN1')       as produto_nome,
         prod.grupo                                                 as grupo_produto_codigo,
-        sum(l.quantidade)                                          as quantidade,
-        sum(l.valor)                                                as valor,
-        sum(
+        sum(${SINAL} * l.quantidade)                                          as quantidade,
+        sum(${SINAL} * l.valor)                                                as valor,
+        sum(${SINAL} *
           coalesce(
             nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
             cc.custo,
@@ -238,18 +264,12 @@ serve(async (req) => {
       from lancto l
       left join produto prod on prod.grid = l.produto
       left join custo_composto_v cc on cc.v_grid = l.grid
-      where l.operacao = 'V'
+      where l.operacao in ('V', 'DC')
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
         and (cardinality($4::bigint[]) = 0 or prod.grupo = any($4::bigint[]))
-        and not exists (
-          select 1 from lancto d
-           where d.mlid     = l.mlid
-             and d.produto  = l.produto
-             and d.operacao = 'DC'
-        )
       group by to_char(l.data, 'YYYY-MM'), l.produto, prod.nome, prod.grupo
-      order by to_char(l.data, 'YYYY-MM'), sum(l.valor) desc
+      order by to_char(l.data, 'YYYY-MM'), sum(${SINAL} * l.valor) desc
     `
       : por_dia
       ? `${cteCustoComposto}
@@ -259,12 +279,12 @@ serve(async (req) => {
         prod.codigo                                                as produto_codigo,
         convert_to(coalesce(prod.nome::text, ''), 'LATIN1')       as produto_nome,
         prod.grupo                                                 as grupo_produto_codigo,
-        sum(l.quantidade)                                          as quantidade,
-        sum(l.valor)                                                as valor,
-        sum(coalesce(l.valor_desconto, 0))                          as valor_desconto,
-        sum(case when l.valor_desconto > 0 then l.valor_desconto else 0 end)              as valor_acrescimo,
-        sum(case when l.valor_desconto < 0 then abs(l.valor_desconto) else 0 end)         as valor_descontos,
-        sum(
+        sum(${SINAL} * l.quantidade)                                          as quantidade,
+        sum(${SINAL} * l.valor)                                                as valor,
+        sum(${SINAL} * coalesce(l.valor_desconto, 0))                          as valor_desconto,
+        sum(case when l.valor_desconto > 0 then ${SINAL} * l.valor_desconto else 0 end)              as valor_acrescimo,
+        sum(case when l.valor_desconto < 0 then ${SINAL} * abs(l.valor_desconto) else 0 end)         as valor_descontos,
+        sum(${SINAL} *
           coalesce(
             nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
             cc.custo,
@@ -274,26 +294,20 @@ serve(async (req) => {
       from lancto l
       left join produto prod on prod.grid = l.produto
       left join custo_composto_v cc on cc.v_grid = l.grid
-      where l.operacao = 'V'
+      where l.operacao in ('V', 'DC')
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
         and (cardinality($4::bigint[]) = 0 or prod.grupo = any($4::bigint[]))
-        and not exists (
-          select 1 from lancto d
-           where d.mlid     = l.mlid
-             and d.produto  = l.produto
-             and d.operacao = 'DC'
-        )
       group by l.empresa, l.data, prod.codigo, prod.nome, prod.grupo
-      order by l.data, sum(l.valor) desc
+      order by l.data, sum(${SINAL} * l.valor) desc
     `
       : por_mes
       ? `${cteCustoComposto}
       select
         to_char(l.data, 'YYYY-MM')                                 as ano_mes,
-        sum(l.quantidade)                                          as quantidade,
-        sum(l.valor)                                                as valor,
-        sum(
+        sum(${SINAL} * l.quantidade)                                          as quantidade,
+        sum(${SINAL} * l.valor)                                                as valor,
+        sum(${SINAL} *
           coalesce(
             nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
             cc.custo,
@@ -302,15 +316,9 @@ serve(async (req) => {
         )                                                           as valor_custo
       from lancto l
       left join custo_composto_v cc on cc.v_grid = l.grid
-      where l.operacao = 'V'
+      where l.operacao in ('V', 'DC')
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
-        and not exists (
-          select 1 from lancto d
-           where d.mlid     = l.mlid
-             and d.produto  = l.produto
-             and d.operacao = 'DC'
-        )
       group by to_char(l.data, 'YYYY-MM')
       order by to_char(l.data, 'YYYY-MM')
     `
@@ -321,17 +329,17 @@ serve(async (req) => {
         l.produto                                                 as produto_codigo,
         convert_to(coalesce(prod.nome::text, ''), 'LATIN1')       as produto_nome,
         prod.grupo                                                 as grupo_produto_codigo,
-        sum(l.quantidade)                                         as quantidade,
-        sum(l.valor)                                               as valor,
-        sum(coalesce(l.valor_desconto, 0))                         as valor_desconto,
-        sum(
+        sum(${SINAL} * l.quantidade)                                         as quantidade,
+        sum(${SINAL} * l.valor)                                               as valor,
+        sum(${SINAL} * coalesce(l.valor_desconto, 0))                         as valor_desconto,
+        sum(${SINAL} *
           coalesce(
             nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
             cc.custo,
             0
           )
         )                                                          as valor_custo,
-        count(*)                                                   as itens,
+        count(*) filter (where l.operacao = 'V')                        as itens,
         l.vendedor                                                 as vendedor_pessoa_id,
         convert_to(coalesce(pe.nome::text, ''), 'LATIN1')         as vendedor_nome,
         convert_to(coalesce(l.vendedor::text, ''), 'LATIN1')      as vendedor
@@ -339,17 +347,11 @@ serve(async (req) => {
       left join produto prod on prod.grid = l.produto
       left join pessoa  pe   on pe.grid   = l.vendedor
       left join custo_composto_v cc on cc.v_grid = l.grid
-      where l.operacao = 'V'
+      where l.operacao in ('V', 'DC')
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
-        and not exists (
-          select 1 from lancto d
-           where d.mlid     = l.mlid
-             and d.produto  = l.produto
-             and d.operacao = 'DC'
-        )
       group by l.empresa, l.produto, prod.nome, prod.grupo, l.vendedor, pe.nome
-      order by sum(l.valor) desc
+      order by sum(${SINAL} * l.valor) desc
     `
       : `${cteCustoComposto}
       select
@@ -359,10 +361,11 @@ serve(async (req) => {
         l.produto                                                 as produto_codigo,
         convert_to(coalesce(prod.nome::text, ''), 'LATIN1')       as produto_nome,
         prod.grupo                                                 as grupo_produto_codigo,
-        l.quantidade,
-        l.valor,
-        l.valor_desconto,
-        coalesce(
+        ${SINAL} * l.quantidade                                    as quantidade,
+        ${SINAL} * l.valor                                         as valor,
+        ${SINAL} * coalesce(l.valor_desconto, 0)                   as valor_desconto,
+        (l.operacao = 'DC')                                       as devolucao,
+        ${SINAL} * coalesce(
           nullif((select avg(el.custo_medio) from estoque_lancto el where el.lancto = l.grid), 0) * l.quantidade,
           cc.custo,
           0
@@ -374,15 +377,9 @@ serve(async (req) => {
       left join produto prod on prod.grid = l.produto
       left join pessoa  pe   on pe.grid   = l.vendedor
       left join custo_composto_v cc on cc.v_grid = l.grid
-      where l.operacao = 'V'
+      where l.operacao in ('V', 'DC')
         and l.empresa = any($1::bigint[])
         and l.data between $2 and $3
-        and not exists (
-          select 1 from lancto d
-           where d.mlid     = l.mlid
-             and d.produto  = l.produto
-             and d.operacao = 'DC'
-        )
       order by l.data, l.hora
     `;
 
