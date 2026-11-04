@@ -12,6 +12,9 @@ import { useAnonimizador } from '../services/anonimizarService';
 import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 import { formatCurrency } from '../utils/format';
 import RelatorioAlteracoesCaixas from '../components/bpo/RelatorioAlteracoesCaixas';
+import AlteracoesCaixasWebposto from '../components/bpo/AlteracoesCaixasWebposto';
+import RelatorioAlteracoesWebposto from '../components/bpo/RelatorioAlteracoesWebposto';
+import * as mapService from '../services/mapeamentoService';
 
 // ─── Helpers ───────────────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -268,6 +271,8 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
   const { labelEmpresa } = useAnonimizador();
   const [clientes, setClientes] = useState([]);
   const [redesAutosystem, setRedesAutosystem] = useState([]);
+  const [chavesWebposto, setChavesWebposto] = useState([]);
+  const [docWebposto, setDocWebposto] = useState(null); // documento de impressão (Webposto)
   const [redeSel, setRedeSel] = useState(null);
 
   const [empresasSelIds, setEmpresasSelIds] = useState(new Set());
@@ -296,16 +301,20 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
   useEffect(() => {
     (async () => {
       try {
-        const [lista, redesAS] = await Promise.all([
+        const [lista, redesAS, chaves] = await Promise.all([
           clientesService.listarClientes(),
           autosystemService.listarRedes().catch(() => []),
+          mapService.listarChavesApi().catch(() => []),
         ]);
         const clientesValidos = (lista || []).filter(c =>
-          c.as_rede_id && c.empresa_codigo != null && c.empresa_codigo !== ''
+          (c.as_rede_id || c.chave_api_id) && c.empresa_codigo != null && c.empresa_codigo !== ''
         );
         setClientes(clientesValidos);
-        const idsAS = new Set(clientesValidos.map(c => c.as_rede_id));
+        const idsAS = new Set(clientesValidos.map(c => c.as_rede_id).filter(Boolean));
         setRedesAutosystem((redesAS || []).filter(r => idsAS.has(r.id)));
+        // Webposto: alterações via Quality V1/AUDITORIA (AlteracoesCaixasWebposto).
+        const idsWP = new Set(clientesValidos.map(c => c.chave_api_id).filter(Boolean));
+        setChavesWebposto((chaves || []).filter(k => idsWP.has(k.id)));
       } catch (e) { setErro(e.message); }
       finally { setLoadingMeta(false); }
     })();
@@ -314,7 +323,7 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
   const contagensPorRede = useMemo(() => {
     const m = new Map();
     clientes.forEach(c => {
-      const key = c.as_rede_id;
+      const key = c.as_rede_id || c.chave_api_id;
       if (key) m.set(key, (m.get(key) || 0) + 1);
     });
     return m;
@@ -338,6 +347,20 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
       setEmpresasSelIds(new Set());
     }
   }, [empresasDaRede]);
+
+  // Webposto: empresas da rede (chave_api) + a chave p/ a Quality.
+  const empresasWebposto = useMemo(() => {
+    if (redeSel?.tipo !== 'webposto') return [];
+    return clientes
+      .filter(c => c.status !== 'inativo' && c.chave_api_id === redeSel.id)
+      .sort((a, b) => (Number(a.empresa_codigo) || 0) - (Number(b.empresa_codigo) || 0));
+  }, [redeSel, clientes]);
+  const chaveWebposto = redeSel?.tipo === 'webposto'
+    ? chavesWebposto.find(k => k.id === redeSel.id)?.chave || null
+    : null;
+
+  // Trocar de rede limpa o resultado anterior (evita mostrar Autosystem na Webposto).
+  useEffect(() => { setAlteracoes([]); setSchema([]); setErro(null); setDocWebposto(null); }, [redeSel?.tipo, redeSel?.id]);
 
   const empresasSel = useMemo(
     () => empresasDaRede.filter(c => empresasSelIds.has(c.id)),
@@ -681,13 +704,23 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
           <>
             <div className="mb-3">
               <SeletorRedeBPO
-                chavesApi={[]}
+                chavesApi={chavesWebposto}
                 redesAutosystem={redesAutosystem}
                 contagensPorRede={contagensPorRede}
-                redeSel={redeSel}
+                value={redeSel}
                 onChange={setRedeSel}
               />
             </div>
+            {redeSel?.tipo === 'webposto' && (
+              <AlteracoesCaixasWebposto
+                key={redeSel.id}
+                chave={chaveWebposto}
+                empresas={empresasWebposto}
+                labelEmpresa={labelEmpresa}
+                redeNome={chavesWebposto.find(k => k.id === redeSel.id)?.nome || ''}
+                onDocumento={setDocWebposto}
+              />
+            )}
             {redeSel?.tipo === 'autosystem' && (
               <div className="flex flex-wrap items-end gap-3">
                 <div>
@@ -758,7 +791,7 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
         </div>
       )}
 
-      {!loading && alteracoes.length > 0 && (
+      {redeSel?.tipo === 'autosystem' && !loading && alteracoes.length > 0 && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             <Kpi icone={History}  cor="violet"  label="Alterações no período" valor={fmtNum(kpis.total)} />
@@ -833,14 +866,19 @@ export default function BpoAlteracoesCaixas({ hideHeader = false } = {}) {
       )}
       </div>
 
-      {/* Documento de impressão (papel timbrado CCI) — oculto na tela. */}
-      <RelatorioAlteracoesCaixas
-        arvore={arvoreFiltrada}
-        camposRelevantes={CAMPOS_RELEVANTES}
-        mapaEmpresas={mapaEmpresas}
-        labelEmpresa={labelEmpresa}
-        contexto={contextoRelatorio}
-      />
+      {/* Documento de impressão (papel timbrado CCI) — oculto na tela. Só o do
+          tipo da rede selecionada, p/ não imprimir os dois. */}
+      {redeSel?.tipo === 'webposto' ? (
+        <RelatorioAlteracoesWebposto grupos={docWebposto?.grupos || []} contexto={docWebposto?.contexto || {}} />
+      ) : (
+        <RelatorioAlteracoesCaixas
+          arvore={arvoreFiltrada}
+          camposRelevantes={CAMPOS_RELEVANTES}
+          mapaEmpresas={mapaEmpresas}
+          labelEmpresa={labelEmpresa}
+          contexto={contextoRelatorio}
+        />
+      )}
     </div>
   );
 }

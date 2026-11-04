@@ -1,8 +1,9 @@
 // Conferência de recebimentos (portal do cliente): total recebido no dia, por
 // forma de pagamento, para UMA empresa — mesma base da Conciliação de caixas
 // da CCI (BpoConciliacaoCaixas):
-//   Webposto  → VENDA_FORMA_PAGAMENTO (só vendas aprovadas e não canceladas);
-//               cartão/PIX separado por administradora; demais pelo nome da forma.
+//   Webposto  → fechamento de caixa do Webposto (CARTAO + CAIXA_APRESENTADO),
+//               que reflete as correções da conferência; caixas abertos caem
+//               na VENDA_FORMA_PAGAMENTO. Ver webposto() abaixo.
 //   Autosystem→ movto via autosystem-recebimentos; uma linha por conta de
 //               recebimento (conta_debitar), com a categoria da rede.
 // Ao confirmar, grava em cliente_conferencia_recebimentos (migration 206).
@@ -31,29 +32,86 @@ function ordenar(lista) {
     .sort((a, b) => (ORDEM_TIPO[a.tipo] ?? 9) - (ORDEM_TIPO[b.tipo] ?? 9) || a.rotulo.localeCompare(b.rotulo));
 }
 
+// Categorias do fechamento de caixa (CAIXA_APRESENTADO, campo `<campo>Apurado`).
+// Cartão fica de fora: vem detalhado por administradora do endpoint CARTAO.
+const CAMPOS_CAIXA = [
+  ['dinheiro', 'DINHEIRO', 'dinheiro'],
+  ['notaPrazo', 'NOTA A PRAZO', 'a_prazo'],
+  ['cheque', 'CHEQUE', 'cheque'],
+  ['chequePre', 'CHEQUE PRÉ', 'cheque'],
+  ['cartaFrete', 'CARTA FRETE', 'outros'],
+  ['valeCliente', 'VALE CLIENTE', 'outros'],
+  ['prePag', 'PRÉ-PAGO', 'outros'],
+  ['transfBanc', 'TRANSFERÊNCIA BANCÁRIA', 'outros'],
+  ['transfDeb', 'TRANSFERÊNCIA (DÉBITO)', 'outros'],
+  ['emprestimo', 'EMPRÉSTIMO', 'outros'],
+  ['valeFun', 'VALE FUNCIONÁRIO', 'outros'],
+  ['despesa', 'DESPESAS DO CAIXA', 'outros'],
+  ['chequePagar', 'CHEQUE A PAGAR', 'outros'],
+  ['fundoCxDeb', 'FUNDO DE CAIXA', 'outros'],
+];
+
+// Webposto: segue o FECHAMENTO DE CAIXA do Webposto, que reflete as correções
+// feitas na conferência (ex.: PIX trocado p/ "CIELO - PIX", dinheiro lançado
+// como despesa). VENDA_FORMA_PAGAMENTO guarda só a forma ORIGINAL da venda.
+//   - cartões/PIX por administradora → CARTAO do dia (inclui os "Manualmente")
+//   - caixas fechados → `*Apurado` do CAIXA_APRESENTADO por categoria
+//   - caixas ainda abertos → VENDA_FORMA_PAGAMENTO (só formas sem administradora)
 async function webposto(cliente, data) {
   const chaves = await mapService.listarChavesApi();
   const chave = chaves.find(c => c.id === cliente.chave_api_id)?.chave;
   if (!chave) throw new Error('Chave da API não encontrada para esta empresa.');
   const filtros = { dataInicial: data, dataFinal: data, empresaCodigo: cliente.empresa_codigo };
-  const [vendas, formas, adms] = await Promise.all([
+  const [vendas, formas, adms, cartoes, caixas, apresentados] = await Promise.all([
     qualityApi.buscarVendas(chave, { ...filtros, situacao: 'A' }),
     qualityApi.buscarVendaFormaPagamento(chave, filtros),
     qualityApi.buscarAdministradoras(chave).catch(() => []),
+    qualityApi.buscarCartoes(chave, filtros),
+    qualityApi.buscarCaixas(chave, filtros).catch(() => []),
+    qualityApi.buscarCaixasApresentados(chave, filtros).catch(() => []),
   ]);
-  const aprovadas = new Set((vendas || []).filter(v => v.cancelada !== 'S').map(v => v.vendaCodigo ?? v.codigo));
   const nomeAdm = new Map((adms || []).map(a => [Number(a.administradoraCodigo ?? a.codigo), a.descricao || a.nome]));
   const grupos = new Map();
-  (formas || []).forEach(fp => {
-    if (!aprovadas.has(fp.vendaCodigo)) return;
-    const tipo = classificarForma(fp.nomeFormaPagamento);
-    const admCod = fp.administradoraCodigo != null ? Number(fp.administradoraCodigo) : null;
-    const porAdm = admCod != null && tipo !== 'dinheiro';
-    const chaveG = porAdm ? `adm:${admCod}` : `forma:${String(fp.nomeFormaPagamento || 'OUTROS').toUpperCase()}`;
-    const rotulo = porAdm ? (nomeAdm.get(admCod) || `Administradora ${admCod}`) : (fp.nomeFormaPagamento || 'Outros');
-    const g = grupos.get(chaveG) || { chave: chaveG, rotulo, tipo: porAdm ? 'cartao' : tipo, sistema: 0 };
-    g.sistema += Number(fp.valorPagamento || 0);
+  const somar = (chaveG, rotulo, tipo, valor) => {
+    const g = grupos.get(chaveG) || { chave: chaveG, rotulo, tipo, sistema: 0 };
+    g.sistema += Number(valor || 0);
     grupos.set(chaveG, g);
+  };
+
+  // Cartões / PIX por administradora (já com as correções da conferência).
+  (cartoes || []).forEach(c => {
+    const adm = Number(c.administradoraCodigo);
+    somar(`adm:${adm}`, c.adiministradoraDescricao || c.administradoraDescricao || nomeAdm.get(adm) || `Administradora ${adm}`, 'cartao', c.valor);
+  });
+
+  // Caixas fechados: valores apurados no fechamento.
+  const fechados = new Set((caixas || []).filter(c => c.fechado).map(c => Number(c.caixaCodigo)));
+  const apurFechados = (apresentados || []).filter(a => fechados.has(Number(a.caixaCodigo)));
+  const caixasComApurado = new Set(apurFechados.map(a => Number(a.caixaCodigo)));
+  apurFechados.forEach(a => {
+    CAMPOS_CAIXA.forEach(([campo, rotulo, tipo]) => {
+      const v = Number(a[`${campo}Apurado`] || 0);
+      if (v) somar(`caixa:${campo}`, rotulo, tipo, v);
+    });
+  });
+
+  // Caixas abertos (sem fechamento): formas da venda, exceto cartão/PIX de
+  // administradora (esses já vieram do CARTAO).
+  const caixaDaVenda = new Map((vendas || []).filter(v => v.cancelada !== 'S')
+    .map(v => [v.vendaCodigo ?? v.codigo, Number(v.caixaCodigo)]));
+  (formas || []).forEach(fp => {
+    if (!caixaDaVenda.has(fp.vendaCodigo)) return;
+    if (caixasComApurado.has(caixaDaVenda.get(fp.vendaCodigo))) return;
+    if (fp.administradoraCodigo != null) return;
+    const tipo = classificarForma(fp.nomeFormaPagamento);
+    const nome = String(fp.nomeFormaPagamento || 'OUTROS').toUpperCase();
+    const campo = tipo === 'dinheiro' ? 'dinheiro' : /PRAZO/.test(nome) ? 'notaPrazo' : null;
+    if (campo) {
+      const [, rotulo, t] = CAMPOS_CAIXA.find(c => c[0] === campo);
+      somar(`caixa:${campo}`, rotulo, t, fp.valorPagamento);
+    } else {
+      somar(`forma:${nome}`, fp.nomeFormaPagamento || 'Outros', tipo, fp.valorPagamento);
+    }
   });
   return ordenar([...grupos.values()]);
 }

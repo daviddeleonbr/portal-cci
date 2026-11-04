@@ -912,6 +912,61 @@ export async function buscarCaixasApresentados(apiKey, { dataInicial, dataFinal,
   });
 }
 
+// ─── Auditoria (V1/AUDITORIA) ─────────────────────────────────
+// Log de operações do Webposto: quem incluiu/alterou/excluiu o quê (cartão,
+// caixa apresentado, sangria…), com o texto "Antes:/Depois:". Particularidades:
+//   - datas são date-time COM fuso (`2026-11-03T00:00:00-03:00`);
+//   - `limite` máx. 1000 e não há cursor (`ultimoCodigo`) → buscamos dia a dia
+//     e, se a janela encher, dividimos ao meio até caber;
+//   - a chave precisa ter um usuário vinculado na Quality; senão volta 403
+//     ("Nenhum usuário configurado para uso.") → erro com code AUDITORIA_SEM_USUARIO.
+const LIMITE_AUDITORIA = 1000;
+const fmtDataHoraBR = (ms) => {
+  // Horário de Brasília fixo (-03:00, sem horário de verão desde 2019).
+  const d = new Date(ms - 3 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}-03:00`;
+};
+async function _auditoriaJanela(urlBase, apiKey, iniMs, fimMs, filiais, origens, prof = 0) {
+  const params = {
+    dataInicial: fmtDataHoraBR(iniMs), dataFinal: fmtDataHoraBR(fimMs),
+    filiais: filiais.join(','), limite: LIMITE_AUDITORIA,
+  };
+  if (origens?.length) params.origens = origens.join(',');
+  const data = await fetchJson(urlBase, 'V1/AUDITORIA', apiKey, params);
+  const lista = Array.isArray(data) ? data : (data?.resultados || []);
+  if (lista.length < LIMITE_AUDITORIA || prof >= 6 || fimMs - iniMs < 60 * 1000) return lista;
+  const meio = Math.floor((iniMs + fimMs) / 2);
+  const [a, b] = await Promise.all([
+    _auditoriaJanela(urlBase, apiKey, iniMs, meio, filiais, origens, prof + 1),
+    _auditoriaJanela(urlBase, apiKey, meio + 1000, fimMs, filiais, origens, prof + 1),
+  ]);
+  return [...a, ...b];
+}
+export async function buscarAuditoria(apiKey, { dataInicial, dataFinal, filiais = [], origens } = {}, urlBase = DEFAULT_URL_BASE) {
+  const dias = [];
+  for (let d = new Date(`${dataInicial}T00:00:00Z`); d <= new Date(`${dataFinal}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+    dias.push(d.toISOString().slice(0, 10));
+  }
+  try {
+    const partes = await Promise.all(dias.map(dia => {
+      const ini = Date.parse(`${dia}T00:00:00-03:00`);
+      return _auditoriaJanela(urlBase, apiKey, ini, ini + 86399 * 1000, filiais, origens);
+    }));
+    // Dedup (janelas divididas podem se tocar) por auditoriaCodigo.
+    const vistos = new Map();
+    partes.flat().forEach(ev => vistos.set(ev.auditoriaCodigo ?? `${ev.dataHoraEvento}|${vistos.size}`, ev));
+    return [...vistos.values()].sort((a, b) => String(b.dataHoraEvento).localeCompare(String(a.dataHoraEvento)));
+  } catch (e) {
+    if (e?.status === 403 || e?.status === 401) {
+      const err = new Error('Vincule um usuário a chave para utilização');
+      err.code = 'AUDITORIA_SEM_USUARIO';
+      throw err;
+    }
+    throw e;
+  }
+}
+
 // Caixas (turnos) do dia: apurado + diferenca ja calculados, funcionario responsavel
 export async function buscarCaixas(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'CAIXA', apiKey, {

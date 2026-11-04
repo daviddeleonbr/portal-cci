@@ -640,18 +640,36 @@ export default function BpoConciliacaoCaixas({
     return { acrescimos, descontos, itensComAcrescimo, itensComDesconto };
   }, [vendaItens, vendasAprovadasSet]);
 
-  // Recebido por forma de pagamento (reutiliza classificarForma)
+  // Recebido por forma de pagamento.
+  // Caixa FECHADO → apurado do fechamento (CAIXA_APRESENTADO), que reflete as
+  // correções da conferência (PIX trocado de administradora, dinheiro lançado
+  // como despesa…). VENDA_FORMA_PAGAMENTO guarda só a forma original da venda,
+  // então fica só p/ caixas ainda abertos (sem fechamento).
   const totaisPorForma = useMemo(() => {
     const t = { dinheiro: 0, cartao: 0, cheque: 0, outros: 0 };
-    const vendasCanceladas = new Set();
-    vendas.forEach(v => { if (v.cancelada === 'S') vendasCanceladas.add(v.vendaCodigo || v.codigo); });
+    const fechados = new Set(caixas.filter(c => c.fechado).map(c => c.caixaCodigo));
+    const comApurado = new Set();
+    caixasApresentados.forEach(ca => {
+      if (!fechados.has(ca.caixaCodigo)) return;
+      comApurado.add(ca.caixaCodigo);
+      const n = (k) => Number(ca[k] || 0);
+      t.dinheiro += n('dinheiroApurado');
+      t.cartao += n('cartaoApurado');
+      t.cheque += n('chequeApurado') + n('chequePreApurado');
+      t.outros += n('cartaFreteApurado') + n('valeClienteApurado') + n('emprestimoApurado')
+        + n('prePagApurado') + n('valeFunApurado') + n('chequePagarApurado') + n('transfBancApurado')
+        + n('transfDebApurado') + n('fundoCxDebApurado') + n('notaPrazoApurado') + n('despesaApurado');
+    });
+    const caixaDaVenda = new Map();
+    vendas.forEach(v => { if (v.cancelada !== 'S') caixaDaVenda.set(v.vendaCodigo || v.codigo, v.caixaCodigo); });
     formasPagamento.forEach(fp => {
-      if (vendasCanceladas.has(fp.vendaCodigo)) return;
+      if (!caixaDaVenda.has(fp.vendaCodigo)) return;
+      if (comApurado.has(caixaDaVenda.get(fp.vendaCodigo))) return;
       const cat = classificarForma(fp.nomeFormaPagamento);
       t[cat] = (t[cat] || 0) + Number(fp.valorPagamento || 0);
     });
     return t;
-  }, [formasPagamento, vendas]);
+  }, [formasPagamento, vendas, caixas, caixasApresentados]);
 
   const totalCategoria = totaisPorCategoria.combustivel + totaisPorCategoria.automotivos
     + totaisPorCategoria.conveniencia + totaisPorCategoria.outros;
