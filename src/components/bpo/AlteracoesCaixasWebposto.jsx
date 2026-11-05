@@ -75,6 +75,11 @@ function camposAlterados(item) {
   return [...new Set([...Object.keys(item.antes), ...Object.keys(item.depois)])]
     .filter(c => !OCULTOS_EXCLUSAO.has(c) && (item.antes[c] || '') !== (item.depois[c] || ''));
 }
+// Data do turno (movimento do caixa) → "2026-10-31" (p/ filtrar e ordenar).
+function dataTurnoDoItem(caixa) {
+  const m = String(caixa || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
 // "PDV, 001, 3º TURNO, 03/11/2026" → "3º TURNO · 03/11/2026 · PDV 001"
 function tituloCaixa(caixa) {
   const partes = String(caixa || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -99,6 +104,7 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
   const [soCaixa, setSoCaixa] = useState(true);
   const [tabelasSel, setTabelasSel] = useState(new Set());
   const [usuarioSel, setUsuarioSel] = useState('');
+  const [turnoSel, setTurnoSel] = useState(''); // data do turno (yyyy-mm-dd)
   const [abertos, setAbertos] = useState(new Set());
 
   const empresa = empresas.find(e => e.id === empresaId) || null;
@@ -135,6 +141,7 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
           tabela: it.tabela || '—',
           operacao: it.operacao,
           caixa: caixaDoItem(p.ctx),
+          dataTurno: dataTurnoDoItem(caixaDoItem(p.ctx)),
           ...p,
           texto: it.textoAuditado || '',
         });
@@ -153,6 +160,7 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
       setPeriodoBusca({ de: dataDe, ate: dataAte, empresa: labelEmpresa(empresa) });
       setTabelasSel(new Set());
       setUsuarioSel('');
+      setTurnoSel('');
       setAbertos(new Set());
     } catch (e) {
       if (e?.code === 'AUDITORIA_SEM_USUARIO') { setSemUsuario(true); setItens(null); }
@@ -168,6 +176,12 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [itens, soCaixa]);
   const usuarios = useMemo(() => [...new Set((itens || []).map(i => i.usuario))].sort(), [itens]);
+  // Datas de turno presentes no resultado (mais recente primeiro), com contagem.
+  const datasTurno = useMemo(() => {
+    const m = new Map();
+    (itens || []).forEach(i => { if (i.dataTurno && (!soCaixa || ehTabelaCaixa(i.tabela))) m.set(i.dataTurno, (m.get(i.dataTurno) || 0) + 1); });
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [itens, soCaixa]);
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -175,10 +189,11 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
       if (soCaixa && !ehTabelaCaixa(i.tabela)) return false;
       if (tabelasSel.size && !tabelasSel.has(i.tabela)) return false;
       if (usuarioSel && i.usuario !== usuarioSel) return false;
+      if (turnoSel && i.dataTurno !== turnoSel) return false;
       if (q && !`${i.tabela} ${i.usuario} ${i.funcionario} ${i.caixa} ${i.texto}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [itens, soCaixa, tabelasSel, usuarioSel, busca]);
+  }, [itens, soCaixa, tabelasSel, usuarioSel, turnoSel, busca]);
 
   // Funcionário (A-Z, "Sem funcionário" por último) → categoria/tabela
   // (mais frequente primeiro) → operação (Inclusão → Alteração → Exclusão).
@@ -241,11 +256,14 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
       contexto: {
         rede: redeNome,
         empresa: periodoBusca?.empresa || '',
-        periodo: periodoBusca ? (periodoBusca.de === periodoBusca.ate ? fmtD(periodoBusca.de) : `${fmtD(periodoBusca.de)} a ${fmtD(periodoBusca.ate)}`) : '',
+        periodo: [
+          periodoBusca ? `Alterado ${periodoBusca.de === periodoBusca.ate ? `em ${fmtD(periodoBusca.de)}` : `de ${fmtD(periodoBusca.de)} a ${fmtD(periodoBusca.ate)}`}` : '',
+          turnoSel ? `Turnos de ${fmtD(turnoSel)}` : '',
+        ].filter(Boolean).join('  ·  '),
         geradoEm: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
       },
     });
-  }, [grupos, periodoBusca, redeNome, onDocumento]);
+  }, [grupos, periodoBusca, turnoSel, redeNome, onDocumento]);
 
   const kpis = useMemo(() => {
     const ops = { INCLUIR: 0, ALTERAR: 0, EXCLUIR: 0 };
@@ -336,6 +354,11 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
               <select value={usuarioSel} onChange={e => setUsuarioSel(e.target.value)} className={inp}>
                 <option value="">Todos os usuários</option>
                 {usuarios.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+              <select value={turnoSel} onChange={e => setTurnoSel(e.target.value)} className={inp}
+                title="Data do movimento do caixa/turno que foi modificado">
+                <option value="">Todas as datas de turno</option>
+                {datasTurno.map(([d, n]) => <option key={d} value={d}>Turno de {d.split('-').reverse().join('/')} ({n})</option>)}
               </select>
               <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-gray-600">
                 <input type="checkbox" checked={soCaixa} onChange={e => { setSoCaixa(e.target.checked); setTabelasSel(new Set()); }} />
