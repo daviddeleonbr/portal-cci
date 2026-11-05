@@ -32,10 +32,12 @@ function ordenar(lista) {
     .sort((a, b) => (ORDEM_TIPO[a.tipo] ?? 9) - (ORDEM_TIPO[b.tipo] ?? 9) || a.rotulo.localeCompare(b.rotulo));
 }
 
-// Categorias do fechamento de caixa (CAIXA_APRESENTADO, campo `<campo>Apurado`).
+// Categorias do fechamento de caixa (CAIXA_APRESENTADO, campo `<campo>Apurado`;
+// o 4º item, quando há, troca o campo lido). Dinheiro usa o APRESENTADO (o que
+// o operador entregou na gaveta), não o apurado pelo sistema.
 // Cartão fica de fora: vem detalhado por administradora do endpoint CARTAO.
 const CAMPOS_CAIXA = [
-  ['dinheiro', 'DINHEIRO', 'dinheiro'],
+  ['dinheiro', 'DINHEIRO', 'dinheiro', 'dinheiroApresentado'],
   ['notaPrazo', 'NOTA A PRAZO', 'a_prazo'],
   ['cheque', 'CHEQUE', 'cheque'],
   ['chequePre', 'CHEQUE PRÉ', 'cheque'],
@@ -56,6 +58,7 @@ const CAMPOS_CAIXA = [
 // como despesa). VENDA_FORMA_PAGAMENTO guarda só a forma ORIGINAL da venda.
 //   - cartões/PIX por administradora → CARTAO do dia (inclui os "Manualmente")
 //   - caixas fechados → `*Apurado` do CAIXA_APRESENTADO por categoria
+//     (dinheiro: `dinheiroApresentado`)
 //   - caixas ainda abertos → VENDA_FORMA_PAGAMENTO (só formas sem administradora)
 async function webposto(cliente, data) {
   const chaves = await mapService.listarChavesApi();
@@ -89,8 +92,8 @@ async function webposto(cliente, data) {
   const apurFechados = (apresentados || []).filter(a => fechados.has(Number(a.caixaCodigo)));
   const caixasComApurado = new Set(apurFechados.map(a => Number(a.caixaCodigo)));
   apurFechados.forEach(a => {
-    CAMPOS_CAIXA.forEach(([campo, rotulo, tipo]) => {
-      const v = Number(a[`${campo}Apurado`] || 0);
+    CAMPOS_CAIXA.forEach(([campo, rotulo, tipo, lido]) => {
+      const v = Number(a[lido || `${campo}Apurado`] || 0);
       if (v) somar(`caixa:${campo}`, rotulo, tipo, v);
     });
   });
