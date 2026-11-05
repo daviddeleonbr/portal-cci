@@ -2,10 +2,12 @@
 // Por empresa + dia: o total recebido no sistema por forma de pagamento
 // (dinheiro, cada administradora/conta de cartão, cheque…), a coluna
 // "Conferido" (valores dos portais/extratos, digitados pelo usuário) e a
-// diferença. Ao confirmar, fica travada; a aba Consulta lista o que foi enviado.
+// diferença. "Salvar rascunho" guarda o digitado (por empresa+dia, no banco)
+// para terminar depois. Ao confirmar, fica travada e o rascunho some; a aba
+// Consulta lista o que foi enviado.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, ClipboardCheck, Loader2, Lock, RefreshCw, Save } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ClipboardCheck, FileClock, Loader2, Lock, RefreshCw, Save, Trash2 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Toast from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
@@ -39,6 +41,9 @@ export default function ClienteConferenciaRecebimentos() {
   const [erro, setErro] = useState('');
   const [confirmar, setConfirmar] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [rascunho, setRascunho] = useState(null);     // { atualizado_em, atualizado_por }
+  const [salvandoRascunho, setSalvandoRascunho] = useState(false);
+  const [alterado, setAlterado] = useState(false);    // mexeu desde o último rascunho
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
   const showToast = (type, message) => { setToast({ show: true, type, message }); setTimeout(() => setToast(t => ({ ...t, show: false })), 3500); };
 
@@ -47,13 +52,18 @@ export default function ClienteConferenciaRecebimentos() {
 
   const carregar = useCallback(async (forcar = false) => {
     if (!empresa || !data) return;
-    setCarregando(true); setErro(''); setItens([]); setSalva(null); setObservacoes('');
+    setCarregando(true); setErro(''); setItens([]); setSalva(null); setObservacoes(''); setRascunho(null); setAlterado(false);
     try {
       const existente = await conferenciaService.buscarConferencia(empresa.id, data);
       if (existente) { setSalva(existente); return; }
       if (data >= hoje) { setErro('Só é possível conferir dias anteriores a hoje.'); return; }
-      const linhas = await conferenciaService.carregarRecebimentosDia(empresa, data, tipoCliente, { forcar });
-      setItens(linhas.map(l => ({ ...l, conferido: '' })));
+      const [linhas, rasc] = await Promise.all([
+        conferenciaService.carregarRecebimentosDia(empresa, data, tipoCliente, { forcar }),
+        conferenciaService.buscarRascunho(empresa.id, data).catch(() => null),
+      ]);
+      const vals = rasc?.valores || {};
+      setItens(linhas.map(l => ({ ...l, conferido: vals[l.chave] ?? '' })));
+      if (rasc) { setRascunho(rasc); setObservacoes(rasc.observacoes || ''); }
       if (!linhas.length) setErro('Nenhum recebimento no sistema para este dia.');
     } catch (e) { setErro(e.message || 'Falha ao carregar os recebimentos.'); }
     finally { setCarregando(false); }
@@ -66,6 +76,35 @@ export default function ClienteConferenciaRecebimentos() {
   const totDif = totConferido - totSistema;
   const preenchidos = itens.filter(i => String(i.conferido).trim() !== '').length;
 
+  // avisa ao sair da página com digitação não salva
+  useEffect(() => {
+    if (!alterado || salva) return undefined;
+    const h = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [alterado, salva]);
+
+  const guardarRascunho = async () => {
+    setSalvandoRascunho(true);
+    try {
+      const row = await conferenciaService.salvarRascunho({
+        clienteId: empresa.id, data, itens, observacoes: observacoes.trim(), atualizadoPor: usuario?.nome,
+      });
+      setRascunho(row); setAlterado(false);
+      showToast('success', 'Rascunho salvo. Você pode sair e continuar depois.');
+    } catch (e) { showToast('error', e.message || 'Falha ao salvar o rascunho.'); }
+    finally { setSalvandoRascunho(false); }
+  };
+
+  const descartarRascunho = async () => {
+    try {
+      await conferenciaService.excluirRascunho(empresa.id, data);
+      setRascunho(null); setAlterado(false); setObservacoes('');
+      setItens(list => list.map(x => ({ ...x, conferido: '' })));
+      showToast('success', 'Rascunho descartado.');
+    } catch (e) { showToast('error', e.message || 'Falha ao descartar o rascunho.'); }
+  };
+
   const salvar = async () => {
     setSalvando(true);
     try {
@@ -73,7 +112,7 @@ export default function ClienteConferenciaRecebimentos() {
         cliente: empresa, data, observacoes: observacoes.trim(), confirmadoPor: usuario?.nome,
         itens: itens.map(i => ({ ...i, conferido: num(i.conferido) })),
       });
-      setSalva(row); setConfirmar(false);
+      setSalva(row); setConfirmar(false); setRascunho(null); setAlterado(false);
       showToast('success', 'Resumo de caixa confirmado e salvo.');
     } catch (e) { showToast('error', e.message); }
     finally { setSalvando(false); }
@@ -124,6 +163,19 @@ export default function ClienteConferenciaRecebimentos() {
               </p>
             </div>
           )}
+          {rascunho && !salva && !carregando && (
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <FileClock className="h-4 w-4 text-blue-600" />
+              <p className="flex-1 text-sm text-blue-900">
+                <strong>Rascunho</strong> salvo em {new Date(rascunho.atualizado_em).toLocaleString('pt-BR')}{rascunho.atualizado_por ? <> por <strong>{rascunho.atualizado_por}</strong></> : null}.
+                {alterado ? ' Há alterações ainda não salvas.' : ' Ainda não foi confirmado.'}
+              </p>
+              <button onClick={descartarRascunho}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100">
+                <Trash2 className="h-3.5 w-3.5" /> Descartar rascunho
+              </button>
+            </div>
+          )}
           {erro && !salva && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
               <AlertCircle className="mt-0.5 h-4 w-4 text-amber-500" /><p className="text-xs text-amber-700">{erro}</p>
@@ -164,7 +216,7 @@ export default function ClienteConferenciaRecebimentos() {
                               <span className="font-mono tabular-nums text-gray-900">{formatCurrency(l.conferido)}</span>
                             ) : (
                               <input inputMode="decimal" value={itens[idx].conferido} placeholder="0,00"
-                                onChange={e => setItens(list => list.map((x, k) => (k === idx ? { ...x, conferido: e.target.value } : x)))}
+                                onChange={e => { setAlterado(true); setItens(list => list.map((x, k) => (k === idx ? { ...x, conferido: e.target.value } : x))); }}
                                 className="h-9 w-36 rounded-lg border border-gray-200 bg-white px-3 text-right font-mono text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                             )}
                           </td>
@@ -190,16 +242,22 @@ export default function ClienteConferenciaRecebimentos() {
                 <div className="border-t border-gray-100 px-5 py-3 text-sm text-gray-700"><strong>Observações:</strong> {salva.observacoes}</div>
               )) : (
                 <div className="space-y-3 border-t border-gray-100 p-4">
-                  <textarea rows={2} value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Observações (opcional)"
+                  <textarea rows={2} value={observacoes} onChange={e => { setAlterado(true); setObservacoes(e.target.value); }} placeholder="Observações (opcional)"
                     className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                   <div className="flex items-center justify-between gap-3">
                     <span className={`text-xs ${preenchidos === itens.length ? 'text-emerald-700' : 'text-amber-600'}`}>
                       {preenchidos === itens.length ? <><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Todas as formas conferidas</> : `${itens.length - preenchidos} forma(s) em branco serão salvas como R$ 0,00`}
                     </span>
+                    <div className="flex items-center gap-2">
+                    <button onClick={guardarRascunho} disabled={!empresa || salvandoRascunho || (!alterado && !!rascunho)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      {salvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileClock className="h-4 w-4" />} {rascunho && !alterado ? 'Rascunho salvo' : 'Salvar rascunho'}
+                    </button>
                     <button onClick={() => setConfirmar(true)} disabled={!empresa}
                       className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
                       <Save className="h-4 w-4" /> Confirmar e salvar
                     </button>
+                    </div>
                   </div>
                 </div>
               )}

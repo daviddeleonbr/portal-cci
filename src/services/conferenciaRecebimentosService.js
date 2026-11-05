@@ -188,3 +188,31 @@ export async function salvarConferencia({ cliente, data, itens, observacoes, con
   }
   return row;
 }
+
+// ─── Rascunho (salva o "Conferido" parcial para terminar depois) ─────
+// valores: { [chave]: texto digitado }. Apagado no servidor ao confirmar.
+const COLS_RASCUNHO = 'cliente_id, data, valores, observacoes, atualizado_em, atualizado_por';
+
+export async function buscarRascunho(clienteId, data) {
+  const { data: row, error } = await supabase.from('cliente_conferencia_recebimentos_rascunho')
+    .select(COLS_RASCUNHO).eq('cliente_id', clienteId).eq('data', data).maybeSingle();
+  if (error) throw error;
+  return row;
+}
+
+export async function salvarRascunho({ clienteId, data, itens, observacoes, atualizadoPor }) {
+  const valores = {};
+  itens.forEach(i => { const v = String(i.conferido ?? '').trim(); if (v) valores[i.chave] = v; });
+  const { data: row, error } = await supabase.from('cliente_conferencia_recebimentos_rascunho')
+    .upsert({ cliente_id: clienteId, data, valores, observacoes: observacoes || null, atualizado_por: atualizadoPor || null },
+      { onConflict: 'cliente_id,data' })
+    .select(COLS_RASCUNHO).single();
+  if (error) throw error;
+  return row;
+}
+
+export async function excluirRascunho(clienteId, data) {
+  const { error } = await supabase.from('cliente_conferencia_recebimentos_rascunho')
+    .delete().eq('cliente_id', clienteId).eq('data', data);
+  if (error) throw error;
+}
