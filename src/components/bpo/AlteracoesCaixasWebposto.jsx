@@ -5,7 +5,7 @@
 // em linhas "Campo: valor" e, nas alterações, blocos "Antes:" / "Depois:".
 // Se a chave não tiver usuário vinculado na Quality → 403 → aviso.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, ChevronDown, ChevronRight, Download, History, Loader2, Pencil, Plus,
   RefreshCw, Search, Trash2, Users, FileText, Layers,
@@ -105,7 +105,7 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
   const [semUsuario, setSemUsuario] = useState(false);
   const [soCaixa, setSoCaixa] = useState(true);
   const [tabelasSel, setTabelasSel] = useState(new Set());
-  const [usuarioSel, setUsuarioSel] = useState('');
+  const [usuariosSel, setUsuariosSel] = useState(new Set()); // vazio = todos
   const [turnoSel, setTurnoSel] = useState(''); // data do turno (yyyy-mm-dd)
   const [abertos, setAbertos] = useState(new Set());
 
@@ -163,7 +163,7 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
       setItens(lista.filter(i => !TABELAS_OCULTAS.has(i.tabela)));
       setPeriodoBusca({ de: dataDe, ate: dataAte, empresa: labelEmpresa(empresa) });
       setTabelasSel(new Set());
-      setUsuarioSel('');
+      setUsuariosSel(new Set());
       setTurnoSel('');
       setAbertos(new Set());
     } catch (e) {
@@ -192,12 +192,12 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
     return (itens || []).filter(i => {
       if (soCaixa && !ehTabelaCaixa(i.tabela)) return false;
       if (tabelasSel.size && !tabelasSel.has(i.tabela)) return false;
-      if (usuarioSel && i.usuario !== usuarioSel) return false;
+      if (usuariosSel.size && !usuariosSel.has(i.usuario)) return false;
       if (turnoSel && i.dataTurno !== turnoSel) return false;
       if (q && !`${i.tabela} ${i.usuario} ${i.funcionario} ${i.caixa} ${i.texto}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [itens, soCaixa, tabelasSel, usuarioSel, turnoSel, busca]);
+  }, [itens, soCaixa, tabelasSel, usuariosSel, turnoSel, busca]);
 
   // Funcionário (A-Z, "Sem funcionário" por último) → categoria/tabela
   // (mais frequente primeiro) → operação (Inclusão → Alteração → Exclusão).
@@ -355,10 +355,7 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
                 <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar (valor, administradora, funcionário…)"
                   className={`${inp} w-full pl-8`} />
               </div>
-              <select value={usuarioSel} onChange={e => setUsuarioSel(e.target.value)} className={inp}>
-                <option value="">Todos os usuários</option>
-                {usuarios.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <SeletorUsuarios usuarios={usuarios} selecionados={usuariosSel} onChange={setUsuariosSel} className={inp} />
               <select value={turnoSel} onChange={e => setTurnoSel(e.target.value)} className={inp}
                 title="Data do movimento do caixa/turno que foi modificado">
                 <option value="">Todas as datas de turno</option>
@@ -459,6 +456,48 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
             );
           })}
         </>
+      )}
+    </div>
+  );
+}
+
+// Dropdown com checkboxes — vários usuários (nenhum marcado = todos).
+function SeletorUsuarios({ usuarios, selecionados, onChange, className }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', fora);
+    return () => document.removeEventListener('mousedown', fora);
+  }, [aberto]);
+  const alternar = (u) => {
+    const n = new Set(selecionados);
+    if (n.has(u)) n.delete(u); else n.add(u);
+    onChange(n);
+  };
+  const rotulo = selecionados.size === 0 ? 'Todos os usuários'
+    : selecionados.size === 1 ? [...selecionados][0] : `${selecionados.size} usuários`;
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setAberto(a => !a)}
+        className={`${className} inline-flex min-w-[170px] items-center justify-between gap-2 text-left`}>
+        <span className="truncate">{rotulo}</span>
+        <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+      </button>
+      {aberto && (
+        <div className="absolute z-20 mt-1 max-h-72 w-64 overflow-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+          <button type="button" onClick={() => onChange(new Set())}
+            className="w-full rounded-md px-2 py-1.5 text-left text-xs text-blue-700 hover:bg-blue-50">
+            Todos os usuários
+          </button>
+          {usuarios.map(u => (
+            <label key={u} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
+              <input type="checkbox" checked={selecionados.has(u)} onChange={() => alternar(u)} />
+              <span className="truncate">{u}</span>
+            </label>
+          ))}
+        </div>
       )}
     </div>
   );
