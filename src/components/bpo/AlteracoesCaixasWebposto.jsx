@@ -75,6 +75,8 @@ function camposAlterados(item) {
   return [...new Set([...Object.keys(item.antes), ...Object.keys(item.depois)])]
     .filter(c => !OCULTOS_EXCLUSAO.has(c) && (item.antes[c] || '') !== (item.depois[c] || ''));
 }
+const TABELAS_OCULTAS = new Set(['Caixa Apresentado', 'Caixa']);
+
 // Data do turno (movimento do caixa) → "2026-10-31" (p/ filtrar e ordenar).
 function dataTurnoDoItem(caixa) {
   const m = String(caixa || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -156,7 +158,9 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
         }
       });
       lista.forEach(i => { i.funcionario = i.ctx['Funcionário'] || donoCaixa.get(i.caixa) || 'Sem funcionário'; });
-      setItens(lista);
+      // "Caixa Apresentado" e "Caixa" (fechamento/reabertura do turno) não
+      // interessam — servem só p/ descobrir o funcionário acima, e saem daqui.
+      setItens(lista.filter(i => !TABELAS_OCULTAS.has(i.tabela)));
       setPeriodoBusca({ de: dataDe, ate: dataAte, empresa: labelEmpresa(empresa) });
       setTabelasSel(new Set());
       setUsuarioSel('');
