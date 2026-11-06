@@ -7,7 +7,7 @@
 // Consulta lista o que foi enviado.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, ClipboardCheck, FileClock, Loader2, Lock, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ClipboardCheck, FileClock, FileSpreadsheet, Loader2, Lock, RefreshCw, Save, Trash2 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Toast from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
@@ -105,6 +105,50 @@ export default function ClienteConferenciaRecebimentos() {
     } catch (e) { showToast('error', e.message || 'Falha ao descartar o rascunho.'); }
   };
 
+  // Exporta o que está na tela (confirmado, rascunho ou em digitação) p/ .xlsx.
+  const exportarExcel = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const status = salva
+        ? `Confirmado em ${new Date(salva.confirmado_em).toLocaleString('pt-BR')} por ${salva.confirmado_por || '—'}`
+        : rascunho ? `Rascunho (não confirmado) — salvo em ${new Date(rascunho.atualizado_em).toLocaleString('pt-BR')}` : 'Não confirmado';
+      const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+      const aoa = [
+        ['Resumo de Caixa'],
+        ['Empresa', nomeEmp(empresa)],
+        ['Data', fmtData(data)],
+        ['Situação', status],
+        [],
+        ['Forma de recebimento', 'Tipo', 'Sistema', 'Conferido', 'Diferença'],
+      ];
+      linhas.forEach((l, idx) => {
+        const preenchido = salva || String(itens[idx]?.conferido ?? '').trim() !== '';
+        const conferido = salva ? Number(l.conferido) : l.conferidoNum;
+        aoa.push([
+          l.rotulo, conferenciaService.ROTULO_TIPO[l.tipo] || l.tipo, r2(l.sistema),
+          preenchido ? r2(conferido) : null, preenchido ? r2(l.diferenca) : null,
+        ]);
+      });
+      aoa.push(['Totais', '', r2(totSistema), r2(totConferido), r2(totDif)]);
+      const obs = salva ? salva.observacoes : observacoes.trim();
+      if (obs) aoa.push([], ['Observações', obs]);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+      const inicio = 6; // 1ª linha de valores (0-based)
+      for (let r = inicio; r < inicio + linhas.length + 1; r += 1) {
+        for (let c = 2; c <= 4; c += 1) {
+          const cel = ws[XLSX.utils.encode_cell({ r, c })];
+          if (cel && cel.t === 'n') cel.z = '#,##0.00';
+        }
+      }
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Resumo de caixa');
+      const nomeArq = `resumo-caixa-${nomeEmp(empresa)}-${data}`.normalize('NFD').replace(/\p{Diacritic}/gu, '')
+        .replace(/[^\w-]+/g, '-').replace(/-+/g, '-').toLowerCase();
+      XLSX.writeFile(wb, `${nomeArq}.xlsx`);
+    } catch (e) { showToast('error', e.message || 'Falha ao gerar o Excel.'); }
+  };
+
   const salvar = async () => {
     setSalvando(true);
     try {
@@ -188,7 +232,11 @@ export default function ClienteConferenciaRecebimentos() {
             <div className="overflow-hidden rounded-2xl border border-gray-200/60 bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-3">
                 <ClipboardCheck className="h-4 w-4 text-blue-500" />
-                <h3 className="text-sm font-semibold text-gray-800">Recebimentos de {fmtData(data)} — {nomeEmp(empresa)}</h3>
+                <h3 className="flex-1 text-sm font-semibold text-gray-800">Recebimentos de {fmtData(data)} — {nomeEmp(empresa)}</h3>
+                <button onClick={exportarExcel}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Exportar Excel
+                </button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-sm">
