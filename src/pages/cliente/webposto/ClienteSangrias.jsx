@@ -95,8 +95,12 @@ export default function ClienteSangrias() {
 
   const dataInvalida = useMemo(() => data && data >= hojeStr(), [data]);
 
-  // Verifica se existe fechamento + carrega vendas quando data muda
-  const carregarDia = useCallback(async () => {
+  // Verifica se existe fechamento + carrega vendas quando data muda.
+  // manter (botão Recarregar): { apresentados: { [fcod]: texto }, manuais: [...] }
+  // — preserva o que foi digitado e as linhas manuais; se o sistema passar a ter
+  // sangria do funcionário manual, a linha vira a do sistema (apurado real)
+  // mantendo o apresentado.
+  const carregarDia = useCallback(async (manter = null) => {
     if (!cliente || !data) return;
     if (data >= hojeStr()) {
       setError('Data invalida. Somente dias anteriores ao dia de hoje podem ser conciliados.');
@@ -177,16 +181,19 @@ export default function ClienteSangrias() {
         porFunc.set(fcod, (porFunc.get(fcod) || 0) + valor);
       });
 
-      const lista = Array.from(porFunc.entries())
+      const aprMantido = manter?.apresentados || {};
+      const doSistema = Array.from(porFunc.entries())
         .map(([fcod, apurado]) => ({
           funcionarioCodigo: fcod,
           nome: fcod === SEM_FUNC
             ? 'Sem funcionário identificado'
             : (mapaFunc.get(fcod) || `Funcionário #${fcod}`),
           dinheiroApurado: Number(apurado.toFixed(2)),
-          dinheiroApresentado: '',
-        }))
-        .sort((a, b) => a.nome.localeCompare(b.nome));
+          dinheiroApresentado: aprMantido[String(fcod)] ?? '',
+        }));
+      const noSistema = new Set(doSistema.map(r => String(r.funcionarioCodigo)));
+      const manuais = (manter?.manuais || []).filter(r => !noSistema.has(String(r.funcionarioCodigo)));
+      const lista = [...doSistema, ...manuais].sort((a, b) => a.nome.localeCompare(b.nome));
 
       setRegistros(lista);
       if (lista.length === 0) {
@@ -209,15 +216,17 @@ export default function ClienteSangrias() {
     ));
   };
 
-  // Adiciona uma sangria manual à tabela (fluxo: o funcionário esqueceu
-  // de registrar no sistema → admin inclui aqui pra fechar o caixa).
+  // Adiciona uma sangria manual à tabela (fluxo: o funcionário não tem
+  // sangria no sistema → inclui aqui pra fechar o caixa). Entra com apurado
+  // R$ 0,00 (não há lançamento) e o valor digitado como APRESENTADO (editável).
   // Não persiste em lugar nenhum — só compõe a lista local da conciliação
   // do dia, que será salva inteira em `cliente_sangrias_fechamento`.
   const adicionarSangriaManual = () => {
     const fcod = String(novoFuncCodigo || '').trim();
-    const valor = Number(String(novoValor || '').replace(',', '.'));
+    const txt = String(novoValor ?? '').trim();
+    const valor = Number(txt.replace(',', '.'));
     if (!fcod) return showToast('error', 'Selecione um funcionário.');
-    if (!Number.isFinite(valor) || valor <= 0) return showToast('error', 'Informe um valor maior que zero.');
+    if (txt !== '' && (!Number.isFinite(valor) || valor < 0)) return showToast('error', 'Informe um valor válido.');
     if (registros.some(r => String(r.funcionarioCodigo) === fcod)) {
       return showToast('error', 'Esse funcionário já está na tabela. Edite o valor apresentado direto na linha.');
     }
@@ -230,8 +239,8 @@ export default function ClienteSangrias() {
       {
         funcionarioCodigo: isNaN(Number(fcod)) ? fcod : Number(fcod),
         nome,
-        dinheiroApurado: Number(valor.toFixed(2)),
-        dinheiroApresentado: '',
+        dinheiroApurado: 0,
+        dinheiroApresentado: txt === '' ? '' : String(Number(valor.toFixed(2))),
         manual: true,
       },
     ].sort((a, b) => a.nome.localeCompare(b.nome)));
@@ -409,7 +418,15 @@ export default function ClienteSangrias() {
               placeholder="Nome completo"
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-600" />
           </div>
-          <button onClick={() => { qualityApi.limparCacheTransacional(); carregarDia(); }} disabled={loadingDados || !cliente}
+          <button onClick={() => {
+            qualityApi.limparCacheTransacional();
+            carregarDia(travado ? null : {
+              apresentados: Object.fromEntries(registros
+                .filter(r => String(r.dinheiroApresentado ?? '').trim() !== '')
+                .map(r => [String(r.funcionarioCodigo), r.dinheiroApresentado])),
+              manuais: registros.filter(r => r.manual),
+            });
+          }} disabled={loadingDados || !cliente}
             className="flex items-center gap-2 h-10 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Recarregar
@@ -842,10 +859,10 @@ function FormSangriaManual({
     .filter(f => f.codigo != null && f.ativo && !jaNaTabela.has(String(f.codigo)))
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
+  // valor (apresentado) é opcional e pode ser zero
   const podeAdicionar =
     !!novoFuncCodigo
-    && novoValor !== ''
-    && Number(String(novoValor).replace(',', '.')) > 0;
+    && !(Number(String(novoValor).replace(',', '.')) < 0);
 
   return (
     <div className="mt-4 bg-white rounded-xl border border-dashed border-amber-300 bg-amber-50/20 p-4 shadow-sm">
@@ -856,8 +873,9 @@ function FormSangriaManual({
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-semibold text-gray-900">Adicionar sangria manual</h4>
           <p className="text-[11.5px] text-gray-500 leading-relaxed">
-            Use quando o funcionário não registrou a sangria no sistema. O valor entra como
-            <strong className="text-amber-700"> dinheiro apurado</strong> e pode ser ajustado com o "apresentado" abaixo.
+            Use quando o funcionário não tem sangria no sistema. Entra com apurado R$ 0,00 e o valor como
+            <strong className="text-amber-700"> apresentado (contado)</strong>, que pode ser alterado na linha. Se o sistema
+            passar a ter a sangria, ao recarregar a linha assume o valor apurado do sistema.
           </p>
         </div>
       </div>
@@ -874,7 +892,7 @@ function FormSangriaManual({
         </select>
         <input type="number" inputMode="decimal" step="0.01" min="0"
           value={novoValor} onChange={(e) => setNovoValor(e.target.value)}
-          placeholder="Valor apurado"
+          placeholder="Valor apresentado"
           className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono text-right text-gray-900 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" />
         <button type="button" onClick={onAdicionar} disabled={!podeAdicionar}
           className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 px-4 h-10 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
