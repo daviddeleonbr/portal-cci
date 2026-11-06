@@ -5,9 +5,12 @@
 // diferença. "Salvar rascunho" guarda o digitado (por empresa+dia, no banco)
 // para terminar depois. Ao confirmar, fica travada e o rascunho some; a aba
 // Consulta lista o que foi enviado.
+// Formas SEM lançamento no sistema: o usuário adiciona (Sistema = 0, Conferido
+// digitado); se o sistema passar a ter lançamento nela, ao recarregar a linha
+// casa pela chave e passa a mostrar o valor do sistema, mantendo o conferido.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, ClipboardCheck, FileClock, FileSpreadsheet, Loader2, Lock, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ClipboardCheck, FileClock, FileSpreadsheet, Loader2, Lock, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Toast from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
@@ -34,7 +37,7 @@ export default function ClienteConferenciaRecebimentos() {
   const [aba, setAba] = useState(podeConferir ? 'conferencia' : 'consulta');
   const [empresaId, setEmpresaId] = useState(session?.cliente?.id || empresas[0]?.id || '');
   const [data, setData] = useState(ontem());
-  const [itens, setItens] = useState([]);           // [{ chave, rotulo, tipo, sistema, conferido(string) }]
+  const [itens, setItens] = useState([]);           // [{ chave, rotulo, tipo, sistema, conferido(string), adicionada? }]
   const [salva, setSalva] = useState(null);         // conferência já confirmada
   const [observacoes, setObservacoes] = useState('');
   const [carregando, setCarregando] = useState(false);
@@ -44,26 +47,41 @@ export default function ClienteConferenciaRecebimentos() {
   const [rascunho, setRascunho] = useState(null);     // { atualizado_em, atualizado_por }
   const [salvandoRascunho, setSalvandoRascunho] = useState(false);
   const [alterado, setAlterado] = useState(false);    // mexeu desde o último rascunho
+  const [formas, setFormas] = useState([]);           // todas as formas da empresa (p/ adicionar)
+  const [novaForma, setNovaForma] = useState({ chave: '', valor: '' });
+  const [carregado, setCarregado] = useState(false);  // dia carregado e editável
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
   const showToast = (type, message) => { setToast({ show: true, type, message }); setTimeout(() => setToast(t => ({ ...t, show: false })), 3500); };
 
   const empresa = empresas.find(e => e.id === empresaId) || null;
   const hoje = ymd(new Date());
 
-  const carregar = useCallback(async (forcar = false) => {
+  // manter: estado da tela (Recarregar) — prevalece sobre o rascunho salvo.
+  const carregar = useCallback(async (forcar = false, manter = null) => {
     if (!empresa || !data) return;
     setCarregando(true); setErro(''); setItens([]); setSalva(null); setObservacoes(''); setRascunho(null); setAlterado(false);
+    setCarregado(false); setNovaForma({ chave: '', valor: '' });
     try {
       const existente = await conferenciaService.buscarConferencia(empresa.id, data);
       if (existente) { setSalva(existente); return; }
       if (data >= hoje) { setErro('Só é possível conferir dias anteriores a hoje.'); return; }
-      const [linhas, rasc] = await Promise.all([
+      const [linhas, rasc, todas] = await Promise.all([
         conferenciaService.carregarRecebimentosDia(empresa, data, tipoCliente, { forcar }),
         conferenciaService.buscarRascunho(empresa.id, data).catch(() => null),
+        conferenciaService.listarFormasRecebimento(empresa, tipoCliente).catch(() => []),
       ]);
-      const vals = rasc?.valores || {};
-      setItens(linhas.map(l => ({ ...l, conferido: vals[l.chave] ?? '' })));
-      if (rasc) { setRascunho(rasc); setObservacoes(rasc.observacoes || ''); }
+      const vals = { ...(rasc?.valores || {}), ...(manter?.valores || {}) };
+      const adicionadas = manter ? manter.adicionadas : (rasc?.ocorrencias || []);
+      // Forma adicionada que agora TEM lançamento → some daqui e fica a linha do sistema.
+      const noSistema = new Set(linhas.map(l => l.chave));
+      const extras = adicionadas.filter(a => a.chave && !noSistema.has(a.chave))
+        .map(a => ({ chave: a.chave, rotulo: a.rotulo, tipo: a.tipo, sistema: 0, adicionada: true }));
+      setItens([...linhas, ...extras].map(l => ({ ...l, conferido: vals[l.chave] ?? '' })));
+      setFormas(todas);
+      if (rasc) setRascunho(rasc);
+      setObservacoes(manter ? manter.observacoes : (rasc?.observacoes || ''));
+      if (manter) setAlterado(manter.alterado);
+      setCarregado(true);
       if (!linhas.length) setErro('Nenhum recebimento no sistema para este dia.');
     } catch (e) { setErro(e.message || 'Falha ao carregar os recebimentos.'); }
     finally { setCarregando(false); }
@@ -75,6 +93,26 @@ export default function ClienteConferenciaRecebimentos() {
   const totConferido = linhas.reduce((s, i) => s + (Number(salva ? i.conferido : i.conferidoNum) || 0), 0);
   const totDif = totConferido - totSistema;
   const preenchidos = itens.filter(i => String(i.conferido).trim() !== '').length;
+  const formasDisponiveis = formas.filter(f => !itens.some(i => i.chave === f.chave));
+
+  // Recarregar sem perder o que foi digitado (nem as formas adicionadas).
+  const recarregar = () => {
+    const manter = carregado && !salva ? {
+      valores: Object.fromEntries(itens.filter(i => String(i.conferido).trim() !== '').map(i => [i.chave, i.conferido])),
+      adicionadas: itens.filter(i => i.adicionada).map(({ chave, rotulo, tipo }) => ({ chave, rotulo, tipo })),
+      observacoes, alterado,
+    } : null;
+    carregar(true, manter);
+  };
+
+  const adicionarForma = () => {
+    const f = formas.find(x => x.chave === novaForma.chave);
+    if (!f || itens.some(i => i.chave === f.chave)) return;
+    setItens(l => [...l, { ...f, sistema: 0, adicionada: true, conferido: novaForma.valor }]);
+    setNovaForma({ chave: '', valor: '' });
+    setAlterado(true);
+  };
+  const removerForma = (chave) => { setItens(l => l.filter(x => x.chave !== chave)); setAlterado(true); };
 
   // avisa ao sair da página com digitação não salva
   useEffect(() => {
@@ -100,7 +138,7 @@ export default function ClienteConferenciaRecebimentos() {
     try {
       await conferenciaService.excluirRascunho(empresa.id, data);
       setRascunho(null); setAlterado(false); setObservacoes('');
-      setItens(list => list.map(x => ({ ...x, conferido: '' })));
+      setItens(list => list.filter(x => !x.adicionada).map(x => ({ ...x, conferido: '' })));
       showToast('success', 'Rascunho descartado.');
     } catch (e) { showToast('error', e.message || 'Falha ao descartar o rascunho.'); }
   };
@@ -125,7 +163,7 @@ export default function ClienteConferenciaRecebimentos() {
         const preenchido = salva || String(itens[idx]?.conferido ?? '').trim() !== '';
         const conferido = salva ? Number(l.conferido) : l.conferidoNum;
         aoa.push([
-          l.rotulo, conferenciaService.ROTULO_TIPO[l.tipo] || l.tipo, r2(l.sistema),
+          l.adicionada ? `${l.rotulo} (sem lançamento no sistema)` : l.rotulo, conferenciaService.ROTULO_TIPO[l.tipo] || l.tipo, r2(l.sistema),
           preenchido ? r2(conferido) : null, preenchido ? r2(l.diferenca) : null,
         ]);
       });
@@ -193,7 +231,7 @@ export default function ClienteConferenciaRecebimentos() {
               <input type="date" value={data} max={ontem()} onChange={e => setData(e.target.value)}
                 className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm" />
             </div>
-            <button onClick={() => carregar(true)} disabled={carregando || !empresa}
+            <button onClick={recarregar} disabled={carregando || !empresa}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} /> Recarregar
             </button>
@@ -228,7 +266,7 @@ export default function ClienteConferenciaRecebimentos() {
 
           {carregando ? (
             <div className="flex justify-center rounded-2xl border border-gray-200/60 bg-white py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
-          ) : linhas.length > 0 && (
+          ) : (salva ? linhas.length > 0 : carregado) && (
             <div className="overflow-hidden rounded-2xl border border-gray-200/60 bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-3">
                 <ClipboardCheck className="h-4 w-4 text-blue-500" />
@@ -255,7 +293,14 @@ export default function ClienteConferenciaRecebimentos() {
                       return (
                         <tr key={l.chave}>
                           <td className="px-4 py-2.5">
-                            <p className="font-medium text-gray-900">{l.rotulo}</p>
+                            <p className="flex items-center gap-2 font-medium text-gray-900">
+                              {l.rotulo}
+                              {l.adicionada && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Sem lançamento</span>}
+                              {l.adicionada && !salva && (
+                                <button onClick={() => removerForma(l.chave)} title="Remover esta forma"
+                                  className="rounded p-0.5 text-gray-300 hover:bg-red-50 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>
+                              )}
+                            </p>
                             <p className="text-[11px] text-gray-400">{conferenciaService.ROTULO_TIPO[l.tipo] || l.tipo}</p>
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono tabular-nums text-gray-900">{formatCurrency(l.sistema)}</td>
@@ -285,6 +330,25 @@ export default function ClienteConferenciaRecebimentos() {
                   </tfoot>
                 </table>
               </div>
+
+              {!salva && (
+                <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 bg-gray-50/60 px-4 py-3">
+                  <span className="text-xs font-medium text-gray-600">Forma sem lançamento no sistema?</span>
+                  <select value={novaForma.chave} onChange={e => setNovaForma(f => ({ ...f, chave: e.target.value }))}
+                    className="h-9 min-w-[220px] flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm sm:flex-none">
+                    <option value="">{formasDisponiveis.length ? 'Selecione a forma de recebimento…' : 'Nenhuma outra forma disponível'}</option>
+                    {formasDisponiveis.map(f => <option key={f.chave} value={f.chave}>{f.rotulo}</option>)}
+                  </select>
+                  <input inputMode="decimal" value={novaForma.valor} placeholder="Conferido 0,00"
+                    onChange={e => setNovaForma(f => ({ ...f, valor: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') adicionarForma(); }}
+                    className="h-9 w-36 rounded-lg border border-gray-200 bg-white px-3 text-right font-mono text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  <button onClick={adicionarForma} disabled={!novaForma.chave}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+                    <Plus className="h-4 w-4" /> Adicionar
+                  </button>
+                </div>
+              )}
 
               {salva ? (salva.observacoes && (
                 <div className="border-t border-gray-100 px-5 py-3 text-sm text-gray-700"><strong>Observações:</strong> {salva.observacoes}</div>

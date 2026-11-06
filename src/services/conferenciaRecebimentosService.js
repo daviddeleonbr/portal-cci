@@ -151,6 +151,33 @@ export async function carregarRecebimentosDia(cliente, data, tipoCliente, { forc
   return tipoCliente === 'autosystem' ? autosystem(cliente, data) : webposto(cliente, data);
 }
 
+// Todas as formas de recebimento possíveis da empresa — p/ o usuário ADICIONAR
+// uma forma que não teve lançamento no dia (linha com Sistema = 0). Mesmo
+// esquema de chave das linhas do dia (adm:<cod> / caixa:<campo> no Webposto,
+// conta:<cod> no Autosystem): se depois o sistema passar a ter lançamento
+// nela, a linha casa pela chave e vira a linha normal do sistema.
+export async function listarFormasRecebimento(cliente, tipoCliente) {
+  let lista;
+  if (tipoCliente === 'autosystem') {
+    const cats = await autosystemService.listarContasCategorizadasRede(cliente.as_rede_id);
+    lista = cats
+      .filter(c => c.categoria && c.categoria !== 'sobra_caixa' && c.categoria !== 'falta_caixa')
+      .map(c => ({ chave: `conta:${c.codigo}`, rotulo: c.nome || `Conta ${c.codigo}`, tipo: c.categoria === 'cartao_pix' ? 'cartao' : c.categoria }));
+  } else {
+    const chaves = await mapService.listarChavesApi();
+    const chave = chaves.find(c => c.id === cliente.chave_api_id)?.chave;
+    const adms = chave ? await qualityApi.buscarAdministradoras(chave).catch(() => []) : [];
+    lista = [
+      ...CAMPOS_CAIXA.map(([campo, rotulo, tipo]) => ({ chave: `caixa:${campo}`, rotulo, tipo })),
+      ...(adms || []).map(a => {
+        const cod = Number(a.administradoraCodigo ?? a.codigo);
+        return { chave: `adm:${cod}`, rotulo: a.descricao || a.nome || `Administradora ${cod}`, tipo: 'cartao' };
+      }),
+    ];
+  }
+  return lista.sort((a, b) => (ORDEM_TIPO[a.tipo] ?? 9) - (ORDEM_TIPO[b.tipo] ?? 9) || a.rotulo.localeCompare(b.rotulo));
+}
+
 // ─── Gravação / consulta ─────────────────────────────────────────
 const COLS = 'id, cliente_id, data, itens, total_sistema, total_conferido, total_diferenca, observacoes, confirmado_em, confirmado_por';
 
@@ -176,7 +203,10 @@ export async function listarConferencias({ clienteIds, de, ate }) {
 export async function salvarConferencia({ cliente, data, itens, observacoes, confirmadoPor }) {
   const linhas = itens.map(i => {
     const conferido = r2(i.conferido);
-    return { chave: i.chave, rotulo: i.rotulo, tipo: i.tipo, sistema: r2(i.sistema), conferido, diferenca: r2(conferido - r2(i.sistema)) };
+    return {
+      chave: i.chave, rotulo: i.rotulo, tipo: i.tipo, sistema: r2(i.sistema), conferido, diferenca: r2(conferido - r2(i.sistema)),
+      ...(i.adicionada ? { adicionada: true } : {}), // forma sem lançamento no sistema, incluída pelo usuário
+    };
   });
   const total_sistema = r2(linhas.reduce((s, i) => s + i.sistema, 0));
   const total_conferido = r2(linhas.reduce((s, i) => s + i.conferido, 0));
@@ -193,8 +223,10 @@ export async function salvarConferencia({ cliente, data, itens, observacoes, con
 }
 
 // ─── Rascunho (salva o "Conferido" parcial para terminar depois) ─────
-// valores: { [chave]: texto digitado }. Apagado no servidor ao confirmar.
-const COLS_RASCUNHO = 'cliente_id, data, valores, observacoes, atualizado_em, atualizado_por';
+// valores: { [chave]: texto }. ocorrencias (coluna da migration 209): as formas
+// ADICIONADAS pelo usuário [{ chave, rotulo, tipo }] — o conferido delas fica
+// em `valores` pela mesma chave. Apagado no servidor ao confirmar.
+const COLS_RASCUNHO = 'cliente_id, data, valores, ocorrencias, observacoes, atualizado_em, atualizado_por';
 
 export async function buscarRascunho(clienteId, data) {
   const { data: row, error } = await supabase.from('cliente_conferencia_recebimentos_rascunho')
@@ -204,10 +236,11 @@ export async function buscarRascunho(clienteId, data) {
 }
 
 export async function salvarRascunho({ clienteId, data, itens, observacoes, atualizadoPor }) {
+  const adicionadas = itens.filter(i => i.adicionada).map(({ chave, rotulo, tipo }) => ({ chave, rotulo, tipo }));
   const valores = {};
   itens.forEach(i => { const v = String(i.conferido ?? '').trim(); if (v) valores[i.chave] = v; });
   const { data: row, error } = await supabase.from('cliente_conferencia_recebimentos_rascunho')
-    .upsert({ cliente_id: clienteId, data, valores, observacoes: observacoes || null, atualizado_por: atualizadoPor || null },
+    .upsert({ cliente_id: clienteId, data, valores, ocorrencias: adicionadas, observacoes: observacoes || null, atualizado_por: atualizadoPor || null },
       { onConflict: 'cliente_id,data' })
     .select(COLS_RASCUNHO).single();
   if (error) throw error;

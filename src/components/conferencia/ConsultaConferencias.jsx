@@ -113,7 +113,7 @@ export default function ConsultaConferencias({ empresas }) {
                 <tbody className="divide-y divide-gray-100">
                   {(aberto.itens || []).map((i, k) => (
                     <tr key={k}>
-                      <td className="py-2 text-gray-800">{i.rotulo}<span className="block text-[11px] text-gray-400">{conferenciaService.ROTULO_TIPO[i.tipo] || i.tipo}</span></td>
+                      <td className="py-2 text-gray-800">{i.rotulo}{i.adicionada && <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Sem lançamento</span>}<span className="block text-[11px] text-gray-400">{conferenciaService.ROTULO_TIPO[i.tipo] || i.tipo}</span></td>
                       <td className="py-2 text-right font-mono tabular-nums">{formatCurrency(i.sistema)}</td>
                       <td className="py-2 text-right font-mono tabular-nums">{formatCurrency(i.conferido)}</td>
                       <td className={`py-2 text-right font-mono font-semibold tabular-nums ${corDif(i.diferenca)}`}>{formatCurrency(i.diferenca)}</td>
