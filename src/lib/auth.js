@@ -172,32 +172,32 @@ export async function loginCliente(email, senha) {
 // ─── Acesso DEMO: admin vê o portal cliente com nomes fictícios ─────
 //
 // Cria uma sessão CLIENTE marcada com `_demo: true`, baseada nos dados
-// reais de uma chave_api (rede webposto). Nomes reais (rede, empresas,
+// reais de uma rede — Webposto (chave_api) ou Autosystem (as_rede). Nomes reais (rede, empresas,
 // vendedores, fornecedores) são substituídos por fictícios via
 // utils/demoMascarar.js. Valores numéricos (vendas, totais) são REAIS.
 //
 // Salva também `_adminOriginal` pra permitir voltar ao admin sem
 // re-fazer login.
-export async function acessarPortalDemo({ chaveApiId }) {
+export async function acessarPortalDemo({ chaveApiId, asRedeId }) {
   const sessaoAdmin = getAdminSession();
   if (!sessaoAdmin?.usuario) throw new Error('Você precisa estar logado como admin pra usar o modo demo.');
 
   // Importa lazy pra evitar ciclo
   const { mascararRede, mascararEmpresa } = await import('../utils/demoMascarar');
 
-  // 1) Carrega a chave_api real
-  const { data: chaveApi, error: errCh } = await supabase
-    .from('chaves_api')
-    .select('*')
-    .eq('id', chaveApiId)
-    .single();
-  if (errCh || !chaveApi) throw new Error('Rede não encontrada: ' + (errCh?.message || ''));
+  // 1) Carrega a rede real (Webposto: chaves_api · Autosystem: as_rede — só
+  //    id/nome/ativo, nunca as credenciais criptografadas).
+  const tipoCliente = asRedeId ? 'autosystem' : 'webposto';
+  const { data: rede, error: errCh } = asRedeId
+    ? await supabase.from('as_rede').select('id, nome, ativo').eq('id', asRedeId).single()
+    : await supabase.from('chaves_api').select('*').eq('id', chaveApiId).single();
+  if (errCh || !rede) throw new Error('Rede não encontrada: ' + (errCh?.message || ''));
 
   // 2) Carrega empresas (clientes) reais dessa rede
   const { data: emps, error: errEmps } = await supabase
     .from('clientes')
     .select('*')
-    .eq('chave_api_id', chaveApiId)
+    .eq(asRedeId ? 'as_rede_id' : 'chave_api_id', asRedeId || chaveApiId)
     .eq('status', 'ativo')
     .order('nome', { ascending: true });
   if (errEmps) throw new Error('Falha ao carregar empresas: ' + errEmps.message);
@@ -206,7 +206,7 @@ export async function acessarPortalDemo({ chaveApiId }) {
   }
 
   // 3) Mascara nomes
-  const chaveApiMasc   = mascararRede(chaveApi);
+  const redeMasc       = mascararRede(rede);
   const empresasMasc   = emps.map(mascararEmpresa);
   const clienteAtivo   = empresasMasc[0];
 
@@ -222,6 +222,7 @@ export async function acessarPortalDemo({ chaveApiId }) {
       'dashboard', 'comercial_vendas', 'comercial_operacao',
       'comercial_produtividade', 'comercial_estoques', 'financeiro',
       'documentos', 'notas_fiscais',
+      'sangrias', 'conferencia_recebimentos',
     ],
     empresas_permitidas: null,
   };
@@ -229,9 +230,9 @@ export async function acessarPortalDemo({ chaveApiId }) {
   const sessionDemo = {
     usuario: usuarioCliente,
     cliente: clienteAtivo,
-    tipoCliente: 'webposto',
-    chaveApi: chaveApiMasc,
-    asRede: null,
+    tipoCliente,
+    chaveApi: tipoCliente === 'webposto' ? redeMasc : null,
+    asRede: tipoCliente === 'autosystem' ? redeMasc : null,
     clientesRede: empresasMasc,
     loggedAt: new Date().toISOString(),
     _demo: true,

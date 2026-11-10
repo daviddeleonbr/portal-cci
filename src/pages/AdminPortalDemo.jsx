@@ -1,5 +1,5 @@
 // Tela admin: seletor de rede pra acessar o portal cliente em MODO DEMO.
-// Mostra todas as redes (chaves_api) com nomes FICTÍCIOS — admin escolhe
+// Mostra todas as redes (Webposto: chaves_api · Autosystem: as_rede) com nomes FICTÍCIOS — admin escolhe
 // uma e cai no portal cliente como demo. Dados numéricos são reais; só
 // os nomes são substituídos.
 
@@ -17,27 +17,32 @@ export default function AdminPortalDemo() {
   const [redes, setRedes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
-  const [acessando, setAcessando] = useState(null); // chaveApiId em andamento
+  const [acessando, setAcessando] = useState(null); // id da rede em andamento
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
-        // Lista todas as chaves_api ativas
-        const { data, error } = await supabase
-          .from('chaves_api')
-          .select('id, nome, provedor, clientes(id)')
-          .order('nome', { ascending: true });
-        if (error) throw error;
+        // Lista as redes Webposto (chaves_api) e Autosystem (as_rede)
+        const [wp, as] = await Promise.all([
+          supabase.from('chaves_api').select('id, nome, provedor, clientes(id)').order('nome', { ascending: true }),
+          supabase.from('as_rede').select('id, nome, clientes(id)').order('nome', { ascending: true }),
+        ]);
+        if (wp.error) throw wp.error;
+        if (as.error) throw as.error;
         // Mascara nomes pra exibição
-        const mascaradas = (data || []).map(r => ({
+        const mascarar = (r, tipo) => ({
           id: r.id,
+          tipo,
           nomeOriginal: r.nome,
           nomeFicticio: mascararRede(r).nome,
-          provedor: r.provedor || 'quality',
+          provedor: tipo === 'autosystem' ? 'autosystem' : (r.provedor || 'quality'),
           qtdEmpresas: (r.clientes || []).length,
-        }));
-        setRedes(mascaradas);
+        });
+        setRedes([
+          ...(wp.data || []).map(r => mascarar(r, 'webposto')),
+          ...(as.data || []).map(r => mascarar(r, 'autosystem')),
+        ].sort((a, b) => a.nomeOriginal.localeCompare(b.nomeOriginal)));
       } catch (err) {
         setErro(err.message);
       } finally {
@@ -46,11 +51,11 @@ export default function AdminPortalDemo() {
     })();
   }, []);
 
-  const entrarNoPortal = async (chaveApiId) => {
-    setAcessando(chaveApiId);
+  const entrarNoPortal = async (rede) => {
+    setAcessando(rede.id);
     try {
-      await acessarPortalDemo({ chaveApiId });
-      navigate('/cliente/webposto/dashboard');
+      await acessarPortalDemo(rede.tipo === 'autosystem' ? { asRedeId: rede.id } : { chaveApiId: rede.id });
+      navigate(`/cliente/${rede.tipo}/dashboard`);
     } catch (err) {
       setToast({ tipo: 'error', mensagem: err.message });
     } finally {
@@ -115,7 +120,7 @@ export default function AdminPortalDemo() {
                   <span className="text-gray-300">·</span>
                   <span className="font-mono uppercase">{r.provedor}</span>
                 </div>
-                <button onClick={() => entrarNoPortal(r.id)}
+                <button onClick={() => entrarNoPortal(r)}
                   disabled={acessando === r.id || r.qtdEmpresas === 0}
                   className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 text-[12px] font-semibold text-white transition-colors">
                   {acessando === r.id ? (
