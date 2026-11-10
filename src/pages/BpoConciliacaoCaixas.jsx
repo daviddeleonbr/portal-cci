@@ -4,13 +4,15 @@ import {
   Coins, Loader2, AlertCircle, Building2, Zap, Calendar,
   UserRound, CheckCircle2, TrendingUp, TrendingDown, RefreshCw, Clock, ChevronRight,
   Fuel, Wrench, ShoppingBag, Package, CreditCard, Banknote, FileText, MoreHorizontal,
-  XCircle, ChevronDown, PlusCircle, MinusCircle, Printer, History, Stethoscope,
+  XCircle, ChevronDown, PlusCircle, MinusCircle, Printer, History, Stethoscope, ClipboardCheck,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import BpoAlteracoesCaixas from './BpoAlteracoesCaixas';
 import BpoAnaliseCartoes from './BpoAnaliseCartoes';
 import BpoDiagnosticarCartoes from './BpoDiagnosticarCartoes';
 import ConsultaConferencias from '../components/conferencia/ConsultaConferencias';
+import { ResumoCaixa } from './cliente/ClienteConferenciaRecebimentos';
+import { getAdminSession } from '../lib/auth';
 import Modal from '../components/ui/Modal';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
@@ -916,6 +918,12 @@ export default function BpoConciliacaoCaixas({
             }`}>
             <Stethoscope className="h-4 w-4" /> Diagnosticar
           </button>
+          <button onClick={() => setAbaAtiva('resumo')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              abaAtiva === 'resumo' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <ClipboardCheck className="h-4 w-4" /> Resumo de caixa
+          </button>
           <button onClick={() => setAbaAtiva('conferencias')}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
               abaAtiva === 'conferencias' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -923,6 +931,11 @@ export default function BpoConciliacaoCaixas({
             <CheckCircle2 className="h-4 w-4" /> Resumos de caixa do cliente
           </button>
         </div>
+      )}
+
+      {/* Aba: Resumo de caixa — a mesma conferência do portal do cliente, feita pela CCI */}
+      {!modoCliente && abaAtiva === 'resumo' && (
+        <ResumoCaixa modoAdmin empresas={clientes} usuarioNome={getAdminSession()?.usuario?.nome} />
       )}
 
       {/* Aba: conferências de recebimentos enviadas pelos clientes (portal) */}

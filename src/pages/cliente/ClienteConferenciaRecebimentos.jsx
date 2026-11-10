@@ -8,6 +8,8 @@
 // Formas SEM lançamento no sistema: o usuário adiciona (Sistema = 0, Conferido
 // digitado); se o sistema passar a ter lançamento nela, ao recarregar a linha
 // casa pela chave e passa a mostrar o valor do sistema, mantendo o conferido.
+// O miolo (ResumoCaixa) também é usado no admin, como aba da Conciliação de
+// caixas (modoAdmin): todas as empresas, tipo Webposto/Autosystem por empresa.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, ClipboardCheck, FileClock, FileSpreadsheet, Loader2, Lock, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react';
@@ -15,6 +17,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import Toast from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import ConsultaConferencias from '../../components/conferencia/ConsultaConferencias';
+import { SelectBusca } from '../../components/tarefas/CamposTarefas';
 import { useClienteSession } from '../../hooks/useAuth';
 import * as conferenciaService from '../../services/conferenciaRecebimentosService';
 import { formatCurrency } from '../../utils/format';
@@ -29,13 +32,19 @@ const corDif = (v) => (Math.abs(v) < 0.005 ? 'text-emerald-600' : v > 0 ? 'text-
 export default function ClienteConferenciaRecebimentos() {
   const session = useClienteSession();
   const usuario = session?.usuario;
-  const tipoCliente = session?.tipoCliente;
   const empresas = useMemo(() => session?.clientesRede || [], [session?.clientesRede]);
-  const perms = usuario?.permissoes || [];
-  const podeConferir = perms.includes('conferencia_recebimentos');
+  return (
+    <ResumoCaixa empresas={empresas} empresaInicial={session?.cliente?.id || empresas[0]?.id || ''}
+      tipoFixo={session?.tipoCliente} usuarioNome={usuario?.nome}
+      podeConferir={(usuario?.permissoes || []).includes('conferencia_recebimentos')} />
+  );
+}
 
+// tipoFixo: 'webposto' | 'autosystem' (portal do cliente). Sem ele (admin), o
+// tipo sai da própria empresa (as_rede_id → Autosystem).
+export function ResumoCaixa({ empresas, empresaInicial = '', tipoFixo = null, usuarioNome, podeConferir = true, modoAdmin = false }) {
   const [aba, setAba] = useState(podeConferir ? 'conferencia' : 'consulta');
-  const [empresaId, setEmpresaId] = useState(session?.cliente?.id || empresas[0]?.id || '');
+  const [empresaId, setEmpresaId] = useState(empresaInicial);
   const [data, setData] = useState(ontem());
   const [itens, setItens] = useState([]);           // [{ chave, rotulo, tipo, sistema, conferido(string), adicionada? }]
   const [salva, setSalva] = useState(null);         // conferência já confirmada
@@ -54,6 +63,7 @@ export default function ClienteConferenciaRecebimentos() {
   const showToast = (type, message) => { setToast({ show: true, type, message }); setTimeout(() => setToast(t => ({ ...t, show: false })), 3500); };
 
   const empresa = empresas.find(e => e.id === empresaId) || null;
+  const tipoCliente = tipoFixo || (empresa?.as_rede_id ? 'autosystem' : 'webposto');
   const hoje = ymd(new Date());
 
   // manter: estado da tela (Recarregar) — prevalece sobre o rascunho salvo.
@@ -126,7 +136,7 @@ export default function ClienteConferenciaRecebimentos() {
     setSalvandoRascunho(true);
     try {
       const row = await conferenciaService.salvarRascunho({
-        clienteId: empresa.id, data, itens, observacoes: observacoes.trim(), atualizadoPor: usuario?.nome,
+        clienteId: empresa.id, data, itens, observacoes: observacoes.trim(), atualizadoPor: usuarioNome,
       });
       setRascunho(row); setAlterado(false);
       showToast('success', 'Rascunho salvo. Você pode sair e continuar depois.');
@@ -191,7 +201,7 @@ export default function ClienteConferenciaRecebimentos() {
     setSalvando(true);
     try {
       const row = await conferenciaService.salvarConferencia({
-        cliente: empresa, data, observacoes: observacoes.trim(), confirmadoPor: usuario?.nome,
+        cliente: empresa, data, observacoes: observacoes.trim(), confirmadoPor: usuarioNome,
         itens: itens.map(i => ({ ...i, conferido: num(i.conferido) })),
       });
       setSalva(row); setConfirmar(false); setRascunho(null); setAlterado(false);
@@ -203,27 +213,26 @@ export default function ClienteConferenciaRecebimentos() {
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
-      <PageHeader title="Resumo de Caixa" description="Confira o que o sistema recebeu no dia, por forma de pagamento, com os portais e extratos" />
+      {!modoAdmin && <PageHeader title="Resumo de Caixa" description="Confira o que o sistema recebeu no dia, por forma de pagamento, com os portais e extratos" />}
 
-      <div className="mb-4 inline-flex rounded-lg bg-gray-100 p-1">
+      {!modoAdmin && <div className="mb-4 inline-flex rounded-lg bg-gray-100 p-1">
         {podeConferir && (
           <button onClick={() => setAba('conferencia')}
             className={`rounded-md px-3 py-1.5 text-sm font-medium ${aba === 'conferencia' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Conferência</button>
         )}
         <button onClick={() => setAba('consulta')}
           className={`rounded-md px-3 py-1.5 text-sm font-medium ${aba === 'consulta' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Consulta</button>
-      </div>
+      </div>}
 
       {aba === 'consulta' ? <ConsultaConferencias empresas={empresas} /> : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-            {empresas.length > 1 && (
-              <div className="min-w-[220px] flex-1">
+            {(empresas.length > 1 || modoAdmin) && (
+              <div className="min-w-[260px] flex-1">
                 <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Empresa</label>
-                <select value={empresaId} onChange={e => setEmpresaId(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm">
-                  {empresas.map(e => <option key={e.id} value={e.id}>{nomeEmp(e)}</option>)}
-                </select>
+                <SelectBusca value={empresaId} onChange={setEmpresaId} vazio={modoAdmin ? 'Selecione a empresa…' : undefined}
+                  placeholderBusca="Buscar empresa…" vazioLista="Nenhuma empresa encontrada."
+                  opcoes={empresas.map(e => ({ value: e.id, label: modoAdmin ? `${nomeEmp(e)}${e.as_rede_id ? ' · Autosystem' : ' · Webposto'}` : nomeEmp(e) }))} />
               </div>
             )}
             <div>

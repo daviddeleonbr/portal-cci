@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Eye, Loader2, RefreshCw, X } from 'lucide-react';
+import { SelectBusca } from '../tarefas/CamposTarefas';
 import * as conferenciaService from '../../services/conferenciaRecebimentosService';
 import { formatCurrency } from '../../utils/format';
 
@@ -46,10 +47,9 @@ export default function ConsultaConferencias({ empresas }) {
           <input type="date" value={ate} onChange={e => setAte(e.target.value)} className={inp} /></div>
         {(empresas || []).length > 1 && (
           <div className="min-w-[220px] flex-1"><label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Empresa</label>
-            <select value={empresaF} onChange={e => setEmpresaF(e.target.value)} className={`${inp} w-full`}>
-              <option value="">Todas</option>
-              {(empresas || []).map(e => <option key={e.id} value={e.id}>{nomeEmp(e)}</option>)}
-            </select></div>
+            <SelectBusca value={empresaF} onChange={setEmpresaF} vazio="Todas"
+              placeholderBusca="Buscar empresa…" vazioLista="Nenhuma empresa encontrada."
+              opcoes={(empresas || []).map(e => ({ value: e.id, label: nomeEmp(e) }))} /></div>
         )}
         <button onClick={carregar} disabled={carregando}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
