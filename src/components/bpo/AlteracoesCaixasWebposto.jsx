@@ -19,7 +19,10 @@ const fmtDataHora = (iso) => {
   const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
   return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}${m[6] ? `:${m[6]}` : ''}` : (iso || '—');
 };
+// Busca a auditoria do dia do caixa até hoje (alteração costuma vir dias
+// depois), limitada a MAX_DIAS, e fica só com o que é do caixa daquele dia.
 const MAX_DIAS = 31;
+const somarDias = (s, n) => { const d = new Date(`${s}T12:00:00`); d.setDate(d.getDate() + n); return ymd(d); };
 
 // Tabelas que mexem no caixa (filtro padrão). As demais ficam disponíveis.
 const ehTabelaCaixa = (t) => /^caixa|^cart[ãa]o$|^cheque|^venda prazo$|^venda forma/i.test(t || '');
@@ -89,6 +92,38 @@ function tituloCaixa(caixa) {
   return caixa || 'Sem caixa vinculado';
 }
 
+// "Cartão ALTERAR" na auditoria só traz Autorização/Bandeira — sem caixa nem
+// funcionário. Resolve pela Quality: CARTAO (autorização → venda) → VENDA
+// (→ caixa) → CAIXA (turno, data, funcionário dono). Usa o rótulo de caixa
+// da própria auditoria quando existe um com o mesmo turno/data.
+async function resolverCaixaCartoes(chave, empresaCodigo, dia, lista) {
+  const pend = lista.filter(i => !i.caixa && i.ctx['Autorização']);
+  if (!pend.length) return;
+  const f = { dataInicial: dia, dataFinal: dia, empresaCodigo };
+  const [cartoes, vendas, caixas, funcs] = await Promise.all([
+    qualityApi.buscarCartoes(chave, f),
+    qualityApi.buscarVendas(chave, f),
+    qualityApi.buscarCaixas(chave, f),
+    qualityApi.buscarFuncionarios(chave).catch(() => []),
+  ]);
+  const caixaDaVenda = new Map((vendas || []).map(v => [v.vendaCodigo ?? v.codigo, v.caixaCodigo]));
+  const caixaPorCod = new Map((caixas || []).map(c => [c.caixaCodigo ?? c.codigo, c]));
+  const nomeFunc = new Map((funcs || []).map(x => [x.funcionarioCodigo ?? x.codigo, x.nome]));
+  const rotulos = [...new Set(lista.map(i => i.caixa).filter(Boolean))];
+  pend.forEach(i => {
+    const aut = String(i.ctx['Autorização']).trim();
+    const adm = i.ctx.Bandeira || i.antes.Administradora || i.depois.Administradora || '';
+    const candidatos = (cartoes || []).filter(c => String(c.autorizacao || '').trim() === aut);
+    const cartao = candidatos.find(c => c.adiministradoraDescricao === adm || c.adiministradoraDescricao === i.depois.Administradora) || candidatos[0];
+    const cx = cartao && caixaPorCod.get(caixaDaVenda.get(cartao.vendaCodigo));
+    if (!cx) return;
+    const dataBR = String(cx.dataMovimento).slice(0, 10).split('-').reverse().join('/');
+    i.caixa = rotulos.find(r => r.includes(cx.turno) && r.includes(dataBR)) || `${cx.turno}, ${dataBR}`;
+    i.dataTurno = dataTurnoDoItem(i.caixa);
+    i.donoQuality = nomeFunc.get(cx.funcionarioCodigo) || '';
+  });
+}
+
 // Campos mais informativos p/ o resumo de inclusão/exclusão.
 const CAMPOS_RESUMO = ['Administradora', 'Valor', 'Valor Total', 'Dinheiro', 'Plano de Conta', 'Histórico', 'Venda', 'Conta', 'Observação'];
 
@@ -96,8 +131,7 @@ const CAMPOS_RESUMO = ['Administradora', 'Valor', 'Valor Total', 'Dinheiro', 'Pl
 // agrupados) do documento de impressão — ele precisa ficar FORA do `.no-print`.
 export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEmpresa = (e) => e?.nome, redeNome = '', onDocumento }) {
   const [empresaId, setEmpresaId] = useState(() => empresas[0]?.id || '');
-  const [dataDe, setDataDe] = useState(ontem());
-  const [dataAte, setDataAte] = useState(ontem());
+  const [diaCaixa, setDiaCaixa] = useState(ontem()); // dia do movimento do caixa/turno
   const [busca, setBusca] = useState('');
   const [itens, setItens] = useState(null); // null = ainda não buscou
   const [carregando, setCarregando] = useState(false);
@@ -106,7 +140,6 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
   const [soCaixa, setSoCaixa] = useState(true);
   const [tabelasSel, setTabelasSel] = useState(new Set());
   const [usuariosSel, setUsuariosSel] = useState(new Set()); // vazio = todos
-  const [turnoSel, setTurnoSel] = useState(''); // data do turno (yyyy-mm-dd)
   const [abertos, setAbertos] = useState(new Set());
 
   const empresa = empresas.find(e => e.id === empresaId) || null;
@@ -115,13 +148,13 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
     setErro(''); setSemUsuario(false);
     if (!chave) { setErro('Chave da API não encontrada para esta rede.'); return; }
     if (!empresa) { setErro('Selecione a empresa.'); return; }
-    if (!dataDe || !dataAte || dataDe > dataAte) { setErro('Período inválido.'); return; }
-    const dias = (new Date(dataAte) - new Date(dataDe)) / 86400000 + 1;
-    if (dias > MAX_DIAS) { setErro(`Selecione no máximo ${MAX_DIAS} dias.`); return; }
+    const hoje = ymd(new Date());
+    if (!diaCaixa || diaCaixa > hoje) { setErro('Dia do caixa inválido.'); return; }
+    const ate = [hoje, somarDias(diaCaixa, MAX_DIAS - 1)].sort()[0];
     setCarregando(true);
     try {
       const eventos = await qualityApi.buscarAuditoria(chave, {
-        dataInicial: dataDe, dataFinal: dataAte,
+        dataInicial: diaCaixa, dataFinal: ate,
         filiais: [Number(empresa.empresa_codigo)], origens: ['RETAGUARDA'],
       });
       // Achata em itens (1 linha por tabela afetada), mantendo o evento pai.
@@ -149,6 +182,9 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
         });
         });
       });
+      // Cartão alterado sem caixa no texto → descobre o caixa pela Quality.
+      await resolverCaixaCartoes(chave, Number(empresa.empresa_codigo), diaCaixa, lista)
+        .catch(e => console.warn('[alteracoes] falha ao resolver caixa dos cartões', e));
       // Funcionário: o do próprio registro; senão o dono do caixa/turno (o
       // "Caixa Apresentado" traz o funcionário do caixa; "Caixa" não traz).
       const donoCaixa = new Map();
@@ -157,14 +193,14 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
           donoCaixa.set(i.caixa, i.ctx['Funcionário']);
         }
       });
-      lista.forEach(i => { i.funcionario = i.ctx['Funcionário'] || donoCaixa.get(i.caixa) || 'Sem funcionário'; });
+      lista.forEach(i => { i.funcionario = i.ctx['Funcionário'] || donoCaixa.get(i.caixa) || i.donoQuality || 'Sem funcionário'; });
       // "Caixa Apresentado" e "Caixa" (fechamento/reabertura do turno) não
       // interessam — servem só p/ descobrir o funcionário acima, e saem daqui.
-      setItens(lista.filter(i => !TABELAS_OCULTAS.has(i.tabela)));
-      setPeriodoBusca({ de: dataDe, ate: dataAte, empresa: labelEmpresa(empresa) });
+      // Só o que é do caixa/turno do dia escolhido.
+      setItens(lista.filter(i => !TABELAS_OCULTAS.has(i.tabela) && i.dataTurno === diaCaixa));
+      setPeriodoBusca({ dia: diaCaixa, empresa: labelEmpresa(empresa) });
       setTabelasSel(new Set());
       setUsuariosSel(new Set());
-      setTurnoSel('');
       setAbertos(new Set());
     } catch (e) {
       if (e?.code === 'AUDITORIA_SEM_USUARIO') { setSemUsuario(true); setItens(null); }
@@ -180,12 +216,6 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [itens, soCaixa]);
   const usuarios = useMemo(() => [...new Set((itens || []).map(i => i.usuario))].sort(), [itens]);
-  // Datas de turno presentes no resultado (mais recente primeiro), com contagem.
-  const datasTurno = useMemo(() => {
-    const m = new Map();
-    (itens || []).forEach(i => { if (i.dataTurno && (!soCaixa || ehTabelaCaixa(i.tabela))) m.set(i.dataTurno, (m.get(i.dataTurno) || 0) + 1); });
-    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  }, [itens, soCaixa]);
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -193,11 +223,10 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
       if (soCaixa && !ehTabelaCaixa(i.tabela)) return false;
       if (tabelasSel.size && !tabelasSel.has(i.tabela)) return false;
       if (usuariosSel.size && !usuariosSel.has(i.usuario)) return false;
-      if (turnoSel && i.dataTurno !== turnoSel) return false;
       if (q && !`${i.tabela} ${i.usuario} ${i.funcionario} ${i.caixa} ${i.texto}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [itens, soCaixa, tabelasSel, usuariosSel, turnoSel, busca]);
+  }, [itens, soCaixa, tabelasSel, usuariosSel, busca]);
 
   // Funcionário (A-Z, "Sem funcionário" por último) → categoria/tabela
   // (mais frequente primeiro) → operação (Inclusão → Alteração → Exclusão).
@@ -260,14 +289,11 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
       contexto: {
         rede: redeNome,
         empresa: periodoBusca?.empresa || '',
-        periodo: [
-          periodoBusca ? `Alterado ${periodoBusca.de === periodoBusca.ate ? `em ${fmtD(periodoBusca.de)}` : `de ${fmtD(periodoBusca.de)} a ${fmtD(periodoBusca.ate)}`}` : '',
-          turnoSel ? `Turnos de ${fmtD(turnoSel)}` : '',
-        ].filter(Boolean).join('  ·  '),
+        periodo: periodoBusca ? `Caixa de ${fmtD(periodoBusca.dia)}` : '',
         geradoEm: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
       },
     });
-  }, [grupos, periodoBusca, turnoSel, redeNome, onDocumento]);
+  }, [grupos, periodoBusca, redeNome, onDocumento]);
 
   const kpis = useMemo(() => {
     const ops = { INCLUIR: 0, ALTERAR: 0, EXCLUIR: 0 };
@@ -288,12 +314,9 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className={lbl}>Alterado de</label>
-          <input type="date" value={dataDe} max={dataAte} onChange={e => setDataDe(e.target.value)} className={inp} />
-        </div>
-        <div>
-          <label className={lbl}>Até</label>
-          <input type="date" value={dataAte} min={dataDe} onChange={e => setDataAte(e.target.value)} className={inp} />
+          <label className={lbl}>Dia do caixa</label>
+          <input type="date" value={diaCaixa} max={ymd(new Date())} onChange={e => setDiaCaixa(e.target.value)} className={inp}
+            title="Dia do movimento do caixa/turno — traz as alterações feitas nele, em qualquer data posterior" />
         </div>
         <div className="min-w-[240px]">
           <label className={lbl}>Empresa</label>
@@ -333,7 +356,7 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
           <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
             <History className="h-6 w-6 text-blue-600" />
           </div>
-          <p className="text-sm font-medium text-gray-900">Selecione o período e a empresa e clique em "Buscar"</p>
+          <p className="text-sm font-medium text-gray-900">Selecione o dia do caixa e a empresa e clique em "Buscar"</p>
           <p className="mt-1 text-xs text-gray-500">Mostra o que foi incluído, alterado ou excluído na retaguarda do Webposto (cartões, fechamento de caixa, sangrias…).</p>
         </div>
       )}
@@ -356,11 +379,6 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
                   className={`${inp} w-full pl-8`} />
               </div>
               <SeletorUsuarios usuarios={usuarios} selecionados={usuariosSel} onChange={setUsuariosSel} className={inp} />
-              <select value={turnoSel} onChange={e => setTurnoSel(e.target.value)} className={inp}
-                title="Data do movimento do caixa/turno que foi modificado">
-                <option value="">Todas as datas de turno</option>
-                {datasTurno.map(([d, n]) => <option key={d} value={d}>Turno de {d.split('-').reverse().join('/')} ({n})</option>)}
-              </select>
               <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-gray-600">
                 <input type="checkbox" checked={soCaixa} onChange={e => { setSoCaixa(e.target.checked); setTabelasSel(new Set()); }} />
                 Só o que mexe no caixa
@@ -388,7 +406,7 @@ export default function AlteracoesCaixasWebposto({ chave, empresas = [], labelEm
 
           {filtrados.length === 0 ? (
             <div className="rounded-2xl border border-gray-200/60 bg-white shadow-sm">
-              <p className="py-12 text-center text-sm text-gray-400">Nenhuma alteração no período com esses filtros.</p>
+              <p className="py-12 text-center text-sm text-gray-400">Nenhuma alteração nos caixas deste dia com esses filtros.</p>
             </div>
           ) : grupos.map(g => {
             const recolhido = fechados.has(g.nome);
