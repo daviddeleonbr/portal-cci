@@ -681,6 +681,11 @@ export async function buscarRecebimentosAutosystem(redeId, empresaCodigos, filtr
       contas_creditar_extras: Array.isArray(filtros.contas_creditar_extras)
         ? filtros.contas_creditar_extras
         : [],
+      // Contas que entram com TODOS os lançamentos a débito do dia, não só
+      // os que vieram do caixa (ex: baixa de fatura de cartão).
+      contas_debitar_todas: Array.isArray(filtros.contas_debitar_todas)
+        ? filtros.contas_debitar_todas
+        : [],
     },
   });
   if (error) throw await _extrairErroFn(error, 'Falha ao buscar recebimentos');

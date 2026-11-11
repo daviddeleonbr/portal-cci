@@ -124,9 +124,12 @@ async function autosystem(cliente, data) {
   const categorias = await autosystemService.listarContasCategorizadasRede(redeId);
   const catPorConta = new Map(categorias.map(c => [String(c.codigo), c]));
   const sobras = categorias.filter(c => c.categoria === 'sobra_caixa').map(c => String(c.codigo));
+  // Contas de cartão/PIX: soma TUDO que entrou nelas no dia (igual ao "Entradas"
+  // do Lançamentos Financeiros do AS), inclusive baixa de fatura que não passa no PDV.
+  const cartoes = categorias.filter(c => c.categoria === 'cartao_pix').map(c => String(c.codigo));
   const [receb, contas] = await Promise.all([
     autosystemService.buscarRecebimentosAutosystem(redeId, [cliente.empresa_codigo],
-      { data_de: data, data_ate: data, contas_creditar_extras: sobras }),
+      { data_de: data, data_ate: data, contas_creditar_extras: sobras, contas_debitar_todas: cartoes }),
     autosystemService.buscarContasAutosystem(redeId).catch(() => []),
   ]);
   const nomeConta = new Map((contas || []).map(c => [String(c.codigo), c.nome || c.descricao]));

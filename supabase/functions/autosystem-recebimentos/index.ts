@@ -57,10 +57,14 @@ serve(async (req) => {
     // Contas extras a incluir no filtro de conta_creditar (ex: contas de
     // sobra de caixa que são receitas fora do padrão 1.1.2.*).
     contas_creditar_extras?: string[];
+    // Contas cujo lançamento entra INTEIRO, seja qual for a conta_creditar
+    // (ex: contas de cartão — a "baixa de fatura" de cartão não passa pelo
+    // PDV/caixa 1.1.2, mas é recebimento naquela conta). Resumo de caixa.
+    contas_debitar_todas?: string[];
   };
   try { body = await req.json(); } catch { return json({ error: 'Body JSON inválido' }, 400); }
 
-  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_creditar_extras } = body;
+  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_creditar_extras, contas_debitar_todas } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
   if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
     return json({ error: 'empresa_codigos[] é obrigatório' }, 400);
@@ -85,6 +89,7 @@ serve(async (req) => {
       .filter(n => Number.isFinite(n));
 
     const extras = Array.isArray(contas_creditar_extras) ? contas_creditar_extras.map(String) : [];
+    const debitarTodas = Array.isArray(contas_debitar_todas) ? contas_debitar_todas.map(String) : [];
 
     const sql = `
       select
@@ -106,13 +111,14 @@ serve(async (req) => {
       where (
             m.conta_creditar::text like '1.1.2%'
          or m.conta_creditar::text = any($4::text[])
+         or m.conta_debitar::text  = any($5::text[])
       )
         and m.empresa = any($1::bigint[])
         and m.data between $2 and $3
       order by m.hora
     `;
 
-    const rows = await executarQuery(rede, sql, [empresasNum, data_de, data_ate, extras], { encoding: 'SQL_ASCII' });
+    const rows = await executarQuery(rede, sql, [empresasNum, data_de, data_ate, extras, debitarTodas], { encoding: 'SQL_ASCII' });
 
     const recebimentos = rows.map((row) => decodeRowText(row, TEXT_COLUMNS, 'windows-1252'));
 
