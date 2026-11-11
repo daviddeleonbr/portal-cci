@@ -177,7 +177,7 @@ function DetalheFechamento({ f, empresa, onFechar }) {
                 const dif = Number(r.diferenca ?? (Number(r.dinheiroApresentado || 0) - Number(r.dinheiroApurado || 0)));
                 return (
                   <tr key={i}>
-                    <td className="py-2 text-gray-800">{r.nome}<span className="ml-1 font-mono text-[10px] text-gray-400">#{r.funcionarioCodigo}</span></td>
+                    <td className="py-2 text-gray-800">{r.nome}<span className="ml-1 font-mono text-[10px] text-gray-400">#{r.funcionarioCodigo}</span>{r.turno && <span className="block text-[11px] text-gray-500">{r.turno}</span>}</td>
                     <td className="py-2 text-right font-mono tabular-nums">{formatCurrency(r.dinheiroApurado)}</td>
                     <td className="py-2 text-right font-mono tabular-nums">{formatCurrency(r.dinheiroApresentado)}</td>
                     <td className={`py-2 text-right font-mono font-semibold tabular-nums ${corDif(dif)}`}>{formatCurrency(dif)}</td>

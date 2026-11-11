@@ -39,6 +39,13 @@ function formatDataBR(s) {
   return y && m && d ? `${d}/${m}/${y}` : s;
 }
 
+// Uma linha por funcionário + turno (caixa). Fechamentos antigos (sem
+// caixaCodigo) e as manuais caem na chave só do funcionário.
+const chaveLinha = (r) => `${r.funcionarioCodigo}|${r.caixaCodigo ?? (r.manual ? 'manual' : '')}`;
+// Funcionário (A-Z) e, dentro dele, turno (1º, 2º…); manual por último.
+const ordenarLinhas = (l) => [...l].sort((a, b) =>
+  a.nome.localeCompare(b.nome) || (a.turnoOrdem ?? 99) - (b.turnoOrdem ?? 99));
+
 export default function ClienteSangrias() {
   const session = useClienteSession();
   const cliente = session?.cliente;
@@ -96,7 +103,7 @@ export default function ClienteSangrias() {
   const dataInvalida = useMemo(() => data && data >= hojeStr(), [data]);
 
   // Verifica se existe fechamento + carrega vendas quando data muda.
-  // manter (botão Recarregar): { apresentados: { [fcod]: texto }, manuais: [...] }
+  // manter (botão Recarregar): { apresentados: { [chaveLinha]: texto }, manuais: [...] }
   // — preserva o que foi digitado e as linhas manuais; se o sistema passar a ter
   // sangria do funcionário manual, a linha vira a do sistema (apurado real)
   // mantendo o apresentado.
@@ -146,10 +153,13 @@ export default function ClienteSangrias() {
       if (!chave) throw new Error('Chave API não encontrada');
 
       const filtros = { dataInicial: data, dataFinal: data, empresaCodigo: cliente.empresa_codigo };
-      const [sangrias, funcs] = await Promise.all([
+      const [sangrias, funcs, caixas] = await Promise.all([
         qualityApi.buscarSangriasCaixa(chave.chave, filtros),
         qualityApi.buscarFuncionarios(chave.chave),
+        qualityApi.buscarCaixas(chave.chave, filtros).catch(() => []),
       ]);
+      // caixaCodigo → turno ("1º TURNO") p/ separar as sangrias por turno.
+      const turnoDoCaixa = new Map((caixas || []).map(c => [Number(c.caixaCodigo ?? c.codigo), { turno: c.turno, ordem: Number(c.turnoCodigo) || 0 }]));
 
       // Guarda catálogo de funcionários para usar no form de adicionar manual
       setFuncionariosLista(funcs || []);
@@ -161,7 +171,7 @@ export default function ClienteSangrias() {
         f.nome ?? f.descricao ?? `Funcionário #${f.funcionarioCodigo ?? f.codigo}`,
       ));
 
-      // Filtra sangrias pelas contas habilitadas e agrega por funcionário.
+      // Filtra sangrias pelas contas habilitadas e agrega por funcionário + turno.
       // O endpoint SANGRIA_CAIXA não tem um campo único `valor`; a sangria
       // pode misturar vários meios (dinheiro, cheque, cartão, etc.). O total
       // bruto é a soma desses campos.
@@ -178,22 +188,32 @@ export default function ClienteSangrias() {
         for (const c of CAMPOS_VALOR) valor += Number(s[c]) || 0;
         if (valor === 0) return;
         const fcod = s.funcionarioCodigo || SEM_FUNC;
-        porFunc.set(fcod, (porFunc.get(fcod) || 0) + valor);
+        const cx = s.caixaCodigo != null ? Number(s.caixaCodigo) : null;
+        const k = `${fcod}|${cx ?? ''}`;
+        const g = porFunc.get(k) || { fcod, cx, apurado: 0 };
+        g.apurado += valor;
+        porFunc.set(k, g);
       });
 
       const aprMantido = manter?.apresentados || {};
-      const doSistema = Array.from(porFunc.entries())
-        .map(([fcod, apurado]) => ({
-          funcionarioCodigo: fcod,
-          nome: fcod === SEM_FUNC
-            ? 'Sem funcionário identificado'
-            : (mapaFunc.get(fcod) || `Funcionário #${fcod}`),
-          dinheiroApurado: Number(apurado.toFixed(2)),
-          dinheiroApresentado: aprMantido[String(fcod)] ?? '',
-        }));
+      const doSistema = Array.from(porFunc.values())
+        .map(({ fcod, cx, apurado }) => {
+          const t = cx != null ? turnoDoCaixa.get(cx) : null;
+          const r = {
+            funcionarioCodigo: fcod,
+            nome: fcod === SEM_FUNC
+              ? 'Sem funcionário identificado'
+              : (mapaFunc.get(fcod) || `Funcionário #${fcod}`),
+            caixaCodigo: cx,
+            turno: t?.turno || (cx != null ? `Caixa #${cx}` : ''),
+            turnoOrdem: t?.ordem ?? 99,
+            dinheiroApurado: Number(apurado.toFixed(2)),
+          };
+          return { ...r, dinheiroApresentado: aprMantido[chaveLinha(r)] ?? '' };
+        });
       const noSistema = new Set(doSistema.map(r => String(r.funcionarioCodigo)));
       const manuais = (manter?.manuais || []).filter(r => !noSistema.has(String(r.funcionarioCodigo)));
-      const lista = [...doSistema, ...manuais].sort((a, b) => a.nome.localeCompare(b.nome));
+      const lista = ordenarLinhas([...doSistema, ...manuais]);
 
       setRegistros(lista);
       if (lista.length === 0) {
@@ -210,9 +230,9 @@ export default function ClienteSangrias() {
 
   useEffect(() => { carregarDia(); }, [carregarDia]);
 
-  const atualizarApresentado = (fcod, valor) => {
+  const atualizarApresentado = (k, valor) => {
     setRegistros(prev => prev.map(r =>
-      r.funcionarioCodigo === fcod ? { ...r, dinheiroApresentado: valor } : r
+      chaveLinha(r) === k ? { ...r, dinheiroApresentado: valor } : r
     ));
   };
 
@@ -234,7 +254,7 @@ export default function ClienteSangrias() {
       String(f.funcionarioCodigo ?? f.codigo) === fcod
     );
     const nome = fObj?.nome ?? fObj?.descricao ?? `Funcionário #${fcod}`;
-    setRegistros(prev => [
+    setRegistros(prev => ordenarLinhas([
       ...prev,
       {
         funcionarioCodigo: isNaN(Number(fcod)) ? fcod : Number(fcod),
@@ -243,14 +263,14 @@ export default function ClienteSangrias() {
         dinheiroApresentado: txt === '' ? '' : String(Number(valor.toFixed(2))),
         manual: true,
       },
-    ].sort((a, b) => a.nome.localeCompare(b.nome)));
+    ]));
     setNovoFuncCodigo('');
     setNovoValor('');
     setError(null); // limpa "nenhuma sangria encontrada"
   };
 
-  const removerSangriaManual = (fcod) => {
-    setRegistros(prev => prev.filter(r => r.funcionarioCodigo !== fcod));
+  const removerSangriaManual = (k) => {
+    setRegistros(prev => prev.filter(r => chaveLinha(r) !== k));
   };
 
   const totais = useMemo(() => {
@@ -294,6 +314,9 @@ export default function ClienteSangrias() {
       const regsParaSalvar = registros.map(r => ({
         funcionarioCodigo: r.funcionarioCodigo,
         nome: r.nome,
+        ...(r.caixaCodigo != null ? { caixaCodigo: r.caixaCodigo } : {}),
+        ...(r.turno ? { turno: r.turno, turnoOrdem: r.turnoOrdem } : {}),
+        ...(r.manual ? { manual: true } : {}),
         dinheiroApurado: Number(r.dinheiroApurado || 0),
         dinheiroApresentado: Number(r.dinheiroApresentado || 0),
         diferenca: Number(r.dinheiroApresentado || 0) - Number(r.dinheiroApurado || 0),
@@ -423,7 +446,7 @@ export default function ClienteSangrias() {
             carregarDia(travado ? null : {
               apresentados: Object.fromEntries(registros
                 .filter(r => String(r.dinheiroApresentado ?? '').trim() !== '')
-                .map(r => [String(r.funcionarioCodigo), r.dinheiroApresentado])),
+                .map(r => [chaveLinha(r), r.dinheiroApresentado])),
               manuais: registros.filter(r => r.manual),
             });
           }} disabled={loadingDados || !cliente}
@@ -501,13 +524,14 @@ export default function ClienteSangrias() {
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
               <Calendar className="h-4 w-4 text-blue-500" />
               <h3 className="text-sm font-semibold text-gray-800">Fechamento de {formatDataBR(data)}</h3>
-              <span className="text-[11px] text-gray-400">· {registros.length} funcionários</span>
+              <span className="text-[11px] text-gray-400">· {new Set(registros.map(r => String(r.funcionarioCodigo))).size} funcionários · {registros.length} turno(s)</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                     <th className="px-4 py-3">Funcionário</th>
+                    <th className="px-4 py-3">Turno</th>
                     <th className="px-4 py-3 text-right">Dinheiro apurado</th>
                     <th className="px-4 py-3 text-right">Apresentado (contado)</th>
                     <th className="px-4 py-3 text-right">Diferença</th>
@@ -521,7 +545,7 @@ export default function ClienteSangrias() {
                     const diff = apr - Number(r.dinheiroApurado || 0);
                     const conciliado = temApr && Math.abs(diff) < 0.01;
                     return (
-                      <tr key={r.funcionarioCodigo} className={`hover:bg-gray-50/60 ${r.manual ? 'bg-amber-50/30' : ''}`}>
+                      <tr key={chaveLinha(r)} className={`hover:bg-gray-50/60 ${r.manual ? 'bg-amber-50/30' : ''}`}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
                             <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0 ${
@@ -544,13 +568,14 @@ export default function ClienteSangrias() {
                             </div>
                           </div>
                         </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{r.turno || '—'}</td>
                         <td className="px-4 py-3 text-right font-mono text-sm text-gray-900 tabular-nums">
                           {formatCurrency(r.dinheiroApurado)}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <input type="number" step="0.01" inputMode="decimal"
                             value={r.dinheiroApresentado ?? ''}
-                            onChange={(e) => atualizarApresentado(r.funcionarioCodigo, e.target.value)}
+                            onChange={(e) => atualizarApresentado(chaveLinha(r), e.target.value)}
                             disabled={travado}
                             placeholder="0,00"
                             className="w-32 h-9 rounded-lg border border-gray-200 px-3 text-sm font-mono text-right focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-600" />
@@ -581,7 +606,7 @@ export default function ClienteSangrias() {
                               </span>
                             )}
                             {r.manual && !travado && (
-                              <button onClick={() => removerSangriaManual(r.funcionarioCodigo)}
+                              <button onClick={() => removerSangriaManual(chaveLinha(r))}
                                 title="Remover sangria manual"
                                 className="h-5 w-5 inline-flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
                                 <X className="h-3 w-3" />
@@ -595,7 +620,7 @@ export default function ClienteSangrias() {
                 </tbody>
                 <tfoot className="bg-gray-50/60 border-t border-gray-200">
                   <tr className="text-sm font-semibold">
-                    <td className="px-4 py-3 text-gray-700">Totais</td>
+                    <td className="px-4 py-3 text-gray-700" colSpan={2}>Totais</td>
                     <td className="px-4 py-3 text-right font-mono text-gray-900 tabular-nums">{formatCurrency(totais.apurado)}</td>
                     <td className="px-4 py-3 text-right font-mono text-gray-900 tabular-nums">{formatCurrency(totais.apresentado)}</td>
                     <td className={`px-4 py-3 text-right font-mono tabular-nums ${
