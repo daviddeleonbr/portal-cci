@@ -250,6 +250,24 @@ export async function salvarRascunho({ clienteId, data, itens, observacoes, atua
   return row;
 }
 
+// Reabre um resumo confirmado (só admin — RLS conf_receb_del = cci_is_admin()).
+// Os valores conferidos (e as formas adicionadas) voltam como RASCUNHO, para
+// editar e confirmar de novo; depois apaga a confirmação.
+export async function reabrirConferencia(conf, atualizadoPor) {
+  const itens = (conf.itens || []).map(i => ({
+    ...i,
+    conferido: String(Number(i.conferido || 0).toFixed(2)).replace('.', ','),
+  }));
+  await salvarRascunho({
+    clienteId: conf.cliente_id, data: conf.data, itens,
+    observacoes: conf.observacoes, atualizadoPor,
+  });
+  const { data: apagadas, error } = await supabase.from('cliente_conferencia_recebimentos')
+    .delete().eq('id', conf.id).select('id');
+  if (error) throw error;
+  if (!apagadas?.length) throw new Error('Sem permissão para reabrir este resumo de caixa.');
+}
+
 export async function excluirRascunho(clienteId, data) {
   const { error } = await supabase.from('cliente_conferencia_recebimentos_rascunho')
     .delete().eq('cliente_id', clienteId).eq('data', data);

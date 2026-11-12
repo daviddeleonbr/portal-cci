@@ -12,7 +12,7 @@
 // caixas (modoAdmin): todas as empresas, tipo Webposto/Autosystem por empresa.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, ClipboardCheck, FileClock, FileSpreadsheet, Loader2, Lock, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ClipboardCheck, FileClock, FileSpreadsheet, Loader2, Lock, LockOpen, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Toast from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
@@ -36,13 +36,15 @@ export default function ClienteConferenciaRecebimentos() {
   return (
     <ResumoCaixa empresas={empresas} empresaInicial={session?.cliente?.id || empresas[0]?.id || ''}
       tipoFixo={session?.tipoCliente} usuarioNome={usuario?.nome}
-      podeConferir={(usuario?.permissoes || []).includes('conferencia_recebimentos')} />
+      podeConferir={(usuario?.permissoes || []).includes('conferencia_recebimentos')}
+      podeReabrir={!!session?._demo} />
   );
 }
 
 // tipoFixo: 'webposto' | 'autosystem' (portal do cliente). Sem ele (admin), o
 // tipo sai da própria empresa (as_rede_id → Autosystem).
-export function ResumoCaixa({ empresas, empresaInicial = '', tipoFixo = null, usuarioNome, podeConferir = true, modoAdmin = false }) {
+// podeReabrir: admin (aba do BPO ou portal Demo) reabre um resumo confirmado.
+export function ResumoCaixa({ empresas, empresaInicial = '', tipoFixo = null, usuarioNome, podeConferir = true, modoAdmin = false, podeReabrir = modoAdmin }) {
   const [aba, setAba] = useState(podeConferir ? 'conferencia' : 'consulta');
   const [empresaId, setEmpresaId] = useState(empresaInicial);
   const [data, setData] = useState(ontem());
@@ -55,6 +57,8 @@ export function ResumoCaixa({ empresas, empresaInicial = '', tipoFixo = null, us
   const [salvando, setSalvando] = useState(false);
   const [rascunho, setRascunho] = useState(null);     // { atualizado_em, atualizado_por }
   const [salvandoRascunho, setSalvandoRascunho] = useState(false);
+  const [reabrir, setReabrir] = useState(false);       // modal de reabertura
+  const [reabrindo, setReabrindo] = useState(false);
   const [alterado, setAlterado] = useState(false);    // mexeu desde o último rascunho
   const [formas, setFormas] = useState([]);           // todas as formas da empresa (p/ adicionar)
   const [novaForma, setNovaForma] = useState({ chave: '', valor: '' });
@@ -210,6 +214,17 @@ export function ResumoCaixa({ empresas, empresaInicial = '', tipoFixo = null, us
     finally { setSalvando(false); }
   };
 
+  const reabrirResumo = async () => {
+    setReabrindo(true);
+    try {
+      await conferenciaService.reabrirConferencia(salva, usuarioNome);
+      setReabrir(false);
+      showToast('success', 'Resumo de caixa reaberto. Os valores conferidos voltaram como rascunho.');
+      await carregar(true);
+    } catch (e) { showToast('error', e.message); }
+    finally { setReabrindo(false); }
+  };
+
   return (
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
@@ -249,9 +264,15 @@ export function ResumoCaixa({ empresas, empresaInicial = '', tipoFixo = null, us
           {salva && (
             <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
               <Lock className="mt-0.5 h-4 w-4 text-emerald-600" />
-              <p className="text-sm text-emerald-900">
+              <p className="flex-1 text-sm text-emerald-900">
                 <strong>Resumo de caixa confirmado</strong> em {new Date(salva.confirmado_em).toLocaleString('pt-BR')} por <strong>{salva.confirmado_por || '—'}</strong>. Os valores não podem mais ser alterados.
               </p>
+              {podeReabrir && (
+                <button onClick={() => setReabrir(true)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 text-sm font-medium text-emerald-800 hover:bg-emerald-100">
+                  <LockOpen className="h-4 w-4" /> Reabrir
+                </button>
+              )}
             </div>
           )}
           {rascunho && !salva && !carregando && (
@@ -405,6 +426,22 @@ export function ResumoCaixa({ empresas, empresaInicial = '', tipoFixo = null, us
             <div className="rounded-lg border border-gray-200 p-3"><p className="text-[10px] uppercase text-gray-400">Diferença</p><p className={`font-mono font-semibold ${corDif(totDif)}`}>{formatCurrency(totDif)}</p></div>
           </div>
           <p className="text-[12px] text-amber-700">Após salvar, o resumo de caixa deste dia fica travado e não pode mais ser alterada.</p>
+        </div>
+      </Modal>
+
+      <Modal open={reabrir} onClose={() => !reabrindo && setReabrir(false)} title="Reabrir resumo de caixa" size="md"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setReabrir(false)} disabled={reabrindo} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+            <button onClick={reabrirResumo} disabled={reabrindo}
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50">
+              {reabrindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockOpen className="h-4 w-4" />} Sim, reabrir
+            </button>
+          </div>
+        )}>
+        <div className="space-y-2 text-sm text-gray-700">
+          <p>{nomeEmp(empresa)} · {fmtData(data)}</p>
+          <p>A confirmação de <strong>{salva?.confirmado_por || '—'}</strong> será desfeita. Os valores conferidos voltam como <strong>rascunho</strong>, para alterar e confirmar novamente.</p>
         </div>
       </Modal>
     </div>
