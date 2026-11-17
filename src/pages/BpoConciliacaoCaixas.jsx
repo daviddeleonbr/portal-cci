@@ -11,6 +11,7 @@ import BpoAlteracoesCaixas from './BpoAlteracoesCaixas';
 import BpoAnaliseCartoes from './BpoAnaliseCartoes';
 import BpoDiagnosticarCartoes from './BpoDiagnosticarCartoes';
 import ConsultaConferencias from '../components/conferencia/ConsultaConferencias';
+import ConsultaSangrias from '../components/sangrias/ConsultaSangrias';
 import { ResumoCaixa } from './cliente/ClienteConferenciaRecebimentos';
 import { getAdminSession } from '../lib/auth';
 import Modal from '../components/ui/Modal';
@@ -918,6 +919,12 @@ export default function BpoConciliacaoCaixas({
             }`}>
             <Stethoscope className="h-4 w-4" /> Diagnosticar
           </button>
+          <button onClick={() => setAbaAtiva('sangrias')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              abaAtiva === 'sangrias' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <Banknote className="h-4 w-4" /> Sangrias
+          </button>
           <button onClick={() => setAbaAtiva('resumo')}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
               abaAtiva === 'resumo' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -931,6 +938,12 @@ export default function BpoConciliacaoCaixas({
             <CheckCircle2 className="h-4 w-4" /> Resumos de caixa do cliente
           </button>
         </div>
+      )}
+
+      {/* Aba: Sangrias — só visualização dos fechamentos enviados pelos clientes
+          (a mesma Consulta do portal do cliente) */}
+      {!modoCliente && abaAtiva === 'sangrias' && (
+        <ConsultaSangrias empresas={clientes} />
       )}
 
       {/* Aba: Resumo de caixa — a mesma conferência do portal do cliente, feita pela CCI */}

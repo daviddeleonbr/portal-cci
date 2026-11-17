@@ -21,6 +21,7 @@ export default function ConsultaSangrias({ empresas }) {
   const hoje = new Date();
   const [de, setDe] = useState(() => ymd(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 30)));
   const [ate, setAte] = useState(() => ymd(hoje));
+  const [modo, setModo] = useState('periodo'); // 'periodo' | 'dia' (dia = de === ate)
   const [empresaF, setEmpresaF] = useState('');
   const [busca, setBusca] = useState('');
   const [lista, setLista] = useState([]);
@@ -55,13 +56,32 @@ export default function ConsultaSangrias({ empresas }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
         <div>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">De</label>
-          <input type="date" value={de} onChange={e => setDe(e.target.value)} className={inp} />
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Filtrar por</label>
+          <div className="flex h-9 items-center rounded-lg bg-gray-100 p-0.5">
+            {[['periodo', 'Período'], ['dia', 'Um dia']].map(([k, rot]) => (
+              <button key={k} type="button"
+                onClick={() => { setModo(k); if (k === 'dia') setDe(ate); }}
+                className={`h-8 rounded-md px-3 text-sm font-medium ${modo === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                {rot}
+              </button>
+            ))}
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Até</label>
-          <input type="date" value={ate} onChange={e => setAte(e.target.value)} className={inp} />
-        </div>
+        {modo === 'dia' ? (
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Dia</label>
+            <input type="date" value={ate} onChange={e => { setDe(e.target.value); setAte(e.target.value); }} className={inp} />
+          </div>
+        ) : (<>
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">De</label>
+            <input type="date" value={de} onChange={e => setDe(e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Até</label>
+            <input type="date" value={ate} onChange={e => setAte(e.target.value)} className={inp} />
+          </div>
+        </>)}
         {(empresas || []).length > 1 && (
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Empresa</label>
