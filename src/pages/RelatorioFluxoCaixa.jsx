@@ -1539,7 +1539,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const valor = Math.abs(Number(m.valor || 0));
         if (m.tipo === 'Crédito') cc.entradas += valor; else cc.saidas += valor;
         const sd = saldoDepois(m);
-        const key = `${m.dataMovimento || ''}|${String(m.movimentoContaCodigo || 0).padStart(20, '0')}`;
+        // MESMA regra da abertura (aberturaPorConta): última DATA e, nela, o último
+        // movimento na ordem da API. Não desempatar por movimentoContaCodigo — com
+        // lançamento em lote/retro-datado o maior código não é o último saldo, e o
+        // saldo final saía errado (variação não batia com entradas − saídas).
+        const key = m.dataMovimento || '';
         if (sd != null && key >= cc._ultKey) { cc._saldoAtual = sd; cc._ultKey = key; }
       }));
       Object.values(porEmpresa).forEach(pe => Object.values(pe.contasMap).forEach(cc => {
@@ -1550,7 +1554,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
     const arr = Object.values(porEmpresa).map(p => {
       const contas = Object.values(p.contasMap)
-        .map(c => ({ ...c, variacao: c.saldoFinal - c.saldoInicial }))
+        // Variação = entradas − saídas (mesma base do relatório). Os saldos ficam
+        // como informação; se não fecharem com ela, é o extrato que está incoerente.
+        .map(c => ({ ...c, variacao: c.entradas - c.saidas }))
         .filter(c => Math.abs(c.saldoInicial) > 0.005 || Math.abs(c.saldoFinal) > 0.005 || Math.abs(c.entradas) > 0.005 || Math.abs(c.saidas) > 0.005)
         .sort((a, b) => String(a.contaNome).localeCompare(String(b.contaNome), undefined, { numeric: true }));
       // Totais da empresa = soma das contas.
@@ -1558,7 +1564,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const saldoFinal = contas.reduce((s, c) => s + c.saldoFinal, 0);
       const entradas = contas.reduce((s, c) => s + c.entradas, 0);
       const saidas = contas.reduce((s, c) => s + c.saidas, 0);
-      return { empresa: p.empresa, empresaCodigo: p.empresaCodigo, saldoInicial, saldoFinal, entradas, saidas, variacao: saldoFinal - saldoInicial, contas };
+      return { empresa: p.empresa, empresaCodigo: p.empresaCodigo, saldoInicial, saldoFinal, entradas, saidas, variacao: entradas - saidas, contas };
     }).sort((a, b) => b.variacao - a.variacao);
     const somaAbs = arr.reduce((s, p) => s + Math.abs(p.variacao), 0);
     const totalConsolidado = arr.reduce((s, p) => s + p.variacao, 0);
