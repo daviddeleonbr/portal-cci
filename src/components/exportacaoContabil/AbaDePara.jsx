@@ -573,6 +573,25 @@ function Regras({ redeId, planoId, gerenciais, contabeis, contabilPorCodigo, reg
 
 // ─── Históricos padrão (templates de narração) ───────────────
 function Historicos({ redeId, planoId, gerenciais, historicos, passagem, onMudou, showToast }) {
+  // Opção da rede+plano: linha sem histórico usa a observação ({obs}) do sistema.
+  const [fallbackObs, setFallbackObs] = useState(false);
+  const [salvandoFallback, setSalvandoFallback] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    deParaService.buscarHistoricoFallbackObs(redeId, planoId)
+      .then(v => { if (vivo) setFallbackObs(v); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [redeId, planoId]);
+  const alternarFallback = async (v) => {
+    setSalvandoFallback(true);
+    try {
+      await deParaService.salvarHistoricoFallbackObs(redeId, planoId, v);
+      setFallbackObs(v);
+      showToast?.('success', v ? 'Sem histórico, a exportação usa a observação do lançamento' : 'Opção desativada');
+    } catch (err) { showToast?.('error', err.message); }
+    finally { setSalvandoFallback(false); }
+  };
   const gerPorCodigo = useMemo(() => Object.fromEntries(gerenciais.map(g => [g.codigo, g])), [gerenciais]);
   const passagemContas = useMemo(() => gerenciais.filter(g => passagem.has(g.codigo)), [gerenciais, passagem]);
   const [form, setForm] = useState(null);
@@ -656,6 +675,14 @@ function Historicos({ redeId, planoId, gerenciais, historicos, passagem, onMudou
           Template do histórico com <strong>tokens</strong>. Ex.: <code className="text-[11px] bg-gray-100 dark:bg-white/10 rounded px-1">PG DOC {'{documento}'} {'{pessoa}'}</code>.
           Uma regra sem condição vira o padrão do tipo.
         </p>
+        <label className="inline-flex flex-shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-gray-200 dark:border-white/10 px-3 py-2 text-[12.5px] text-gray-700 dark:text-gray-300"
+          title="Quando nenhuma regra de histórico casar com a linha (ou o template sair vazio), usa a observação do lançamento no sistema">
+          {salvandoFallback ? <Loader2 className="h-4 w-4 animate-spin text-teal-600" /> : (
+            <input type="checkbox" checked={fallbackObs} onChange={e => alternarFallback(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-teal-600" />
+          )}
+          Sem histórico, usar a observação <code className="text-[11px] bg-gray-100 dark:bg-white/10 rounded px-1">{'{obs}'}</code>
+        </label>
         {!form && (
           <div className="flex gap-2 flex-shrink-0">
             <button onClick={() => nova('provisao')} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-[12.5px] font-medium text-white hover:bg-blue-700"><Plus className="h-4 w-4" /> Provisão</button>

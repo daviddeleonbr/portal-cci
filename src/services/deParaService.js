@@ -53,12 +53,13 @@ export async function buscarMovtoExport(redeId, { empresaCodigos, dataDe, dataAt
 
 // Config completa do de/para de uma rede+plano (p/ resolver a exportação).
 export async function carregarConfig(asRedeId, planoId) {
-  const [mapaArr, regras, passagem, historicos, exclusoes] = await Promise.all([
+  const [mapaArr, regras, passagem, historicos, exclusoes, fallbackObs] = await Promise.all([
     listarMapa(asRedeId, planoId),
     listarRegras(asRedeId, planoId),
     listarPassagem(asRedeId),
     listarHistoricos(asRedeId, planoId),
     listarExclusoes(asRedeId, planoId),
+    buscarHistoricoFallbackObs(asRedeId, planoId),
   ]);
   return {
     mapa: Object.fromEntries(mapaArr.map(m => [m.conta_gerencial, m.conta_contabil_codigo])),
@@ -66,7 +67,30 @@ export async function carregarConfig(asRedeId, planoId) {
     passagem: new Set(passagem),
     historicos,
     exclusoes: exclusoes.filter(e => e.ativo),
+    historicoFallbackObs: fallbackObs,
   };
+}
+
+// Opção da rede+plano: sem histórico → usa a observação ({obs}) do lançamento.
+export async function buscarHistoricoFallbackObs(asRedeId, planoId) {
+  const { data, error } = await supabase
+    .from('plano_contabil_rede')
+    .select('historico_fallback_obs')
+    .eq('as_rede_id', asRedeId).eq('plano_id', planoId)
+    .maybeSingle();
+  // Sem a coluna (migration 210 não aplicada) não pode derrubar a exportação.
+  if (error) return false;
+  return !!data?.historico_fallback_obs;
+}
+
+export async function salvarHistoricoFallbackObs(asRedeId, planoId, ativo) {
+  const { data, error } = await supabase
+    .from('plano_contabil_rede')
+    .update({ historico_fallback_obs: !!ativo })
+    .eq('as_rede_id', asRedeId).eq('plano_id', planoId)
+    .select('id');
+  if (error) throw error;
+  if (!data?.length) throw new Error('Plano não vinculado a esta rede.');
 }
 
 // Planos contábeis atribuídos à rede (allowlist plano_contabil_rede).

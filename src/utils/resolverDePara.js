@@ -8,6 +8,7 @@
 //   regras:     [{ tipo_lancamento, cond_conta_debitar, cond_conta_creditar, cond_despesa_origem, lado, conta_contabil_codigo }],
 //   passagem:   Set(contaGerencial),
 //   historicos: [{ tipo_lancamento, cond_conta_debitar, cond_conta_creditar, cond_despesa_origem, template }],
+//   historicoFallbackObs: bool — sem histórico, usa a obs do lançamento,
 // }
 // ============================================================
 
@@ -117,7 +118,10 @@ export function resolverHistorico(row, cfg) {
     ? (h.cond_conta_debitar ? 1 : 0) + (h.cond_despesa_origem ? 2 : 0)
     : (h.cond_conta_debitar ? 1 : 0) + (h.cond_conta_creditar ? 1 : 0);
   const h = escolher(cands, bate, score);
-  return h ? aplicarTemplate(h.template, row) : '';
+  const txt = h ? aplicarTemplate(h.template, row) : '';
+  // Opção da rede+plano: sem histórico → observação do lançamento no sistema.
+  if (!txt && cfg.historicoFallbackObs) return String(row.obs || '').replace(/\s+/g, ' ').trim();
+  return txt;
 }
 
 // A linha casa alguma regra de exclusão? (não deve sair no arquivo)
