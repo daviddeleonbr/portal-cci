@@ -5,9 +5,10 @@ import {
   ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
   Building2, Zap, RefreshCw, Wallet, Printer,
   EyeOff, Eye, ChevronLeft as ChevLeft, Download,
-  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale, Activity, Truck, Sparkles,
+  LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale, Activity, Truck, Sparkles, CalendarClock,
 } from 'lucide-react';
 import AnaliseQuedasFluxo from '../components/ia/AnaliseQuedasFluxo';
+import FluxoProjetado from '../components/fluxo/FluxoProjetado';
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as RTooltip, ReferenceLine, Layer, useXAxisScale, usePlotArea,
@@ -131,7 +132,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [tempoGeracao, setTempoGeracao] = useState(null); // ms
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
-  const [activeTab, setActiveTab] = useState('fluxo'); // 'fluxo' | 'empresa' | 'evolucao'
+  const [activeTab, setActiveTab] = useState('fluxo'); // 'fluxo' | 'empresa' | 'evolucao' | 'compras' | 'projetado'
   const [analiseQuedasAberta, setAnaliseQuedasAberta] = useState(false); // IA das quedas (só admin)
   // Durante a impressão da análise de quedas, o CSS de impressão desta tela
   // (margens de página, tabelas, títulos) fica desligado para não deformar o timbrado.
@@ -1627,6 +1628,10 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       });
     }));
 
+    // Saldo no FIM do período carregado (independe do recorte da Evolução) —
+    // ponto de partida da aba Projetado.
+    const saldoFimCarregado = saldoInicialPeriodo + movsAll.reduce((s, m) => s + m.entrada - m.saida, 0);
+
     // Limites do período carregado (dos meses selecionados no relatório).
     const loadedIni = meses[0].dataInicial;
     const loadedFim = meses[meses.length - 1].dataFinal;
@@ -1741,9 +1746,31 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       menorLabel: menor.label, idxMenor, variacao, variacaoPct, amplitude,
       diagnostico: partes.join(' '), granularidade: gran, dataIni, dataFim, larguraPx,
       loadedIni, loadedFim, varMin, varMax, offSaldo, offVar,
-      tendenciaDir, domSaldo, domVar, movimentos: movs,
+      tendenciaDir, domSaldo, domVar, movimentos: movs, saldoFimCarregado,
     };
   }, [dadosCarregados, modoRede, resultadoPorEmpresa, composicaoSaldo, cliente, empresaCodigosDaCategoria, dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, descricaoPorConta, meses, granEvol, evolRange, incluirAplicacoes, contasAplicacao]);
+
+  // ─── Projetado: mesmos filtros de conta da Evolução, p/ o extrato realizado
+  // depois do período (dia seguinte → ontem) entrar com a mesma regra.
+  const movimentoValidoProjecao = useCallback((m) => {
+    const cod = String(m.contaCodigo);
+    const tc = tipoPorConta.get(cod);
+    if (tc !== 'bancaria' && tc !== 'caixa') return false;
+    if (!tiposContaAtivos.has(tc)) return false;
+    if (filtroContas.size > 0 && !filtroContas.has(cod)) return false;
+    if (!incluirAplicacoes && contasAplicacao.size > 0
+      && (contasAplicacao.has(String(m.planoContaGerencialCodigo)) || contasAplicacao.has(String(m._contraparteBruta)))) return false;
+    return true;
+  }, [tipoPorConta, tiposContaAtivos, filtroContas, incluirAplicacoes, contasAplicacao]);
+  const empresaCodigosProjecao = useMemo(
+    () => (modoRede ? empresaCodigosDaCategoria : (cliente?.empresa_codigo != null ? [Number(cliente.empresa_codigo)] : [])),
+    [modoRede, empresaCodigosDaCategoria, cliente],
+  );
+  const nomeEmpresaProjecao = useCallback((ec) => {
+    const emp = (cliente?._empresas || []).find(e => Number(e.empresa_codigo) === Number(ec))
+      || (Number(cliente?.empresa_codigo) === Number(ec) ? cliente : null);
+    return emp ? nomeEmpresa(emp, usarApelido) : `#${ec}`;
+  }, [cliente, usarApelido]);
 
   // Giro semanal "de segunda a segunda": agrupa TODOS os movimentos do período em
   // semanas (2ª→dom) e monta o perfil médio por dia da semana, pra revelar a
@@ -2636,6 +2663,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               <Truck className="h-3.5 w-3.5" /> Compras
             </button>
           )}
+          {cliente?.usa_webposto && cliente?.chave_api_id && (
+            <button onClick={() => setActiveTab('projetado')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200 ${
+                activeTab === 'projetado' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              <CalendarClock className="h-3.5 w-3.5" /> Projetado
+            </button>
+          )}
         </div>
       )}
 
@@ -3104,6 +3139,17 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 )}
               </>
             )}
+          </motion.div>
+        ) : activeTab === 'projetado' && cliente?.usa_webposto ? (
+          <motion.div key="projetado" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            <FluxoProjetado
+              chaveApiId={cliente?.chave_api_id}
+              empresaCodigos={empresaCodigosProjecao}
+              nomeEmpresa={nomeEmpresaProjecao}
+              dataInicio={(() => { const [y, m, d] = meses[meses.length - 1].dataFinal.split('-').map(Number); const dt = new Date(y, m - 1, d + 1); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`; })()}
+              saldoInicial={evolucaoCaixa?.saldoFimCarregado ?? 0}
+              movimentoValido={movimentoValidoProjecao}
+            />
           </motion.div>
         ) : activeTab === 'compras' ? (
           <motion.div key="compras" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
