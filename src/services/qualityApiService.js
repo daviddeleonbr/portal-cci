@@ -465,7 +465,29 @@ export function distribuirPagamentoTitulos(m, titulosPorPagamento) {
     return { titulo: t, valorTitulo: valorDoTitulo, planoCod: t.planoContaGerencialCodigo };
   }).filter(x => x.valorTitulo > 0 && x.planoCod != null && x.planoCod !== 0);
   const total = partes.reduce((s, x) => s + x.valorTitulo, 0);
-  return (partes.length > 0 && total > 0) ? partes : null;
+  if (!(partes.length > 0 && total > 0)) return null;
+  // A soma das partes TEM que fechar com o movimento bancário (senão a variação do
+  // fluxo não bate com o extrato). A Quality às vezes grava o lote torto — ex.:
+  // lote de 320,60 (mensalidade 159 + seguro 161,60) com pagamento 320,60 num
+  // título e 0,64 no outro → 321,24. Se não fechar: usa o valor de face dos
+  // títulos quando ELE fecha; senão reparte o movimento proporcionalmente
+  // (resíduo na última parte p/ bater ao centavo).
+  const alvo = Math.abs(Number(m.valor || 0));
+  if (alvo > 0 && Math.abs(total - alvo) > 0.005) {
+    const face = partes.map(x => Math.max(0, Number(x.titulo.valor ?? x.titulo.valorTitulo ?? 0)));
+    const somaFace = face.reduce((s, v) => s + v, 0);
+    const base = Math.abs(somaFace - alvo) <= 0.005 ? face : partes.map(x => x.valorTitulo);
+    const somaBase = base.reduce((s, v) => s + v, 0);
+    let acum = 0;
+    return partes.map((x, i) => {
+      const v = i === partes.length - 1
+        ? Math.round((alvo - acum) * 100) / 100
+        : Math.round(alvo * (base[i] / somaBase) * 100) / 100;
+      acum += v;
+      return { ...x, valorTitulo: v };
+    }).filter(x => x.valorTitulo > 0);
+  }
+  return partes;
 }
 
 // IMPORTANTE: TITULO_RECEBER aceita `convertido`:
