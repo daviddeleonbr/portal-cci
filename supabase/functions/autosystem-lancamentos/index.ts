@@ -61,6 +61,7 @@ serve(async (req) => {
     data_ate?: string;
     contas_codigos?: string[];
     resumo?: boolean;
+    caixas?: boolean;
   };
   try {
     body = await req.json();
@@ -68,7 +69,7 @@ serve(async (req) => {
     return json({ error: 'Body JSON inválido' }, 400);
   }
 
-  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_codigos, resumo } = body;
+  const { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_codigos, resumo, caixas } = body;
   if (!redeId) return json({ error: 'rede_id é obrigatório' }, 400);
   if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
     return json({ error: 'empresa_codigos deve ser um array não-vazio' }, 400);
@@ -76,7 +77,7 @@ serve(async (req) => {
   if (!data_de || !data_ate) {
     return json({ error: 'data_de e data_ate são obrigatórios' }, 400);
   }
-  if (!resumo && (!Array.isArray(contas_codigos) || contas_codigos.length === 0)) {
+  if (!resumo && !caixas && (!Array.isArray(contas_codigos) || contas_codigos.length === 0)) {
     // Nada mapeado → retorna vazio (sem precisar consultar o Autosystem)
     return json({ lancamentos: [] });
   }
@@ -132,6 +133,60 @@ serve(async (req) => {
         };
       });
       return json({ resumoContas: contas });
+    }
+
+    // ── Modo CAIXAS: todos os movtos em que um dos lados é conta de caixa/PDV
+    //    (1.1.2.*). Usado pela planilha "Movimentos dos caixas" da Conciliação
+    //    de Caixas. A conta exibida é a CONTRAPARTIDA do caixa; o valor sai
+    //    com sinal (+ entrada no caixa / − saída). Transferência entre dois
+    //    caixas: conta = caixa creditado, valor positivo (entrada no debitado).
+    if (caixas) {
+      const sqlCaixas = `
+        select
+          m.data,
+          to_char(m.hora, 'HH24:MI:SS')                          as hora,
+          m.valor,
+          (m.conta_debitar like '1.1.2%')                       as entrada,
+          convert_to(coalesce(mm.nome, ''), 'LATIN1')           as motivo_nome,
+          convert_to(coalesce(case when m.conta_debitar like '1.1.2%' then cc.nome else cd.nome end, ''), 'LATIN1') as conta_nome,
+          convert_to(coalesce(m.documento::text, ''), 'LATIN1') as documento,
+          convert_to(coalesce(m.usuario::text, ''), 'LATIN1')   as usuario,
+          convert_to(coalesce(pf.nome::text, ''),   'LATIN1')   as usuario_nome,
+          convert_to(coalesce(pr.nome::text, ''),   'LATIN1')   as responsavel_nome,
+          m.grid                                                as lancamento_id
+        from movto m
+        left join conta         cd on cd.codigo = m.conta_debitar
+        left join conta         cc on cc.codigo = m.conta_creditar
+        left join motivo_movto  mm on mm.grid   = m.motivo
+        left join usuario       u  on u.nome    = m.usuario
+        left join pessoa        pf on pf.grid   = u.pessoa
+        left join caixa         cx on cx.empresa = m.empresa and cx.data = m.data and cx.turno = m.turno
+                                  and cx.conta = case when m.conta_debitar like '1.1.2%'
+                                                      then m.conta_debitar else m.conta_creditar end
+        left join pessoa        pr on pr.grid   = cx.pessoa
+        where m.empresa = any($1::bigint[])
+          and m.data between $2 and $3
+          and (m.conta_debitar like '1.1.2%' or m.conta_creditar like '1.1.2%')
+        order by m.data, m.hora, m.grid
+      `;
+      const rowsCx = await executarQuery(rede, sqlCaixas, [empresasNum, data_de, data_ate], { encoding: 'SQL_ASCII' });
+      const movtos = rowsCx.map((row) => {
+        const out = decodeRowText(row, new Set(['motivo_nome', 'conta_nome', 'documento', 'usuario', 'usuario_nome', 'responsavel_nome']), 'windows-1252');
+        const v = Number(out.valor ?? 0);
+        const entrada = out.entrada === true || out.entrada === 't';
+        return {
+          lancamento_id: out.lancamento_id,
+          data: out.data,
+          hora: out.hora ?? '',
+          motivo: out.motivo_nome ?? '',
+          conta: out.conta_nome ?? '',
+          documento: out.documento ?? '',
+          // Quem lançou; sem usuário (frentista), cai pro responsável do PDV/turno
+          funcionario: out.usuario_nome || out.responsavel_nome || out.usuario || '',
+          valor: entrada ? v : -v,
+        };
+      });
+      return json({ movtos });
     }
 
     const sql = `

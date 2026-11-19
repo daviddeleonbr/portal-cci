@@ -5,7 +5,9 @@ import {
   UserRound, CheckCircle2, TrendingUp, TrendingDown, RefreshCw, Clock, ChevronRight,
   Fuel, Wrench, ShoppingBag, Package, CreditCard, Banknote, FileText, MoreHorizontal,
   XCircle, ChevronDown, PlusCircle, MinusCircle, Printer, History, Stethoscope, ClipboardCheck,
+  FileSpreadsheet,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import PageHeader from '../components/ui/PageHeader';
 import BpoAlteracoesCaixas from './BpoAlteracoesCaixas';
 import BpoAnaliseCartoes from './BpoAnaliseCartoes';
@@ -323,6 +325,50 @@ export default function BpoConciliacaoCaixas({
       setError('Erro ao carregar dados: ' + err.message);
     } finally {
       setLoadingDados(false);
+    }
+  }, [cliente, data]);
+
+  // ─── Planilha dos movimentos dos caixas (só Autosystem) ───────
+  // data, hora, motivo, conta (contrapartida do caixa), documento,
+  // funcionário, valor (+ entrada / − saída). Busca direto, sem depender do "Carregar".
+  const ehAutosystem = !!(cliente?.as_rede_id && !cliente?.chave_api_id) || (!cliente && redeSel?.tipo === 'autosystem');
+  const [exportandoMovtos, setExportandoMovtos] = useState(false);
+  const exportarMovtosCaixas = useCallback(async () => {
+    if (!cliente?.as_rede_id || !data) return;
+    setExportandoMovtos(true);
+    setError(null);
+    try {
+      const todos = await autosystemService.buscarMovtosCaixasAutosystem(
+        cliente.as_rede_id, [cliente.empresa_codigo], { data_de: data, data_ate: data },
+      );
+      // Fora as vendas (motivo "VENDA DE PRODUTOS") — só interessam os demais movimentos do caixa
+      const movtos = todos.filter(m => String(m.motivo || '').trim().toUpperCase() !== 'VENDA DE PRODUTOS');
+      if (movtos.length === 0) { setError('Nenhum movimento de caixa nesse dia.'); return; }
+      const fmtData = (d) => { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; };
+      const linhas = movtos.map(m => ({
+        'Data': fmtData(m.data),
+        'Hora': m.hora || '',
+        'Motivo': m.motivo || '',
+        'Conta': m.conta || '',
+        'Documento': m.documento || '',
+        'Funcionário': m.funcionario || '',
+        'Valor': Number(m.valor || 0),
+      }));
+      const ws = XLSX.utils.json_to_sheet(linhas);
+      ws['!cols'] = [{ wch: 11 }, { wch: 9 }, { wch: 34 }, { wch: 34 }, { wch: 14 }, { wch: 30 }, { wch: 12 }];
+      // Formato numérico na coluna Valor (G), da linha 2 em diante
+      for (let r = 1; r <= linhas.length; r++) {
+        const cel = ws[XLSX.utils.encode_cell({ r, c: 6 })];
+        if (cel) cel.z = '#,##0.00;-#,##0.00';
+      }
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Movimentos');
+      const nomeEmp = String(cliente.nome || 'empresa').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').slice(0, 40);
+      XLSX.writeFile(wb, `movimentos-caixas-${nomeEmp}-${data}.xlsx`);
+    } catch (err) {
+      setError('Erro ao gerar planilha: ' + err.message);
+    } finally {
+      setExportandoMovtos(false);
     }
   }, [cliente, data]);
 
@@ -1005,7 +1051,7 @@ export default function BpoConciliacaoCaixas({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_180px_auto] gap-3 items-end">
+        <div className={`grid grid-cols-1 gap-3 items-end ${ehAutosystem ? 'sm:grid-cols-[1fr_1fr_180px_auto_auto]' : 'sm:grid-cols-[1fr_1fr_180px_auto]'}`}>
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">1. Rede</label>
             <SeletorRedeBPO
@@ -1037,6 +1083,14 @@ export default function BpoConciliacaoCaixas({
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Carregar
           </button>
+          {ehAutosystem && (
+            <button onClick={exportarMovtosCaixas} disabled={!cliente || exportandoMovtos}
+              title="Planilha com todos os movimentos dos caixas (PDVs) da empresa no dia"
+              className="flex items-center gap-2 h-10 rounded-lg border border-emerald-200 bg-white hover:bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              {exportandoMovtos ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+              Planilha
+            </button>
+          )}
         </div>
       )}
       </div>

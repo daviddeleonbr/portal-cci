@@ -555,6 +555,36 @@ export async function buscarLancamentosAutosystem(redeId, empresaCodigos, filtro
   return Array.isArray(data?.lancamentos) ? data.lancamentos : [];
 }
 
+// ─── Movimentos dos caixas (PDVs 1.1.2.*) ────────────────────
+// Todos os movtos em que um dos lados é conta de caixa. Cada linha já vem
+// pronta pra planilha: { data, hora, motivo, conta (contrapartida),
+// documento, funcionario, valor (+ entrada / − saída do caixa) }.
+export async function buscarMovtosCaixasAutosystem(redeId, empresaCodigos, filtros = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) {
+    throw new Error('Selecione ao menos uma empresa.');
+  }
+  if (!filtros.data_de || !filtros.data_ate) {
+    throw new Error('data_de e data_ate são obrigatórios.');
+  }
+  const { data, error } = await supabase.functions.invoke('autosystem-lancamentos', {
+    body: {
+      rede_id: redeId,
+      empresa_codigos: empresaCodigos,
+      data_de: filtros.data_de,
+      data_ate: filtros.data_ate,
+      caixas: true,
+    },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar movimentos dos caixas');
+  if (data?.error) throw new Error(data.detail || data.error);
+  // Versão antiga da Edge (sem o modo caixas) responde { lancamentos: [] }
+  if (!Array.isArray(data?.movtos)) {
+    throw new Error('a Edge Function autosystem-lancamentos está desatualizada (falta publicar o modo "caixas").');
+  }
+  return data.movtos;
+}
+
 // ─── Resumo de TODAS as contas com movimento no período ──────
 // Sem filtro de mapeamento: retorna cada conta do plano que teve débito ou
 // crédito no período, com o total de cada lado. Usado pela seção "Contas não
