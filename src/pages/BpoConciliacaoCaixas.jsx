@@ -333,17 +333,30 @@ export default function BpoConciliacaoCaixas({
   // funcionário, valor (+ entrada / − saída). Busca direto, sem depender do "Carregar".
   const ehAutosystem = !!(cliente?.as_rede_id && !cliente?.chave_api_id) || (!cliente && redeSel?.tipo === 'autosystem');
   const [exportandoMovtos, setExportandoMovtos] = useState(false);
+  // Modal do intervalo: abre com a data da tela nas duas pontas
+  const [modalPlanilha, setModalPlanilha] = useState(false);
+  const [planDe, setPlanDe] = useState('');
+  const [planAte, setPlanAte] = useState('');
+  const [erroPlanilha, setErroPlanilha] = useState(null);
+  const abrirModalPlanilha = () => {
+    setPlanDe(data); setPlanAte(data); setErroPlanilha(null); setModalPlanilha(true);
+  };
   const exportarMovtosCaixas = useCallback(async () => {
-    if (!cliente?.as_rede_id || !data) return;
+    if (!cliente?.as_rede_id) return;
+    if (!planDe || !planAte) { setErroPlanilha('Informe as duas datas.'); return; }
+    if (planDe > planAte) { setErroPlanilha('A data inicial é maior que a final.'); return; }
+    // Teto de 31 dias: o movto do caixa traz todas as vendas (filtradas aqui no front)
+    const dias = Math.round((new Date(planAte) - new Date(planDe)) / 86400000) + 1;
+    if (dias > 31) { setErroPlanilha('Intervalo máximo de 31 dias.'); return; }
     setExportandoMovtos(true);
-    setError(null);
+    setErroPlanilha(null);
     try {
       const todos = await autosystemService.buscarMovtosCaixasAutosystem(
-        cliente.as_rede_id, [cliente.empresa_codigo], { data_de: data, data_ate: data },
+        cliente.as_rede_id, [cliente.empresa_codigo], { data_de: planDe, data_ate: planAte },
       );
       // Fora as vendas (motivo "VENDA DE PRODUTOS") — só interessam os demais movimentos do caixa
       const movtos = todos.filter(m => String(m.motivo || '').trim().toUpperCase() !== 'VENDA DE PRODUTOS');
-      if (movtos.length === 0) { setError('Nenhum movimento de caixa nesse dia.'); return; }
+      if (movtos.length === 0) { setErroPlanilha('Nenhum movimento de caixa nesse intervalo.'); return; }
       const fmtData = (d) => { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; };
       const linhas = movtos.map(m => ({
         'Data': fmtData(m.data),
@@ -364,13 +377,15 @@ export default function BpoConciliacaoCaixas({
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Movimentos');
       const nomeEmp = String(cliente.nome || 'empresa').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').slice(0, 40);
-      XLSX.writeFile(wb, `movimentos-caixas-${nomeEmp}-${data}.xlsx`);
+      const periodo = planDe === planAte ? planDe : `${planDe}_a_${planAte}`;
+      XLSX.writeFile(wb, `movimentos-caixas-${nomeEmp}-${periodo}.xlsx`);
+      setModalPlanilha(false);
     } catch (err) {
-      setError('Erro ao gerar planilha: ' + err.message);
+      setErroPlanilha('Erro ao gerar planilha: ' + err.message);
     } finally {
       setExportandoMovtos(false);
     }
-  }, [cliente, data]);
+  }, [cliente, planDe, planAte]);
 
   const mapaFuncionarios = useMemo(() => {
     const m = new Map();
@@ -1084,13 +1099,49 @@ export default function BpoConciliacaoCaixas({
             Carregar
           </button>
           {ehAutosystem && (
-            <button onClick={exportarMovtosCaixas} disabled={!cliente || exportandoMovtos}
-              title="Planilha com todos os movimentos dos caixas (PDVs) da empresa no dia"
+            <button onClick={abrirModalPlanilha} disabled={!cliente || exportandoMovtos}
+              title="Planilha com os movimentos dos caixas (PDVs) da empresa no intervalo escolhido"
               className="flex items-center gap-2 h-10 rounded-lg border border-emerald-200 bg-white hover:bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {exportandoMovtos ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
               Planilha
             </button>
           )}
+          <Modal open={modalPlanilha} onClose={() => !exportandoMovtos && setModalPlanilha(false)}
+            title="Planilha dos movimentos dos caixas" size="sm"
+            footer={
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setModalPlanilha(false)} disabled={exportandoMovtos}
+                  className="h-9 rounded-lg border border-gray-200 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                  Cancelar
+                </button>
+                <button onClick={exportarMovtosCaixas} disabled={exportandoMovtos}
+                  className="flex items-center gap-2 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50">
+                  {exportandoMovtos ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                  Exportar
+                </button>
+              </div>
+            }>
+            <p className="text-[12px] text-gray-500 mb-3">
+              {cliente?.nome} — movimentos dos PDVs, exceto vendas de produtos. Máximo de 31 dias.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">De</label>
+                <input type="date" value={planDe} onChange={(e) => setPlanDe(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Até</label>
+                <input type="date" value={planAte} onChange={(e) => setPlanAte(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </div>
+            </div>
+            {erroPlanilha && (
+              <p className="mt-3 flex items-center gap-1.5 text-[12px] text-red-600">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" /> {erroPlanilha}
+              </p>
+            )}
+          </Modal>
         </div>
       )}
       </div>
