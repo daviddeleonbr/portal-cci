@@ -1,111 +1,13 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useLocation, NavLink, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  ChevronDown, ChevronLeft, LogOut,
-  LayoutDashboard, BarChart3, TrendingUp, PieChart,
-  HelpCircle, Coins, UserCog, ClipboardCheck,
-  ShoppingCart, Activity, Gauge,
-  ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet, Receipt,
-  Boxes, AlertTriangle, KeyRound,
-} from 'lucide-react';
+import { ChevronDown, X, LogOut, PieChart, ArrowUpRight, UserRound } from 'lucide-react';
+import { buildNavigation, filtrarNavegacao } from './clienteNavegacao';
 import { useClienteSession } from '../../../hooks/useAuth';
 import LogoCCI from '../../ui/LogoCCI';
 import { logoutCliente } from '../../../lib/auth';
 import PerfilModalCliente from './PerfilModalCliente';
 import * as pendenciasService from '../../../services/pendenciasService';
-
-// Os hrefs são montados em runtime com prefixo `/cliente/<tipoCliente>`
-// para que webposto e autosystem reusem o mesmo menu.
-function buildNavigation(prefix, tipoCliente = 'webposto') {
-  return [
-    {
-      section: 'Principal',
-      items: [
-        { name: 'Visão Geral', href: `${prefix}/dashboard`, icon: LayoutDashboard, permissao: 'dashboard' },
-        { name: 'Minhas tarefas', href: `${prefix}/tarefas`, icon: ClipboardCheck, permissao: 'tarefas' },
-      ],
-    },
-    {
-      section: 'Relatórios',
-      items: [
-        { name: 'DRE', href: `${prefix}/dre`, icon: BarChart3, permissao: 'dre', requerFlag: 'exibir_dre' },
-        { name: 'Fluxo de Caixa', href: `${prefix}/fluxo-caixa`, icon: TrendingUp, permissao: 'fluxo_caixa', requerFlag: 'exibir_fluxo_caixa' },
-        { name: 'Relatórios BI', href: `${prefix}/relatorios-bi`, icon: PieChart, permissao: 'relatorios_bi' },
-      ],
-    },
-    {
-      section: 'Comercial',
-      items: [
-        { name: 'Vendas', href: `${prefix}/comercial/vendas`, icon: ShoppingCart, permissao: 'comercial_vendas' },
-        { name: 'Operação', href: `${prefix}/comercial/operacao`, icon: Activity, permissao: 'comercial_operacao' },
-        { name: 'Produtividade', href: `${prefix}/comercial/produtividade`, icon: Gauge, permissao: 'comercial_produtividade' },
-        { name: 'Análise de Estoques', href: `${prefix}/comercial/estoques`, icon: Boxes, permissao: 'comercial_estoques' },
-        // Compras só faz sentido em autosystem (puxa análise de estoque do AS)
-        ...(tipoCliente === 'autosystem' ? [{ name: 'Compras', href: `${prefix}/compras`, icon: ShoppingCart, permissao: 'compras' }] : []),
-      ],
-    },
-    {
-      section: 'Financeiro',
-      items: [
-        { name: 'Contas a Pagar', href: `${prefix}/financeiro/contas-pagar`, icon: ArrowUpRight, permissao: 'financeiro' },
-        { name: 'Contas a Receber', href: `${prefix}/financeiro/contas-receber`, icon: ArrowDownLeft, permissao: 'financeiro' },
-      ],
-    },
-    {
-      section: 'BPO',
-      items: [
-        { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: ['sangrias', 'sangrias_consultar'] },
-        { name: 'Resumo de caixa', href: `${prefix}/conferencia-recebimentos`, icon: ClipboardCheck, permissao: ['conferencia_recebimentos', 'conferencia_recebimentos_consultar'] },
-        { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais' },
-        { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas' },
-        { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo' },
-        { name: 'Acessos', href: `${prefix}/acessos`, icon: KeyRound, permissao: 'acessos' },
-      ],
-    },
-    {
-      section: 'Atendimento',
-      items: [
-        { name: 'Pendências', href: `${prefix}/pendencias`, icon: AlertTriangle, badgeKey: 'pendencias', permissao: 'pendencias' },
-        { name: 'Suporte', href: `${prefix}/suporte`, icon: HelpCircle, permissao: 'suporte' },
-        { name: 'Melhorias do Sistema', href: `${prefix}/melhorias`, icon: Lightbulb, permissao: 'melhorias' },
-      ],
-    },
-    {
-      section: 'Administração da Rede',
-      items: [
-        { name: 'Usuários da Rede', href: `${prefix}/usuarios`, icon: UserCog, permissao: 'gerenciar_usuarios' },
-        { name: 'Configurações', href: `${prefix}/configuracoes`, icon: Settings, permissao: 'configuracoes' },
-      ],
-    },
-  ];
-}
-
-// flagSource é o objeto onde procuramos as flags `requerFlag` (`exibir_dre`
-// etc.). Para Webposto vem de `session.cliente` (flag por empresa);
-// para Autosystem vem de `session.asRede` (flag por rede).
-function filtrarNavegacao(navigationAll, permissoes, flagSource) {
-  const perms = new Set(permissoes || []);
-  const visivel = (item) => {
-    if (item.permissao && ![].concat(item.permissao).some(p => perms.has(p))) return false; // lista = qualquer uma
-    if (item.requerFlag && !flagSource?.[item.requerFlag]) return false;
-    return true;
-  };
-  return navigationAll
-    .map(section => ({
-      ...section,
-      items: section.items
-        .map(item => {
-          if (item.children) {
-            const filhosVisiveis = item.children.filter(visivel);
-            return filhosVisiveis.length && visivel(item) ? { ...item, children: filhosVisiveis } : null;
-          }
-          return visivel(item) ? item : null;
-        })
-        .filter(Boolean),
-    }))
-    .filter(section => section.items.length > 0);
-}
 
 function isSubtreeActive(item, pathname) {
   if (item.href && (pathname === item.href || pathname.startsWith(item.href + '/'))) return true;
@@ -220,26 +122,46 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
   const cnpjCliente = cliente?.cnpj || '';
   const initials = nomeCliente.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
+  // Menu do celular (gaveta "Mais"): grade de blocos, sem os atalhos que já
+  // estão na barra inferior. Submenus (children) entram achatados.
+  const secoesMobile = useMemo(() => navigation
+    .map(sec => ({
+      ...sec,
+      items: sec.items.flatMap(it => (it.children ? it.children.map(c => ({ ...c, icon: c.icon || it.icon })) : [it]))
+        .filter(it => it.href && !it.barraMobile),
+    }))
+    .filter(sec => sec.items.length > 0), [navigation]);
+
   // Desktop (≥lg): igual ao Visor360 — recolhida (rail de ícones, 64px) por padrão
   // e expande ao passar o mouse, SOBREPONDO o conteúdo (não empurra a página).
-  // Mobile (<lg): drawer overlay com slide, sempre com largura cheia (260px).
+  // Mobile (<lg): gaveta de BAIXO PRA CIMA (botão "Mais" da ClienteBottomNav),
+  // largura cheia, encostada logo acima da barra inferior — tocar "Mais" de
+  // novo fecha. Os atalhos da barra ficam escondidos aqui (max-lg:hidden).
   return (
     <aside
-      className={`group fixed left-0 top-0 z-40 flex h-screen w-[260px] flex-col overflow-hidden bg-white border-r border-gray-200/70 transition-[width,transform] duration-300 ease-in-out
-        ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
-        lg:w-16 lg:hover:w-[260px] lg:hover:shadow-2xl lg:hover:shadow-gray-900/10`}
+      aria-label="Menu"
+      className={`group fixed z-40 flex flex-col overflow-hidden bg-white ease-in-out
+        inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] max-h-[calc(100dvh-4rem-env(safe-area-inset-bottom)-3.5rem)] w-full
+        rounded-t-2xl border-t border-gray-200 shadow-[0_-12px_32px_-12px_rgba(15,23,42,0.25)]
+        transition-[transform,opacity,visibility] duration-300
+        ${mobileOpen ? 'translate-y-0 opacity-100 visible' : 'translate-y-full opacity-0 invisible pointer-events-none'}
+        lg:visible lg:opacity-100 lg:pointer-events-auto lg:translate-y-0 lg:transition-[width] lg:inset-x-auto lg:left-0 lg:top-0 lg:bottom-auto lg:h-screen lg:max-h-none
+        lg:w-16 lg:hover:w-[260px] lg:rounded-none lg:border-t-0 lg:border-r lg:border-gray-200/70 lg:shadow-none lg:hover:shadow-2xl lg:hover:shadow-gray-900/10`}
     >
-      {/* Close button (mobile only) */}
-      <button
-        onClick={onMobileClose}
-        aria-label="Fechar menu"
-        className="lg:hidden absolute right-2 top-2 z-50 flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </button>
+      {/* Cabeçalho da gaveta (mobile): alça + título + fechar */}
+      <div className="lg:hidden flex-shrink-0">
+        <div className="flex justify-center pt-2"><span className="h-1 w-10 rounded-full bg-gray-300" /></div>
+        <div className="flex items-center justify-between pl-5 pr-2 pt-1 pb-1">
+          <p className="text-sm font-semibold text-gray-900">Menu</p>
+          <button onClick={onMobileClose} aria-label="Fechar menu"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
 
       {/* Logo */}
-      <div className="flex h-16 items-center px-5 flex-shrink-0 border-b border-gray-100">
+      <div className="hidden lg:flex h-16 items-center px-5 flex-shrink-0 border-b border-gray-100">
         <Link to={`${prefix}/dashboard`} className="flex items-center gap-3">
           <div className="h-6 w-6 flex-shrink-0">
             <LogoCCI className="h-6 w-6" title="CCI Cliente" />
@@ -252,7 +174,55 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
       </div>
 
       {/* Navigation */}
-      <nav className="menu-lateral flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-0.5">
+      {/* Navegação — CELULAR: blocos em grade (alvo grande, leitura rápida) */}
+      <div className="lg:hidden flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 pt-1 space-y-5">
+        {usaVisor360 && (
+          <a href={visor360Url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-xl bg-blue-700 px-4 min-h-[52px] text-sm font-semibold text-white active:bg-blue-800">
+            <PieChart className="h-5 w-5 flex-shrink-0" />
+            <span className="flex-1">Acessar Visor360</span>
+            <ArrowUpRight className="h-4 w-4 flex-shrink-0" />
+          </a>
+        )}
+        {secoesMobile.map(section => (
+          <section key={section.section} aria-label={section.section === 'Principal' ? 'Início' : section.section}>
+            {section.section !== 'Principal' && (
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-600">{section.section}</h3>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              {section.items.map(item => {
+                const Icon = item.icon;
+                const on = item.href === hrefAtivo;
+                const badge = item.badgeKey ? badges[item.badgeKey] : 0;
+                return (
+                  <NavLink key={item.href} to={item.href}
+                    className={`relative flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 text-center transition-colors ${
+                      on ? 'border-blue-700 bg-blue-50 ring-1 ring-blue-700' : 'border-gray-200 bg-white active:bg-gray-50'}`}>
+                    <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${on ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-700'}`}>
+                      {Icon && <Icon className="h-5 w-5" aria-hidden="true" />}
+                    </span>
+                    <span className={`text-[12px] leading-tight line-clamp-2 ${on ? 'font-semibold text-blue-800' : 'font-medium text-gray-800'}`}>
+                      {item.name}
+                    </span>
+                    {badge > 0 && (
+                      <span className="absolute right-1.5 top-1.5 inline-flex min-w-[20px] h-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-bold text-white tabular-nums"
+                        aria-label={`${badge} pendente${badge === 1 ? '' : 's'}`}>
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    )}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+        {secoesMobile.length === 0 && !usaVisor360 && (
+          <p className="py-6 text-center text-sm text-gray-600">Todas as suas opções já estão na barra abaixo.</p>
+        )}
+      </div>
+
+      {/* Navegação — DESKTOP: lista na sidebar recolhível */}
+      <nav className="menu-lateral hidden lg:block flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-0.5">
         {usaVisor360 && (
           <a
             href={visor360Url}
@@ -292,7 +262,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                       key={item.name}
                       to={item.href}
                       title={item.name}
-                      className={`relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
+                      className={`relative flex items-center gap-3 rounded-md ${item.barraMobile ? 'max-lg:hidden' : ''} px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
                         isActive
                           ? 'bg-blue-50 text-blue-700'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -301,7 +271,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                       {isActive && (
                         <motion.span
                           layoutId="clienteActiveBar"
-                          className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r bg-blue-600"
+                          className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r bg-accent-500"
                         />
                       )}
                       {Icon && <Icon className={`h-[17px] w-[17px] flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
@@ -335,7 +305,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                       }`}
                     >
                       {isActive && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r bg-blue-600" />
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r bg-accent-500" />
                       )}
                       {Icon && <Icon className={`h-[17px] w-[17px] flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
                       <span className={`flex-1 text-left ${FADE}`}>{item.name}</span>
@@ -390,7 +360,31 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
       </nav>
 
       {/* Bottom: User — recolhida: só o avatar; expandida: avatar + nome + sair */}
-      <div className="flex-shrink-0 border-t border-gray-100 p-2">
+      {/* CELULAR: cartão do usuário com ações rotuladas (alvos de 44px+) */}
+      <div className="lg:hidden flex-shrink-0 border-t border-gray-100 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-700 text-white text-sm font-semibold flex-shrink-0" aria-hidden="true">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 truncate">{nomeCliente}</p>
+            {cnpjCliente && <p className="text-xs text-gray-600 truncate tabular-nums">{cnpjCliente}</p>}
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setPerfilAberto(true)}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-800 active:bg-gray-50">
+            <UserRound className="h-4 w-4" aria-hidden="true" /> Meu perfil
+          </button>
+          <button type="button" onClick={handleLogout}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-rose-200 text-sm font-medium text-rose-700 active:bg-rose-50">
+            <LogOut className="h-4 w-4" aria-hidden="true" /> Sair
+          </button>
+        </div>
+      </div>
+
+      {/* DESKTOP: recolhida mostra só o avatar; expandida, avatar + nome + sair */}
+      <div className="hidden lg:block flex-shrink-0 border-t border-gray-100 p-2">
         <div className="flex items-center gap-2.5 overflow-hidden rounded-lg bg-gray-50 p-2 border border-gray-100">
           <button type="button" onClick={() => setPerfilAberto(true)} title="Meu perfil"
             className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left hover:opacity-80">
@@ -409,7 +403,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
           </button>
         </div>
       </div>
-      {perfilAberto && <PerfilModalCliente onClose={() => setPerfilAberto(false)} onSair={handleLogout} />}
+      {perfilAberto && <PerfilModalCliente onClose={() => setPerfilAberto(false)} />}
     </aside>
   );
 }

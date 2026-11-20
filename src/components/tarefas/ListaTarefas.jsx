@@ -45,8 +45,8 @@ export default function ListaTarefas({ tarefas, gestor = false, onAbrir, abaInic
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
         <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
           {ABAS.map(a => (
-            <button key={a.k} onClick={() => setAba(a.k)}
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+            <button key={a.k} onClick={() => setAba(a.k)} aria-pressed={aba === a.k}
+              className={`whitespace-nowrap rounded-full px-3.5 sm:px-3 h-10 sm:h-auto sm:py-1.5 text-sm sm:text-xs font-medium transition-colors ${
                 aba === a.k ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               {a.rot}
               <span className={`ml-1.5 tabular-nums ${aba === a.k ? 'text-white/70' : a.k === 'atrasadas' && contagem[a.k] ? 'text-rose-600 font-semibold' : 'text-gray-400'}`}>{contagem[a.k]}</span>
@@ -55,8 +55,8 @@ export default function ListaTarefas({ tarefas, gestor = false, onAbrir, abaInic
         </div>
         <div className="relative sm:w-64">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar tarefa…"
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm" />
+          <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar tarefa…" aria-label="Buscar tarefa" enterKeyHint="search"
+            className="h-12 sm:h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-base sm:text-sm" />
         </div>
       </div>
 
@@ -77,7 +77,7 @@ export default function ListaTarefas({ tarefas, gestor = false, onAbrir, abaInic
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="flex items-center gap-2 text-sm font-semibold text-gray-900"><span className="truncate">{t.titulo}</span><ReferenciaBadge t={t} /></p>
-                      <p className="mt-0.5 text-[11.5px] text-gray-500 truncate">
+                      <p className="mt-0.5 text-[13px] sm:text-[11.5px] text-gray-600 sm:text-gray-500 truncate">
                         {gestor && <>{t.cliente?.razao_social || t.cliente?.nome}{' · '}</>}
                         {t.setor?.nome || 'Sem setor'}
                         {gestor && t.responsavel?.nome ? ` · ${t.responsavel.nome}` : ''}
@@ -85,7 +85,7 @@ export default function ListaTarefas({ tarefas, gestor = false, onAbrir, abaInic
                     </div>
                     <span className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_TAREFA[st].cls}`}>{STATUS_TAREFA[st].rotulo}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] sm:text-[11px] text-gray-600 sm:text-gray-500">
                     <span className={`inline-flex items-center gap-1 ${st === 'atrasada' ? 'font-medium text-rose-600' : ''}`}>
                       <Clock className="h-3.5 w-3.5" /> {fmtDataHora(t.vence_em)}
                     </span>

@@ -1,10 +1,10 @@
-import { Menu, Moon, Sun, Building2, Tag } from 'lucide-react';
+import { Moon, Sun, Building2, Tag } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import NotificacoesBell from '../../ui/NotificacoesBell';
 import { useTheme } from '../../../hooks/useTheme';
 import { useUsarApelido, toggleUsarApelido } from '../../../lib/apelidoPref';
 
-export default function ClienteHeader({ onMenuClick }) {
+export default function ClienteHeader() {
   const session = useClienteSession();
   const cliente = session?.cliente;
   const clientesRede = session?.clientesRede || [];
@@ -21,13 +21,7 @@ export default function ClienteHeader({ onMenuClick }) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-md px-3 sm:px-6">
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-        <button
-          onClick={onMenuClick}
-          aria-label="Abrir menu"
-          className="lg:hidden rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        {/* Mobile: o menu abre pelo botão "Mais" da barra inferior (ClienteBottomNav) */}
         {tipoCliente === 'autosystem' ? (
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">

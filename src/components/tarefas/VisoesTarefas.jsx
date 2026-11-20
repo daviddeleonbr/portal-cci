@@ -1,8 +1,11 @@
 // Visões das tarefas: Lista | Kanban | Agenda (a escolhida fica salva no
 // navegador). Usado pela CCI (gestor) e pelo funcionário.
+// Celular (<768px): Kanban vira "Quadro" (uma coluna por vez, escolhida em
+// chips com contador — arrastar não funciona no toque) e a Agenda vira uma
+// faixa de dias + lista do dia escolhido (7 colunas não cabem na tela).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { List, Columns3, CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { List, Columns3, CalendarDays, ChevronLeft, ChevronRight, Clock, Play, Loader2, ChevronRight as Seta } from 'lucide-react';
 import ListaTarefas from './ListaTarefas';
 import { ReferenciaBadge } from './CamposTarefas';
 import * as tarefasService from '../../services/tarefasService';
@@ -16,24 +19,40 @@ const VISOES = [
 // Padrão: Kanban. A escolha do usuário fica salva (chave v2 = todos recomeçam no Kanban).
 const lerVisao = () => { try { return localStorage.getItem('tarefas_visao_v2') || 'kanban'; } catch { return 'kanban'; } };
 
-export default function VisoesTarefas({ tarefas, rotinas = [], gestor = false, onAbrir, onAlterado, onErro, abaInicial, vazio }) {
-  const [visao, setVisao] = useState(lerVisao);
+// true abaixo de md (768px). useSyncExternalStore → acompanha giro/redimensionamento.
+const MQ_CELULAR = '(max-width: 767px)';
+const assinarMq = (cb) => {
+  if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+  const mq = window.matchMedia(MQ_CELULAR);
+  mq.addEventListener('change', cb);
+  return () => mq.removeEventListener('change', cb);
+};
+const lerMq = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(MQ_CELULAR).matches : false);
+function useEhCelular() { return useSyncExternalStore(assinarMq, lerMq, () => false); }
+
+export default function VisoesTarefas({ tarefas, rotinas = [], gestor = false, onAbrir, onAlterado, onErro, abaInicial, vazio, visaoInicial }) {
+  const [visao, setVisao] = useState(() => visaoInicial || lerVisao());
   const trocar = (v) => { setVisao(v); try { localStorage.setItem('tarefas_visao_v2', v); } catch { /* sem storage */ } };
+  const celular = useEhCelular();
 
   return (
     <div>
-      <div className="mb-3 inline-flex rounded-lg bg-gray-100 p-1">
+      <div role="tablist" aria-label="Visualização" className="mb-3 flex sm:inline-flex rounded-lg bg-gray-100 p-1">
         {VISOES.map(v => (
-          <button key={v.k} onClick={() => trocar(v.k)}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ${visao === v.k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-            <v.icon className="h-3.5 w-3.5" /> {v.rot}
+          <button key={v.k} role="tab" aria-selected={visao === v.k} onClick={() => trocar(v.k)}
+            className={`flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-md px-3 h-10 sm:h-auto sm:py-1.5 text-sm sm:text-xs font-medium ${visao === v.k ? 'bg-white text-gray-900 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-800'}`}>
+            <v.icon className="h-4 w-4 sm:h-3.5 sm:w-3.5" aria-hidden="true" /> {celular && v.k === 'kanban' ? 'Quadro' : v.rot}
           </button>
         ))}
       </div>
       {visao === 'kanban' ? (
-        <Kanban tarefas={tarefas} gestor={gestor} onAbrir={onAbrir} onAlterado={onAlterado} onErro={onErro} />
+        celular
+          ? <QuadroCelular tarefas={tarefas} gestor={gestor} onAbrir={onAbrir} onAlterado={onAlterado} onErro={onErro} vazio={vazio} />
+          : <Kanban tarefas={tarefas} gestor={gestor} onAbrir={onAbrir} onAlterado={onAlterado} onErro={onErro} />
       ) : visao === 'agenda' ? (
-        <Agenda tarefas={tarefas} rotinas={gestor ? rotinas : []} onAbrir={onAbrir} />
+        celular
+          ? <AgendaCelular tarefas={tarefas} rotinas={gestor ? rotinas : []} gestor={gestor} onAbrir={onAbrir} />
+          : <Agenda tarefas={tarefas} rotinas={gestor ? rotinas : []} onAbrir={onAbrir} />
       ) : (
         <ListaTarefas tarefas={tarefas} gestor={gestor} onAbrir={onAbrir} abaInicial={abaInicial} vazio={vazio} />
       )}
@@ -243,6 +262,188 @@ function Agenda({ tarefas, rotinas, onAbrir }) {
       </div>
       {rotinas.length > 0 && (
         <p className="flex-shrink-0 px-3 py-2 text-[11px] text-gray-400">Contorno tracejado = ocorrência prevista de rotina (a tarefa é gerada no próprio dia).</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Celular ────────────────────────────────────────────────────
+
+// Cartão de tarefa grande (toque em qualquer lugar abre o detalhe).
+// `acao` opcional: botão rápido no rodapé (ex.: Iniciar).
+function CartaoTarefaCelular({ t, gestor, onAbrir, acao }) {
+  const st = statusEfetivo(t);
+  const ck = t.checklist || [];
+  return (
+    <li className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <button type="button" onClick={() => onAbrir(t)} className="flex w-full items-start gap-3 p-4 text-left active:bg-gray-50 rounded-xl">
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold leading-snug text-gray-900">{t.titulo}</p>
+          <ReferenciaBadge t={t} />
+          <p className="mt-1 truncate text-[13px] text-gray-600">
+            {gestor ? `${t.cliente?.razao_social || t.cliente?.nome || ''} · ${t.responsavel?.nome || 'Sem responsável'}` : (t.setor?.nome || 'Sem setor')}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+            <span className={`inline-flex items-center gap-1 ${st === 'atrasada' ? 'font-semibold text-rose-700' : 'text-gray-700'}`}>
+              <Clock className="h-3.5 w-3.5" aria-hidden="true" /> {fmtDataHora(t.vence_em)}
+            </span>
+            {ck.length > 0 && <span className="text-gray-600 tabular-nums">Checklist {ck.filter(i => i.feito).length}/{ck.length}</span>}
+          </div>
+        </div>
+        <Seta className="mt-1 h-5 w-5 flex-shrink-0 text-gray-400" aria-hidden="true" />
+      </button>
+      {acao}
+    </li>
+  );
+}
+
+// Kanban no celular: chips de status (com contador) + lista da coluna escolhida.
+// Começa na coluna mais urgente que tiver tarefa. "Iniciar" substitui o
+// arrastar de A fazer → Em andamento; as demais mudanças seguem pelo detalhe.
+function QuadroCelular({ tarefas, gestor, onAbrir, onAlterado, onErro, vazio }) {
+  const porColuna = useMemo(() => {
+    const m = Object.fromEntries(COLUNAS.map(c => [c.k, []]));
+    tarefas.forEach(t => { const st = statusEfetivo(t); if (m[st]) m[st].push(t); });
+    Object.values(m).forEach(l => l.sort((a, b) => new Date(a.vence_em) - new Date(b.vence_em)));
+    m.concluida = m.concluida.slice(-50).reverse();
+    return m;
+  }, [tarefas]);
+  const [coluna, setColuna] = useState(() => {
+    const ordem = ['atrasada', 'a_fazer', 'em_andamento', 'aguardando_validacao', 'concluida'];
+    return ordem.find(k => porColuna[k].length > 0) || 'a_fazer';
+  });
+  const [iniciando, setIniciando] = useState(null);
+
+  const iniciar = async (t) => {
+    setIniciando(t.id);
+    try { await tarefasService.alterarStatus(t.id, 'em_andamento'); onAlterado?.(); }
+    catch (e) { onErro?.(e.message); }
+    finally { setIniciando(null); }
+  };
+
+  const lista = porColuna[coluna] || [];
+  return (
+    <div>
+      <div role="tablist" aria-label="Situação" className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+        {COLUNAS.map(c => {
+          const on = c.k === coluna;
+          const n = porColuna[c.k].length;
+          return (
+            <button key={c.k} role="tab" aria-selected={on} onClick={() => setColuna(c.k)}
+              className={`flex h-10 flex-shrink-0 items-center gap-2 rounded-full border px-3.5 text-sm font-medium whitespace-nowrap ${
+                on ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-700'}`}>
+              {c.rot}
+              <span className={`inline-flex min-w-[22px] h-[22px] items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums ${
+                on ? 'bg-white/20 text-white' : c.k === 'atrasada' && n ? 'bg-rose-100 text-rose-800' : 'bg-gray-100 text-gray-700'}`}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
+      {lista.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
+          <p className="text-sm font-medium text-gray-800">Nenhuma tarefa em “{COLUNAS.find(c => c.k === coluna)?.rot}”.</p>
+          {tarefas.length === 0 && vazio && <p className="mt-1 text-[13px] text-gray-600">{vazio}</p>}
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {lista.map(t => (
+            <CartaoTarefaCelular key={t.id} t={t} gestor={gestor} onAbrir={onAbrir}
+              acao={t.status === 'a_fazer' && (
+                <div className="border-t border-gray-100 px-4 py-2">
+                  <button type="button" onClick={() => iniciar(t)} disabled={iniciando === t.id}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg px-2 -ml-2 text-sm font-semibold text-blue-700 active:bg-blue-50 disabled:opacity-60">
+                    {iniciando === t.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" aria-hidden="true" />}
+                    Iniciar tarefa
+                  </button>
+                </div>
+              )} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// Agenda no celular: navegação por semana, faixa com os 7 dias (pontinhos =
+// tem tarefa) e a lista do dia escolhido logo abaixo.
+function AgendaCelular({ tarefas, rotinas, gestor, onAbrir }) {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const [dia, setDia] = useState(() => new Date(hoje));
+  const ini = inicioSemana(dia);
+  const dias = Array.from({ length: 7 }, (_, i) => { const d = new Date(ini); d.setDate(d.getDate() + i); return d; });
+
+  const porDia = useMemo(() => {
+    const m = new Map();
+    tarefas.forEach(t => { const k = chaveDia(new Date(t.vence_em)); if (!m.has(k)) m.set(k, []); m.get(k).push(t); });
+    m.forEach(l => l.sort((a, b) => new Date(a.vence_em) - new Date(b.vence_em)));
+    return m;
+  }, [tarefas]);
+
+  const andar = (n) => setDia(d => { const x = new Date(d); x.setDate(x.getDate() + 7 * n); return x; });
+  const lista = porDia.get(chaveDia(dia)) || [];
+  const previstas = dia > hoje
+    ? rotinas.filter(r => rotinaNoDia(r, dia) && !lista.some(t => t.rotina_id === r.id))
+    : [];
+  const mesAno = dia.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const ehHoje = dia.getTime() === hoje.getTime();
+
+  return (
+    <div>
+      <div className="rounded-xl border border-gray-200/70 bg-white shadow-sm">
+        <div className="flex items-center justify-between px-1 py-1">
+          <button onClick={() => andar(-1)} aria-label="Semana anterior" className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-600 active:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
+          <div className="text-center">
+            <p className="text-sm font-semibold capitalize text-gray-900" aria-live="polite">{mesAno}</p>
+            {!ehHoje && <button onClick={() => setDia(new Date(hoje))} className="text-xs font-semibold text-blue-700">Voltar para hoje</button>}
+          </div>
+          <button onClick={() => andar(1)} aria-label="Próxima semana" className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-600 active:bg-gray-100"><ChevronRight className="h-5 w-5" /></button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 px-2 pb-2">
+          {dias.map((d, i) => {
+            const sel = d.getTime() === dia.getTime();
+            const eHoje = d.getTime() === hoje.getTime();
+            const doDia = porDia.get(chaveDia(d)) || [];
+            const temAtrasada = doDia.some(t => statusEfetivo(t) === 'atrasada');
+            return (
+              <button key={i} onClick={() => setDia(d)} aria-pressed={sel}
+                aria-label={`${d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}, ${doDia.length} tarefa(s)`}
+                className={`flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl ${sel ? 'bg-blue-700 text-white' : eHoje ? 'bg-blue-50 text-blue-800' : 'text-gray-800 active:bg-gray-100'}`}>
+                <span className={`text-[11px] font-medium ${sel ? 'text-white/85' : 'text-gray-500'}`}>{DIAS_SEM[i]}</span>
+                <span className="text-base font-semibold tabular-nums">{d.getDate()}</span>
+                <span className="flex h-1.5 items-center gap-0.5" aria-hidden="true">
+                  {doDia.length > 0 && <span className={`h-1.5 w-1.5 rounded-full ${sel ? 'bg-white' : temAtrasada ? 'bg-rose-500' : 'bg-blue-600'}`} />}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="mt-4 mb-2 px-1 text-[13px] font-semibold text-gray-700 first-letter:uppercase">
+        {ehHoje ? 'Hoje' : dia.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+        <span className="font-normal text-gray-500"> · {lista.length} tarefa{lista.length === 1 ? '' : 's'}</span>
+      </p>
+      {lista.length === 0 && previstas.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center text-sm text-gray-600">Nenhuma tarefa neste dia.</div>
+      ) : (
+        <ul className="space-y-2">
+          {lista.map(t => {
+            const st = statusEfetivo(t);
+            return (
+              <CartaoTarefaCelular key={t.id} t={t} gestor={gestor} onAbrir={onAbrir}
+                acao={(
+                  <div className="border-t border-gray-100 px-4 py-2">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_TAREFA[st].cls}`}>{STATUS_TAREFA[st].rotulo}</span>
+                  </div>
+                )} />
+            );
+          })}
+          {previstas.map(r => (
+            <li key={r.id} className="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-700">
+              {r.nome} <span className="text-xs text-gray-500">· prevista (rotina)</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

@@ -17,6 +17,7 @@ import * as sangriasService from '../../../services/clienteSangriasService';
 import * as contasBancariasService from '../../../services/clienteContasBancariasService';
 import { formatCurrency } from '../../../utils/format';
 import { SecaoRetiradas, ResumoDepositoModal } from '../../../components/sangrias/RetiradasDeposito';
+import CampoData from '../../../components/ui/CampoData';
 import ConsultaSangrias from '../../../components/sangrias/ConsultaSangrias';
 import { erroRetiradas, resumoRetiradas, PERMISSAO_TAREFA_DEPOSITO } from '../../../utils/sangriasDeposito';
 
@@ -393,20 +394,28 @@ export default function ClienteSangrias() {
       <PageHeader title="Sangrias - Contagem de Caixa" description="Confira o dinheiro apurado no sistema e registre o apresentado no fechamento de cada funcionário">
         {aba === 'contagem' && (
           <button onClick={() => setMostrarHistorico(!mostrarHistorico)}
-            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            className="hidden sm:flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
             <History className="h-4 w-4" /> {mostrarHistorico ? 'Ocultar histórico' : 'Ver histórico'}
           </button>
         )}
       </PageHeader>
 
       {/* Contagem (lança) × Consulta (fechamentos enviados por todos os usuários) */}
-      <div className="mb-4 inline-flex rounded-lg bg-gray-100 p-1">
-        {podeContar && (
-          <button onClick={() => setAba('contagem')}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${aba === 'contagem' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Contagem</button>
+      <div className="mb-4 flex items-center gap-2">
+        <div role="tablist" className="flex flex-1 sm:flex-none rounded-lg bg-gray-100 p-1">
+          {podeContar && (
+            <button role="tab" aria-selected={aba === 'contagem'} onClick={() => setAba('contagem')}
+              className={`flex-1 sm:flex-none rounded-md px-3 h-10 sm:h-auto sm:py-1.5 text-sm font-medium ${aba === 'contagem' ? 'bg-white text-gray-900 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-800'}`}>Contagem</button>
+          )}
+          <button role="tab" aria-selected={aba === 'consulta'} onClick={() => setAba('consulta')}
+            className={`flex-1 sm:flex-none rounded-md px-3 h-10 sm:h-auto sm:py-1.5 text-sm font-medium ${aba === 'consulta' ? 'bg-white text-gray-900 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-800'}`}>Consulta</button>
+        </div>
+        {aba === 'contagem' && (
+          <button onClick={() => setMostrarHistorico(!mostrarHistorico)} aria-pressed={mostrarHistorico}
+            className={`sm:hidden flex h-12 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium ${mostrarHistorico ? 'border-blue-700 bg-blue-50 text-blue-800' : 'border-gray-200 bg-white text-gray-700'}`}>
+            <History className="h-4 w-4" aria-hidden="true" /> Histórico
+          </button>
         )}
-        <button onClick={() => setAba('consulta')}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${aba === 'consulta' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Consulta</button>
       </div>
 
       {aba === 'consulta' ? <ConsultaSangrias empresas={session?.clientesRede || []} /> : (<>
@@ -421,25 +430,22 @@ export default function ClienteSangrias() {
       <div className="bg-white rounded-xl border border-gray-200/60 p-4 mb-4 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr_auto] gap-3 items-end">
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data da conciliação</label>
-            <input type="date" value={data} onChange={(e) => setData(e.target.value)}
-              max={ontemStr()}
-              disabled={loadingDados}
-              className={`w-full h-10 rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 disabled:opacity-50 ${
-                dataInvalida
-                  ? 'border-red-300 focus:border-red-400 focus:ring-red-100 bg-red-50/40 text-red-700'
-                  : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'
-              }`} />
+            <span className="block text-[11px] sm:text-[10px] font-semibold text-gray-600 sm:text-gray-500 uppercase tracking-wider">Data da conciliação</span>
+            {/* CampoData: gaveta com calendário grande e atalhos; só dias anteriores a hoje */}
+            <CampoData value={data} onChange={(v) => v && setData(v)} max={ontemStr()} disabled={loadingDados}
+              titulo="Data da conciliação" permitirLimpar={false}
+              atalhos={[{ label: 'Anteontem', dias: -2 }, { label: 'Ontem', dias: -1 }]}
+              className={`!h-12 sm:!h-10 !text-base sm:!text-sm ${dataInvalida ? '!border-red-300 !bg-red-50/40' : ''}`} />
             {dataInvalida && (
-              <p className="mt-1 text-[11px] text-red-600">Somente dias anteriores são permitidos.</p>
+              <p className="mt-1 text-xs sm:text-[11px] text-red-600">Somente dias anteriores são permitidos.</p>
             )}
           </div>
           <div>
-            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Responsavel pela contagem</label>
+            <label className="block text-[11px] sm:text-[10px] font-semibold text-gray-600 sm:text-gray-500 uppercase tracking-wider mb-1">Responsável pela contagem</label>
             <input type="text" value={responsavel} onChange={(e) => setResponsavel(e.target.value)}
-              disabled={travado}
+              disabled={travado} autoComplete="name" enterKeyHint="done"
               placeholder="Nome completo"
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-600" />
+              className="w-full h-12 sm:h-10 rounded-lg border border-gray-200 px-3 text-base sm:text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-600" />
           </div>
           <button onClick={() => {
             qualityApi.limparCacheTransacional();
@@ -450,7 +456,7 @@ export default function ClienteSangrias() {
               manuais: registros.filter(r => r.manual),
             });
           }} disabled={loadingDados || !cliente}
-            className="flex items-center gap-2 h-10 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50">
+            className="flex items-center justify-center gap-2 h-12 sm:h-10 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-50 transition-colors disabled:opacity-50">
             {loadingDados ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Recarregar
           </button>
@@ -510,23 +516,90 @@ export default function ClienteSangrias() {
       ) : (
         <>
           {/* Resumo */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-            <Kpi label="Total apurado" valor={formatCurrency(totais.apurado)} icon={TrendingUp} color="emerald" />
-            <Kpi label="Total apresentado" valor={formatCurrency(totais.apresentado)} icon={CheckCircle2} color="blue" />
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-5">
+            <Kpi label="Apurado" valor={formatCurrency(totais.apurado)} icon={TrendingUp} color="emerald" />
+            <Kpi label="Contado" valor={formatCurrency(totais.apresentado)} icon={CheckCircle2} color="blue" />
             <Kpi label="Diferença"
               valor={formatCurrency(totais.diferenca)}
               icon={Math.abs(totais.diferenca) < 0.01 ? CheckCircle2 : totais.diferenca > 0 ? TrendingUp : TrendingDown}
-              color={Math.abs(totais.diferenca) < 0.01 ? 'emerald' : totais.diferenca > 0 ? 'amber' : 'red'} />
+              color={Math.abs(totais.diferenca) < 0.01 ? 'emerald' : totais.diferenca > 0 ? 'amber' : 'red'}
+              destaque={Math.abs(totais.diferenca) < 0.01 ? 'text-gray-900' : totais.diferenca > 0 ? 'text-amber-700' : 'text-red-700'} />
           </div>
 
           {/* Tabela */}
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-blue-500" />
+            <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <Calendar className="h-4 w-4 text-blue-600" aria-hidden="true" />
               <h3 className="text-sm font-semibold text-gray-800">Fechamento de {formatDataBR(data)}</h3>
-              <span className="text-[11px] text-gray-400">· {new Set(registros.map(r => String(r.funcionarioCodigo))).size} funcionários · {registros.length} turno(s)</span>
+              <span className="w-full sm:w-auto text-xs sm:text-[11px] text-gray-600 sm:text-gray-400">
+                <span className="hidden sm:inline">· </span>{new Set(registros.map(r => String(r.funcionarioCodigo))).size} funcionários · {registros.length} turno(s)
+              </span>
             </div>
-            <div className="overflow-x-auto">
+
+            {/* CELULAR: um card por funcionário/turno, com campo grande pro valor contado */}
+            <ul className="md:hidden divide-y divide-gray-100">
+              {registros.map(r => {
+                const apr = Number(r.dinheiroApresentado || 0);
+                const temApr = r.dinheiroApresentado != null && String(r.dinheiroApresentado).trim() !== '';
+                const diff = apr - Number(r.dinheiroApurado || 0);
+                const conciliado = temApr && Math.abs(diff) < 0.01;
+                const k = chaveLinha(r);
+                return (
+                  <li key={k} className={`px-4 py-4 ${r.manual ? 'bg-amber-50/40' : ''}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-[15px] font-semibold text-gray-900 leading-snug">{r.nome}</p>
+                          {r.manual && (
+                            <span className="text-[10px] uppercase tracking-wider rounded-full px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 font-semibold">Manual</span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-[12px] text-gray-600">{r.turno || 'Sem turno'} · cód. {r.funcionarioCodigo}</p>
+                      </div>
+                      <StatusSangria temApr={temApr} conciliado={conciliado} diff={diff} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 items-end">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">Apurado</p>
+                        <p className="mt-1 h-12 flex items-center text-base font-semibold text-gray-900 tabular-nums">{formatCurrency(r.dinheiroApurado)}</p>
+                      </div>
+                      <label className="block">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">Contado</span>
+                        <input type="number" step="0.01" inputMode="decimal" enterKeyHint="next"
+                          value={r.dinheiroApresentado ?? ''}
+                          onChange={(e) => atualizarApresentado(k, e.target.value)}
+                          disabled={travado} placeholder="0,00"
+                          aria-label={`Valor contado de ${r.nome}${r.turno ? ` (${r.turno})` : ''}`}
+                          className="mt-1 w-full h-12 rounded-lg border border-gray-300 px-3 text-base font-semibold text-right tabular-nums focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:border-gray-200 disabled:text-gray-700" />
+                      </label>
+                    </div>
+                    {(temApr || (r.manual && !travado)) && (
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        {temApr ? (
+                          <p className={`text-sm font-semibold tabular-nums ${conciliado ? 'text-gray-700' : diff > 0 ? 'text-amber-700' : 'text-red-700'}`}>
+                            Diferença: {formatCurrency(diff)}
+                          </p>
+                        ) : <span />}
+                        {r.manual && !travado && (
+                          <button onClick={() => removerSangriaManual(k)}
+                            className="-mr-2 inline-flex h-10 items-center gap-1 rounded-lg px-3 text-[13px] font-medium text-red-700 active:bg-red-50">
+                            <X className="h-4 w-4" aria-hidden="true" /> Remover
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="md:hidden flex items-center justify-between border-t border-gray-200 bg-gray-50/60 px-4 py-3 text-sm">
+              <span className="font-semibold text-gray-700">Diferença total</span>
+              <span className={`font-bold tabular-nums ${
+                Math.abs(totais.diferenca) < 0.01 ? 'text-gray-900' : totais.diferenca > 0 ? 'text-amber-700' : 'text-red-700'}`}>{formatCurrency(totais.diferenca)}</span>
+            </div>
+
+            {/* DESKTOP: tabela */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
@@ -656,10 +729,10 @@ export default function ClienteSangrias() {
           {!travado && (
             <div className="mt-4 bg-white rounded-xl border border-gray-200/60 p-4 shadow-sm space-y-4">
               <div>
-                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Observacoes (opcional)</label>
+                <label className="block text-[11px] sm:text-[10px] font-semibold text-gray-600 sm:text-gray-500 uppercase tracking-wider mb-1">Observações (opcional)</label>
                 <textarea rows={2} value={observacoes} onChange={(e) => setObservacoes(e.target.value)}
                   placeholder="Alguma nota sobre o fechamento deste dia"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-base sm:text-sm resize-none focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               </div>
 
               {/* Ciencia */}
@@ -668,20 +741,23 @@ export default function ClienteSangrias() {
               }`}>
                 <input type="checkbox" checked={cienciaConfirmada}
                   onChange={(e) => setCienciaConfirmada(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400" />
+                  className="mt-0.5 h-5 w-5 sm:h-4 sm:w-4 flex-shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-400" />
                 <div className="flex-1">
                   <p className={`text-sm font-medium ${cienciaConfirmada ? 'text-emerald-900' : 'text-gray-800'}`}>
                     Declaro que conferi pessoalmente os valores apresentados
                   </p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
+                  <p className="text-xs sm:text-[11px] text-gray-600 sm:text-gray-500 mt-0.5">
                     Confirmo que o dinheiro apresentado por cada funcionário foi contado fisicamente
                     e que todos os valores digitados estao corretos. Após salvar, os dados ficam travados.
                   </p>
                 </div>
               </label>
 
-              {/* Status + Botão */}
-              <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
+              {/* Status + Botão (celular: botão largo; dica do que falta) */}
+              {!cienciaConfirmada && (
+                <p className="sm:hidden -mb-1 text-xs text-gray-600">Marque a declaração acima para habilitar o envio.</p>
+              )}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-gray-100">
                 <div className="text-xs text-gray-500">
                   {todosPreenchidos ? (
                     <span className="inline-flex items-center gap-1.5 text-emerald-700">
@@ -689,14 +765,14 @@ export default function ClienteSangrias() {
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-amber-600">
-                      <AlertCircle className="h-3.5 w-3.5" /> Funcionários em branco serao salvos como R$ 0,00
+                      <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" /> Funcionários em branco serão salvos como R$ 0,00
                     </span>
                   )}
                 </div>
                 <button onClick={abrirConfirmacao}
                   disabled={salvando || !responsavel.trim() || !cienciaConfirmada}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={!cienciaConfirmada ? 'Marque a declaracao de ciência para habilitar' : undefined}>
+                  className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-blue-700 hover:bg-blue-800 px-5 h-12 sm:h-auto sm:py-2.5 text-base sm:text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!cienciaConfirmada ? 'Marque a declaração de ciência para habilitar' : undefined}>
                   {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Confirmar e salvar
                 </button>
@@ -730,28 +806,28 @@ export default function ClienteSangrias() {
               {historico.map(h => {
                 const conciliado = Math.abs(Number(h.total_diferenca || 0)) < 0.01;
                 return (
-                  <button key={h.id} onClick={() => setData(h.data)}
-                    className="w-full flex items-center gap-4 px-5 py-3 hover:bg-gray-50/60 transition-colors text-left">
-                    <Calendar className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
+                  <button key={h.id} onClick={() => { setData(h.data); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className="w-full flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3.5 sm:py-3 hover:bg-gray-50/60 active:bg-gray-50 transition-colors text-left">
+                    <Calendar className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0 basis-[calc(100%-2rem)] sm:basis-auto">
                       <p className="text-sm font-medium text-gray-900">{formatDataBR(h.data)}</p>
-                      <p className="text-[11px] text-gray-400">
+                      <p className="text-xs sm:text-[11px] text-gray-600 sm:text-gray-400">
                         Confirmado em {new Date(h.confirmado_em).toLocaleString('pt-BR')} por {h.confirmado_por || '—'}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">Apresentado</p>
+                    <div className="ml-8 sm:ml-0 text-left sm:text-right">
+                      <p className="text-[10px] text-gray-500 sm:text-gray-400 uppercase tracking-wider">Apresentado</p>
                       <p className="text-sm font-mono text-gray-900 tabular-nums">{formatCurrency(h.total_apresentado)}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">Diferença</p>
+                    <div className="text-left sm:text-right">
+                      <p className="text-[10px] text-gray-500 sm:text-gray-400 uppercase tracking-wider">Diferença</p>
                       <p className={`text-sm font-mono font-semibold tabular-nums ${
                         conciliado ? 'text-emerald-600'
                           : Number(h.total_diferenca) > 0 ? 'text-amber-600'
                           : 'text-red-600'
                       }`}>{formatCurrency(h.total_diferenca)}</p>
                     </div>
-                    <Lock className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                    <Lock className="ml-auto sm:ml-0 h-3.5 w-3.5 text-emerald-600 flex-shrink-0" aria-label="Fechado" />
                   </button>
                 );
               })}
@@ -764,14 +840,14 @@ export default function ClienteSangrias() {
       <Modal open={modalConfirmacao} onClose={() => !salvando && setModalConfirmacao(false)}
         title="Confirmar fechamento de sangria" size="md"
         footer={(
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <button onClick={() => setModalConfirmacao(false)} disabled={salvando}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50">
+              className="h-11 sm:h-auto rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50">
               Revisar novamente
             </button>
             <button onClick={confirmarSalvamento}
               disabled={salvando || (podeCriarTarefa && resumoRetiradas(retiradas, totais.apresentado).deposito > 0 && !respDeposito)}
-              className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              className="flex items-center justify-center gap-2 rounded-lg bg-blue-700 hover:bg-blue-800 px-5 h-12 sm:h-auto sm:py-2.5 text-base sm:text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
               {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Sim, confirmar e salvar
             </button>
@@ -802,12 +878,12 @@ export default function ClienteSangrias() {
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-lg border border-gray-200 bg-white p-3">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400">Apurado</p>
+            <div className="rounded-lg border border-gray-200 bg-white p-2.5 sm:p-3 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-gray-500">Apurado</p>
               <p className="text-sm font-mono font-semibold text-gray-900 tabular-nums mt-0.5">{formatCurrency(totais.apurado)}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-3">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400">Apresentado</p>
+            <div className="rounded-lg border border-gray-200 bg-white p-2.5 sm:p-3 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-gray-500">Contado</p>
               <p className="text-sm font-mono font-semibold text-gray-900 tabular-nums mt-0.5">{formatCurrency(totais.apresentado)}</p>
             </div>
             <div className={`rounded-lg border p-3 ${
@@ -840,7 +916,26 @@ export default function ClienteSangrias() {
   );
 }
 
-function Kpi({ label, valor, icon: Icon, color }) {
+// Pílula de status da linha (celular). Mesma regra da tabela.
+function StatusSangria({ temApr, conciliado, diff }) {
+  if (!temApr) return <span className="flex-shrink-0 text-[11px] font-medium rounded-full px-2 py-1 bg-gray-100 text-gray-700">Pendente</span>;
+  if (conciliado) return (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200">
+      <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> OK
+    </span>
+  );
+  return diff > 0 ? (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-1 bg-amber-50 text-amber-800 border border-amber-200">
+      <TrendingUp className="h-3 w-3" aria-hidden="true" /> Sobra
+    </span>
+  ) : (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-1 bg-red-50 text-red-800 border border-red-200">
+      <TrendingDown className="h-3 w-3" aria-hidden="true" /> Falta
+    </span>
+  );
+}
+
+function Kpi({ label, valor, icon: Icon, color, destaque }) {
   const colors = {
     blue:    'bg-blue-50 text-blue-600',
     emerald: 'bg-emerald-50 text-emerald-600',
@@ -849,14 +944,14 @@ function Kpi({ label, valor, icon: Icon, color }) {
   };
   return (
     <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-xl border border-gray-200/60 p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{label}</p>
-        <div className={`h-7 w-7 rounded-md flex items-center justify-center ${colors[color]}`}>
+      className="bg-white rounded-xl border border-gray-200/60 p-2.5 sm:p-4 shadow-sm min-w-0">
+      <div className="flex items-center justify-between mb-1 sm:mb-1.5">
+        <p className="text-[10px] text-gray-600 sm:text-gray-500 font-medium uppercase tracking-wide sm:tracking-wider leading-tight">{label}</p>
+        <div className={`hidden sm:flex h-7 w-7 rounded-md items-center justify-center ${colors[color]}`}>
           <Icon className="h-3.5 w-3.5" />
         </div>
       </div>
-      <p className="text-lg font-bold text-gray-900 tabular-nums">{valor}</p>
+      <p className={`text-[13px] sm:text-lg font-bold tabular-nums truncate ${destaque || 'text-gray-900'}`}>{valor}</p>
     </motion.div>
   );
 }
@@ -897,7 +992,10 @@ function FormSangriaManual({
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-semibold text-gray-900">Adicionar sangria manual</h4>
-          <p className="text-[11.5px] text-gray-500 leading-relaxed">
+          <p className="sm:hidden text-xs text-gray-600 leading-relaxed">
+            Para funcionário sem sangria no sistema. O valor entra como <strong className="text-amber-800">contado</strong>.
+          </p>
+          <p className="hidden sm:block text-[11.5px] text-gray-500 leading-relaxed">
             Use quando o funcionário não tem sangria no sistema. Entra com apurado R$ 0,00 e o valor como
             <strong className="text-amber-700"> apresentado (contado)</strong>, que pode ser alterado na linha. Se o sistema
             passar a ter a sangria, ao recarregar a linha assume o valor apurado do sistema.
@@ -906,8 +1004,8 @@ function FormSangriaManual({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px_auto] gap-2">
-        <select value={novoFuncCodigo} onChange={(e) => setNovoFuncCodigo(e.target.value)}
-          className="h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-800 bg-white focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100">
+        <select value={novoFuncCodigo} onChange={(e) => setNovoFuncCodigo(e.target.value)} aria-label="Funcionário"
+          className="h-12 sm:h-10 rounded-lg border border-gray-200 px-3 text-base sm:text-sm text-gray-800 bg-white focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100">
           <option value="">Selecione o funcionário...</option>
           {disponiveis.map(f => (
             <option key={f.codigo} value={f.codigo}>
@@ -917,10 +1015,10 @@ function FormSangriaManual({
         </select>
         <input type="number" inputMode="decimal" step="0.01" min="0"
           value={novoValor} onChange={(e) => setNovoValor(e.target.value)}
-          placeholder="Valor apresentado"
-          className="h-10 rounded-lg border border-gray-200 px-3 text-sm font-mono text-right text-gray-900 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" />
+          placeholder="Valor contado" aria-label="Valor contado"
+          className="h-12 sm:h-10 rounded-lg border border-gray-200 px-3 text-base sm:text-sm text-right tabular-nums text-gray-900 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" />
         <button type="button" onClick={onAdicionar} disabled={!podeAdicionar}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 px-4 h-10 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 px-4 h-12 sm:h-10 text-base sm:text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
           <Plus className="h-4 w-4" /> Adicionar
         </button>
       </div>

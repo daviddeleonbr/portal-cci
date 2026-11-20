@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ClienteSidebar from './ClienteSidebar';
 import ClienteHeader from './ClienteHeader';
+import ClienteBottomNav from './ClienteBottomNav';
 import ModalNovidades from '../../ui/ModalNovidades';
 import PrefetcherWebposto from './PrefetcherWebposto';
 import BannerModoDemo from './BannerModoDemo';
@@ -36,16 +37,9 @@ export default function ClienteLayout() {
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   return (
-    <EmpresaAtivaProvider><div className="min-h-screen relative app-bg">
+    <EmpresaAtivaProvider><div className="min-h-screen relative app-bg app-bg-cliente">
       <BannerModoDemo />
-      {/* Decorative background - gradient mesh */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-blue-400/15 blur-[100px]" />
-        <div className="absolute top-[30%] left-[20%] w-[450px] h-[450px] rounded-full bg-blue-400/10 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[15%] w-[400px] h-[400px] rounded-full bg-blue-300/10 blur-[100px]" />
-        <div className="absolute bottom-[20%] left-[-5%] w-[350px] h-[350px] rounded-full bg-blue-300/10 blur-[100px]" />
-        <div className="absolute inset-0 app-vignette" />
-      </div>
+      {/* Fundo cinza claro liso (app-bg-cliente) — sem as manchas teal decorativas */}
 
       <ModalNovidades />
       <ModalPendenciasLogin />
@@ -63,8 +57,9 @@ export default function ClienteLayout() {
       />
       {/* Margem = largura recolhida; a sidebar expandida (hover) sobrepõe o conteúdo */}
       <div className="relative lg:ml-16">
-        <ClienteHeader onMenuClick={() => setMobileOpen(true)} />
-        <main className="p-4 sm:p-6 lg:p-8">
+        <ClienteHeader />
+        {/* pb extra no mobile: espaço da barra inferior fixa (+ safe-area do iPhone) */}
+        <main className="p-4 sm:p-6 lg:p-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-8">
           {/* Fade simples (sem transform) — um `transform` remanescente do
               framer-motion viraria containing block e quebraria `position: sticky`
               das barras de filtro fixas das páginas. */}
@@ -77,6 +72,11 @@ export default function ClienteLayout() {
           </motion.div>
         </main>
       </div>
+
+      <ClienteBottomNav
+        maisAberto={mobileOpen}
+        onMaisClick={() => setMobileOpen(v => !v)}
+      />
     </div></EmpresaAtivaProvider>
   );
 }

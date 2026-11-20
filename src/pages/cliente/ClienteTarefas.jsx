@@ -15,6 +15,10 @@ export default function ClienteTarefas() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [abertaId, setAbertaId] = useState(null);
+  // Toque num resumo (Atrasadas / Vencem hoje / Em validação) → abre a Lista
+  // já filtrada. `seq` remonta as visões com a aba escolhida.
+  const [atalho, setAtalho] = useState(null);
+  const irPara = (aba) => setAtalho(a => ({ aba, seq: (a?.seq || 0) + 1 }));
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro('');
@@ -38,24 +42,25 @@ export default function ClienteTarefas() {
   return (
     <div>
       <PageHeader title="Minhas tarefas" description="Rotinas e tarefas atribuídas a você pela CCI">
-        <button onClick={carregar} disabled={carregando}
-          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-          <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} /> Atualizar
+        <button onClick={carregar} disabled={carregando} aria-label="Atualizar tarefas"
+          className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white h-11 sm:h-auto min-w-[44px] px-3 sm:py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+          <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} /> <span className="hidden sm:inline">Atualizar</span>
         </button>
       </PageHeader>
 
       <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
-        <Resumo rot="Atrasadas" valor={atrasadas} cls={atrasadas ? 'text-rose-600' : 'text-gray-900'} />
-        <Resumo rot="Vencem hoje" valor={hoje} cls="text-amber-600" />
-        <Resumo rot="Em validação" valor={validacao} cls="text-violet-700" />
+        <Resumo rot="Atrasadas" valor={atrasadas} cls={atrasadas ? 'text-rose-700' : 'text-gray-900'} onClick={() => irPara('atrasadas')} />
+        <Resumo rot="Vencem hoje" valor={hoje} cls={hoje ? 'text-amber-700' : 'text-gray-900'} onClick={() => irPara('hoje')} />
+        <Resumo rot="Em validação" valor={validacao} cls={validacao ? 'text-violet-700' : 'text-gray-900'} onClick={() => irPara('validacao')} />
       </div>
 
       {erro && <p className="mb-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{erro}</p>}
       {carregando && lista.length === 0 ? (
         <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div>
       ) : (
-        <VisoesTarefas tarefas={lista} onAbrir={t => setAbertaId(t.id)} onAlterado={carregar} onErro={setErro}
-          abaInicial={atrasadas ? 'atrasadas' : 'abertas'}
+        <VisoesTarefas key={atalho?.seq || 0} tarefas={lista} onAbrir={t => setAbertaId(t.id)} onAlterado={carregar} onErro={setErro}
+          abaInicial={atalho?.aba || (atrasadas ? 'atrasadas' : 'abertas')}
+          visaoInicial={atalho ? 'lista' : undefined}
           vazio="Nenhuma tarefa por aqui. As rotinas atribuídas pela CCI aparecem nesta tela." />
       )}
 
@@ -64,11 +69,12 @@ export default function ClienteTarefas() {
   );
 }
 
-function Resumo({ rot, valor, cls }) {
+function Resumo({ rot, valor, cls, onClick }) {
   return (
-    <div className="rounded-xl border border-gray-200/70 bg-white p-3 shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{rot}</p>
-      <p className={`mt-0.5 text-xl font-bold tabular-nums ${cls}`}>{valor}</p>
-    </div>
+    <button type="button" onClick={onClick} aria-label={`${rot}: ${valor}. Ver na lista`}
+      className="rounded-xl border border-gray-200/70 bg-white p-3 text-left shadow-sm hover:border-gray-300 active:bg-gray-50">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 leading-tight">{rot}</p>
+      <p className={`mt-1 text-2xl sm:text-xl font-bold tabular-nums ${cls}`}>{valor}</p>
+    </button>
   );
 }
