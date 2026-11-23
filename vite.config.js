@@ -75,6 +75,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Web Push (notificações no celular): handlers de push/clique em
+        // public/push-sw.js, importados pelo SW gerado. Ver pushService.js.
+        importScripts: ['push-sw.js'],
         // Cresce o limite — bundles do app têm chunks >2MB.
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // bundle único (sem code-splitting) já passa de 5 MiB
         // Precaches o shell estático (HTML/JS/CSS/imagens do build).

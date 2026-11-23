@@ -7,7 +7,9 @@
 import { useEffect } from 'react';
 import { usePageHeader } from '../layout/PageHeaderContext';
 
-export default function PageHeader({ title, description, children, sticky = false }) {
+// acoesNaLinha: no celular, as ações ficam na mesma linha do título (à direita)
+// em vez de cair pra linha de baixo — use com ações compactas (só ícone).
+export default function PageHeader({ title, description, children, sticky = false, acoesNaLinha = false }) {
   const ctx = usePageHeader();
   const dentroDoProvider = ctx != null;
 
@@ -31,14 +33,14 @@ export default function PageHeader({ title, description, children, sticky = fals
 
   // Modo legado: header inline completo (usado pelo layout cliente).
   const linha = (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div className={`flex sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 ${acoesNaLinha ? 'flex-row items-start justify-between' : 'flex-col'}`}>
       <div className="min-w-0">
         <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gray-900 truncate">{title}</h1>
         {description && (
           <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500 truncate">{description}</p>
         )}
       </div>
-      {children && <div className="flex items-center gap-2 sm:gap-3 flex-wrap">{children}</div>}
+      {children && <div className={`flex items-center gap-2 sm:gap-3 ${acoesNaLinha ? 'shrink-0' : 'flex-wrap'}`}>{children}</div>}
     </div>
   );
 

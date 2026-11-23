@@ -319,6 +319,55 @@ export async function buscarProdutoPorCodigoBarras(apiKey, codigoBarras, urlBase
   }) || null;
 }
 
+// Busca no catálogo PRODUTO (em cache) por código de barras, código interno
+// ou descrição. Só dígitos (≥ 6) = código de barras exato; dígitos curtos =
+// código interno; texto = todas as palavras na descrição (sem acento/caixa).
+// Devolve até `limite` produtos, cada um com `codigo_barra` (1º código) e
+// `codigo_interno` = referenciaCodigo (o código que aparece no Webposto, ex.
+// "000123"). `codigo`/`produtoCodigo` é o ID do banco — não mostrar ao usuário.
+// empresaCodigo: com ele, só os produtos ATIVOS naquela empresa (a inativação
+// no Webposto é por empresa — PRODUTO?empresaCodigo&ativo=true; o campo `ativo`
+// do cadastro geral vem sempre null). Sem ele, o catálogo todo.
+export async function buscarProdutosPorTermo(apiKey, termo, { limite = 30, empresaCodigo = null } = {}, urlBase = DEFAULT_URL_BASE) {
+  const alvo = String(termo || '').trim();
+  if (!alvo) return [];
+  let todos = null;
+  if (empresaCodigo != null && empresaCodigo !== '') {
+    todos = await fetchCatalogo(urlBase, 'PRODUTO', apiKey, { limite: LIMITE_PADRAO, empresaCodigo, ativo: true }).catch(() => null);
+  }
+  if (!Array.isArray(todos)) todos = await buscarProdutos(apiKey, urlBase);
+  if (!Array.isArray(todos)) return [];
+  // Reforço: fora quem vier marcado inativo (null = não informado → fica).
+  const produtos = todos.filter(p => {
+    const a = p?.ativo;
+    if (a == null) return true;
+    if (a === false || a === 0) return false;
+    return !['N', 'I', 'F', '0', 'FALSE', 'INATIVO'].includes(String(a).trim().toUpperCase());
+  });
+  const cbs = (p) => {
+    const lista = p?.produtoCodigoBarra;
+    const arr = Array.isArray(lista) ? lista : (lista != null ? [lista] : []);
+    return arr.map(c => (typeof c === 'object' && c ? String(c.codigoBarra ?? c.codigo ?? '') : String(c ?? '')).trim()).filter(Boolean);
+  };
+  const comCb = (p) => ({ ...p, codigo_barra: cbs(p)[0] || '', codigo_interno: p.referenciaCodigo != null ? String(p.referenciaCodigo) : '' });
+  if (/^\d{6,}$/.test(alvo)) {
+    return produtos.filter(p => cbs(p).includes(alvo)).slice(0, limite).map(comCb);
+  }
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  if (/^\d+$/.test(alvo)) {
+    // código interno do sistema (referenciaCodigo, com ou sem zeros à esquerda)
+    const porCodigo = produtos.filter(p => p.referenciaCodigo != null && String(p.referenciaCodigo).trim() !== ''
+      && Number(p.referenciaCodigo) === Number(alvo));
+    if (porCodigo.length) return porCodigo.slice(0, limite).map(comCb);
+  }
+  const palavras = norm(alvo).split(/\s+/).filter(Boolean);
+  return produtos
+    .filter(p => { const n = norm(p.nome ?? p.descricao); return palavras.every(w => n.includes(w)); })
+    .sort((a, b) => norm(a.nome).indexOf(palavras[0]) - norm(b.nome).indexOf(palavras[0]))
+    .slice(0, limite)
+    .map(comCb);
+}
+
 export async function buscarGrupos(apiKey, urlBase = DEFAULT_URL_BASE) {
   return fetchCatalogo(urlBase, 'GRUPO', apiKey, { limite: LIMITE_PADRAO });
 }

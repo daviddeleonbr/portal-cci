@@ -21,6 +21,7 @@ import * as nfService from '../../../services/notaManifestacaoService';
 import { formatCurrency } from '../../../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../../../utils/nfe';
 import InputData from '../../../components/ui/InputData';
+import { useAtualizacaoAutomatica } from '../../../hooks/useAtualizacaoAutomatica';
 
 const STATUS_PILLS = {
   pendente:         { label: 'Pendente',      bg: 'bg-gray-100 dark:bg-white/[0.06]',      text: 'text-gray-700 dark:text-gray-300',     dot: 'bg-gray-400' },
@@ -77,19 +78,27 @@ export default function ClienteNotasFiscais() {
   const [dataAte, setDataAte] = useState(fimMesAtual());
   const [toast, setToast] = useState(null);
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
     if (!empresaAtual?.id) { setNotas([]); return; }
-    setLoading(true);
-    setError(null);
+    if (!silencioso) { setLoading(true); setError(null); }
     try {
       const lista = await nfService.listarPorCliente(empresaAtual.id);
       setNotas(lista);
     } catch (err) {
-      setError(err.message || 'Falha ao carregar notas');
-    } finally { setLoading(false); }
+      if (!silencioso) setError(err.message || 'Falha ao carregar notas');
+    } finally { if (!silencioso) setLoading(false); }
   }, [empresaAtual?.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Tempo real: a CCI lançou/devolveu, outra pessoa da rede mexeu…
+  const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
+  useAtualizacaoAutomatica({
+    canal: `nf-cliente-${empresaAtual?.id || 'x'}`,
+    tabelas: [{ table: 'nf_manifestacao', filter: `cliente_id=eq.${empresaAtual?.id}` }],
+    recarregar: recarregarSilencioso,
+    ativo: !!empresaAtual?.id,
+  });
 
   const sincronizar = async () => {
     if (!redeId) {
@@ -162,7 +171,7 @@ export default function ClienteNotasFiscais() {
 
   return (
     <div>
-      <PageHeader title="Notas Fiscais" description={asRede?.nome || 'Manifestação de notas recebidas'}>
+      <PageHeader title="Notas Fiscais" description={asRede?.nome || 'Manifestação de notas recebidas'} acoesNaLinha={empresasDisponiveis.length <= 1}>
         {empresasDisponiveis.length > 1 && (
           <EmpresaSeletorCompartilhado
             single

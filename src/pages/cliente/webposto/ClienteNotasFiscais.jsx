@@ -17,6 +17,7 @@ import * as nfService from '../../../services/notaManifestacaoService';
 import { formatCurrency } from '../../../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../../../utils/nfe';
 import InputData from '../../../components/ui/InputData';
+import { useAtualizacaoAutomatica } from '../../../hooks/useAtualizacaoAutomatica';
 
 const STATUS_PILLS = {
   pendente:         { label: 'Pendente',      bg: 'bg-gray-100 dark:bg-white/[0.06]',      text: 'text-gray-700 dark:text-gray-300 dark:text-gray-600',    dot: 'bg-gray-400' },
@@ -63,19 +64,27 @@ export default function ClienteNotasFiscais() {
   const [dataAte, setDataAte] = useState(fimMesAtual());
   const [toast, setToast] = useState(null);
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
     if (!cliente?.id) return;
-    setLoading(true);
-    setError(null);
+    if (!silencioso) { setLoading(true); setError(null); }
     try {
       const lista = await nfService.listarPorCliente(cliente.id);
       setNotas(lista);
     } catch (err) {
-      setError(err.message || 'Falha ao carregar notas');
-    } finally { setLoading(false); }
+      if (!silencioso) setError(err.message || 'Falha ao carregar notas');
+    } finally { if (!silencioso) setLoading(false); }
   }, [cliente?.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Tempo real: a CCI lançou/devolveu, outra pessoa da rede mexeu…
+  const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
+  useAtualizacaoAutomatica({
+    canal: `nf-cliente-${cliente?.id || 'x'}`,
+    tabelas: [{ table: 'nf_manifestacao', filter: `cliente_id=eq.${cliente?.id}` }],
+    recarregar: recarregarSilencioso,
+    ativo: !!cliente?.id,
+  });
 
   const sincronizar = async () => {
     if (!cliente?.chave_api_id || !cliente?.empresa_codigo) {
@@ -154,7 +163,7 @@ export default function ClienteNotasFiscais() {
 
   return (
     <div>
-      <PageHeader title="Notas Fiscais" description="Manifestação de notas recebidas">
+      <PageHeader title="Notas Fiscais" description="Manifestação de notas recebidas" acoesNaLinha>
         <div className="hidden md:flex items-center gap-2">
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
             <CalendarRange className="h-3 w-3" /> Emissão entre

@@ -325,6 +325,10 @@ export async function adicionarProduto(nfId, produto) {
     descricao: produto.descricao || null,
     quantidade: Number(produto.quantidade) || 1,
     valor_unitario: Number(produto.valor_unitario) || 0,
+    // conversão de embalagem (migração 217): 2 caixas × 24 un → quantidade 48
+    embalagem_qtd: produto.embalagem_qtd ?? null,
+    embalagem_tipo: produto.embalagem_tipo ?? null,
+    unidades_por_embalagem: produto.unidades_por_embalagem ?? null,
     ordem: produto.ordem ?? 0,
     produto_novo: !!produto.produto_novo,
     tipo_destinacao: produto.tipo_destinacao || 'estoque',
@@ -345,7 +349,7 @@ export async function adicionarProduto(nfId, produto) {
 // falhar, remove o produto pra não deixar estado inconsistente.
 export async function adicionarProdutoNovo({
   nfId, clienteId, descricao, codigoBarras, quantidade, valorUnitario, ordem,
-  fotoProduto, fotoCodigoBarras,
+  fotoProduto, fotoCodigoBarras, qtdColunas = {},
 }) {
   if (!nfId || !clienteId) throw new Error('nfId e clienteId obrigatórios');
   if (!descricao || !descricao.trim()) throw new Error('Descrição do produto é obrigatória');
@@ -360,6 +364,7 @@ export async function adicionarProdutoNovo({
       codigo_interno: null,                       // CCI define ao cadastrar
       descricao: descricao.trim(),
       quantidade, valor_unitario: valorUnitario,
+      ...qtdColunas, // quantidade + embalagem (sobrescreve quantidade quando vem)
       ordem,
       produto_novo: true,
     });

@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, CalendarClock, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Circle, ListPlus,
-  Clock, Landmark, Loader2, Search, Settings2, Undo2, X,
+  Clock, Landmark, Loader2, Search, Settings2, Tag, Undo2, X,
 } from 'lucide-react';
 import Modal from '../ui/Modal';
 import BarraProgressoFetch from '../ui/BarraProgressoFetch';
@@ -607,6 +607,11 @@ function ListaTitulos({ titulo, titulos, agruparPorDia, multiEmpresa, celular, p
                     <p className="mt-0.5 truncate text-xs text-gray-600">
                       {[!g.dia || g.dia === 'sem' || t.programacao ? `Venc. ${dataBR(t.vencimento)}` : null, multiEmpresa ? t.empresaNome : null, t.documento ? `Doc. ${t.documento}` : null].filter(Boolean).join(' · ')}
                     </p>
+                    {t.conta && (
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-700" title="Conta gerencial">
+                        <Tag className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" /><span className="truncate">{t.conta}</span>
+                      </p>
+                    )}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <ChipSituacao s={t.situacao} curto />
                       {t.vencida && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-200">Em atraso</span>}
@@ -620,7 +625,7 @@ function ListaTitulos({ titulo, titulos, agruparPorDia, multiEmpresa, celular, p
           ) : (
             <table className="w-full table-fixed text-sm">
               <thead className="sr-only">
-                <tr><th>Selecionar</th><th>Vencimento</th>{multiEmpresa && <th>Empresa</th>}<th>Fornecedor</th><th>Documento</th><th>Valor</th><th>Situação</th></tr>
+                <tr><th>Selecionar</th><th>Vencimento</th>{multiEmpresa && <th>Empresa</th>}<th>Fornecedor</th><th className="hidden lg:table-cell">Conta gerencial</th><th>Documento</th><th>Valor</th><th>Situação</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {g.ts.map(t => (
@@ -635,12 +640,21 @@ function ListaTitulos({ titulo, titulos, agruparPorDia, multiEmpresa, celular, p
                       {dataBR(t.vencimento)}
                       {t.programacao
                         ? <span className="block text-[10px] font-semibold text-gray-600">pagar {dataBR(t.dataPag).slice(0, 5)}</span>
-                        : t.vencimento !== t.vencimentoEfetivo && <span className="block text-[10px] text-gray-500">conta {dataBR(t.vencimentoEfetivo).slice(0, 5)}</span>}
+                        : t.vencimento !== t.vencimentoEfetivo && <span className="block text-[10px] text-gray-500">útil {dataBR(t.vencimentoEfetivo).slice(0, 5)}</span>}
                     </td>
                     {multiEmpresa && <td className="w-44 truncate px-3 py-2.5 text-xs text-gray-700" title={t.empresaNome}>{t.empresaNome}</td>}
                     <td className="truncate px-3 py-2.5">
                       <p className="truncate font-medium text-gray-900" title={t.fornecedor}>{t.fornecedor}</p>
-                      {(t.historico || t.conta) && <p className="truncate text-[11px] text-gray-500" title={t.historico || t.conta}>{t.historico || t.conta}</p>}
+                      {t.historico && <p className="truncate text-[11px] text-gray-500" title={t.historico}>{t.historico}</p>}
+                      {t.conta && <p className="truncate text-[11px] text-gray-600 lg:hidden" title={`Conta gerencial: ${t.conta}`}>Conta: {t.conta}</p>}
+                    </td>
+                    <td className="hidden w-56 px-3 py-2.5 lg:table-cell" title={t.conta ? `Conta gerencial: ${t.contaCodigo ? `${t.contaCodigo} · ` : ''}${t.conta}` : 'Sem conta gerencial'}>
+                      {t.conta ? (
+                        <>
+                          <p className="flex items-center gap-1 text-xs text-gray-800"><Tag className="h-3 w-3 shrink-0 text-gray-500" aria-hidden="true" /><span className="truncate">{t.conta}</span></p>
+                          {t.contaCodigo && <p className="truncate pl-4 font-mono text-[10px] text-gray-500">{t.contaCodigo}</p>}
+                        </>
+                      ) : <span className="text-xs text-gray-400">—</span>}
                     </td>
                     <td className="w-32 truncate px-3 py-2.5 font-mono text-xs text-gray-700" title={t.documento}>
                       {t.documento || '—'}{t.parcela && <span className="text-gray-500"> · {t.parcela}</span>}
@@ -672,7 +686,7 @@ function BarraSelecao({ ts, ehAdmin, salvando, onAcao, onLimpar }) {
   const comStatus = ts.filter(t => t.situacao !== 'a_incluir');
   const btn = 'inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold disabled:opacity-50';
   return (
-    <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4 md:left-auto md:right-6 md:px-0">
+    <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 lg:bottom-4 md:left-auto md:right-6 md:px-0">
       <div className="mx-auto flex max-w-4xl flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-xl sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <button type="button" onClick={onLimpar} aria-label="Limpar seleção" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg hover:bg-gray-100">
@@ -772,7 +786,7 @@ function ModalTitulo({ t, onFechar, ehAdmin, podeAutorizar, salvando, erro, onAc
           {linha('Empresa', t.empresaNome)}
           {linha('Documento', [t.documento, t.parcela && `parcela ${t.parcela}`].filter(Boolean).join(' · '))}
           {linha('Emissão', t.emissao && dataBR(t.emissao))}
-          {linha('Conta', t.conta)}
+          {linha('Conta gerencial', t.conta && [t.contaCodigo, t.conta].filter(Boolean).join(' · '))}
           {linha('Histórico', t.historico)}
         </div>
         <ol className="space-y-2 rounded-lg bg-gray-50 p-3 text-xs">
@@ -1014,7 +1028,7 @@ function ModalMontarDia({ dia, cicloAte, proximoPagamento, titulos, hoje, multiE
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-gray-900">{t.fornecedor}</span>
-                      <span className="block truncate text-[11px] text-gray-500">{[multiEmpresa ? t.empresaNome : null, t.documento ? `Doc. ${t.documento}` : null].filter(Boolean).join(' · ') || ' '}</span>
+                      <span className="block truncate text-[11px] text-gray-500">{[multiEmpresa ? t.empresaNome : null, t.conta || null, t.documento ? `Doc. ${t.documento}` : null].filter(Boolean).join(' · ') || ' '}</span>
                       <span className="mt-1 flex flex-wrap gap-1">
                         <ChipRelacao rel={rel} t={t} />
                         {t.situacao !== 'a_incluir' && <ChipSituacao s={t.situacao} curto />}
@@ -1299,7 +1313,7 @@ function ModalConfirmarAutorizacao({ ts, multiEmpresa, salvando, erro, onFechar,
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium text-gray-900">{t.fornecedor}</span>
                 <span className="block truncate text-[11px] text-gray-500">
-                  {[`Venc. ${dataBR(t.vencimento)}`, t.dia ? `pagamento ${dataBR(t.dia).slice(0, 5)}` : null, multiEmpresa ? t.empresaNome : null].filter(Boolean).join(' · ')}
+                  {[`Venc. ${dataBR(t.vencimento)}`, t.dia ? `pagamento ${dataBR(t.dia).slice(0, 5)}` : null, t.conta || null, multiEmpresa ? t.empresaNome : null].filter(Boolean).join(' · ')}
                 </span>
               </span>
               <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">{formatCurrency(t.valor)}</span>

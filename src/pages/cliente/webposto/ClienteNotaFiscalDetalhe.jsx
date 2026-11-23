@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, Loader2, AlertCircle, Save, Plus, Trash2,
+  ArrowLeft, Loader2, AlertCircle, Save, Plus, Trash2, Pencil,
   Upload, File, FileText, Download, Send, CheckCircle2,
   Package, Briefcase, Building2, Calendar, Hash, ScanLine, X, Search,
   Camera, Keyboard, PackagePlus, ImagePlus, Image as ImageIcon,
@@ -18,7 +18,10 @@ import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
+import CampoQuantidadeNf from '../../../components/nf/CampoQuantidadeNf';
+import { estadoQuantidade, colunasQuantidade, quantidadeValida, textoQuantidade } from '../../../utils/nfQuantidade';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../../../utils/nfe';
+import { useAtualizacaoAutomatica } from '../../../hooks/useAtualizacaoAutomatica';
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -64,9 +67,9 @@ export default function ClienteNotaFiscalDetalhe() {
   const [modalNovoProduto, setModalNovoProduto] = useState(false);
   const [modalUsoConsumo, setModalUsoConsumo] = useState(false);
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
     if (!id) return;
-    setLoading(true); setError(null);
+    if (!silencioso) { setLoading(true); setError(null); }
     try {
       const n = await nfService.obter(id);
       if (!n) throw new Error('Nota não encontrada');
@@ -77,11 +80,34 @@ export default function ClienteNotaFiscalDetalhe() {
       setNota(n);
       setProdutosLocal(n.produtos || []);
     } catch (err) {
-      setError(err.message || 'Falha ao carregar nota');
-    } finally { setLoading(false); }
+      if (!silencioso) setError(err.message || 'Falha ao carregar nota');
+    } finally { if (!silencioso) setLoading(false); }
   }, [id, cliente?.id, clientesRede]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Tempo real (CCI devolveu/lançou, outra pessoa editou). Não atropela quem
+  // está digitando: com campo em foco ou janela aberta, adia e tenta de novo.
+  const ocupadoRef = useRef(false);
+  const recarregarSilencioso = useCallback(() => {
+    const tentar = () => {
+      const el = document.activeElement;
+      const digitando = el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+      if (digitando || ocupadoRef.current) { setTimeout(tentar, 1500); return; }
+      carregar({ silencioso: true });
+    };
+    tentar();
+  }, [carregar]);
+  useAtualizacaoAutomatica({
+    canal: `nf-cliente-det-${id}`,
+    tabelas: [
+      { table: 'nf_manifestacao', filter: `id=eq.${id}` },
+      { table: 'nf_manifestacao_produto', filter: `nf_manifestacao_id=eq.${id}` },
+      { table: 'nf_manifestacao_arquivo', filter: `nf_manifestacao_id=eq.${id}` },
+    ],
+    recarregar: recarregarSilencioso,
+    ativo: !!id,
+  });
 
   // ─── Produtos ────────────────────────────────────────────
   // Insere um produto em branco ou pré-preenchido (vindo do scan/busca).
@@ -104,6 +130,12 @@ export default function ClienteNotaFiscalDetalhe() {
       setToast({ tipo: 'error', mensagem: 'Erro ao adicionar produto: ' + err.message });
     }
   };
+
+  const [editandoIdx, setEditandoIdx] = useState(null); // item aberto na janela "Editar item"
+  // janela aberta / enviando → o tempo real espera (não perde o que está sendo feito)
+  useEffect(() => {
+    ocupadoRef.current = !!(modalScan || modalNovoProduto || modalUsoConsumo || editandoIdx != null || enviando);
+  }, [modalScan, modalNovoProduto, modalUsoConsumo, editandoIdx, enviando]);
 
   const editarProdutoLocal = (idx, campos) => {
     setProdutosLocal(prev => prev.map((p, i) => i === idx ? { ...p, ...campos } : p));
@@ -341,8 +373,8 @@ export default function ClienteNotaFiscalDetalhe() {
             {/* Mobile: cards */}
             <div className="md:hidden divide-y divide-gray-100 dark:divide-white/10">
               {produtosLocal.map((p, idx) => itemVisivel(p) && (
-                <ProdutoCard key={p.id} produto={p} readonly={readonly} sistemaLabel={sistemaLabel}
-                  onEdit={(campos) => editarProdutoLocal(idx, campos)}
+                <ProdutoCard key={p.id} produto={p} idx={idx} readonly={readonly} sistemaLabel={sistemaLabel}
+                  onAbrir={() => setEditandoIdx(idx)}
                   onCommit={(campos) => commitProduto(idx, campos)}
                   onRemove={() => removerProduto(idx)} />
               ))}
@@ -350,14 +382,15 @@ export default function ClienteNotaFiscalDetalhe() {
 
             {/* Desktop: tabela */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-xs min-w-[720px]">
+              <table className="w-full text-xs min-w-[860px]">
                 <thead>
                   <tr className="text-left text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-white/10">
                     <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] dark:bg-white/[0.03] w-10">#</th>
                     <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Código de barras</th>
                     <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Cód. interno</th>
                     <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Descrição</th>
-                    {!readonly && <th className="px-2 py-2 bg-gray-50 w-10" />}
+                    <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] w-56">Quantidade</th>
+                    {!readonly && <th className="px-2 py-2 bg-gray-50 dark:bg-white/[0.03] w-20" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/10">
@@ -365,6 +398,7 @@ export default function ClienteNotaFiscalDetalhe() {
                     <ProdutoRow key={p.id} produto={p} idx={idx} readonly={readonly}
                       onEdit={(campos) => editarProdutoLocal(idx, campos)}
                       onCommit={(campos) => commitProduto(idx, campos)}
+                      onAbrir={() => setEditandoIdx(idx)}
                       onRemove={() => removerProduto(idx)} />
                   ))}
                 </tbody>
@@ -429,30 +463,24 @@ export default function ClienteNotaFiscalDetalhe() {
       />
       )}
 
-      {/* Botão enviar pra CCI */}
+      {/* O que falta pra enviar — no fluxo da página (não flutua) */}
+      {!readonly && !podeEnviar && (
+        <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/[0.12] p-4">
+          <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Faltam itens obrigatórios para enviar:</p>
+          <ul className="text-[12px] text-amber-700 dark:text-amber-300/90 mt-1 space-y-0.5">
+            {pendencias.map(p => <li key={p}>· {p}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Só o botão Enviar flutua — ACIMA da barra inferior do celular (h-16 +
+          área segura do iPhone, visível abaixo de lg); no desktop, 1rem do fundo.
+          Celular: largura toda; desktop: à direita. */}
       {!readonly && (
-        <div className={`sticky bottom-4 rounded-2xl shadow-lg p-4 flex items-center gap-3 border-2 transition-colors backdrop-blur-md backdrop-saturate-150 ${
-          podeEnviar
-            ? 'bg-white/80 dark:bg-slate-900/70 border-blue-300 dark:border-blue-500/40'
-            : 'bg-amber-50/70 dark:bg-amber-500/[0.12] border-amber-300 dark:border-amber-500/40'
-        }`}>
-          <div className="flex-1 min-w-0">
-            {podeEnviar ? (
-              <>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Pronto pra enviar à CCI</p>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">Todas as informações obrigatórias estão preenchidas.</p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Faltam itens obrigatórios:</p>
-                <ul className="text-[11px] text-amber-700 dark:text-amber-300/90 mt-0.5 space-y-0.5">
-                  {pendencias.map(p => <li key={p}>· {p}</li>)}
-                </ul>
-              </>
-            )}
-          </div>
+        <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] lg:bottom-4 z-[46] flex justify-end pointer-events-none">
           <button onClick={enviarParaCci} disabled={enviando || !podeEnviar}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 text-white px-4 py-2.5 text-sm font-bold hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+            title={podeEnviar ? 'Enviar a nota para a CCI' : 'Preencha os itens obrigatórios para enviar'}
+            className="pointer-events-auto inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-blue-600 text-white px-6 h-12 text-sm font-bold ring-2 ring-white/90 dark:ring-slate-900/90 shadow-[0_10px_28px_-6px_rgba(16,118,110,0.55),0_2px_6px_rgba(0,0,0,0.12)] disabled:shadow-[0_8px_22px_-6px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.12)] hover:bg-blue-700 transition-colors disabled:bg-gray-500 dark:disabled:bg-slate-500 disabled:text-white/90 disabled:cursor-not-allowed">
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Enviar à CCI
           </button>
@@ -462,6 +490,7 @@ export default function ClienteNotaFiscalDetalhe() {
       {modalScan && (
         <ModalScanProduto
           cliente={cliente}
+          empresaCodigo={nota?.empresa_codigo ?? cliente?.empresa_codigo}
           origem={origem}
           redeId={asRedeId}
           onClose={() => setModalScan(false)}
@@ -511,6 +540,13 @@ export default function ClienteNotaFiscalDetalhe() {
         />
       )}
 
+      {editandoIdx != null && produtosLocal[editandoIdx] && (
+        <ModalEditarProduto produto={produtosLocal[editandoIdx]} numero={editandoIdx + 1} readonly={readonly} sistemaLabel={sistemaLabel}
+          onClose={() => setEditandoIdx(null)}
+          onSalvar={async (campos) => { await commitProduto(editandoIdx, campos); setEditandoIdx(null); }}
+          onRemover={async () => { const i = editandoIdx; setEditandoIdx(null); await removerProduto(i); }} />
+      )}
+
       {toast && <Toast tipo={toast.tipo} mensagem={toast.mensagem} onClose={() => setToast(null)} />}
     </div>
   );
@@ -555,7 +591,7 @@ function BadgesProduto({ produto, readonly, onMudarDestinacao, onToggleBonificac
 }
 
 // ─── Produto: linha (desktop) ────────────────────────────────
-function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
+function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onAbrir, onRemove }) {
   return (
     <tr className={produto.produto_novo
       ? 'bg-amber-50/40 dark:bg-amber-500/[0.06] hover:bg-amber-50/70 dark:hover:bg-amber-500/[0.1]'
@@ -597,24 +633,42 @@ function ProdutoRow({ produto, idx, readonly, onEdit, onCommit, onRemove }) {
           </p>
         )}
       </td>
+      <td className="px-3 py-1.5">
+        {/* quantidade com conversão: edita na janela "Editar item" */}
+        <button type="button" onClick={onAbrir}
+          className="w-full text-left rounded px-2 py-1 text-[11.5px] tabular-nums text-gray-800 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-500/10"
+          title={readonly ? 'Ver item' : 'Alterar a quantidade'}>
+          {textoQuantidade(produto)}
+        </button>
+      </td>
       {!readonly && (
         <td className="px-2 py-1.5">
-          <button onClick={onRemove}
-            className="p-1.5 rounded hover:bg-rose-50 text-gray-400 hover:text-rose-600"
-            aria-label="Remover produto">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center justify-end gap-0.5">
+            <button onClick={onAbrir} title="Editar item"
+              className="p-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-500/10 text-gray-400 hover:text-blue-600"
+              aria-label="Editar item">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={onRemove} title="Remover"
+              className="p-1.5 rounded hover:bg-rose-50 text-gray-400 hover:text-rose-600"
+              aria-label="Remover produto">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </td>
       )}
     </tr>
   );
 }
 
-// ─── Produto: card (mobile) ──────────────────────────────────
-function ProdutoCard({ produto, readonly, sistemaLabel = 'Webposto', onEdit, onCommit, onRemove }) {
+
+// ─── Produto: card (mobile) — resumo; toque abre "Editar item" ──
+function ProdutoCard({ produto, idx, readonly, sistemaLabel = 'Webposto', onAbrir, onCommit, onRemove }) {
+  const codigos = [produto.codigo_barras, produto.produto_novo ? 'cód a cadastrar' : (produto.codigo_interno ? `cód ${produto.codigo_interno}` : null)].filter(Boolean).join(' · ');
   return (
-    <div className={`p-3 space-y-2 ${produto.produto_novo ? 'bg-amber-50/40 dark:bg-amber-500/[0.06]' : ''}`}>
-      <div className="flex items-center gap-1.5 flex-wrap">
+    <div className={`p-3 ${produto.produto_novo ? 'bg-amber-50/40 dark:bg-amber-500/[0.06]' : ''}`}>
+      <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+        <span className="text-[10px] font-mono text-gray-400">#{idx + 1}</span>
         <BadgesProduto produto={produto} readonly={readonly}
           onMudarDestinacao={(novo) => onCommit({ tipo_destinacao: novo })}
           onToggleBonificacao={() => onCommit({ bonificacao: !produto.bonificacao })} />
@@ -623,42 +677,161 @@ function ProdutoCard({ produto, readonly, sistemaLabel = 'Webposto', onEdit, onC
         )}
       </div>
       <div className="flex items-start gap-2">
-        <input type="text" value={produto.descricao || ''} disabled={readonly}
-          onChange={e => onEdit({ descricao: e.target.value })}
-          onBlur={e => onCommit({ descricao: e.target.value })}
-          placeholder="Descrição"
-          className="flex-1 h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+        <button type="button" onClick={onAbrir} className="min-w-0 flex-1 text-left">
+          <p className={`text-sm font-semibold line-clamp-2 ${produto.descricao ? 'text-gray-900 dark:text-gray-100' : 'italic text-gray-400'}`}>
+            {produto.descricao || 'Sem descrição'}
+          </p>
+          {codigos && <p className="mt-0.5 truncate text-[11px] font-mono text-gray-500 dark:text-gray-400">{codigos}</p>}
+          <p className="mt-1 text-xs font-medium text-gray-800 dark:text-gray-200 tabular-nums">{textoQuantidade(produto)}</p>
+        </button>
         {!readonly && (
-          <button onClick={onRemove}
-            className="h-10 w-10 flex items-center justify-center rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-600 flex-shrink-0"
-            aria-label="Remover produto">
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <input type="text" value={produto.codigo_barras || ''} disabled={readonly || produto.produto_novo}
-          onChange={e => onEdit({ codigo_barras: e.target.value })}
-          onBlur={e => onCommit({ codigo_barras: e.target.value })}
-          placeholder="Código de barras"
-          className="h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-xs font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
-        {produto.produto_novo ? (
-          <span className="h-10 px-3 rounded-lg flex items-center justify-center text-[10.5px] font-semibold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">
-            cód a cadastrar
-          </span>
-        ) : (
-          <input type="text" value={produto.codigo_interno || ''} disabled={readonly}
-            onChange={e => onEdit({ codigo_interno: e.target.value })}
-            onBlur={e => onCommit({ codigo_interno: e.target.value })}
-            placeholder="Cód. interno"
-            className="h-10 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-xs font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 dark:disabled:text-gray-500" />
+          <div className="flex flex-shrink-0 items-center gap-1">
+            <button onClick={onAbrir}
+              className="h-10 w-10 flex items-center justify-center rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-blue-50 hover:text-blue-700"
+              aria-label="Editar item">
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button onClick={onRemove}
+              className="h-10 w-10 flex items-center justify-center rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-600"
+              aria-label="Remover produto">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         )}
       </div>
       {produto.motivo_devolucao && (
-        <div className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-3 py-2 text-[12px] text-rose-800 dark:text-rose-300">
+        <div className="mt-2 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-3 py-2 text-[12px] text-rose-800 dark:text-rose-300">
           <span className="font-semibold">⚠ Corrigir: </span>{produto.motivo_devolucao}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Editar item (gaveta no celular, janela no computador) ────
+function ModalEditarProduto({ produto, numero, readonly, sistemaLabel = 'Webposto', onClose, onSalvar, onRemover }) {
+  const [f, setF] = useState(() => ({
+    descricao: produto.descricao || '',
+    codigo_barras: produto.codigo_barras || '',
+    codigo_interno: produto.codigo_interno || '',
+    bonificacao: !!produto.bonificacao,
+    tipo_destinacao: produto.tipo_destinacao === 'uso_consumo' ? 'uso_consumo' : 'estoque',
+  }));
+  const [qtd, setQtd] = useState(() => estadoQuantidade(produto));
+  const [salvando, setSalvando] = useState(false);
+  const set = (campo) => (e) => setF(x => ({ ...x, [campo]: e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e }));
+
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape' && !salvando) onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose, salvando]);
+
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      await onSalvar({
+        descricao: f.descricao.trim(),
+        codigo_barras: f.codigo_barras.trim(),
+        ...(produto.produto_novo ? {} : { codigo_interno: f.codigo_interno.trim() }),
+        ...colunasQuantidade(qtd),
+        bonificacao: f.bonificacao,
+        tipo_destinacao: f.tipo_destinacao,
+      });
+    } finally { setSalvando(false); }
+  };
+
+  const inp = 'w-full h-11 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-gray-50 dark:disabled:bg-slate-800/40 disabled:text-gray-500';
+  const rot = 'block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4" onClick={salvando ? undefined : onClose}>
+      <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+        role="dialog" aria-modal="true" aria-labelledby="titulo-editar-item"
+        className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[92dvh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-3 px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-white/10 shrink-0">
+          <div className="h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+            <Pencil className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 id="titulo-editar-item" className="text-base font-semibold text-gray-900 dark:text-gray-100">{readonly ? 'Item' : 'Editar item'} #{numero}</h2>
+            {produto.produto_novo && <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">Produto novo — a CCI cadastrará no {sistemaLabel}</p>}
+          </div>
+          <button onClick={onClose} disabled={salvando} className="p-2 -mr-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 dark:text-gray-400" aria-label="Fechar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-3">
+          <div>
+            <label htmlFor="ed-desc" className={rot}>Descrição</label>
+            <input id="ed-desc" type="text" value={f.descricao} onChange={set('descricao')} disabled={readonly} placeholder="Descrição do produto" className={inp} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="min-w-0">
+              <label htmlFor="ed-cb" className={rot}>Código de barras</label>
+              <input id="ed-cb" type="text" inputMode="numeric" value={f.codigo_barras} onChange={set('codigo_barras')} disabled={readonly || produto.produto_novo} className={`${inp} font-mono`} />
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="ed-ci" className={rot}>Cód. interno</label>
+              {produto.produto_novo
+                ? <p className="h-11 px-3 rounded-lg flex items-center text-[11px] font-semibold uppercase tracking-wider bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">a cadastrar</p>
+                : <input id="ed-ci" type="text" value={f.codigo_interno} onChange={set('codigo_interno')} disabled={readonly} className={`${inp} font-mono`} />}
+            </div>
+          </div>
+          <CampoQuantidadeNf valor={qtd} onChange={setQtd} disabled={readonly} idBase="ed" />
+
+          <div>
+            <p className={rot}>Destinação</p>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Destinação">
+              {[['estoque', 'Estoque (revenda)', Package], ['uso_consumo', 'Uso e consumo', Briefcase]].map(([v, r, Ic]) => (
+                <button key={v} type="button" role="radio" aria-checked={f.tipo_destinacao === v} disabled={readonly}
+                  onClick={() => setF(x => ({ ...x, tipo_destinacao: v }))}
+                  className={`h-11 inline-flex items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition ${f.tipo_destinacao === v
+                    ? (v === 'estoque' ? 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-300' : 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300')
+                    : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.04]'}`}>
+                  <Ic className="h-4 w-4" /> {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className={`flex items-center gap-2 h-11 px-3 rounded-lg border cursor-pointer transition-colors ${f.bonificacao
+            ? 'border-pink-300 dark:border-pink-500/40 bg-pink-50 dark:bg-pink-500/10'
+            : 'border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800/50'}`}>
+            <input type="checkbox" checked={f.bonificacao} onChange={set('bonificacao')} disabled={readonly}
+              className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-400" />
+            <span className={`text-sm font-medium ${f.bonificacao ? 'text-pink-800 dark:text-pink-300' : 'text-gray-700 dark:text-gray-300'}`}>Produto em bonificação</span>
+          </label>
+
+          {produto.motivo_devolucao && (
+            <div className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-3 py-2 text-[12px] text-rose-800 dark:text-rose-300">
+              <span className="font-semibold">⚠ Corrigir: </span>{produto.motivo_devolucao}
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 px-4 sm:px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/[0.02] flex items-center gap-2">
+          {!readonly && (
+            <button onClick={onRemover} disabled={salvando}
+              className="inline-flex items-center gap-1.5 h-11 sm:h-auto sm:py-2 px-2 rounded-lg text-sm font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10">
+              <Trash2 className="h-4 w-4" /> Remover
+            </button>
+          )}
+          <div className="flex-1" />
+          <button onClick={onClose} disabled={salvando}
+            className="rounded-lg px-3 h-11 sm:h-auto sm:py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06]">
+            {readonly ? 'Fechar' : 'Cancelar'}
+          </button>
+          {!readonly && (
+            <button onClick={salvar} disabled={salvando || !quantidadeValida(qtd)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 text-white px-4 h-11 sm:h-auto sm:py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar
+            </button>
+          )}
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -816,8 +989,7 @@ function MotivoSemBoleto({ valor, temBoletos, readonly, onSalvar }) {
 // ─── Modal de item de uso e consumo (interno, não vai pro estoque) ──
 function ModalUsoConsumo({ onClose, onAdicionar }) {
   const [descricao, setDescricao] = useState('');
-  const [quantidade, setQuantidade] = useState('1');
-  const [valorUnit, setValorUnit] = useState('');
+  const [qtd, setQtd] = useState(() => estadoQuantidade());
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
@@ -826,7 +998,7 @@ function ModalUsoConsumo({ onClose, onAdicionar }) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose, salvando]);
 
-  const podeSalvar = descricao.trim() && Number(quantidade) > 0;
+  const podeSalvar = descricao.trim() && quantidadeValida(qtd);
 
   const submit = async (e) => {
     e?.preventDefault();
@@ -835,8 +1007,7 @@ function ModalUsoConsumo({ onClose, onAdicionar }) {
     try {
       await onAdicionar({
         descricao: descricao.trim(),
-        quantidade: Number(quantidade) || 1,
-        valor_unitario: Number(valorUnit) || 0,
+        ...colunasQuantidade(qtd),
       });
     } finally { setSalvando(false); }
   };
@@ -863,7 +1034,7 @@ function ModalUsoConsumo({ onClose, onAdicionar }) {
           </button>
         </div>
 
-        <form onSubmit={submit} className="px-5 py-4 space-y-3">
+        <form onSubmit={submit} className="px-4 sm:px-5 py-4 space-y-3">
           <label className="block">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
               Descrição <span className="text-rose-500">*</span>
@@ -873,31 +1044,7 @@ function ModalUsoConsumo({ onClose, onAdicionar }) {
               className="w-full h-11 px-3 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40" />
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Quantidade <span className="text-rose-500">*</span>
-              </span>
-              <input type="number" step="0.0001" min="0" value={quantidade}
-                onChange={e => setQuantidade(e.target.value)}
-                className="w-full h-11 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40" />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Valor unit. (R$) <span className="text-rose-500">*</span>
-              </span>
-              <input type="number" step="0.01" min="0" value={valorUnit}
-                onChange={e => setValorUnit(e.target.value)}
-                className="w-full h-11 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40" />
-            </label>
-          </div>
-
-          <div className="rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 p-2.5 flex items-center justify-between">
-            <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Subtotal</span>
-            <span className="font-mono tabular-nums text-sm font-bold text-gray-900 dark:text-gray-100">
-              {formatCurrency((Number(quantidade) || 0) * (Number(valorUnit) || 0))}
-            </span>
-          </div>
+          <CampoQuantidadeNf valor={qtd} onChange={setQtd} idBase="uso" />
         </form>
 
         <div className="px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/[0.02] flex items-center gap-2">
@@ -918,15 +1065,15 @@ function ModalUsoConsumo({ onClose, onAdicionar }) {
 }
 
 // ─── Modal de cadastro de produto NOVO (não existe no Webposto) ──
-// Cliente preenche descrição, qtd, valor unit e anexa 2 fotos (produto +
+// Cliente preenche descrição, quantidade (ou caixas × unidades) e anexa 2 fotos (produto +
 // código de barras). CCI usa as fotos pra cadastrar antes de lançar.
 function ModalNovoProduto({ sistemaLabel = 'Webposto', onClose, onAdicionar }) {
   const [descricao, setDescricao] = useState('');
   const [codigoBarras, setCodigoBarras] = useState('');
-  const [quantidade, setQuantidade] = useState('1');
-  const [valorUnit, setValorUnit] = useState('');
+  const [qtd, setQtd] = useState(() => estadoQuantidade());
   const [fotoProduto, setFotoProduto] = useState(null);
   const [fotoCodigoBarras, setFotoCodigoBarras] = useState(null);
+  const [lendoCodigo, setLendoCodigo] = useState(false); // leitura do código pela câmera
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
@@ -936,7 +1083,7 @@ function ModalNovoProduto({ sistemaLabel = 'Webposto', onClose, onAdicionar }) {
   }, [onClose, salvando]);
 
   const podeSalvar = descricao.trim() && fotoProduto && fotoCodigoBarras
-    && Number(quantidade) > 0;
+    && quantidadeValida(qtd);
 
   const submit = async (e) => {
     e?.preventDefault();
@@ -946,102 +1093,121 @@ function ModalNovoProduto({ sistemaLabel = 'Webposto', onClose, onAdicionar }) {
       await onAdicionar({
         descricao: descricao.trim(),
         codigoBarras: codigoBarras.trim(),
-        quantidade: Number(quantidade) || 1,
-        valorUnitario: Number(valorUnit) || 0,
+        quantidade: colunasQuantidade(qtd).quantidade || 1,
+        valorUnitario: 0,
+        qtdColunas: colunasQuantidade(qtd),
         fotoProduto, fotoCodigoBarras,
       });
     } finally { setSalvando(false); }
   };
 
+  // O que falta (mostrado no rodapé enquanto o botão está desligado)
+  const faltando = [
+    !descricao.trim() && 'descrição',
+    !fotoProduto && 'foto do produto',
+    !fotoCodigoBarras && 'foto do código',
+    !quantidadeValida(qtd) && 'quantidade',
+  ].filter(Boolean);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={salvando ? undefined : onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4" onClick={salvando ? undefined : onClose}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden"
+        initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+        role="dialog" aria-modal="true" aria-labelledby="titulo-produto-novo"
+        className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[92dvh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100 dark:border-white/10">
+        {/* alça da gaveta (celular) */}
+        <div className="sm:hidden flex justify-center pt-2" aria-hidden="true"><span className="h-1 w-10 rounded-full bg-gray-300 dark:bg-white/20" /></div>
+
+        {/* Header compacto */}
+        <div className="flex items-center gap-3 px-4 sm:px-5 pt-2 sm:pt-4 pb-3 border-b border-gray-100 dark:border-white/10 shrink-0">
           <div className="h-10 w-10 rounded-lg bg-amber-50 dark:bg-amber-500/15 flex items-center justify-center flex-shrink-0">
             <PackagePlus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Adicionar produto novo à nota</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Esse produto ainda não está cadastrado no {sistemaLabel}. Envie as informações e fotos — a CCI usa para cadastrar antes de lançar a nota.
+            <h2 id="titulo-produto-novo" className="text-base font-semibold text-gray-900 dark:text-gray-100">Produto novo</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">
+              Ainda não cadastrado no {sistemaLabel}. A CCI cadastra com as fotos antes de lançar.
             </p>
           </div>
           <button onClick={onClose} disabled={salvando}
-            className="p-2 -mr-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 dark:text-gray-400 disabled:opacity-50" aria-label="Fechar">
+            className="h-10 w-10 -mr-1 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 dark:text-gray-400 disabled:opacity-50" aria-label="Fechar">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={submit} className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+        <form id="form-produto-novo" onSubmit={submit} className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-4">
+          <div>
+            <label htmlFor="novo-desc" className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
               Descrição do produto <span className="text-rose-500">*</span>
-            </span>
-            <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)}
-              placeholder="Ex: Óleo lubrificante Shell Helix 5W30 1L"
-              className="w-full h-11 px-3 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
-          </label>
-
-          {/* 2 uploads de foto */}
-          <div className="grid grid-cols-2 gap-2">
-            <UploadFoto label="Foto do produto" obrigatorio file={fotoProduto} onChange={setFotoProduto} />
-            <UploadFoto label="Foto do cód. barras" obrigatorio file={fotoCodigoBarras} onChange={setFotoCodigoBarras} />
-          </div>
-
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Código de barras <span className="text-gray-400">(opcional, se souber)</span>
-            </span>
-            <input type="text" value={codigoBarras} onChange={e => setCodigoBarras(e.target.value)}
-              placeholder="789..."
-              className="w-full h-11 px-3 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
-          </label>
-
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Quantidade <span className="text-rose-500">*</span>
-              </span>
-              <input type="number" step="0.0001" min="0" value={quantidade}
-                onChange={e => setQuantidade(e.target.value)}
-                className="w-full h-11 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
             </label>
-            <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Valor unit. (R$) <span className="text-rose-500">*</span>
-              </span>
-              <input type="number" step="0.01" min="0" value={valorUnit}
-                onChange={e => setValorUnit(e.target.value)}
-                className="w-full h-11 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
-            </label>
+            <input id="novo-desc" type="text" value={descricao} onChange={e => setDescricao(e.target.value)}
+              placeholder="Ex.: Óleo Shell Helix 5W30 1L" autoComplete="off" enterKeyHint="next"
+              className="w-full h-11 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
           </div>
 
-          {/* Subtotal preview */}
-          <div className="rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 p-2.5 flex items-center justify-between">
-            <span className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Subtotal</span>
-            <span className="font-mono tabular-nums text-sm font-bold text-gray-900 dark:text-gray-100">
-              {formatCurrency((Number(quantidade) || 0) * (Number(valorUnit) || 0))}
-            </span>
+          {/* 2 fotos lado a lado, mesma altura */}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+              Fotos <span className="text-rose-500">*</span>
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <UploadFoto label="Produto" file={fotoProduto} onChange={setFotoProduto} />
+              <UploadFoto label="Código de barras" file={fotoCodigoBarras} onChange={setFotoCodigoBarras} />
+            </div>
           </div>
+
+          <div>
+            <label htmlFor="novo-cb" className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+              Código de barras <span className="normal-case font-normal tracking-normal text-gray-400">(opcional)</span>
+            </label>
+            {lendoCodigo ? (
+              <div className="space-y-2">
+                <CameraScanner
+                  onDetectado={(cb) => { setCodigoBarras(cb); setLendoCodigo(false); }}
+                  onErro={() => setLendoCodigo(false)} />
+                <button type="button" onClick={() => setLendoCodigo(false)}
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Digitar o código
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input id="novo-cb" type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" enterKeyHint="done"
+                  value={codigoBarras} onChange={e => setCodigoBarras(e.target.value.replace(/\D+/g, ''))}
+                  placeholder="789…"
+                  className="flex-1 min-w-0 h-11 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-base sm:text-sm font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/40" />
+                {CAMERA_DISPONIVEL && (
+                  <button type="button" onClick={() => setLendoCodigo(true)}
+                    className="h-11 shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50"
+                    aria-label="Ler o código com a câmera">
+                    <ScanLine className="h-4 w-4" /> Ler
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <CampoQuantidadeNf valor={qtd} onChange={setQtd} idBase="novo" />
         </form>
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/[0.02] flex items-center gap-2">
-          <button onClick={onClose} disabled={salvando}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-50">
-            Cancelar
-          </button>
-          <div className="flex-1" />
-          <button onClick={submit} disabled={!podeSalvar || salvando}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 text-white px-4 py-2 text-sm font-semibold hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">
-            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-3.5 w-3.5" />}
-            Adicionar à nota
-          </button>
+        {/* Footer: Cancelar à esquerda, Adicionar à direita (mesma linha) */}
+        <div className="shrink-0 px-4 sm:px-5 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/[0.02]">
+          {!podeSalvar && faltando.length > 0 && (
+            <p className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">Falta: {faltando.join(', ')}.</p>
+          )}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClose} disabled={salvando}
+              className="h-11 sm:h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-4 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-50">
+              Cancelar
+            </button>
+            <button type="submit" form="form-produto-novo" disabled={!podeSalvar || salvando}
+              className="h-11 sm:h-10 flex-1 sm:flex-none sm:ml-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 text-white px-4 text-sm font-semibold hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed">
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
+              Adicionar à nota
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>
@@ -1049,41 +1215,47 @@ function ModalNovoProduto({ sistemaLabel = 'Webposto', onClose, onAdicionar }) {
 }
 
 // Upload de 1 foto com preview. `capture="environment"` abre câmera traseira
-// direto no mobile; desktop cai pro picker normal.
-function UploadFoto({ label, obrigatorio, file, onChange }) {
+// direto no mobile; desktop cai pro picker normal. Rótulo DENTRO da caixa
+// (as duas ficam sempre da mesma altura); com foto: trocar (toque) / remover (×).
+function UploadFoto({ label, file, onChange }) {
   const inputRef = useRef(null);
   const previewUrl = useMemo(() => file ? URL.createObjectURL(file) : null, [file]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   return (
-    <div>
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 block mb-1">
-        {label} {obrigatorio && <span className="text-rose-500">*</span>}
-      </span>
+    <div className="relative">
       <button type="button" onClick={() => inputRef.current?.click()}
-        className={`w-full aspect-square rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden transition-colors ${
+        aria-label={file ? `Trocar foto: ${label}` : `Tirar ou escolher foto: ${label}`}
+        className={`w-full h-36 rounded-xl border-2 flex items-center justify-center overflow-hidden transition-colors ${
           file
-            ? 'border-emerald-300 dark:border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-500/[0.06]'
-            : 'border-gray-300 dark:border-white/15 bg-gray-50/50 dark:bg-white/[0.02] hover:border-amber-400 dark:hover:border-amber-500/40 hover:bg-amber-50/40 dark:hover:bg-amber-500/[0.06]'
+            ? 'border-emerald-400 dark:border-emerald-500/50'
+            : 'border-dashed border-gray-300 dark:border-white/15 bg-gray-50/50 dark:bg-white/[0.02] hover:border-amber-400 dark:hover:border-amber-500/40 hover:bg-amber-50/40 dark:hover:bg-amber-500/[0.06]'
         }`}>
         {previewUrl ? (
-          <img src={previewUrl} alt={label} className="w-full h-full object-cover" />
+          <>
+            <img src={previewUrl} alt={label} className="w-full h-full object-cover" />
+            <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pt-5 pb-1.5 text-left">
+              <span className="flex items-center gap-1 text-[11px] font-semibold text-white"><CheckCircle2 className="h-3.5 w-3.5" /> {label}</span>
+              <span className="block text-[10px] text-white/80">Toque para trocar</span>
+            </span>
+          </>
         ) : (
-          <div className="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 p-2">
-            <ImagePlus className="h-6 w-6" />
-            <span className="text-[10px] text-center">Tocar para tirar foto / escolher</span>
-          </div>
+          <span className="flex flex-col items-center gap-1.5 px-2 text-center">
+            <ImagePlus className="h-7 w-7 text-gray-400 dark:text-gray-500" />
+            <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-300 leading-tight">{label}</span>
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">Tirar foto</span>
+          </span>
         )}
       </button>
-      <input ref={inputRef} type="file" className="hidden"
-        accept="image/*" capture="environment"
-        onChange={e => onChange(e.target.files?.[0] || null)} />
       {file && (
-        <button type="button" onClick={() => onChange(null)}
-          className="mt-1 text-[10px] text-rose-600 dark:text-rose-400 hover:underline">
-          Remover
+        <button type="button" onClick={() => onChange(null)} aria-label={`Remover foto: ${label}`}
+          className="absolute top-1.5 right-1.5 h-8 w-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75">
+          <X className="h-4 w-4" />
         </button>
       )}
+      <input ref={inputRef} type="file" className="hidden"
+        accept="image/*" capture="environment"
+        onChange={e => { onChange(e.target.files?.[0] || null); e.target.value = ''; }} />
     </div>
   );
 }
@@ -1191,7 +1363,7 @@ function CameraScanner({ onDetectado, onErro }) {
   );
 }
 
-function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdicionar, onErro }) {
+function ModalScanProduto({ cliente, empresaCodigo = null, origem = 'webposto', redeId, onClose, onAdicionar, onErro }) {
   const ehAutosystem = origem === 'autosystem';
   const sistemaLabel = ehAutosystem ? 'Autosystem' : 'Webposto';
   const [codigo, setCodigo] = useState('');
@@ -1199,12 +1371,13 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
   const [produto, setProduto] = useState(null);  // produto encontrado
   const [resultados, setResultados] = useState([]); // múltiplos (busca por descrição)
   const [naoEncontrado, setNaoEncontrado] = useState(false);
-  const [valorUnit, setValorUnit] = useState('');
-  const [quantidade, setQuantidade] = useState('1');
+  const [qtd, setQtd] = useState(() => estadoQuantidade()); // unidades ou caixas × unidades
   const [bonificacao, setBonificacao] = useState(false);
   const [modoCamera, setModoCamera] = useState(false);
   const inputRef = useRef(null);
   const cameraButtonRef = useRef(null);
+  const buscaSeq = useRef(0);       // ignora respostas de buscas antigas
+  const ultimoBuscado = useRef(''); // não repete a mesma busca
 
   // Detecta dispositivo touch (mobile/tablet). Em touch + câmera disponível,
   // o foco vai pro botão "Escanear" — evita teclado virtual saltando ao abrir.
@@ -1225,20 +1398,20 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
   }, [onClose]);
 
   // Seleciona um produto do resultado (auto quando 1 match, ou clique na lista).
-  // Normaliza o valor sugerido a partir dos campos de cada fonte.
   const selecionarProduto = (p) => {
     setProduto(p);
     setResultados([]);
     setNaoEncontrado(false);
-    const v = ehAutosystem
-      ? (p.preco_custo ?? '')
-      : (p.precoCusto ?? p.custoMedio ?? p.precoVenda ?? '');
-    setValorUnit(v !== '' && v != null ? String(v) : '');
   };
 
+  // Busca automática (debounce) ao digitar/escanear; Enter busca na hora.
+  // Código de barras (só dígitos ≥ 6) acha 1 produto; descrição devolve lista.
   const buscar = async (codigoArg) => {
     const cb = String(codigoArg ?? codigo).trim();
     if (!cb) return;
+    ultimoBuscado.current = cb;
+    const seq = ++buscaSeq.current;
+    const atual = () => seq === buscaSeq.current;
     setBuscando(true);
     setProduto(null);
     setResultados([]);
@@ -1252,12 +1425,13 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
         const lista = await autosystemService.buscarProdutoAutosystem(
           redeId, ehCodBarra ? { codigoBarra: cb } : { termo: cb },
         );
+        if (!atual()) return;
         if (!lista || lista.length === 0) setNaoEncontrado(true);
         else if (lista.length === 1) selecionarProduto(lista[0]);
         else setResultados(lista);
         return;
       }
-      // Webposto: catálogo Quality por código de barras.
+      // Webposto: catálogo Quality (em cache) por código de barras, código ou descrição.
       if (!cliente?.chave_api_id) {
         onErro?.('Integração Webposto não configurada');
         return;
@@ -1265,45 +1439,70 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
       const chaves = await mapService.listarChavesApi();
       const chave = chaves.find(c => c.id === cliente.chave_api_id);
       if (!chave?.chave) throw new Error('Chave API não encontrada');
-      const p = await qualityApi.buscarProdutoPorCodigoBarras(chave.chave, cb);
-      if (!p) setNaoEncontrado(true);
-      else selecionarProduto(p);
+      // só produtos ativos na empresa da nota
+      const lista = await qualityApi.buscarProdutosPorTermo(chave.chave, cb, { empresaCodigo });
+      if (!atual()) return;
+      if (!lista.length) setNaoEncontrado(true);
+      else if (lista.length === 1) selecionarProduto(lista[0]);
+      else setResultados(lista);
     } catch (err) {
-      onErro?.('Erro ao buscar: ' + (err.message || err));
-    } finally { setBuscando(false); }
+      if (atual()) onErro?.('Erro ao buscar: ' + (err.message || err));
+    } finally { if (atual()) setBuscando(false); }
+  };
+
+  // Dispara sozinha: código de barras completo quase na hora; texto a partir
+  // de 3 letras, depois de uma pausa na digitação.
+  useEffect(() => {
+    const termo = codigo.trim();
+    if (modoCamera || termo === ultimoBuscado.current) return undefined;
+    const ehCodBarra = /^\d{6,}$/.test(termo);
+    if (!ehCodBarra && termo.length < 3) return undefined;
+    const t = setTimeout(() => buscar(termo), ehCodBarra ? 250 : 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codigo, modoCamera]);
+
+  const termoEhCodBarra = /^\d{6,}$/.test(codigo.trim());
+  // Código interno do SISTEMA: Webposto = referenciaCodigo (o `codigo` da API é
+  // o ID do banco); Autosystem = codigo (o `grid` é que é o ID do banco).
+  const codigoSistema = (p) => {
+    if (!p) return '';
+    const v = ehAutosystem ? p.codigo : (p.codigo_interno ?? p.referenciaCodigo);
+    return v != null ? String(v) : '';
   };
 
   const confirmar = async () => {
     if (!produto && !naoEncontrado) return;
+    // Não encontrado: o que foi digitado é código de barras (só dígitos) ou descrição
     await onAdicionar({
-      codigo_barras: produto?.codigo_barra || codigo.trim(),
-      codigo_interno: produto?.codigo != null ? String(produto.codigo) : '',
-      descricao: produto?.nome || '',
-      quantidade: Number(quantidade) || 1,
-      valor_unitario: Number(valorUnit) || 0,
+      codigo_barras: produto?.codigo_barra || (termoEhCodBarra ? codigo.trim() : ''),
+      codigo_interno: codigoSistema(produto),
+      descricao: produto?.nome || (!produto && !termoEhCodBarra ? codigo.trim() : ''),
+      ...colunasQuantidade(qtd),
       bonificacao,
     });
   };
 
   const limparEResearch = () => {
-    setProduto(null); setResultados([]); setNaoEncontrado(false); setCodigo(''); setValorUnit(''); setQuantidade('1'); setBonificacao(false);
+    setProduto(null); setResultados([]); setNaoEncontrado(false); setCodigo(''); setQtd(estadoQuantidade()); setBonificacao(false);
+    ultimoBuscado.current = '';
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4" onClick={onClose}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden"
+        initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+        className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[92dvh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100 dark:border-white/10">
+        <div className="flex items-start gap-3 px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-white/10 shrink-0">
           <div className="h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-500/15 flex items-center justify-center flex-shrink-0">
             <ScanLine className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Adicionar produto</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Escaneie o código de barras com leitor ou digite manualmente.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Escaneie o código de barras ou digite o código ou a descrição do produto.</p>
           </div>
           <button onClick={onClose} className="p-2 -mr-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 dark:text-gray-400" aria-label="Fechar">
             <X className="h-5 w-5" />
@@ -1311,8 +1510,9 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
         </div>
 
         {/* Modo câmera (mobile com BarcodeDetector) */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
         {modoCamera ? (
-          <div className="px-5 pt-4">
+          <div className="px-4 sm:px-5 pt-4">
             <CameraScanner
               onDetectado={(cb) => {
                 setCodigo(cb);
@@ -1331,7 +1531,7 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
           </div>
         ) : (
           /* Modo input manual / leitor USB */
-          <div className="px-5 pt-4">
+          <div className="px-4 sm:px-5 pt-4">
             {CAMERA_DISPONIVEL && (
               <button ref={cameraButtonRef} onClick={() => setModoCamera(true)}
                 className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-3.5 text-sm font-bold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all ring-1 ring-blue-400/40 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-400">
@@ -1346,28 +1546,35 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
                 <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
               </div>
             )}
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-              {ehAutosystem ? 'Código de barras ou descrição' : 'Código de barras'}
+            <label htmlFor="busca-produto-nf" className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+              Código de barras, código ou descrição
             </label>
-            <form onSubmit={e => { e.preventDefault(); buscar(); }} className="flex gap-2">
-              <input ref={inputRef} type="text" value={codigo}
+            {/* Busca sozinha ao digitar; Enter (leitor USB) busca na hora */}
+            <form onSubmit={e => { e.preventDefault(); buscar(); }} className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+              <input id="busca-produto-nf" ref={inputRef} type="search" value={codigo} enterKeyHint="search" autoComplete="off"
                 onChange={e => { setCodigo(e.target.value); setProduto(null); setResultados([]); setNaoEncontrado(false); }}
-                placeholder={ehAutosystem ? 'Escaneie o código ou digite a descrição...' : 'Escaneie ou digite o código...'}
-                className="flex-1 h-11 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-base font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
-              <button type="submit" disabled={!codigo.trim() || buscando}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-4 h-11 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-                {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Buscar
-              </button>
+                placeholder="Ex.: 7891234567890 ou óleo 20w50"
+                className={`w-full h-11 pl-9 pr-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 ${termoEhCodBarra ? 'font-mono' : ''}`} />
+              {buscando && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" aria-label="Buscando" />}
             </form>
+            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">A busca é automática. Na descrição, digite pelo menos 3 letras.</p>
           </div>
         )}
 
         {/* Resultado */}
-        <div className="px-5 pb-4 pt-3 min-h-[180px]">
-          {!produto && !naoEncontrado && !buscando && (
+        <div className="px-4 sm:px-5 pb-4 pt-3 min-h-[140px]">
+          {(produto || naoEncontrado || resultados.length > 0) && (
+            <div className="mb-2 flex justify-end">
+              <button type="button" onClick={limparEResearch}
+                className="text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline">
+                Limpar e buscar outro
+              </button>
+            </div>
+          )}
+          {!produto && !naoEncontrado && !buscando && resultados.length === 0 && (
             <p className="text-xs text-gray-400 dark:text-gray-500 italic text-center py-8">
-              Aguardando código...
+              {codigo.trim() && !termoEhCodBarra && codigo.trim().length < 3 ? 'Continue digitando…' : 'Aguardando código ou descrição…'}
             </p>
           )}
 
@@ -1381,18 +1588,18 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
           {resultados.length > 1 && !produto && (
             <div className="mb-3 rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden">
               <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/[0.03] border-b border-gray-100 dark:border-white/10">
-                {resultados.length} produtos — escolha um
+                {resultados.length >= 30 ? 'Mais de 30 produtos — refine a busca ou escolha' : `${resultados.length} produtos — escolha um`}
               </p>
               <ul className="max-h-56 overflow-y-auto divide-y divide-gray-100 dark:divide-white/10">
                 {resultados.map((p) => (
                   <li key={p.grid ?? `${p.codigo}-${p.codigo_barra}`}>
                     <button type="button" onClick={() => selecionarProduto(p)}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50/50 dark:hover:bg-blue-500/10 transition-colors">
-                      <p className="text-[12.5px] font-medium text-gray-900 dark:text-gray-100 truncate">{p.nome || '—'}</p>
-                      <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-mono">
-                        Cód {p.codigo ?? '—'}
+                      className="w-full text-left px-3 py-2.5 hover:bg-blue-50/50 dark:hover:bg-blue-500/10 transition-colors">
+                      <p className="text-[13px] font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{p.nome || '—'}</p>
+                      <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-mono truncate">
+                        Cód {codigoSistema(p) || '—'}
                         {p.codigo_barra && <span> · {p.codigo_barra}</span>}
-                        {p.preco_custo != null && <span> · custo {formatCurrency(p.preco_custo)}</span>}
+                        {(p.preco_custo ?? p.precoCusto) != null && <span> · custo {formatCurrency(p.preco_custo ?? p.precoCusto)}</span>}
                       </p>
                     </button>
                   </li>
@@ -1405,8 +1612,8 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
             <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3 mb-3">
               <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">Produto não encontrado no catálogo</p>
               <p className="text-xs text-amber-700 dark:text-amber-300/80">
-                O código <span className="font-mono">{codigo}</span> não está cadastrado no {sistemaLabel}.
-                Você pode adicionar mesmo assim (preencha descrição na tabela) ou tentar outro código.
+                Nada encontrado no {sistemaLabel} para <span className={termoEhCodBarra ? 'font-mono' : 'font-semibold'}>{codigo.trim()}</span>.
+                Você pode adicionar mesmo assim {termoEhCodBarra ? '(preencha a descrição na tabela)' : '(vai com essa descrição)'} ou tentar outra busca.
               </p>
             </div>
           )}
@@ -1418,7 +1625,7 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200 truncate">{produto.nome || '—'}</p>
                   <p className="text-[11px] text-emerald-700 dark:text-emerald-300/80 font-mono">
-                    Cód {produto.codigo ?? '—'}
+                    Cód {codigoSistema(produto) || '—'}
                     {produto.grupoNome && <span> · {produto.grupoNome}</span>}
                     {produto.unidadeMedida && <span> · {produto.unidadeMedida}</span>}
                   </p>
@@ -1441,43 +1648,26 @@ function ModalScanProduto({ cliente, origem = 'webposto', redeId, onClose, onAdi
                 <span className={`text-sm font-medium ${bonificacao ? 'text-pink-800 dark:text-pink-300' : 'text-gray-700 dark:text-gray-300'}`}>
                   Produto em bonificação
                 </span>
-                <span className="text-[10.5px] text-gray-500 dark:text-gray-400 ml-auto">(CCI lança como bonificação)</span>
+                <span className="hidden sm:inline text-[10.5px] text-gray-500 dark:text-gray-400 ml-auto">(CCI lança como bonificação)</span>
               </label>
 
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block">
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Quantidade</span>
-                  <input type="number" step="0.0001" min="0" value={quantidade}
-                    onChange={e => setQuantidade(e.target.value)}
-                    className="w-full h-10 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
-                </label>
-                <label className="block">
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Valor unit. (R$)</span>
-                  <input type="number" step="0.01" min="0" value={valorUnit}
-                    onChange={e => setValorUnit(e.target.value)}
-                    className="w-full h-10 px-2 mt-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-right font-mono tabular-nums text-gray-900 dark:text-gray-100 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
-                </label>
-              </div>
+              <CampoQuantidadeNf valor={qtd} onChange={setQtd} idBase="scan" />
             </>
           )}
         </div>
 
+        </div>
+
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/[0.02] flex items-center gap-2">
-          {(produto || naoEncontrado) && (
-            <button onClick={limparEResearch}
-              className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
-              Limpar e escanear outro
-            </button>
-          )}
-          <div className="flex-1" />
+        {/* Cancelar à esquerda, Adicionar à direita — sempre na mesma linha */}
+        <div className="shrink-0 px-4 sm:px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/60 dark:bg-white/[0.02] flex items-center justify-between gap-2">
           <button onClick={onClose}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06]">
+            className="rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-4 h-11 sm:h-10 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.06]">
             Cancelar
           </button>
-          <button onClick={confirmar} disabled={!produto && !naoEncontrado}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
-            <Plus className="h-3.5 w-3.5" /> Adicionar à nota
+          <button onClick={confirmar} disabled={(!produto && !naoEncontrado) || !quantidadeValida(qtd)}
+            className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-lg bg-blue-600 text-white px-4 h-11 sm:h-10 text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+            <Plus className="h-4 w-4" /> Adicionar à nota
           </button>
         </div>
       </motion.div>

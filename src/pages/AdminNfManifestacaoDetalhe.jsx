@@ -13,7 +13,9 @@ import Modal from '../components/ui/Modal';
 import { useAdminSession } from '../hooks/useAuth';
 import * as nfService from '../services/notaManifestacaoService';
 import { formatCurrency } from '../utils/format';
+import { textoQuantidade, temEmbalagem } from '../utils/nfQuantidade';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
+import { useAtualizacaoAutomatica } from '../hooks/useAtualizacaoAutomatica';
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -59,18 +61,31 @@ export default function AdminNfManifestacaoDetalhe() {
   const [motivoNf, setMotivoNf] = useState('');
   const [motivoBoleto, setMotivoBoleto] = useState('');
 
-  const carregar = useCallback(async () => {
-    setLoading(true); setError(null);
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) { setLoading(true); setError(null); }
     try {
       const n = await nfService.obter(id);
       if (!n) throw new Error('Nota não encontrada');
       setNota(n);
     } catch (err) {
-      setError(err.message);
-    } finally { setLoading(false); }
+      if (!silencioso) setError(err.message);
+    } finally { if (!silencioso) setLoading(false); }
   }, [id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Tempo real: o cliente mexeu na nota, nos produtos ou nos anexos
+  const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
+  useAtualizacaoAutomatica({
+    canal: `nf-admin-det-${id}`,
+    tabelas: [
+      { table: 'nf_manifestacao', filter: `id=eq.${id}` },
+      { table: 'nf_manifestacao_produto', filter: `nf_manifestacao_id=eq.${id}` },
+      { table: 'nf_manifestacao_arquivo', filter: `nf_manifestacao_id=eq.${id}` },
+    ],
+    recarregar: recarregarSilencioso,
+    ativo: !!id,
+  });
 
   const baixar = async (arq) => {
     try {
@@ -250,7 +265,7 @@ export default function AdminNfManifestacaoDetalhe() {
                   <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">Estoque (revenda)</span>
                 </div>
                 <p className="text-[11px] text-blue-700 dark:text-blue-300/80 mt-1">{estoque.length} {estoque.length === 1 ? 'item' : 'itens'}</p>
-                <p className="font-mono tabular-nums font-bold text-blue-900 dark:text-blue-200 mt-0.5">{formatCurrency(totEstoque)}</p>
+                {totEstoque > 0 && <p className="font-mono tabular-nums font-bold text-blue-900 dark:text-blue-200 mt-0.5">{formatCurrency(totEstoque)}</p>}
               </div>
               <div className="rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 p-3">
                 <div className="flex items-center gap-2">
@@ -258,7 +273,7 @@ export default function AdminNfManifestacaoDetalhe() {
                   <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Uso e consumo</span>
                 </div>
                 <p className="text-[11px] text-violet-700 dark:text-violet-300/80 mt-1">{uso.length} {uso.length === 1 ? 'item' : 'itens'}</p>
-                <p className="font-mono tabular-nums font-bold text-violet-900 dark:text-violet-200 mt-0.5">{formatCurrency(totUso)}</p>
+                {totUso > 0 && <p className="font-mono tabular-nums font-bold text-violet-900 dark:text-violet-200 mt-0.5">{formatCurrency(totUso)}</p>}
               </div>
               <div className={`rounded-lg p-3 border ${bonif.length > 0 ? 'bg-pink-50 dark:bg-pink-500/10 border-pink-200 dark:border-pink-500/20' : 'bg-gray-50 dark:bg-white/[0.03] border-gray-200 dark:border-white/10'}`}>
                 <div className="flex items-center gap-2">
@@ -268,7 +283,7 @@ export default function AdminNfManifestacaoDetalhe() {
                 <p className={`text-[11px] mt-1 ${bonif.length > 0 ? 'text-pink-700 dark:text-pink-300/80' : 'text-gray-500 dark:text-gray-400'}`}>
                   {bonif.length} {bonif.length === 1 ? 'item' : 'itens'} marcado{bonif.length === 1 ? '' : 's'}
                 </p>
-                {bonif.length > 0 && (
+                {bonif.length > 0 && totBonif > 0 && (
                   <p className="font-mono tabular-nums font-bold text-pink-900 dark:text-pink-200 mt-0.5">{formatCurrency(totBonif)}</p>
                 )}
               </div>
@@ -294,6 +309,7 @@ export default function AdminNfManifestacaoDetalhe() {
                   <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Código de barras</th>
                   <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Cód. interno</th>
                   <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03]">Descrição</th>
+                  <th className="px-3 py-2 bg-gray-50 dark:bg-white/[0.03] w-64">Quantidade</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/10">
@@ -342,6 +358,11 @@ export default function AdminNfManifestacaoDetalhe() {
                             <span>{p.motivo_devolucao}</span>
                           </p>
                         )}
+                      </td>
+                      {/* total em unidades em destaque; a conversão (caixas × un) embaixo */}
+                      <td className="px-3 py-2 tabular-nums text-gray-800 dark:text-gray-200">
+                        <p className="font-semibold">{Number(p.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 4 })} un</p>
+                        {temEmbalagem(p) && <p className="text-[11px] text-gray-500 dark:text-gray-400">{textoQuantidade(p)}</p>}
                       </td>
                     </tr>
                   );

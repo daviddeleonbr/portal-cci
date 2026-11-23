@@ -21,10 +21,12 @@ export default function ClienteBpoContasPagar() {
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [session?.clientesRede, tipo]);
 
   const cabecalho = (
-    <PageHeader title="Contas a Pagar" description="Agenda de pagamentos: contas do dia, as próximas e o que a CCI já incluiu no banco para você autorizar">
+    <PageHeader title="Contas a Pagar" description="Agenda de pagamentos: contas do dia, as próximas e o que a CCI já incluiu no banco para você autorizar" acoesNaLinha>
+      {/* celular: só o ícone, na linha do título; computador: com o texto */}
       <button type="button" onClick={() => { qualityApi.limparCacheTransacional(); setRecarga(n => n + 1); }}
-        className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">
-        <RefreshCw className="h-4 w-4" aria-hidden="true" /> Atualizar
+        aria-label="Atualizar" title="Atualizar"
+        className="inline-flex h-10 w-10 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 sm:w-auto sm:px-4">
+        <RefreshCw className="h-4 w-4" aria-hidden="true" /> <span className="hidden sm:inline">Atualizar</span>
       </button>
     </PageHeader>
   );

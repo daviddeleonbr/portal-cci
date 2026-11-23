@@ -5,8 +5,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, Check, CheckCheck, Info, AlertTriangle, CircleAlert, CircleCheck, Loader2 } from 'lucide-react';
+import { Bell, BellRing, Check, CheckCheck, Info, AlertTriangle, CircleAlert, CircleCheck, Loader2, Smartphone } from 'lucide-react';
 import * as notificacoesService from '../../services/notificacoesService';
+import * as pushService from '../../services/pushService';
 
 const COR_TIPO = {
   info:    { Icon: Info,         color: 'text-blue-500',    bg: 'bg-blue-50' },
@@ -119,7 +120,7 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
           <motion.div
             initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-[360px] bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden"
+            className="absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-1.5rem)] bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
@@ -189,9 +190,69 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
                 </ul>
               )}
             </div>
+
+            {/* Push neste aparelho */}
+            <PushAparelho usuarioId={usuarioId} />
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// Rodapé do sino: liga/desliga o push NESTE aparelho (celular ou computador).
+function PushAparelho({ usuarioId }) {
+  const [st, setSt] = useState('carregando');
+  const [ocupado, setOcupado] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    pushService.estado(usuarioId).then(e => { if (vivo) setSt(e); }).catch(() => { if (vivo) setSt('indisponivel'); });
+    return () => { vivo = false; };
+  }, [usuarioId]);
+
+  const alternar = async () => {
+    setOcupado(true); setErro(null);
+    try {
+      if (st === 'ativo') { await pushService.desativar(usuarioId); setSt('inativo'); }
+      else { await pushService.ativar(usuarioId); setSt('ativo'); }
+    } catch (e) {
+      setErro(e.message || 'Não foi possível ativar.');
+      if (typeof Notification !== 'undefined' && Notification.permission === 'denied') setSt('negado');
+    } finally { setOcupado(false); }
+  };
+
+  if (st === 'carregando' || st === 'indisponivel') return null;
+  return (
+    <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-3">
+      {st === 'precisa_instalar' ? (
+        <p className="flex items-start gap-2 text-[11.5px] text-gray-600">
+          <Smartphone className="h-4 w-4 mt-0.5 shrink-0 text-gray-500" />
+          <span>Para receber no iPhone, instale o app: toque em <strong>Compartilhar</strong> e em <strong>Adicionar à Tela de Início</strong>, e abra por lá.</span>
+        </p>
+      ) : st === 'negado' ? (
+        <p className="flex items-start gap-2 text-[11.5px] text-gray-600">
+          <BellRing className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+          <span>As notificações estão bloqueadas para o portal. Libere nas configurações do navegador ou do celular.</span>
+        </p>
+      ) : (
+        <div className="flex items-center gap-3">
+          <BellRing className={`h-4 w-4 shrink-0 ${st === 'ativo' ? 'text-blue-600' : 'text-gray-400'}`} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] font-medium text-gray-900">Receber no celular</p>
+            <p className="text-[10.5px] text-gray-500">{st === 'ativo' ? 'Ativo neste aparelho' : 'Avisos do BPO mesmo com o app fechado'}</p>
+          </div>
+          <button type="button" role="switch" aria-checked={st === 'ativo'} onClick={alternar} disabled={ocupado}
+            aria-label="Receber notificações neste aparelho"
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${st === 'ativo' ? 'bg-blue-600' : 'bg-gray-300'}`}>
+            {ocupado
+              ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin text-white" />
+              : <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${st === 'ativo' ? 'translate-x-5' : 'translate-x-0.5'}`} />}
+          </button>
+        </div>
+      )}
+      {erro && <p className="mt-2 text-[11px] text-red-600">{erro}</p>}
     </div>
   );
 }

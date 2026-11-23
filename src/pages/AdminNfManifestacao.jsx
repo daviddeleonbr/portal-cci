@@ -17,6 +17,7 @@ import * as autosystemService from '../services/autosystemService';
 import * as clientesService from '../services/clientesService';
 import { formatCurrency } from '../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../utils/nfe';
+import { useAtualizacaoAutomatica } from '../hooks/useAtualizacaoAutomatica';
 
 function inicioMesAtual() {
   const d = new Date();
@@ -92,10 +93,12 @@ export default function AdminNfManifestacao() {
     autosystemService.listarRedes().then(rs => setRedesAs((rs || []).filter(r => r.ativo !== false))).catch(() => setRedesAs([]));
   }, []);
 
-  const carregar = useCallback(async () => {
+  // silencioso (tempo real): sem spinner e SEM re-sincronizar o Autosystem
+  // (pesado) — só relê o que já está em nf_manifestacao.
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
     // Rede é obrigatória — sem seleção não carrega nada.
     if (!filtroRede) { setNotas([]); setEmpresasRede([]); return; }
-    setLoading(true); setError(null);
+    if (!silencioso) { setLoading(true); setError(null); }
     try {
       const ehAs = filtroRede.startsWith('as:');
       const redeId = filtroRede.slice(3);
@@ -112,7 +115,7 @@ export default function AdminNfManifestacao() {
       // materializa em nf_manifestacao (não depende do cliente sincronizar).
       // Busca a rede inteira (banco remoto single-tenant) e atribui cada nota
       // à empresa dona; empresa única cai no fallback.
-      if (ehAs) {
+      if (ehAs && !silencioso) {
         await nfService.sincronizarComAutosystem({
           asRedeId: redeId,
           empresas: empresas.map(e => ({ id: e.id, empresa_codigo: e.empresa_codigo, cnpj: e.cnpj })),
@@ -130,11 +133,20 @@ export default function AdminNfManifestacao() {
       });
       setNotas(lista);
     } catch (err) {
-      setError(err.message || 'Falha ao carregar');
-    } finally { setLoading(false); }
+      if (!silencioso) setError(err.message || 'Falha ao carregar');
+    } finally { if (!silencioso) setLoading(false); }
   }, [dataDe, dataAte, filtroRede]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Tempo real: notas/produtos/anexos mudaram (cliente preencheu, enviou…)
+  const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
+  useAtualizacaoAutomatica({
+    canal: `nf-admin-${filtroRede || 'nenhuma'}`,
+    tabelas: [{ table: 'nf_manifestacao' }, { table: 'nf_manifestacao_produto' }, { table: 'nf_manifestacao_arquivo' }],
+    recarregar: recarregarSilencioso,
+    ativo: !!filtroRede,
+  });
 
   const contagens = useMemo(() => {
     const c = { cobrar: 0, enviada: 0, lancada: 0, devolvida: 0 };

@@ -2,6 +2,37 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.6.0",
+      "data": "2026-11-24",
+      "resumo": "Avisos no celular, notas fiscais mais fáceis de preencher e atualização automática.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "Notificações no celular",
+          "descricao": "Ative em Notificações (sino) › “Receber no celular” e receba avisos do BPO mesmo com o app fechado: contas aguardando sua autorização, notas devolvidas ou lançadas. No iPhone, instale o app na tela de início."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Produtos da nota fiscal",
+          "descricao": "Busque o produto pelo código de barras, código ou descrição (só aparecem os ativos), informe a quantidade em unidades ou em caixas (ex.: 2 caixas × 24 = 48 unidades) e edite qualquer item depois. Ficou mais fácil usar no celular."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Notas fiscais em tempo real",
+          "descricao": "A lista e o detalhe das notas se atualizam sozinhos quando a CCI ou alguém da sua rede faz uma alteração."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Conta gerencial nas contas a pagar",
+          "descricao": "Em BPO › Contas a Pagar, cada conta mostra a conta gerencial a que pertence."
+        }
+      ]
+    },
+    {
       "versao": "1.5.0",
       "data": "2026-11-24",
       "resumo": "Nova área de Contas a Pagar no BPO: veja o pagamento do dia e autorize as contas que a CCI incluiu no banco.",

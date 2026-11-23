@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { setItemResiliente } from './storageSafe';
 import { expandirSessaoAdmin } from '../services/usuariosSistemaService';
+import { removerAoSair as removerPushAoSair } from '../services/pushService';
 
 // Chaves de sessao no localStorage (portais independentes)
 const ADMIN_KEY = 'cci_session_admin';
@@ -34,11 +35,15 @@ function setClienteSession(session) {
 }
 
 export function logoutAdmin() {
+  // para de receber push neste aparelho (antes de perder o id do usuário)
+  try { removerPushAoSair(getAdminSession()?.usuario?.id); } catch { /* noop */ }
   localStorage.removeItem(ADMIN_KEY);
   emitSessionChange();
 }
 
 export function logoutCliente() {
+  // para de receber push neste aparelho (sessão demo não tem inscrição própria)
+  try { const s = getClienteSession(); if (!s?._demo) removerPushAoSair(s?.usuario?.id); } catch { /* noop */ }
   localStorage.removeItem(CLIENTE_KEY);
   // Limpa cache de páginas Webposto pra evitar vazamento entre sessões
   try {

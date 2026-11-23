@@ -21,7 +21,8 @@ const iso10 = (v) => (v ? String(v).slice(0, 10) : null);
 // ─── Normalização (mesmos campos p/ os dois ERPs) ────────────
 // { chave, clienteId, empresaNome, vencimento, vencimentoEfetivo, valor,
 //   fornecedor, documento, parcela, historico, conta, emissao }
-function normalizarWebposto(t, emp, fornecedores) {
+function normalizarWebposto(t, emp, fornecedores, plano = new Map()) {
+  const pc = t.planoContaGerencialCodigo != null ? plano.get(String(t.planoContaGerencialCodigo)) : null;
   const cod = t.tituloPagarCodigo ?? t.codigo ?? null;
   const fornCod = t.fornecedorCodigo ?? t.codigoFornecedor ?? t.pessoaCodigo ?? t.codigoPessoa ?? null;
   const venc = iso10(t.dataVencimento || t.vencimento || t.dataVenc || t.data_vencimento);
@@ -39,7 +40,9 @@ function normalizarWebposto(t, emp, fornecedores) {
     documento: String(t.numeroDocumento || t.documento || t.numeroTitulo || t.nrDocumento || t.nrTitulo || t.titulo || ''),
     parcela: p && tot ? `${p}/${tot}` : (p ? String(p) : ''),
     historico: t.historico || t.observacao || t.observacoes || t.descricao || '',
-    conta: '',
+    // conta gerencial (plano de contas gerencial do Webposto)
+    conta: t.planoContaGerencialDescricao || pc?.nome || (t.planoContaGerencialCodigo != null ? `Conta #${t.planoContaGerencialCodigo}` : ''),
+    contaCodigo: t.planoContaGerencialNivel || pc?.hierarquia || '',
     emissao: iso10(t.dataEmissao || t.emissao || t.dataCadastro || t.data_emissao),
   };
 }
@@ -57,7 +60,9 @@ function normalizarAutosystem(t, emp) {
     documento: String(t.documento || ''),
     parcela: '',
     historico: t.obs || '',
-    conta: [t.motivo_nome, t.debito_nome].filter(Boolean).join(' · '),
+    // conta gerencial = conta debitada no Autosystem (motivo como apoio)
+    conta: t.debito_nome || t.motivo_nome || '',
+    contaCodigo: t.debito_codigo ? String(t.debito_codigo) : '',
     emissao: iso10(t.data),
   };
 }
@@ -94,18 +99,28 @@ export async function buscarTitulosErp({ tipo, empresas, redeId = null, onProgre
   const total = chavesIds.length + lista.length;
   onProgresso?.(0, total);
 
-  const fornsPorChave = new Map(await Promise.all(chavesIds.map(async (id) => {
+  // Catálogos por chave: fornecedores + plano de contas gerencial (nome da conta)
+  const catalogos = new Map(await Promise.all(chavesIds.map(async (id) => {
     const ch = porId.get(id);
     const mapa = new Map();
+    const plano = new Map();
     if (ch) {
-      const fs = await qualityApi.buscarFornecedoresQuality(ch.chave).catch(() => []);
+      const [fs, pcs] = await Promise.all([
+        qualityApi.buscarFornecedoresQuality(ch.chave).catch(() => []),
+        qualityApi.buscarPlanoContasGerencial(ch.chave).catch(() => []),
+      ]);
       (fs || []).forEach(f => {
         const cod = f.fornecedorCodigo ?? f.codigo;
         if (cod != null) mapa.set(cod, f.razao || f.fantasia || f.nome || `Fornecedor #${cod}`);
       });
+      (pcs || []).forEach(pc => {
+        const cod = pc.codigo ?? pc.planoContaGerencialCodigo;
+        const nome = pc.descricao ?? pc.nome ?? pc.planoContaGerencialDescricao;
+        if (cod != null && nome) plano.set(String(cod), { nome, hierarquia: pc.hierarquia || '' });
+      });
     }
     tick(total);
-    return [id, mapa];
+    return [id, { forns: mapa, plano }];
   })));
 
   const res = await Promise.allSettled(lista.map(async (emp) => {
@@ -113,8 +128,8 @@ export async function buscarTitulosErp({ tipo, empresas, redeId = null, onProgre
       const ch = porId.get(emp.chave_api_id);
       if (!ch) throw new Error('chave da API Webposto não encontrada');
       const dados = await qualityApi.buscarTitulosPagar(ch.chave, { empresaCodigo: emp.empresa_codigo, apenasPendente: true });
-      const forns = fornsPorChave.get(emp.chave_api_id) || new Map();
-      return (dados || []).map(t => normalizarWebposto(t, emp, forns));
+      const cat = catalogos.get(emp.chave_api_id) || { forns: new Map(), plano: new Map() };
+      return (dados || []).map(t => normalizarWebposto(t, emp, cat.forns, cat.plano));
     } finally { tick(total); }
   }));
   const titulos = [];
