@@ -11,13 +11,22 @@
 // destacados. Clicar num dia (linha da tabela ou card no celular) abre um
 // MODAL com o resumo do dia e o detalhe de tanques, bicos (encerrantes,
 // aferição, venda) e notas de entrada — com setas para o dia anterior/seguinte.
+//
+// Duas visões (abas):
+//   Oficial (Webposto) → o LMC como está no Webposto (o que vai pro fisco).
+//   Real (gerencial)   → o MESMO livro com o ESCRITURAL REAL digitado pela CCI/
+//                        cliente (por tanque) + motivo da diferença. A medição
+//                        continua a do Webposto; perda/sobra e % são recalculadas.
+//                        Ajustes na tabela lmc_real (migração 212); o oficial
+//                        nunca é alterado. Sem ajuste no dia = igual ao oficial.
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileDown, FileSpreadsheet, MessageCircle, Fuel, Loader2, TrendingDown, TrendingUp, FileText, Gauge, Droplets,
+  AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Eye, MessageSquareText, PencilLine, RotateCcw, Save, ShieldCheck, ClipboardEdit, FileDown, FileSpreadsheet, MessageCircle, Fuel, Loader2, TrendingDown, TrendingUp, FileText, Gauge, Droplets,
 } from 'lucide-react';
 import * as qualityApi from '../../services/qualityApiService';
 import { formatCurrency } from '../../utils/format';
+import * as lmcRealService from '../../services/lmcRealService';
 import Modal from '../ui/Modal';
 import GraficoTanquesLmc from './GraficoTanquesLmc';
 
@@ -32,16 +41,10 @@ const fmtData = (iso) => { const [a, m, d] = String(iso || '').slice(0, 10).spli
 const DIAS_SEM = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const diaSemana = (iso) => { const [a, m, d] = String(iso).slice(0, 10).split('-').map(Number); return DIAS_SEM[new Date(a, m - 1, d).getDay()]; };
 
-// Normaliza uma linha da API e calcula perda/sobra e a situação do dia.
-function normalizar(l) {
-  const abertura = num(l.abertura) ?? 0;
-  const entrada = num(l.entrada) ?? 0;
-  const saida = num(l.saida) ?? 0;
-  const disponivel = num(l.disponivel) ?? abertura + entrada;
-  const escritural = num(l.escritural) ?? disponivel - saida;
-  const fechamento = num(l.fechamento);
-  // Pela definição (medido − escritural); sem medição, usa o que veio da API
-  const perdaSobra = fechamento != null ? fechamento - escritural : num(l.perdaSobra);
+// Perda/sobra, % e situação a partir do escritural (oficial ou real).
+// Pela definição (medido − escritural); sem medição, usa o que veio da API.
+function classificar(escritural, fechamento, disponivel, perdaSobraApi) {
+  const perdaSobra = fechamento != null ? fechamento - escritural : perdaSobraApi;
   const pct = perdaSobra != null && disponivel > 0 ? perdaSobra / disponivel : null;
   // A regra é "ACIMA de 0,6%". Compara o percentual com 2 casas — o mesmo que
   // aparece na tela —, não o valor cru: um dia EXATAMENTE no limite (ex.:
@@ -53,17 +56,70 @@ function normalizar(l) {
     : Math.abs(perdaSobra) < 0.5 ? 'ok'
       : acimaDoLimite ? (perdaSobra < 0 ? 'falta_alta' : 'sobra_alta')
         : perdaSobra < 0 ? 'falta' : 'sobra';
+  return { perdaSobra, pct, situacao };
+}
+
+// Normaliza uma linha da API e calcula perda/sobra e a situação do dia.
+function normalizar(l) {
+  const abertura = num(l.abertura) ?? 0;
+  const entrada = num(l.entrada) ?? 0;
+  const saida = num(l.saida) ?? 0;
+  const disponivel = num(l.disponivel) ?? abertura + entrada;
+  const escritural = num(l.escritural) ?? disponivel - saida;
+  const fechamento = num(l.fechamento);
+  const perdaSobraApi = num(l.perdaSobra);
+  const { perdaSobra, pct, situacao } = classificar(escritural, fechamento, disponivel, perdaSobraApi);
   const produtos = Array.isArray(l.produtoCodigo) ? l.produtoCodigo : (l.produtoCodigo != null ? [l.produtoCodigo] : []);
   return {
     id: l.lmcCodigo ?? l.codigo ?? `${l.produtoLmcCodigo}-${l.dataMovimento}`,
     data: String(l.dataMovimento || '').slice(0, 10),
     chaveProduto: String(l.produtoLmcCodigo ?? produtos.join('+')),
-    produtos, abertura, entrada, saida, disponivel, escritural, fechamento, perdaSobra, pct, situacao,
+    produtos, abertura, entrada, saida, disponivel, escritural, fechamento, perdaSobra, pct, situacao, perdaSobraApi,
     precoCusto: num(l.precoCusto),
     tanques: l.lmcTanque || [], bicos: l.lmcBico || [], notas: l.lmcNota || [],
     usuario: l.ultimoUsuarioAlteracao || '', atualizadoEm: l.dataHoraAtualizacao || null,
   };
 }
+
+// Linha do LMC REAL: aplica o escritural real do ajuste (por tanque; ou do
+// combustível quando não há tanques). Com tanques, o escritural do combustível
+// = oficial + soma das diferenças (real − oficial) dos tanques ajustados.
+// `oficial` guarda os números do Webposto para comparação.
+const chaveAjuste = (l) => `${l.data}|${l.chaveProduto}`;
+function aplicarAjuste(l, aj) {
+  const oficial = { escritural: l.escritural, perdaSobra: l.perdaSobra, pct: l.pct, situacao: l.situacao };
+  if (!aj) return { ...l, real: true, ajustado: false, motivo: '', oficial };
+  const et = aj.escritural_tanques || {};
+  let escritural = l.escritural;
+  let tanques = l.tanques;
+  if (l.tanques.length) {
+    let delta = 0;
+    tanques = l.tanques.map(t => {
+      const real = num(et[String(t.tanqueCodigo)]);
+      if (real == null) return t;
+      delta += real - (num(t.escritural) ?? 0);
+      return { ...t, escritural: real, escrituralOficial: num(t.escritural) };
+    });
+    escritural = l.escritural + delta;
+  } else if (num(aj.escritural_produto) != null) {
+    escritural = num(aj.escritural_produto);
+  }
+  return {
+    ...l, ...classificar(escritural, l.fechamento, l.disponivel, l.perdaSobraApi), escritural, tanques,
+    real: true, ajustado: Math.abs(escritural - l.escritural) > 0.0001 || tanques !== l.tanques,
+    motivo: aj.motivo || '', ajusteInfo: { nome: aj.atualizado_por_nome || '', em: aj.updated_at }, oficial,
+  };
+}
+
+// "5.521,5" / "5521,5" / "5521.5" → 5521.5 (vazio = null; inválido = NaN)
+function lerLitros(txt) {
+  let t = String(txt ?? '').trim().replace(/\s|L$/gi, '');
+  if (!t) return null;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  const n = Number(t);
+  return Number.isFinite(n) ? n : NaN;
+}
+const litrosParaTexto = (v) => (v == null ? '' : String(Math.round(v * 100) / 100).replace('.', ','));
 
 const SITUACAO = {
   ok:          { rot: 'Sem diferença', cls: 'bg-gray-100 text-gray-700', barra: 'border-l-gray-300', icone: CheckCircle2 },
@@ -75,8 +131,14 @@ const SITUACAO = {
 };
 const corPerda = (v) => (v == null || Math.abs(v) < 0.5 ? 'text-gray-700' : v < 0 ? 'text-red-700' : 'text-blue-800');
 
-export default function PainelLmc({ apiKey, empresaCodigo, dataInicial, dataFinal, recarga = 0, empresaNome = '' }) {
-  const [linhas, setLinhas] = useState([]);
+export default function PainelLmc({
+  apiKey, empresaCodigo, dataInicial, dataFinal, recarga = 0, empresaNome = '',
+  clienteId = null, podeEditarReal = false, usuarioNome = '',
+}) {
+  const [linhasOficiais, setLinhasOficiais] = useState([]);
+  const [visao, setVisao] = useState('oficial'); // 'oficial' | 'real'
+  const [ajustes, setAjustes] = useState(new Map()); // "data|produto" → linha de lmc_real
+  const [erroAjustes, setErroAjustes] = useState(null);
   const [nomes, setNomes] = useState(new Map());
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -100,13 +162,40 @@ export default function PainelLmc({ apiKey, empresaCodigo, dataInicial, dataFina
         const m = new Map();
         (prods || []).forEach(p => m.set(String(p.produtoCodigo ?? p.codigo), p.nome || p.descricao || ''));
         setNomes(m);
-        setLinhas((lmcs || []).map(normalizar).sort((a, b) => a.data.localeCompare(b.data)));
+        setLinhasOficiais((lmcs || []).map(normalizar).sort((a, b) => a.data.localeCompare(b.data)));
       } catch (e) {
-        if (!cancelado) { setErro(e.message); setLinhas([]); }
+        if (!cancelado) { setErro(e.message); setLinhasOficiais([]); }
       } finally { if (!cancelado) setCarregando(false); }
     })();
     return () => { cancelado = true; };
   }, [apiKey, empresaCodigo, dataInicial, dataFinal, recarga]);
+
+  // Ajustes do LMC real (escritural real + motivo) do período
+  useEffect(() => {
+    if (!clienteId || !dataInicial || !dataFinal) return undefined;
+    let cancelado = false;
+    lmcRealService.listarAjustes(clienteId, { de: dataInicial, ate: dataFinal })
+      .then(m => { if (!cancelado) { setAjustes(m); setErroAjustes(null); } })
+      .catch(e => { if (!cancelado) setErroAjustes(e.message); });
+    return () => { cancelado = true; };
+  }, [clienteId, dataInicial, dataFinal, recarga]);
+
+  // Linhas da visão atual: oficial (Webposto) ou real (com os ajustes aplicados)
+  const linhas = useMemo(() => (visao === 'real'
+    ? linhasOficiais.map(l => aplicarAjuste(l, ajustes.get(chaveAjuste(l))))
+    : linhasOficiais), [visao, linhasOficiais, ajustes]);
+  const diasAjustados = useMemo(() => [...ajustes.values()].length, [ajustes]);
+
+  const salvarAjusteDia = async (l, { escrituralTanques, escrituralProduto, motivo }) => {
+    const linha = await lmcRealService.salvarAjuste({
+      clienteId, data: l.data, produtoChave: l.chaveProduto, escrituralTanques, escrituralProduto, motivo, usuarioNome,
+    });
+    setAjustes(m => new Map(m).set(chaveAjuste(l), linha));
+  };
+  const removerAjusteDia = async (l) => {
+    await lmcRealService.removerAjuste({ clienteId, data: l.data, produtoChave: l.chaveProduto });
+    setAjustes(m => { const n = new Map(m); n.delete(chaveAjuste(l)); return n; });
+  };
 
   const nomeProduto = (codigos) => codigos.map(c => nomes.get(String(c)) || `Produto ${c}`).join(' / ') || 'Combustível';
 
@@ -137,7 +226,7 @@ export default function PainelLmc({ apiKey, empresaCodigo, dataInicial, dataFina
   // Relatórios (PDF / Excel / WhatsApp) — ver src/utils/relatorioLmc.js.
   // Carregados sob demanda (jspdf/xlsx são pesados).
   const contextoRelatorio = () => ({
-    empresa: empresaNome, de: dataInicial, ate: dataFinal, linhas,
+    tipo: visao, empresa: empresaNome, de: dataInicial, ate: dataFinal, linhas,
     nomeDe: (l) => nomeProduto(l.produtos),
   });
   const baixarPdf = async () => {
@@ -201,6 +290,32 @@ export default function PainelLmc({ apiKey, empresaCodigo, dataInicial, dataFina
 
   return (
     <div className="space-y-4">
+      {/* Oficial (Webposto) × Real (gerencial) */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div role="tablist" aria-label="Visão do LMC" className="grid grid-cols-2 rounded-xl bg-gray-100 p-1 sm:inline-grid">
+          {[['oficial', 'Oficial (Webposto)', ShieldCheck], ['real', 'Real (gerencial)', ClipboardEdit]].map(([k, rot, Ic]) => (
+            <button key={k} type="button" role="tab" aria-selected={visao === k} onClick={() => setVisao(k)}
+              disabled={k === 'real' && !clienteId}
+              className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-40 ${
+                visao === k ? 'bg-white font-semibold text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
+              <Ic className="h-4 w-4" aria-hidden="true" /> {rot}
+            </button>
+          ))}
+        </div>
+        <p className="text-[12px] text-gray-600 sm:ml-2">
+          {visao === 'oficial'
+            ? <>O LMC como está no Webposto — o que vale para o fisco.</>
+            : <>Escritural real lançado manualmente · medição do Webposto · <strong>não altera o LMC oficial</strong>
+              {diasAjustados > 0 && <> · {diasAjustados} dia(s) ajustado(s)</>}
+              {podeEditarReal ? '. Clique num dia para ajustar.' : '.'}</>}
+        </p>
+      </div>
+      {visao === 'real' && erroAjustes && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+          Não foi possível carregar os ajustes do LMC real: {erroAjustes}. Mostrando o escritural oficial.
+        </p>
+      )}
+
       {/* Aviso geral + ações: ver os dias, PDF, Excel, WhatsApp */}
       <div className={`flex flex-col gap-3 rounded-xl border p-3 sm:p-4 lg:flex-row lg:items-center ${totalAlertas ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50'}`}>
         <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -312,7 +427,9 @@ export default function PainelLmc({ apiKey, empresaCodigo, dataInicial, dataFina
         </>)}
       </div>
       <p className="text-[11px] text-gray-600">
-        Perda/sobra = fechamento medido − estoque escritural (disponível − saída). Negativo é falta; positivo é sobra.
+        {visao === 'real'
+          ? 'LMC real: perda/sobra = fechamento medido (Webposto) − escritural real (lançado manualmente; sem ajuste, o oficial). Negativo é falta; positivo é sobra.'
+          : 'Perda/sobra = fechamento medido − estoque escritural (disponível − saída). Negativo é falta; positivo é sobra.'}
         Destaque quando passa de 0,6% do estoque disponível do dia.
       </p>
       <ModalDiasAlerta aberto={listaAlertasAberta} linhas={linhas} nomeDe={(l) => nomeProduto(l.produtos)}
@@ -324,7 +441,8 @@ export default function PainelLmc({ apiKey, empresaCodigo, dataInicial, dataFina
             rot={copiado ? 'Copiado!' : 'Copiar p/ WhatsApp'} feito={copiado} titulo="Copia o resumo formatado para colar numa conversa do WhatsApp" />
         </>} />
       <ModalDia dias={dias} id={diaAbertoId} nomeProduto={nomeProduto(produtos.find(p => p.chave === ativo)?.codigos || [])}
-        onTrocar={setDiaAbertoId} onFechar={() => setDiaAbertoId(null)} />
+        onTrocar={setDiaAbertoId} onFechar={() => setDiaAbertoId(null)}
+        podeEditar={visao === 'real' && podeEditarReal} onSalvar={salvarAjusteDia} onRemover={removerAjusteDia} />
     </div>
   );
 }
@@ -406,6 +524,17 @@ function SeloSituacao({ s }) {
   );
 }
 
+// Marcas do LMC real ao lado da data: "Ajustado" e o ícone do motivo
+function MarcasReal({ l }) {
+  if (!l.real || (!l.ajustado && !l.motivo)) return null;
+  return (
+    <>
+      {l.ajustado && <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">Ajustado</span>}
+      {l.motivo && <MessageSquareText className="h-3.5 w-3.5 text-gray-500" aria-label={`Motivo: ${l.motivo}`}><title>{`Motivo: ${l.motivo}`}</title></MessageSquareText>}
+    </>
+  );
+}
+
 function LinhaDia({ l, onAbrir }) {
   const alerta = l.situacao === 'falta_alta' || l.situacao === 'sobra_alta';
   return (
@@ -415,6 +544,7 @@ function LinhaDia({ l, onAbrir }) {
         <td className="whitespace-nowrap px-4 py-2.5 text-left">
           <span className="inline-flex items-center gap-1.5 font-medium text-gray-900">
             {fmtData(l.data)} <span className="text-[11px] font-normal text-gray-500">{diaSemana(l.data)}</span>
+            <MarcasReal l={l} />
           </span>
         </td>
         <td className="px-3 py-2.5 text-gray-700">{fmtL(l.abertura)}</td>
@@ -423,7 +553,10 @@ function LinhaDia({ l, onAbrir }) {
         <td className="px-3 py-2.5 text-gray-700">{fmtL(l.saida)}</td>
         <td className="px-3 py-2.5 text-gray-700">{fmtL(l.escritural)}</td>
         <td className="px-3 py-2.5 font-medium text-gray-900">{fmtL(l.fechamento)}</td>
-        <td className={`px-3 py-2.5 font-semibold ${corPerda(l.perdaSobra)}`}>{fmtLs(l.perdaSobra)}</td>
+        <td className={`px-3 py-2.5 font-semibold ${corPerda(l.perdaSobra)}`}>
+          {fmtLs(l.perdaSobra)}
+          {l.ajustado && <span className="block text-[10px] font-normal text-gray-500">oficial {fmtLs(l.oficial.perdaSobra)}</span>}
+        </td>
         <td className={`px-3 py-2.5 ${alerta ? 'font-semibold text-red-700' : 'text-gray-600'}`}>{fmtPct(l.pct)}</td>
         <td className="px-4 py-2.5 text-left"><SeloSituacao s={l.situacao} /></td>
     </tr>
@@ -436,7 +569,7 @@ function CardDia({ l, onAbrir }) {
     <li className={`rounded-xl border border-l-4 border-gray-200 bg-white shadow-sm ${c.barra}`}>
       <button type="button" onClick={onAbrir} aria-haspopup="dialog" className="w-full p-4 text-left active:bg-gray-50 rounded-xl">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-[15px] font-semibold text-gray-900">{fmtData(l.data)} <span className="text-xs font-normal text-gray-500">{diaSemana(l.data)}</span></p>
+          <p className="flex flex-wrap items-center gap-1.5 text-[15px] font-semibold text-gray-900">{fmtData(l.data)} <span className="text-xs font-normal text-gray-500">{diaSemana(l.data)}</span> <MarcasReal l={l} /></p>
           <SeloSituacao s={l.situacao} />
         </div>
         <dl className="mt-3 grid grid-cols-3 gap-x-2 gap-y-2.5 text-[11px]">
@@ -445,10 +578,12 @@ function CardDia({ l, onAbrir }) {
           <Par rot="Saída" v={fmtL(l.saida)} />
           <Par rot="Escritural" v={fmtL(l.escritural)} />
           <Par rot="Fechamento" v={fmtL(l.fechamento)} forte />
-          <Par rot="Perda/sobra" v={`${fmtLs(l.perdaSobra)}`} cls={corPerda(l.perdaSobra)} forte extra={fmtPct(l.pct)} />
+          <Par rot="Perda/sobra" v={`${fmtLs(l.perdaSobra)}`} cls={corPerda(l.perdaSobra)} forte
+            extra={l.ajustado ? `${fmtPct(l.pct)} · oficial ${fmtLs(l.oficial.perdaSobra)}` : fmtPct(l.pct)} />
         </dl>
+        {l.motivo && <p className="mt-2 line-clamp-2 text-[12px] text-gray-700"><strong>Motivo:</strong> {l.motivo}</p>}
         <span className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-blue-700">
-          Ver tanques, bicos e notas <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          {l.real ? 'Ver detalhes e ajustar' : 'Ver tanques, bicos e notas'} <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </span>
       </button>
     </li>
@@ -457,7 +592,7 @@ function CardDia({ l, onAbrir }) {
 
 // Modal do dia: resumo + detalhe (tanques, bicos, notas). As setas andam pelos
 // dias da lista atual (mesma ordem e filtro da tabela); ← → no teclado também.
-function ModalDia({ dias, id, nomeProduto, onTrocar, onFechar }) {
+function ModalDia({ dias, id, nomeProduto, onTrocar, onFechar, podeEditar = false, onSalvar, onRemover }) {
   const idx = dias.findIndex(d => d.id === id);
   const l = idx >= 0 ? dias[idx] : null;
   // dias vem do mais recente para o mais antigo: "anterior" = idx + 1
@@ -527,10 +662,154 @@ function ModalDia({ dias, id, nomeProduto, onTrocar, onFechar }) {
               Passou de 0,6% do estoque disponível do dia — a ANP pede justificativa.
             </p>
           )}
+          {/* LMC real: escritural real por tanque + motivo (key = remonta ao trocar de dia) */}
+          {l.real && <EditorReal key={l.id} l={l} podeEditar={podeEditar} onSalvar={onSalvar} onRemover={onRemover} />}
           <DetalheDia l={l} />
         </div>
       )}
     </Modal>
+  );
+}
+
+// LMC real — o único dado digitado é o ESCRITURAL (por tanque; ou do
+// combustível sem tanques). Perda/sobra e % recalculam enquanto digita.
+// Salvar grava só o que difere do oficial; sem diferença e sem motivo, o
+// ajuste é removido (volta ao oficial).
+function EditorReal({ l, podeEditar, onSalvar, onRemover }) {
+  const comTanques = l.tanques.length > 0;
+  const oficialTanque = (t) => (t.escrituralOficial !== undefined ? t.escrituralOficial : num(t.escritural));
+  const [valores, setValores] = useState(() => Object.fromEntries(l.tanques.map(t => [String(t.tanqueCodigo), litrosParaTexto(num(t.escritural))])));
+  const [valorProduto, setValorProduto] = useState(() => litrosParaTexto(l.escritural));
+  const [motivo, setMotivo] = useState(l.motivo || '');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const [ok, setOk] = useState(false);
+
+  // Prévia (o mesmo cálculo de aplicarAjuste)
+  let invalido = false;
+  let escrituralReal = l.oficial.escritural;
+  const tanquesPrev = l.tanques.map(t => {
+    const ofi = oficialTanque(t);
+    const v = lerLitros(valores[String(t.tanqueCodigo)]);
+    if (Number.isNaN(v)) invalido = true;
+    const real = v == null || Number.isNaN(v) ? ofi : v;
+    escrituralReal += (real ?? 0) - (ofi ?? 0);
+    const fe = num(t.fechamento);
+    return { t, ofi, real, dif: fe != null && real != null ? fe - real : null };
+  });
+  if (!comTanques) {
+    const v = lerLitros(valorProduto);
+    if (Number.isNaN(v)) invalido = true;
+    escrituralReal = v == null || Number.isNaN(v) ? l.oficial.escritural : v;
+  }
+  const prev = classificar(escrituralReal, l.fechamento, l.disponivel, l.perdaSobraApi);
+  const mudouEscritural = Math.abs(escrituralReal - l.oficial.escritural) > 0.0001;
+
+  const salvar = async () => {
+    if (invalido) { setErro('Confira os valores: use só números (ex.: 5.521,50).'); return; }
+    setSalvando(true); setErro(null); setOk(false);
+    try {
+      const escrituralTanques = {};
+      tanquesPrev.forEach(({ t, ofi, real }) => { if (real != null && Math.abs(real - (ofi ?? 0)) > 0.0001) escrituralTanques[String(t.tanqueCodigo)] = real; });
+      const escrituralProduto = !comTanques && mudouEscritural ? escrituralReal : null;
+      if (!mudouEscritural && !Object.keys(escrituralTanques).length && !motivo.trim()) await onRemover(l);
+      else await onSalvar(l, { escrituralTanques, escrituralProduto, motivo });
+      setOk(true); setTimeout(() => setOk(false), 2500);
+    } catch (e) { setErro(e.message || String(e)); }
+    finally { setSalvando(false); }
+  };
+  const voltarOficial = async () => {
+    setSalvando(true); setErro(null);
+    try {
+      await onRemover(l);
+      setValores(Object.fromEntries(l.tanques.map(t => [String(t.tanqueCodigo), litrosParaTexto(oficialTanque(t))])));
+      setValorProduto(litrosParaTexto(l.oficial.escritural)); setMotivo('');
+    } catch (e) { setErro(e.message || String(e)); }
+    finally { setSalvando(false); }
+  };
+
+  const inp = 'h-11 sm:h-9 w-full rounded-lg border border-gray-300 bg-white px-2.5 text-right text-base sm:text-sm tabular-nums focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-700';
+  return (
+    <section className="rounded-xl border border-violet-200 bg-violet-50/40 p-3 sm:p-4" aria-labelledby="titulo-real">
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h4 id="titulo-real" className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+          <PencilLine className="h-4 w-4 text-violet-700" aria-hidden="true" /> Escritural real {podeEditar ? '(editável)' : ''}
+        </h4>
+        <p className="text-[12px] text-gray-600">Oficial: perda/sobra {fmtLs(l.oficial.perdaSobra)} ({fmtPct(l.oficial.pct)}) · não é alterado</p>
+      </div>
+
+      {comTanques ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-[13px] tabular-nums">
+            <thead><tr className="text-right text-[10px] uppercase tracking-wider text-gray-500">
+              <th className="py-1 text-left">Tanque</th><th className="py-1">Escritural oficial</th><th className="py-1">Escritural real</th><th className="py-1">Medido</th><th className="py-1">Diferença real</th>
+            </tr></thead>
+            <tbody>{tanquesPrev.map(({ t, ofi, dif }) => (
+              <tr key={t.tanqueCodigo} className="border-t border-violet-100 text-right">
+                <td className="py-1.5 text-left font-medium text-gray-800">Tanque {t.tanqueCodigo}</td>
+                <td className="py-1.5 text-gray-600">{fmtL(ofi)}</td>
+                <td className="w-36 py-1.5 pl-2">
+                  <input type="text" inputMode="decimal" value={valores[String(t.tanqueCodigo)] ?? ''} disabled={!podeEditar}
+                    onChange={e => setValores(v => ({ ...v, [String(t.tanqueCodigo)]: e.target.value }))}
+                    aria-label={`Escritural real do tanque ${t.tanqueCodigo}`} className={inp} />
+                </td>
+                <td className="py-1.5 text-gray-900">{fmtL(num(t.fechamento))}</td>
+                <td className={`py-1.5 font-semibold ${corPerda(dif)}`}>{fmtLs(dif)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : (
+        <label className="block max-w-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">Escritural real do combustível (L)</span>
+          <input type="text" inputMode="decimal" value={valorProduto} disabled={!podeEditar} onChange={e => setValorProduto(e.target.value)}
+            className={`${inp} mt-1`} />
+          <span className="mt-0.5 block text-[11px] text-gray-600">Oficial: {fmtL(l.oficial.escritural)}</span>
+        </label>
+      )}
+
+      {/* Resultado real (ao vivo) */}
+      <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-violet-100"><dt className="text-[11px] text-gray-600">Escritural real</dt><dd className="text-sm font-semibold tabular-nums text-gray-900">{fmtL(escrituralReal)}</dd></div>
+        <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-violet-100"><dt className="text-[11px] text-gray-600">Medido</dt><dd className="text-sm font-semibold tabular-nums text-gray-900">{fmtL(l.fechamento)}</dd></div>
+        <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-violet-100"><dt className="text-[11px] text-gray-600">Perda/sobra real</dt><dd className={`text-sm font-semibold tabular-nums ${corPerda(prev.perdaSobra)}`}>{fmtLs(prev.perdaSobra)} <span className="text-xs font-medium text-gray-600">({fmtPct(prev.pct)})</span></dd></div>
+        <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-violet-100"><dt className="text-[11px] text-gray-600">Situação</dt><dd className="mt-0.5"><SeloSituacao s={prev.situacao} /></dd></div>
+      </dl>
+
+      <label className="mt-3 block">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">Motivo da diferença (opcional)</span>
+        {podeEditar ? (
+          <textarea rows={2} value={motivo} onChange={e => setMotivo(e.target.value.slice(0, 1000))}
+            placeholder="Ex.: descarga medida na régua com 120 L a menos que a nota; vazamento no bico 3…"
+            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base sm:text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        ) : (
+          <p className="mt-1 rounded-lg bg-white px-3 py-2 text-sm text-gray-800 ring-1 ring-violet-100">{l.motivo || '—'}</p>
+        )}
+      </label>
+
+      {podeEditar && (
+        <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+          {(l.ajustado || l.motivo) && (
+            <button type="button" onClick={voltarOficial} disabled={salvando}
+              className="inline-flex h-11 sm:h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium text-gray-700 hover:bg-white disabled:opacity-50">
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Voltar ao oficial
+            </button>
+          )}
+          <span className="hidden flex-1 sm:block" />
+          {erro && <span className="text-[13px] text-red-700" role="alert">{erro}</span>}
+          {ok && <span className="text-[13px] font-medium text-emerald-700" role="status">Ajuste salvo.</span>}
+          <button type="button" onClick={salvar} disabled={salvando}
+            className="inline-flex h-12 sm:h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-4 text-base sm:text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />} Salvar ajuste
+          </button>
+        </div>
+      )}
+      {l.ajusteInfo?.em && (
+        <p className="mt-2 text-[11px] text-gray-600">
+          Último ajuste {l.ajusteInfo.nome ? <>por <strong>{l.ajusteInfo.nome}</strong> </> : ''}em {new Date(l.ajusteInfo.em).toLocaleString('pt-BR')}
+        </p>
+      )}
+    </section>
   );
 }
 

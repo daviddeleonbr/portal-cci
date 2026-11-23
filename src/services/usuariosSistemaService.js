@@ -136,6 +136,7 @@ export const PERMISSOES_CLIENTE = [
   { key: 'outras_contas', label: 'Outras contas a pagar', grupo: 'Operacional' },
   { key: 'acessos', label: 'Acessos (logins e senhas de adquirentes/plataformas)', grupo: 'Operacional' },
   { key: 'lmc', label: 'LMC · Livro de Movimentação de Combustíveis (só Webposto, visualização)', grupo: 'Operacional' },
+  { key: 'lmc_editar', label: 'LMC real · lançar o escritural real e o motivo (não altera o oficial)', grupo: 'Operacional' },
   { key: 'suporte', label: 'Suporte', grupo: 'Atendimento' },
   { key: 'pendencias', label: 'Pendências', grupo: 'Atendimento' },
   { key: 'melhorias', label: 'Melhorias do Sistema', grupo: 'Atendimento' },

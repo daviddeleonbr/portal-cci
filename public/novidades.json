@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.4.0",
+      "data": "2026-11-24",
+      "resumo": "LMC real: acompanhe as sobras e faltas com o escritural real, separado do LMC oficial.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "LMC real (gerencial)",
+          "descricao": "Na página LMC, a aba “Real” usa o escritural real lançado por vocês ou pela CCI. Perda/sobra e % são recalculadas na hora, e dá para registrar o motivo da diferença. O LMC oficial não muda."
+        }
+      ]
+    },
+    {
       "versao": "1.3.0",
       "data": "2026-11-24",
       "resumo": "Nova página de LMC para acompanhar sobras e faltas de combustíveis, e mais controle sobre o menu.",

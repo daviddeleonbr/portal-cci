@@ -4,7 +4,9 @@
 // (um combustível por dia, com perdaSobra/pct/situacao calculados) e o nome
 // de cada combustível.
 //
-//   contexto = { empresa, de, ate, linhas, nomeDe(linha) → nome do combustível }
+//   contexto = { tipo: 'oficial' | 'real', empresa, de, ate, linhas, nomeDe(linha) → nome do combustível }
+// tipo 'real' = LMC gerencial (escritural real lançado manualmente): título
+// diferente, aviso de que não é o oficial, e colunas de motivo/oficial.
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -48,7 +50,8 @@ export function diasEmAlerta(linhas) {
 
 // ─── PDF ────────────────────────────────────────────────────────
 // A4 paisagem: cabeçalho, resumo por combustível e os dias acima de 0,6%.
-export function gerarPdfLmc({ empresa, de, ate, linhas, nomeDe }) {
+export function gerarPdfLmc({ tipo = 'oficial', empresa, de, ate, linhas, nomeDe }) {
+  const real = tipo === 'real';
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
   const verde = [16, 118, 110];
@@ -56,22 +59,26 @@ export function gerarPdfLmc({ empresa, de, ate, linhas, nomeDe }) {
 
   doc.setFillColor(...verde); doc.rect(0, 0, W, 4, 'F');
   doc.setTextColor(17, 24, 39); doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
-  doc.text('LMC — Sobras e faltas de combustíveis', 12, 15);
+  doc.text(real ? 'LMC real (gerencial) — Sobras e faltas de combustíveis' : 'LMC — Sobras e faltas de combustíveis', 12, 15);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(75, 85, 99);
   doc.text(`${empresa || ''}  ·  Período: ${dataBr(de)} a ${dataBr(ate)}`, 12, 21);
   doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} · Portal CCI`, W - 12, 21, { align: 'right' });
 
+  if (real) {
+    doc.setFontSize(8.5); doc.setTextColor(91, 33, 182);
+    doc.text('Escritural real lançado manualmente; medição do Webposto. Documento gerencial — não substitui o LMC oficial.', 12, 25.5);
+  }
   // Destaque
   doc.setFontSize(10.5);
   doc.setTextColor(...(alertas.length ? [153, 27, 27] : [16, 118, 110]));
   doc.text(alertas.length
     ? `${alertas.length} dia(s) com perda ou sobra acima de ${TOLERANCIA_PCT.toLocaleString('pt-BR')}% do estoque disponível — limite em que a ANP pede justificativa.`
-    : `Nenhum dia com perda ou sobra acima de ${TOLERANCIA_PCT.toLocaleString('pt-BR')}% do estoque disponível no período.`, 12, 29);
+    : `Nenhum dia com perda ou sobra acima de ${TOLERANCIA_PCT.toLocaleString('pt-BR')}% do estoque disponível no período.`, 12, real ? 32 : 29);
 
   // Resumo por combustível
   const resumo = resumoPorCombustivel({ linhas, nomeDe });
   autoTable(doc, {
-    startY: 33,
+    startY: real ? 36 : 33,
     head: [['Combustível', 'Entradas (L)', 'Vendas (L)', 'Perda/sobra', '% das vendas', `Dias > ${TOLERANCIA_PCT.toLocaleString('pt-BR')}%`, 'Estoque no último dia']],
     body: resumo.map(r => [
       r.nome, n0(r.entrada), n0(r.saida), ls(r.perdaSobra), r.saida > 0 ? pct(r.perdaSobra / r.saida) : '—',
@@ -95,10 +102,12 @@ export function gerarPdfLmc({ empresa, de, ate, linhas, nomeDe }) {
   } else {
     autoTable(doc, {
       startY: y + 3,
-      head: [['Data', 'Combustível', 'Disponível', 'Saída', 'Escritural', 'Medido', 'Perda/sobra', '%', 'Tanques (medido - escritural)']],
+      head: [['Data', 'Combustível', 'Disponível', 'Saída', real ? 'Escritural real' : 'Escritural', 'Medido', 'Perda/sobra', '%', real ? 'Tanques · motivo' : 'Tanques (medido - escritural)']],
       body: alertas.map(l => [
         dataBr(l.data), nomeDe(l), n0(l.disponivel), n0(l.saida), n0(l.escritural), n0(l.fechamento),
-        ls(l.perdaSobra), pct(l.pct), tanquesTexto(l) || '—',
+        ls(l.perdaSobra), pct(l.pct),
+        real ? [tanquesTexto(l), l.motivo ? `Motivo: ${l.motivo}` : '', l.ajustado ? `(oficial ${ls(l.oficial?.perdaSobra)})` : ''].filter(Boolean).join('\n') || '—'
+          : (tanquesTexto(l) || '—'),
       ]),
       styles: { fontSize: 8, cellPadding: 1.4 },
       headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold' },
@@ -121,18 +130,19 @@ export function gerarPdfLmc({ empresa, de, ate, linhas, nomeDe }) {
     doc.setPage(i);
     const H = doc.internal.pageSize.getHeight();
     doc.setFontSize(7.5); doc.setTextColor(107, 114, 128);
-    doc.text('Perda/sobra = medido - escritural (disponível - saída). Negativo = falta; positivo = sobra. Fonte: LMC do Webposto.', 12, H - 7);
+    doc.text(real ? 'LMC real: perda/sobra = medido (Webposto) - escritural real (manual; sem ajuste = oficial). Negativo = falta; positivo = sobra.' : 'Perda/sobra = medido - escritural (disponível - saída). Negativo = falta; positivo = sobra. Fonte: LMC do Webposto.', 12, H - 7);
     doc.text(`Página ${i} de ${total}`, W - 12, H - 7, { align: 'right' });
   }
   return doc;
 }
 
-export function nomeArquivoLmc({ empresa, de, ate }, ext) {
-  return `LMC_${nomeArquivo(empresa)}_${de}_a_${ate}.${ext}`;
+export function nomeArquivoLmc({ tipo, empresa, de, ate }, ext) {
+  return `LMC${tipo === 'real' ? '_real' : ''}_${nomeArquivo(empresa)}_${de}_a_${ate}.${ext}`;
 }
 
 // ─── Excel ──────────────────────────────────────────────────────
-export function exportarExcelLmc({ empresa, de, ate, linhas, nomeDe }) {
+export function exportarExcelLmc({ tipo = 'oficial', empresa, de, ate, linhas, nomeDe }) {
+  const real = tipo === 'real';
   const wb = XLSX.utils.book_new();
   const fmtCols = (ws, larguras) => { ws['!cols'] = larguras.map(wch => ({ wch })); return ws; };
   const r2 = (v) => (v == null ? null : Math.round(v * 100) / 100);
@@ -143,6 +153,10 @@ export function exportarExcelLmc({ empresa, de, ate, linhas, nomeDe }) {
     'Saída (L)': r2(l.saida), 'Escritural (L)': r2(l.escritural), 'Medido (L)': r2(l.fechamento),
     'Perda/sobra (L)': r2(l.perdaSobra), '% do disponível': l.pct == null ? null : Math.round(l.pct * 10000) / 100,
     'Acima de 0,6%': ehAlerta(l) ? 'Sim' : 'Não',
+    ...(real ? {
+      'Escritural oficial (L)': r2(l.oficial?.escritural), 'Perda/sobra oficial (L)': r2(l.oficial?.perdaSobra),
+      'Ajustado': l.ajustado ? 'Sim' : 'Não', 'Motivo': l.motivo || '',
+    } : {}),
   });
 
   const alertas = diasEmAlerta(linhas);
@@ -172,23 +186,25 @@ export function exportarExcelLmc({ empresa, de, ate, linhas, nomeDe }) {
   }));
   if (tanques.length) XLSX.utils.book_append_sheet(wb, fmtCols(XLSX.utils.json_to_sheet(tanques), [11, 24, 9, 13, 14, 12, 13]), 'Tanques');
 
-  XLSX.writeFile(wb, nomeArquivoLmc({ empresa, de, ate }, 'xlsx'));
+  XLSX.writeFile(wb, nomeArquivoLmc({ tipo, empresa, de, ate }, 'xlsx'));
 }
 
 // ─── Texto para WhatsApp (*negrito* do WhatsApp) ────────────────
 const MAX_DIAS_TEXTO = 25;
-export function textoWhatsappLmc({ empresa, de, ate, linhas, nomeDe }) {
+export function textoWhatsappLmc({ tipo = 'oficial', empresa, de, ate, linhas, nomeDe }) {
+  const real = tipo === 'real';
   const alertas = diasEmAlerta(linhas);
   const resumo = resumoPorCombustivel({ linhas, nomeDe });
   const l = [];
-  l.push(`*LMC — ${empresa || ''}*`);
+  l.push(real ? `*LMC real (gerencial) — ${empresa || ''}*` : `*LMC — ${empresa || ''}*`);
+  if (real) l.push('_Escritural real lançado manualmente; não é o LMC oficial._');
   l.push(`Período: ${dataBr(de)} a ${dataBr(ate)}`);
   l.push('');
   l.push(alertas.length
     ? `⚠️ *${alertas.length} dia(s)* com perda ou sobra acima de 0,6% do estoque disponível (limite em que a ANP pede justificativa):`
     : '✅ Nenhum dia com perda ou sobra acima de 0,6% do estoque disponível.');
   alertas.slice(0, MAX_DIAS_TEXTO).forEach(a => {
-    l.push(`• ${dataBr(a.data)} · ${nomeDe(a)}: *${ls(a.perdaSobra)}* (${pct(a.pct)})${a.perdaSobra < 0 ? ' falta' : ' sobra'}`);
+    l.push(`• ${dataBr(a.data)} · ${nomeDe(a)}: *${ls(a.perdaSobra)}* (${pct(a.pct)})${a.perdaSobra < 0 ? ' falta' : ' sobra'}${real && a.motivo ? ` — motivo: ${a.motivo}` : ''}`);
   });
   if (alertas.length > MAX_DIAS_TEXTO) l.push(`…e mais ${alertas.length - MAX_DIAS_TEXTO} dia(s) — veja o relatório completo.`);
   l.push('');

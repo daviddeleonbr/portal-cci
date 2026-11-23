@@ -87,7 +87,8 @@ export default function ClienteLmc() {
       {erroChave ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{erroChave}</div>
       ) : apiKey && !periodoInvalido ? (
-        <PainelLmc apiKey={apiKey} empresaCodigo={cliente.empresa_codigo} empresaNome={cliente.nome} dataInicial={de} dataFinal={ate} recarga={recarga} />
+        <PainelLmc apiKey={apiKey} empresaCodigo={cliente.empresa_codigo} empresaNome={cliente.nome}
+          clienteId={cliente.id} podeEditarReal={(usuario?.permissoes || []).includes('lmc_editar')} usuarioNome={usuario?.nome || ''} dataInicial={de} dataFinal={ate} recarga={recarga} />
       ) : null}
     </div>
   );
