@@ -54,6 +54,13 @@ export default defineConfig({
         // Cor da barra de status do app instalado = fundo do cabeçalho claro.
         // O tema (claro/escuro) troca em runtime pela meta theme-color (useTheme).
         theme_color: '#ffffff',
+        // Variante escura (proposta "manifest dark mode" do Chrome; ignorada
+        // onde não é suportada). A barra de navegação do Android no app
+        // instalado é pintada pelo sistema com a cor do manifest — a página não
+        // consegue trocá-la. Onde suportado, segue o modo escuro DO CELULAR.
+        user_preferences: {
+          color_scheme_dark: { theme_color: '#1e293b', background_color: '#0b1220' },
+        },
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',
