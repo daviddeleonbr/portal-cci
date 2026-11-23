@@ -1,9 +1,12 @@
 // Acessos de adquirentes e outras plataformas — mesma tela para a CCI (todas as
 // redes) e para o cliente (a própria rede; o RLS garante). Senhas ficam
 // mascaradas e aparecem no "olho"; há botão de copiar em cada campo.
+// Celular (<768px): cards em vez da tabela, com copiar/mostrar grandes (44px),
+// categorias em botões deslizáveis, "Novo acesso" flutuante e o formulário
+// em gaveta de baixo pra cima (Modal). Desktop: como antes.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Eye, EyeOff, ExternalLink, KeyRound, Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, ExternalLink, KeyRound, Loader2, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { SelectBusca } from '../tarefas/CamposTarefas';
 import * as acessosService from '../../services/acessosService';
@@ -70,9 +73,16 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative basis-full sm:min-w-[220px] sm:flex-1 sm:basis-auto">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar plataforma, login…"
-            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-teal-500" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+          <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar plataforma, login…"
+            aria-label="Buscar acessos" enterKeyHint="search"
+            className="w-full h-12 sm:h-auto rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-11 sm:pr-3 text-base sm:text-sm outline-none focus:border-teal-500 [&::-webkit-search-cancel-button]:hidden" />
+          {busca && (
+            <button type="button" onClick={() => setBusca('')} aria-label="Limpar busca"
+              className="sm:hidden absolute right-1 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-md text-gray-500">
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
         {admin && redes.length > 1 && (
           <div className="min-w-0 flex-1 sm:w-56 sm:flex-none">
@@ -81,19 +91,33 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
           </div>
         )}
         {clientes.length > 1 && (
-          <div className="min-w-0 flex-1 sm:w-64 sm:flex-none">
+          <div className="min-w-0 basis-full sm:basis-auto sm:w-64 sm:flex-none">
             <SelectBusca value={empresaF} onChange={setEmpresaF} vazio={redeF ? 'Todas as empresas da rede' : 'Todas as empresas'}
               placeholderBusca="Buscar empresa…" vazioLista="Nenhuma empresa encontrada."
               opcoes={empresasFiltro.map(c => ({ value: c.id, label: nomeCliente(c) }))} />
           </div>
         )}
-        <select value={categoria} onChange={e => setCategoria(e.target.value)}
-          className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2.5 text-sm text-gray-700 outline-none focus:border-teal-500 sm:flex-none">
+        <select value={categoria} onChange={e => setCategoria(e.target.value)} aria-label="Categoria"
+          className="hidden sm:block min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2.5 text-sm text-gray-700 outline-none focus:border-teal-500 sm:flex-none">
           <option value="">Todas as categorias</option>
           {CATEGORIAS_ACESSO.map(c => <option key={c.k} value={c.k}>{c.rot}</option>)}
         </select>
+        {/* Celular: categorias em botões deslizáveis (até a borda, param alinhados) */}
+        <div role="radiogroup" aria-label="Categoria"
+          className="sm:hidden -mx-4 flex basis-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 pb-0.5 snap-x snap-mandatory scroll-px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {[{ k: '', rot: 'Todas' }, ...CATEGORIAS_ACESSO].map(c => {
+            const on = categoria === c.k;
+            return (
+              <button key={c.k || 'todas'} type="button" role="radio" aria-checked={on} onClick={() => setCategoria(c.k)}
+                className={`snap-start flex-shrink-0 whitespace-nowrap rounded-full border px-3.5 h-10 text-sm font-medium ${
+                  on ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-700'}`}>
+                {c.rot}
+              </button>
+            );
+          })}
+        </div>
         <button onClick={() => setEditando('novo')}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
+          className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
           <Plus className="h-4 w-4" /> Novo acesso
         </button>
       </div>
@@ -101,12 +125,65 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
       {carregando && lista.length === 0 ? (
         <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div>
       ) : filtrada.length === 0 ? (
-        <div className="rounded-xl border border-gray-200/70 bg-white p-10 text-center text-sm text-gray-400">
-          <KeyRound className="mx-auto mb-2 h-7 w-7 text-gray-300" />
-          {lista.length === 0 ? 'Nenhum acesso cadastrado — clique em “Novo acesso”.' : 'Nenhum acesso para esse filtro.'}
+        <div className="rounded-xl border border-gray-200/70 bg-white p-10 text-center text-sm text-gray-600">
+          <KeyRound className="mx-auto mb-2 h-7 w-7 text-gray-400" aria-hidden="true" />
+          {lista.length === 0
+            ? <><span className="hidden sm:inline">Nenhum acesso cadastrado — clique em “Novo acesso”.</span><span className="sm:hidden">Nenhum acesso cadastrado. Toque em <strong>Novo acesso</strong> para incluir o primeiro.</span></>
+            : 'Nenhum acesso para esse filtro.'}
         </div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-sm">
+      ) : (<>
+        {/* CELULAR: um card por acesso */}
+        <ul className="md:hidden space-y-3">
+          {filtrada.map(a => {
+            const rede = empresasDaRede.get(chaveRede(a)) || [];
+            const nomeRede = admin ? redes.find(r => r.value === redeDe(a))?.label : null;
+            return (
+              <li key={a.id} className="rounded-xl border border-gray-200/80 bg-white shadow-sm">
+                <div className="px-4 pt-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 text-[15px] font-semibold leading-snug text-gray-900">{a.plataforma}</p>
+                    <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${CAT_CLS[a.categoria] || CAT_CLS.outro}`}>{rotCategoria(a.categoria)}</span>
+                  </div>
+                  <p className="mt-0.5 text-[13px] text-gray-600">
+                    {a.cliente_id ? nomeCliente(a.cliente) : `Toda a rede${nomeRede ? ` · ${nomeRede}` : ''} · ${rede.length} empresa${rede.length !== 1 ? 's' : ''}`}
+                  </p>
+                  {a.observacao && <p className="mt-1.5 whitespace-pre-line text-[13px] text-gray-700">{a.observacao}</p>}
+                </div>
+                <dl className="mt-2 divide-y divide-gray-100 border-y border-gray-100">
+                  <LinhaSegredo rotulo="Login" valor={a.login} />
+                  <LinhaSegredo rotulo="Senha" valor={a.senha} oculto />
+                  {a.contrassenha && <LinhaSegredo rotulo="Contrassenha" valor={a.contrassenha} oculto />}
+                </dl>
+                <div className="flex items-center gap-1 px-2 py-1.5">
+                  {a.url && (
+                    <a href={linkUrl(a.url)} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex h-10 items-center gap-1.5 rounded-lg px-2 text-[13px] font-semibold text-teal-700 active:bg-teal-50">
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" /> Abrir site
+                    </a>
+                  )}
+                  <span className="flex-1" />
+                  <button onClick={() => setEditando(a)} className="inline-flex h-10 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium text-gray-700 active:bg-gray-100">
+                    <Pencil className="h-4 w-4" aria-hidden="true" /> Editar
+                  </button>
+                  {admin && (
+                    <button onClick={() => excluir(a)} aria-label={`Excluir ${a.plataforma}`} className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-red-600 active:bg-red-50">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                {a.updated_at && (
+                  <p className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-500">
+                    Atualizado em {fmtData(a.updated_at)}{a.atualizado_por_nome ? ` por ${a.atualizado_por_nome}` : ''}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="md:hidden mt-2 px-1 text-xs text-gray-600">{filtrada.length} acesso(s)</p>
+
+        {/* DESKTOP: tabela */}
+        <div className="hidden md:block overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-sm">
               <thead className="border-b border-gray-100 bg-gray-50 text-left text-[10px] uppercase tracking-wider text-gray-400">
@@ -168,7 +245,14 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
           </div>
           <div className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-400">{filtrada.length} acesso(s)</div>
         </div>
-      )}
+      </>)}
+
+      {/* Celular: "Novo acesso" flutuante, acima da barra inferior do portal */}
+      <div className="sm:hidden h-20" aria-hidden="true" />
+      <button type="button" onClick={() => setEditando('novo')}
+        className="sm:hidden fixed right-4 z-20 bottom-[calc(5rem+env(safe-area-inset-bottom))] inline-flex h-14 items-center gap-2 rounded-full bg-blue-700 pl-5 pr-6 text-base font-semibold text-white shadow-lg shadow-gray-900/20 active:bg-blue-800">
+        <Plus className="h-5 w-5" aria-hidden="true" /> Novo acesso
+      </button>
 
       {editando && (
         <AcessoModal acesso={editando === 'novo' ? null : editando} clientes={ordenados} redes={redes}
@@ -176,6 +260,39 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
           redeInicial={redeF || redeDe(clientes.find(c => c.id === empresaF))}
           onClose={() => setEditando(null)} showToast={showToast}
           onSalvo={() => { setEditando(null); carregar(); }} />
+      )}
+    </div>
+  );
+}
+
+// Linha do card (celular): rótulo + valor grande, mostrar (senhas) e copiar
+// com área de toque de 44px; "Copiado" confirma o toque.
+function LinhaSegredo({ rotulo, valor, oculto = false }) {
+  const [ver, setVer] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const copiar = async () => {
+    try { await navigator.clipboard.writeText(valor); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }
+    catch { /* sem permissão de área de transferência */ }
+  };
+  return (
+    <div className="flex items-center gap-1 pl-4 pr-1.5 py-1.5">
+      <div className="min-w-0 flex-1">
+        <dt className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">{rotulo}</dt>
+        <dd className="truncate font-mono text-[15px] text-gray-900">
+          {!valor ? <span className="font-sans text-gray-400">—</span> : oculto && !ver ? '••••••••' : valor}
+        </dd>
+      </div>
+      {valor && oculto && (
+        <button type="button" onClick={() => setVer(v => !v)} aria-pressed={ver} aria-label={`${ver ? 'Ocultar' : 'Mostrar'} ${rotulo.toLowerCase()}`}
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-gray-600 active:bg-gray-100">
+          {ver ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+        </button>
+      )}
+      {valor && (
+        <button type="button" onClick={copiar} aria-label={`Copiar ${rotulo.toLowerCase()}`}
+          className={`flex h-11 flex-shrink-0 items-center justify-center gap-1 rounded-lg px-2.5 text-[13px] font-semibold ${copiado ? 'text-emerald-700' : 'text-gray-700 active:bg-gray-100'}`}>
+          {copiado ? <><Check className="h-5 w-5" aria-hidden="true" /> Copiado</> : <><Copy className="h-5 w-5" aria-hidden="true" /> Copiar</>}
+        </button>
       )}
     </div>
   );
@@ -208,8 +325,8 @@ function CampoSegredo({ valor, oculto = false }) {
   );
 }
 
-const inp = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100';
-const lbl = 'mb-1 block text-xs font-medium text-gray-500';
+const inp = 'w-full h-12 sm:h-auto rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-base sm:text-sm text-gray-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100';
+const lbl = 'mb-1 block text-xs font-medium text-gray-600';
 
 // "Toda a rede": a CCI escolhe a rede; o cliente usa a própria (todas as suas
 // empresas são da mesma rede).
@@ -251,11 +368,11 @@ function AcessoModal({ acesso, clientes, redes, empresaInicial, redeInicial, onC
     <Modal open onClose={onClose} size="lg"
       title={<span className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-teal-500" /> {acesso ? 'Editar acesso' : 'Novo acesso'}</span>}
       footer={(
-        <div className="flex items-center justify-end gap-2">
-          {erro && <span className="mr-auto text-[12px] text-red-600">{erro}</span>}
-          <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">Cancelar</button>
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+          {erro && <span className="order-first sm:order-none sm:mr-auto text-[13px] sm:text-[12px] text-red-600" role="alert">{erro}</span>}
+          <button type="button" onClick={onClose} className="h-11 sm:h-auto rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
           <button type="submit" form="form-acesso" disabled={salvando}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50">
+            className="inline-flex h-12 sm:h-auto items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-base sm:text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50">
             {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Salvar
           </button>
         </div>
@@ -263,7 +380,7 @@ function AcessoModal({ acesso, clientes, redes, empresaInicial, redeInicial, onC
       <form id="form-acesso" onSubmit={salvar} className="space-y-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
           <div><label className={lbl}>Plataforma</label>
-            <input value={f.plataforma} onChange={e => set({ plataforma: e.target.value })} placeholder="Ex.: Cielo, Rede, Stone, Getnet…" className={inp} autoFocus /></div>
+            <input value={f.plataforma} onChange={e => set({ plataforma: e.target.value })} placeholder="Ex.: Cielo, Rede, Stone, Getnet…" className={inp} autoFocus={!acesso} enterKeyHint="next" /></div>
           <div><label className={lbl}>Categoria</label>
             <select value={f.categoria} onChange={e => set({ categoria: e.target.value })} className={inp}>
               {CATEGORIAS_ACESSO.map(c => <option key={c.k} value={c.k}>{c.rot}</option>)}
@@ -273,8 +390,8 @@ function AcessoModal({ acesso, clientes, redes, empresaInicial, redeInicial, onC
           <label className={lbl}>Vale para</label>
           <div className="mb-2 flex gap-1.5">
             {[[false, 'Uma empresa'], [true, 'Toda a rede']].map(([v, l]) => (
-              <button type="button" key={l} onClick={() => setToda(v)}
-                className={`rounded-md border px-2.5 py-1.5 text-[12px] font-medium ${toda === v ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>{l}</button>
+              <button type="button" key={l} onClick={() => setToda(v)} aria-pressed={toda === v}
+                className={`flex-1 sm:flex-none h-10 sm:h-auto rounded-md border px-2.5 py-1.5 text-sm sm:text-[12px] font-medium ${toda === v ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>{l}</button>
             ))}
           </div>
           {!toda ? (
@@ -291,22 +408,23 @@ function AcessoModal({ acesso, clientes, redes, empresaInicial, redeInicial, onC
           )}
         </div>
         <div><label className={lbl}>Site / link de acesso (opcional)</label>
-          <input value={f.url} onChange={e => set({ url: e.target.value })} placeholder="Ex.: www.cielo.com.br" className={inp} /></div>
+          <input inputMode="url" autoCapitalize="none" autoCorrect="off" value={f.url} onChange={e => set({ url: e.target.value })} placeholder="Ex.: www.cielo.com.br" className={inp} /></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div><label className={lbl}>Login</label>
-            <input value={f.login} onChange={e => set({ login: e.target.value })} className={inp} autoComplete="off" /></div>
+            <input value={f.login} onChange={e => set({ login: e.target.value })} className={inp} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} /></div>
           <div><label className={lbl}>Senha</label>
             <div className="relative">
-              <input type={verSenha ? 'text' : 'password'} value={f.senha} onChange={e => set({ senha: e.target.value })} className={`${inp} pr-9`} autoComplete="new-password" />
-              <button type="button" onClick={() => setVerSenha(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-700">
-                {verSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              <input type={verSenha ? 'text' : 'password'} value={f.senha} onChange={e => set({ senha: e.target.value })} className={`${inp} pr-11`} autoComplete="new-password" autoCapitalize="none" autoCorrect="off" />
+              <button type="button" onClick={() => setVerSenha(v => !v)} aria-label={verSenha ? 'Ocultar senhas' : 'Mostrar senhas'} aria-pressed={verSenha}
+                className="absolute right-1 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:text-gray-700">
+                {verSenha ? <EyeOff className="h-5 w-5 sm:h-4 sm:w-4" /> : <Eye className="h-5 w-5 sm:h-4 sm:w-4" />}
               </button>
             </div></div>
           <div><label className={lbl}>Contrassenha (se houver)</label>
-            <input type={verSenha ? 'text' : 'password'} value={f.contrassenha} onChange={e => set({ contrassenha: e.target.value })} className={inp} autoComplete="new-password" /></div>
+            <input type={verSenha ? 'text' : 'password'} value={f.contrassenha} onChange={e => set({ contrassenha: e.target.value })} className={inp} autoComplete="new-password" autoCapitalize="none" autoCorrect="off" /></div>
         </div>
         <div><label className={lbl}>Observação (opcional)</label>
-          <textarea rows={2} value={f.observacao} onChange={e => set({ observacao: e.target.value })} placeholder="Ex.: estabelecimento 1234567, acesso do gerente" className={inp} /></div>
+          <textarea rows={2} value={f.observacao} onChange={e => set({ observacao: e.target.value })} placeholder="Ex.: estabelecimento 1234567, acesso do gerente" className={`${inp} !h-auto`} /></div>
       </form>
     </Modal>
   );

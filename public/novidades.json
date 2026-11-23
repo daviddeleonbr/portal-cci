@@ -2,6 +2,31 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.2.1",
+      "data": "2026-11-24",
+      "resumo": "Acessos mais fáceis de usar no celular e o menu de baixo com o verde da CCI.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Acessos no celular",
+          "descricao": "Cada acesso virou um cartão com botões grandes para copiar o login e a senha. Filtre por categoria com um toque e use “Novo acesso” no canto da tela."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Menu de baixo no verde da CCI",
+          "descricao": "No celular, o menu inferior ficou verde, igual nos temas claro e escuro, e combina com a barra do aparelho no app instalado."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Janelas de cadastro no celular",
+          "descricao": "Formulários e janelas agora abrem de baixo para cima, mais fáceis de preencher com uma mão."
+        }
+      ]
+    },
+    {
       "versao": "1.2.0",
       "data": "2026-11-24",
       "resumo": "Texto maior para quem precisa, telas que se atualizam sozinhas e datas mais fáceis de preencher no celular.",

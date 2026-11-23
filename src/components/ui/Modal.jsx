@@ -27,7 +27,8 @@ export default function Modal({ open, onClose, title, children, footer, size = '
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        // Celular (<640px): gaveta de baixo pra cima (largura toda, safe-area); sm+: caixa centralizada
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -40,22 +41,23 @@ export default function Modal({ open, onClose, title, children, footer, size = '
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.2 }}
-            className={`relative ${sizes[size]} w-full bg-white dark:bg-slate-900 dark:border dark:border-white/10 rounded-2xl shadow-2xl max-h-[85vh] flex flex-col`}
+            className={`relative ${sizes[size]} w-full bg-white dark:bg-slate-900 dark:border dark:border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col`}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-white/10">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+            <div className="sm:hidden flex justify-center pt-2" aria-hidden="true"><span className="h-1 w-10 rounded-full bg-gray-300" /></div>
+            <div className="flex items-center justify-between pl-4 pr-2 sm:px-6 py-2.5 sm:py-4 border-b border-gray-100 dark:border-white/10">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
               <button
-                onClick={onClose}
-                className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-white/5 transition-colors"
+                onClick={onClose} aria-label="Fechar"
+                className="flex h-11 w-11 sm:h-auto sm:w-auto items-center justify-center rounded-lg sm:p-1.5 text-gray-500 sm:text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-white/5 transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="overflow-y-auto p-6 flex-1">
+            <div className={`overflow-y-auto overscroll-contain p-4 sm:p-6 flex-1 ${footer ? '' : 'pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6'}`}>
               {children}
             </div>
             {footer && (
-              <div className="px-6 py-3 border-t border-gray-100 dark:border-white/10 bg-white dark:bg-slate-900 rounded-b-2xl">
+              <div className="px-4 sm:px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 border-t border-gray-100 dark:border-white/10 bg-white dark:bg-slate-900 sm:rounded-b-2xl">
                 {footer}
               </div>
             )}

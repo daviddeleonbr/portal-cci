@@ -25,19 +25,22 @@ export default function ClienteBottomNav({ onMaisClick, maisAberto = false }) {
   const algumAtalhoAtivo = atalhos.some(a => ativo(a.href));
   const maisAtivo = maisAberto || !algumAtalhoAtivo;
 
-  // Contraste (WCAG AA, texto pequeno ≥ 4.5:1). `blue-*` = verde da marca (index.css):
-  //  - ativo: blue-700 (#0d6159) sobre pílula blue-100 (#dcecea) → ~6.2:1
-  //  - inativo: gray-600 (#4b5563) sobre branco → 7.6:1
-  //  - dark: index.css troca p/ #8cbfb9 (ativo) e #94a3b8 (inativo) sobre #1e293b
-  // O ativo também muda o peso da fonte e ganha a pílula — não depende só da cor.
-  const base = 'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 py-2 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-700 rounded-lg';
-  const cor = (on) => (on ? 'text-blue-700 font-semibold' : 'text-gray-600 font-medium active:text-gray-900');
-  const pilula = (on) => `flex h-7 w-12 items-center justify-center rounded-full transition-colors ${on ? 'bg-blue-100' : ''}`;
+  // Barra VERDE da marca (#10766e) nos dois temas — a mesma cor do manifest
+  // (theme_color), que o Android usa na barra de navegação do sistema logo
+  // abaixo: as duas ficam contínuas no claro e no escuro. Cores em valores
+  // fixos ([#…]) de propósito: as classes nomeadas (bg-white, text-blue-700…)
+  // são trocadas pelo tema escuro no index.css.
+  // Contraste (WCAG AA, texto pequeno ≥ 4.5:1):
+  //  - texto branco sobre #10766e → 5.5:1 (inativo a 90% → ~4.7:1)
+  //  - ativo: ícone #10766e na pílula branca → 5.5:1; rótulo branco em negrito
+  const base = 'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 py-2 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ffffff] rounded-lg';
+  const cor = (on) => (on ? 'text-[#ffffff] font-semibold' : 'text-[#ffffff]/90 font-medium active:text-[#ffffff]');
+  const pilula = (on) => `flex h-7 w-12 items-center justify-center rounded-full transition-colors ${on ? 'bg-[#ffffff] text-[#10766e]' : ''}`;
 
   return (
     <nav
       aria-label="Navegação principal"
-      className="lg:hidden fixed inset-x-0 bottom-0 z-[45] border-t border-gray-200 bg-white/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
+      className="lg:hidden fixed inset-x-0 bottom-0 z-[45] bg-[#10766e] pb-[env(safe-area-inset-bottom)]"
     >
       <div className="flex items-stretch h-16">
         {atalhos.map(item => {

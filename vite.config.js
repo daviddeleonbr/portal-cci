@@ -51,16 +51,13 @@ export default defineConfig({
         name: 'CCI · Portal do Cliente',
         short_name: 'CCI',
         description: 'Portal de BPO contábil — gestão financeira, vendas e operação de postos.',
-        // Cor da barra de status do app instalado = fundo do cabeçalho claro.
-        // O tema (claro/escuro) troca em runtime pela meta theme-color (useTheme).
-        theme_color: '#ffffff',
-        // Variante escura (proposta "manifest dark mode" do Chrome; ignorada
-        // onde não é suportada). A barra de navegação do Android no app
-        // instalado é pintada pelo sistema com a cor do manifest — a página não
-        // consegue trocá-la. Onde suportado, segue o modo escuro DO CELULAR.
-        user_preferences: {
-          color_scheme_dark: { theme_color: '#1e293b', background_color: '#0b1220' },
-        },
+        // Verde da marca = cor da barra inferior do portal (ClienteBottomNav).
+        // O Android pinta a barra de navegação do SISTEMA (abaixo do menu, no
+        // app instalado) com esta cor e a página não consegue trocá-la — por
+        // isso a barra do portal também é verde nos dois temas: as duas ficam
+        // contínuas no claro e no escuro. A barra de STATUS (topo) segue o tema
+        // em runtime pela meta theme-color (useTheme).
+        theme_color: '#10766e',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',
