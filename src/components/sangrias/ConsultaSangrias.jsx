@@ -68,21 +68,26 @@ export default function ConsultaSangrias({ empresas }) {
             ))}
           </div>
         </div>
+        {/* Mesmo layout do Resumo de caixa: no celular, De/Até lado a lado (metade da linha
+            cada; empilham com "Tamanho do texto" grande — largura mínima em rem) e o Dia
+            ocupa a linha toda. No desktop, como antes. */}
         {modo === 'dia' ? (
-          <div>
+          <div className="w-full min-w-0 sm:w-auto">
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Dia</label>
-            <InputData value={ate} onChange={e => { setDe(e.target.value); setAte(e.target.value); }} className={inp} />
+            <InputData value={ate} onChange={e => { setDe(e.target.value); setAte(e.target.value); }} className={`${inp} w-full min-w-0`} />
           </div>
-        ) : (<>
-          <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">De</label>
-            <InputData value={de} onChange={e => setDe(e.target.value)} className={inp} />
+        ) : (
+          <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(8.75rem,1fr))] gap-2 sm:flex sm:w-auto sm:gap-3">
+            <div className="min-w-0">
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">De</label>
+              <InputData value={de} onChange={e => setDe(e.target.value)} className={`${inp} w-full min-w-0`} />
+            </div>
+            <div className="min-w-0">
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Até</label>
+              <InputData value={ate} onChange={e => setAte(e.target.value)} className={`${inp} w-full min-w-0`} />
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Até</label>
-            <InputData value={ate} onChange={e => setAte(e.target.value)} className={inp} />
-          </div>
-        </>)}
+        )}
         {(empresas || []).length > 1 && (
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Empresa</label>
