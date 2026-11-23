@@ -1,3 +1,5 @@
+import { useModoMenu, definirModoMenu, classesModoMenu, useCaixaOpcoes } from '../../lib/modoMenu';
+import { ControleMenu, CaixaOpcoesMenu } from './ControleMenuLateral';
 import { useState, useEffect, useMemo } from 'react';
 import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -7,6 +9,7 @@ import {
   Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
   MessageCircle, RefreshCw, Eye, AlertTriangle,
   Activity, FileSpreadsheet, Receipt, FileSignature, FileDown, ListChecks, KeyRound,
+  Fuel,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { nivelAdmin } from '../../services/usuariosSistemaService';
@@ -64,6 +67,7 @@ const navigationAll = [
     section: 'BPO',
     items: [
       { name: 'Conciliação de Caixas', href: '/admin/bpo/conciliacao-caixas', icon: Coins, permissao: 'conciliacao_caixas' },
+      { name: 'LMC', href: '/admin/bpo/lmc', icon: Fuel, permissao: 'lmc' },
       { name: 'Manifestação de Notas', href: '/admin/fiscal/manifestacao', icon: FileSpreadsheet, permissao: 'notas_fiscais' },
       { name: 'Outras Contas a Pagar', href: '/admin/bpo/outras-contas', icon: Receipt, permissao: 'outras_contas' },
       { name: 'Acessos', href: '/admin/acessos', icon: KeyRound, permissao: 'acessos' },
@@ -130,9 +134,8 @@ function isSubtreeActive(item, pathname) {
   return false;
 }
 
-// Texto da sidebar: no desktop some com a sidebar recolhida e aparece ao
-// passar o mouse (padrão Visor360). No mobile (gaveta) fica sempre visível.
-const FADE = 'whitespace-nowrap lg:opacity-0 lg:group-hover:opacity-100 lg:transition-opacity lg:duration-200';
+// Desktop: 4 modos escolhidos no "Controle do menu" (src/lib/modoMenu.js).
+// Textos usam `FADE` (classes do modo). No mobile (gaveta) ficam sempre visíveis.
 
 export default function Sidebar({ mobileOpen = false, onMobileClose }) {
   const location = useLocation();
@@ -141,6 +144,13 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
   const usuario = session?.usuario;
 
   const navigation = useMemo(() => filtrarNavegacao(usuario), [usuario]);
+
+  // Modo do menu no desktop (Expandido / Recolhido / Expandir ao passar o mouse /
+  // Opções ao passar o mouse) — ver src/lib/modoMenu.js
+  const modo = useModoMenu('admin');
+  const cm = classesModoMenu(modo);
+  const FADE = cm.fade;
+  const caixa = useCaixaOpcoes(modo);
 
   // Contadores pra badges em "Pendências" e "Melhorias do Sistema".
   // Re-carrega ao navegar (admin pode ter resolvido algo na página anterior).
@@ -243,10 +253,10 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
   // Mobile (<lg): gaveta que desliza da lateral (largura cheia), aberta pelo
   // botão de menu do Header.
   return (
-    <aside
+    <aside data-menu-lateral=""
       className={`group fixed left-0 top-0 z-40 flex h-screen w-[260px] flex-col overflow-hidden bg-white border-r border-gray-200/70 transition-[width,transform] duration-300 ease-in-out
         ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'} lg:translate-x-0
-        lg:w-16 lg:hover:w-[260px] lg:hover:shadow-2xl lg:hover:shadow-gray-900/10`}
+        ${cm.aside}`}
     >
       {/* Close button (mobile only) */}
       <button
@@ -281,7 +291,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
                 {section.section}
               </p>
               {idx > 0 && (
-                <div className="absolute left-2 right-2 top-1/2 h-px bg-gray-200 hidden lg:block lg:group-hover:opacity-0 transition-opacity duration-200" aria-hidden />
+                <div className={`absolute left-2 right-2 top-1/2 h-px bg-gray-200 hidden ${cm.marca}`} aria-hidden />
               )}
             </div>
             )}
@@ -297,7 +307,8 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
                     <NavLink
                       key={item.name}
                       to={item.href}
-                      title={item.name}
+                      title={modo === 'opcoes' || modo === 'recolhido' ? undefined : item.name}
+                      {...caixa.propsItem(item)}
                       className={`relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
                         isActive
                           ? 'bg-blue-50 text-blue-700'
@@ -318,7 +329,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
                             {badge > 99 ? '99+' : badge}
                           </span>
                           {/* Recolhida: ponto vermelho discreto sobre o ícone */}
-                          <span className="absolute top-1.5 left-[26px] h-2 w-2 rounded-full bg-rose-500 hidden lg:block lg:group-hover:opacity-0 transition-opacity duration-200" />
+                          <span className={`absolute top-1.5 left-[26px] h-2 w-2 rounded-full bg-rose-500 hidden ${cm.marca}`} />
                         </>
                       )}
                     </NavLink>
@@ -332,8 +343,9 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
                 return (
                   <div key={item.name}>
                     <button
-                      onClick={() => toggleExpand(item.name)}
-                      title={item.name}
+                      onClick={(e) => { if (!caixa.cliqueComSubmenu(item, e.currentTarget)) toggleExpand(item.name); }}
+                      title={modo === 'opcoes' || modo === 'recolhido' ? undefined : item.name}
+                      {...caixa.propsItem(item)}
                       className={`relative w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
                         isActive
                           ? 'bg-blue-50 text-blue-700'
@@ -346,11 +358,11 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
                       {Icon && <Icon className={`h-[17px] w-[17px] flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
                       <span className={`flex-1 text-left ${FADE}`}>{item.name}</span>
                       <ChevronDown
-                        className={`h-3.5 w-3.5 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-gray-600' : 'text-gray-400'} lg:opacity-0 lg:group-hover:opacity-100`}
+                        className={`h-3.5 w-3.5 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-gray-600' : 'text-gray-400'} ${cm.chevron}`}
                       />
                     </button>
 
-                    <div className="lg:hidden lg:group-hover:block">
+                    <div className={cm.submenu}>
                     <AnimatePresence initial={false}>
                       {isOpen && (
                         <motion.div
@@ -451,8 +463,9 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
         ))}
       </nav>
 
-      {/* Bottom: User — recolhida: só o avatar; expandida: avatar + nome + sair */}
-      <div className="flex-shrink-0 border-t border-gray-100 p-2">
+      {/* Bottom: Controle do menu (desktop) + User — recolhida: só o avatar; expandida: avatar + nome + sair */}
+      <div className="flex-shrink-0 border-t border-gray-100 p-2 space-y-1">
+        <ControleMenu modo={modo} onMudar={(m) => { caixa.fechar(); definirModoMenu('admin', m); }} fade={FADE} />
         <div className="flex items-center gap-2.5 overflow-hidden rounded-lg bg-gray-50 p-2 border border-gray-100">
           <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 flex-shrink-0">
             {initials}
@@ -471,6 +484,8 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
           </button>
         </div>
       </div>
+      <CaixaOpcoesMenu alvo={caixa.alvo} hrefAtivo={hrefAtivo}
+        onEntrar={caixa.manter} onSair={caixa.sairDaCaixa} onFechar={caixa.fechar} />
     </aside>
   );
 }

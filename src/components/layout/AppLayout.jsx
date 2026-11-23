@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { PageHeaderProvider } from './PageHeaderContext';
+import { useModoMenu, classesModoMenu } from '../../lib/modoMenu';
 
 export default function AppLayout() {
   // Desktop: sidebar recolhida que expande ao passar o mouse (sem estado).
@@ -14,6 +15,8 @@ export default function AppLayout() {
   const [abertoEm, setAbertoEm] = useState(null);
   const mobileOpen = abertoEm === location.pathname;
   const setMobileOpen = (abrir) => setAbertoEm(abrir ? location.pathname : null);
+  // Recuo do conteúdo conforme o modo do menu (Expandido empurra 260px)
+  const margemMenu = classesModoMenu(useModoMenu('admin')).margem;
 
   return (
     <PageHeaderProvider><div className="min-h-screen relative app-bg">
@@ -36,8 +39,8 @@ export default function AppLayout() {
       )}
 
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
-      {/* Margem = largura recolhida; a sidebar expandida (hover) sobrepõe o conteúdo */}
-      <div className="relative lg:ml-16">
+      {/* Margem = largura da barra no modo atual; no "Expandir ao passar o mouse" ela sobrepõe o conteúdo */}
+      <div className={`relative ${margemMenu} lg:transition-[margin] lg:duration-300`}>
         <Header onMenuClick={() => setMobileOpen(true)} />
         <main className="p-4 sm:p-6 lg:p-8">
           <motion.div

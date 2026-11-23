@@ -537,7 +537,9 @@ export default function ClienteSangrias() {
             </div>
 
             {/* CELULAR: um card por funcionário/turno, com campo grande pro valor contado */}
-            <ul className="md:hidden divide-y divide-gray-100">
+            {/* Cards separados (fundo cinza entre eles) e faixa à esquerda na cor do
+                status — fica fácil ver onde termina um funcionário e começa o outro */}
+            <ul className="md:hidden space-y-2.5 bg-gray-50 px-2.5 py-2.5">
               {registros.map(r => {
                 const apr = Number(r.dinheiroApresentado || 0);
                 const temApr = r.dinheiroApresentado != null && String(r.dinheiroApresentado).trim() !== '';
@@ -545,7 +547,9 @@ export default function ClienteSangrias() {
                 const conciliado = temApr && Math.abs(diff) < 0.01;
                 const k = chaveLinha(r);
                 return (
-                  <li key={k} className={`px-4 py-4 ${r.manual ? 'bg-amber-50/40' : ''}`}>
+                  <li key={k} className={`rounded-xl border border-gray-200 border-l-4 px-4 py-4 shadow-sm ${
+                    !temApr ? 'border-l-gray-300' : conciliado ? 'border-l-emerald-500' : diff > 0 ? 'border-l-amber-500' : 'border-l-red-500'
+                  } ${r.manual ? 'bg-amber-50' : 'bg-white'}`}>
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">

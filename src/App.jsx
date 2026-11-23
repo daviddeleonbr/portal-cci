@@ -106,6 +106,8 @@ import ClienteTarefas from './pages/cliente/ClienteTarefas';
 import AdminTarefas from './pages/AdminTarefas';
 import ClienteAcessos from './pages/cliente/ClienteAcessos';
 import AdminAcessos from './pages/AdminAcessos';
+import AdminLmc from './pages/AdminLmc';
+import WpLmc from './pages/cliente/webposto/ClienteLmc';
 import AsUsuarios from './pages/cliente/autosystem/ClienteUsuarios';
 import AsComercialVendas from './pages/cliente/autosystem/ClienteComercialVendas';
 import AsComercialOperacao from './pages/cliente/autosystem/ClienteComercialOperacao';
@@ -188,6 +190,7 @@ export default function App() {
           <Route path="/admin/pendencias" element={<AdminPendencias />} />
           <Route path="/admin/tarefas" element={<AdminTarefas />} />
           <Route path="/admin/acessos" element={<AdminAcessos />} />
+          <Route path="/admin/bpo/lmc" element={<AdminLmc />} />
           {/* Rota desativada temporariamente — uso futuro */}
           {/* <Route path="/admin/orcamento-solicitacoes" element={<AdminOrcamentoSolicitacoes />} /> */}
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
@@ -256,6 +259,7 @@ export default function App() {
           <Route path="/cliente/webposto/sangrias" element={<RequirePermissaoCliente permissao={['sangrias', 'sangrias_consultar']}><WpSangrias /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/tarefas" element={<RequirePermissaoCliente permissao="tarefas"><ClienteTarefas /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/acessos" element={<RequirePermissaoCliente permissao="acessos"><ClienteAcessos /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/lmc" element={<RequirePermissaoCliente permissao="lmc"><WpLmc /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/suporte" element={<RequirePermissaoCliente permissao="suporte"><WpSuporte /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/pendencias" element={<RequirePermissaoCliente permissao="pendencias"><WpPendencias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/pendencias" element={<RequirePermissaoCliente permissao="pendencias"><WpPendencias /></RequirePermissaoCliente>} />

@@ -476,3 +476,22 @@ html.dark .from-violet-50\/40, html.dark .from-violet-50\/60, html.dark .from-vi
 html.dark .from-blue-50, html.dark .from-emerald-50, html.dark .from-amber-50, html.dark .from-violet-50, html.dark .from-rose-50, html.dark .from-red-50 { --tw-gradient-from: rgba(148, 163, 184, 0.08) !important; }
 html.dark .to-amber-50\/40, html.dark .to-amber-50\/60, html.dark .to-violet-50\/40, html.dark .to-violet-50\/60,
 html.dark .to-blue-50, html.dark .to-emerald-50, html.dark .to-amber-50, html.dark .to-violet-50, html.dark .to-gray-50\/50 { --tw-gradient-to: rgba(148, 163, 184, 0.04) !important; }
+
+/* Gráfico de sobras/faltas do LMC (GraficoTanquesLmc). Par divergente validado
+   (skill dataviz): claro #2a78d6/#e34948 em #ffffff · escuro #3987e5/#e66767 em #1e293b. */
+.grafico-lmc {
+  --lmc-sobra: #2a78d6;
+  --lmc-falta: #e34948;
+  --lmc-grade: #eef0f3;
+  --lmc-eixo:  #6b7280;
+  --lmc-zero:  #9ca3af;
+  --lmc-cursor: rgba(15, 23, 42, 0.04);
+}
+html.dark .grafico-lmc {
+  --lmc-sobra: #3987e5;
+  --lmc-falta: #e66767;
+  --lmc-grade: #2b3648;
+  --lmc-eixo:  #94a3b8;
+  --lmc-zero:  #64748b;
+  --lmc-cursor: rgba(255, 255, 255, 0.05);
+}

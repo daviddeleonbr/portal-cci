@@ -1046,6 +1046,35 @@ export async function buscarSangriasCaixa(apiKey, { dataInicial, dataFinal, empr
   });
 }
 
+// LMC — Livro de Movimentação de Combustíveis (endpoint /INTEGRACAO/V1/LMCS).
+// Uma linha por produto (combustível) por dia, com o detalhe por tanque
+// (lmcTanque), por bico (lmcBico: encerrantes, aferição, venda) e as notas de
+// entrada (lmcNota). Campos principais:
+//   empresaCodigo, lmcCodigo, produtoCodigo[] (array), produtoLmcCodigo,
+//   dataMovimento, abertura, entrada, saida, disponivel (abertura+entrada),
+//   escritural (disponível − saída), fechamento (medido), perdaSobra, saldo,
+//   precoCusto, ultimoUsuarioAlteracao, dataHoraAtualizacao
+// Como em MOVIMENTO_CONTA, deduplica (a busca é em blocos de datas e a API pode
+// repetir/vazar linhas) e filtra pela empresa e pelo período pedidos.
+export async function buscarLmcs(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
+  const raw = await fetchPagParalelo(urlBase, 'V1/LMCS', apiKey, {
+    limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+  });
+  const vistos = new Set();
+  return (raw || []).filter(l => {
+    const id = l?.lmcCodigo ?? l?.codigo;
+    if (id != null) {
+      if (vistos.has(id)) return false;
+      vistos.add(id);
+    }
+    if (empresaCodigo != null && l?.empresaCodigo != null && Number(l.empresaCodigo) !== Number(empresaCodigo)) return false;
+    const d = String(l?.dataMovimento || '').slice(0, 10);
+    if (dataInicial && d && d < dataInicial) return false;
+    if (dataFinal && d && d > dataFinal) return false;
+    return true;
+  });
+}
+
 // ─── Compras (Webposto) para a aba "Compras" do Fluxo de Caixa ────────
 // Títulos a pagar originados de NOTA DE ENTRADA (= compra de mercadoria/
 // combustível) no período, no mesmo formato da versão Autosystem

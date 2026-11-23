@@ -3,7 +3,7 @@ import {
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
   ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet, Receipt,
-  Boxes, AlertTriangle, KeyRound,
+  Boxes, AlertTriangle, KeyRound, Fuel,
 } from 'lucide-react';
 
 // Menu do portal do cliente — compartilhado pela sidebar (ClienteSidebar)
@@ -57,6 +57,8 @@ export function buildNavigation(prefix, tipoCliente = 'webposto') {
         { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas', barraMobile: 'Outras contas' },
         { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo' },
         { name: 'Acessos', href: `${prefix}/acessos`, icon: KeyRound, permissao: 'acessos' },
+        // LMC: por enquanto só Webposto (endpoint /INTEGRACAO/V1/LMCS)
+        ...(tipoCliente === 'webposto' ? [{ name: 'LMC', href: `${prefix}/lmc`, icon: Fuel, permissao: 'lmc' }] : []),
       ],
     },
     {

@@ -11,11 +11,14 @@ import ModalPendenciasLogin from './ModalPendenciasLogin';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { registrarPageview } from '../../../services/usoPortalService';
 import { EmpresaAtivaProvider } from '../../../contexts/EmpresaAtivaContext';
+import { useModoMenu, classesModoMenu } from '../../../lib/modoMenu';
 
 export default function ClienteLayout() {
   // Desktop: sidebar recolhida que expande ao passar o mouse (sem estado).
   // mobileOpen: drawer overlay no mobile.
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Recuo do conteúdo conforme o modo do menu no desktop (Expandido empurra 260px)
+  const margemMenu = classesModoMenu(useModoMenu('cliente')).margem;
 
   // Telemetria: 1 pageview a cada mudança de rota (fire-and-forget).
   // Painel admin consulta em /admin/uso-portal.
@@ -56,7 +59,7 @@ export default function ClienteLayout() {
         onMobileClose={() => setMobileOpen(false)}
       />
       {/* Margem = largura recolhida; a sidebar expandida (hover) sobrepõe o conteúdo */}
-      <div className="relative lg:ml-16">
+      <div className={`relative ${margemMenu} lg:transition-[margin] lg:duration-300`}>
         <ClienteHeader />
         {/* pb extra no mobile: espaço da barra inferior fixa (+ safe-area do iPhone) */}
         <main className="p-4 sm:p-6 lg:p-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-8">

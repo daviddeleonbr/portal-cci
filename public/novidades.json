@@ -2,6 +2,37 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.3.0",
+      "data": "2026-11-24",
+      "resumo": "Nova página de LMC para acompanhar sobras e faltas de combustíveis, e mais controle sobre o menu.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "LMC — Livro de Movimentação de Combustíveis",
+          "descricao": "Veja entradas, vendas, medições e sobras/faltas de cada combustível dia a dia, com gráfico por tanque e destaque dos dias acima de 0,6%. Baixe em PDF ou Excel, ou copie o resumo para o WhatsApp. (Redes Webposto.)"
+        },
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "Controle do menu",
+          "descricao": "No computador, escolha como o menu lateral fica: expandido, recolhido, expandindo ao passar o mouse ou mostrando as opções ao lado do ícone."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Instalar o app",
+          "descricao": "Um botão no topo do portal instala a CCI no celular ou no computador, para abrir direto como um aplicativo."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Sangrias mais fáceis de conferir no celular",
+          "descricao": "Cada funcionário ficou num cartão separado, com uma faixa colorida indicando OK, sobra ou falta."
+        }
+      ]
+    },
+    {
       "versao": "1.2.1",
       "data": "2026-11-24",
       "resumo": "Acessos mais fáceis de usar no celular e o menu de baixo com o verde da CCI.",

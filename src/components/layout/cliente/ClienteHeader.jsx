@@ -1,6 +1,7 @@
 import { Moon, Sun, Building2, Tag } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import NotificacoesBell from '../../ui/NotificacoesBell';
+import BotaoInstalarApp from '../../cliente/BotaoInstalarApp';
 import { useTheme } from '../../../hooks/useTheme';
 import { useUsarApelido, toggleUsarApelido } from '../../../lib/apelidoPref';
 
@@ -63,6 +64,9 @@ export default function ClienteHeader() {
             <span className="hidden sm:inline">{usarApelido ? 'Apelido' : 'Razão social'}</span>
           </button>
         )}
+
+        {/* Instalar o app (só quando ainda não instalado — ver BotaoInstalarApp) */}
+        <BotaoInstalarApp />
 
         {/* Theme toggle */}
         <button onClick={alternar}

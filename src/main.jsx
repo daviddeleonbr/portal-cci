@@ -4,6 +4,8 @@ import './index.css'
 import App from './App.jsx'
 import { hidratarRAM } from './services/webpostoCacheV3'
 import { iniciarAtualizacaoPwa } from './pwaUpdate'
+// Escuta o 'beforeinstallprompt' desde o início (botão "Instalar app" do portal do cliente)
+import './lib/instalacaoPwa'
 
 // Registra o service worker e passa a checar deploys novos periodicamente.
 // Quando há versão nova, dispara o evento que o NovaVersaoToast escuta.

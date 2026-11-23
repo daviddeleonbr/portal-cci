@@ -1,3 +1,5 @@
+import { useModoMenu, definirModoMenu, classesModoMenu, useCaixaOpcoes } from '../../../lib/modoMenu';
+import { ControleMenu, CaixaOpcoesMenu } from '../ControleMenuLateral';
 import { useMemo, useState, useEffect } from 'react';
 import { useLocation, NavLink, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,9 +17,7 @@ function isSubtreeActive(item, pathname) {
   return false;
 }
 
-// Texto da sidebar: no desktop some com a sidebar recolhida e aparece ao
-// passar o mouse (padrão Visor360). No mobile (drawer) fica sempre visível.
-const FADE = 'whitespace-nowrap lg:opacity-0 lg:group-hover:opacity-100 lg:transition-opacity lg:duration-200';
+// Desktop: 4 modos do "Controle do menu" (src/lib/modoMenu.js); textos usam `FADE` (classes do modo).
 
 export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
   const location = useLocation();
@@ -37,6 +37,12 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
   const visor360Url = tipoCliente === 'autosystem'
     ? 'https://visor360-as.cci.app.br'
     : 'https://visor360.cci.app.br';
+
+  // Modo do menu no desktop — ver src/lib/modoMenu.js
+  const modo = useModoMenu('cliente');
+  const cm = classesModoMenu(modo);
+  const FADE = cm.fade;
+  const caixa = useCaixaOpcoes(modo);
 
   const navigation = useMemo(
     () => {
@@ -138,7 +144,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
   // largura cheia, encostada logo acima da barra inferior — tocar "Mais" de
   // novo fecha. Os atalhos da barra ficam escondidos aqui (max-lg:hidden).
   return (
-    <aside
+    <aside data-menu-lateral=""
       aria-label="Menu"
       className={`group fixed z-40 flex flex-col overflow-hidden bg-white ease-in-out
         inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] max-h-[calc(100dvh-4rem-env(safe-area-inset-bottom)-3.5rem)] w-full
@@ -146,7 +152,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
         transition-[transform,opacity,visibility] duration-300
         ${mobileOpen ? 'translate-y-0 opacity-100 visible' : 'translate-y-full opacity-0 invisible pointer-events-none'}
         lg:visible lg:opacity-100 lg:pointer-events-auto lg:translate-y-0 lg:transition-[width] lg:inset-x-auto lg:left-0 lg:top-0 lg:bottom-auto lg:h-screen lg:max-h-none
-        lg:w-16 lg:hover:w-[260px] lg:rounded-none lg:border-t-0 lg:border-r lg:border-gray-200/70 lg:shadow-none lg:hover:shadow-2xl lg:hover:shadow-gray-900/10`}
+        ${cm.aside} lg:rounded-none lg:border-t-0 lg:border-r lg:border-gray-200/70 lg:shadow-none`}
     >
       {/* Cabeçalho da gaveta (mobile): alça + título + fechar */}
       <div className="lg:hidden flex-shrink-0">
@@ -245,7 +251,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                 {section.section}
               </p>
               {(idx > 0 || usaVisor360) && (
-                <div className="absolute left-2 right-2 top-1/2 h-px bg-gray-200 hidden lg:block lg:group-hover:opacity-0 transition-opacity duration-200" aria-hidden />
+                <div className={`absolute left-2 right-2 top-1/2 h-px bg-gray-200 hidden ${cm.marca}`} aria-hidden />
               )}
             </div>
             )}
@@ -261,7 +267,8 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                     <NavLink
                       key={item.name}
                       to={item.href}
-                      title={item.name}
+                      title={modo === 'opcoes' || modo === 'recolhido' ? undefined : item.name}
+                      {...caixa.propsItem(item)}
                       className={`relative flex items-center gap-3 rounded-md ${item.barraMobile ? 'max-lg:hidden' : ''} px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
                         isActive
                           ? 'bg-blue-50 text-blue-700'
@@ -282,7 +289,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                             {badge > 99 ? '99+' : badge}
                           </span>
                           {/* Recolhida: ponto vermelho discreto sobre o ícone */}
-                          <span className="absolute top-1.5 left-[26px] h-2 w-2 rounded-full bg-rose-500 hidden lg:block lg:group-hover:opacity-0 transition-opacity duration-200" />
+                          <span className={`absolute top-1.5 left-[26px] h-2 w-2 rounded-full bg-rose-500 hidden ${cm.marca}`} />
                         </>
                       )}
                     </NavLink>
@@ -296,8 +303,9 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                 return (
                   <div key={item.name}>
                     <button
-                      onClick={() => toggleExpand(item.name)}
-                      title={item.name}
+                      onClick={(e) => { if (!caixa.cliqueComSubmenu(item, e.currentTarget)) toggleExpand(item.name); }}
+                      title={modo === 'opcoes' || modo === 'recolhido' ? undefined : item.name}
+                      {...caixa.propsItem(item)}
                       className={`relative w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
                         isActive
                           ? 'bg-blue-50 text-blue-700'
@@ -310,11 +318,11 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                       {Icon && <Icon className={`h-[17px] w-[17px] flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />}
                       <span className={`flex-1 text-left ${FADE}`}>{item.name}</span>
                       <ChevronDown
-                        className={`h-3.5 w-3.5 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-gray-600' : 'text-gray-400'} lg:opacity-0 lg:group-hover:opacity-100`}
+                        className={`h-3.5 w-3.5 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-gray-600' : 'text-gray-400'} ${cm.chevron}`}
                       />
                     </button>
 
-                    <div className="lg:hidden lg:group-hover:block">
+                    <div className={cm.submenu}>
                     <AnimatePresence initial={false}>
                       {isOpen && (
                         <motion.div
@@ -384,7 +392,8 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
       </div>
 
       {/* DESKTOP: recolhida mostra só o avatar; expandida, avatar + nome + sair */}
-      <div className="hidden lg:block flex-shrink-0 border-t border-gray-100 p-2">
+      <div className="hidden lg:block flex-shrink-0 border-t border-gray-100 p-2 space-y-1">
+        <ControleMenu modo={modo} onMudar={(m) => { caixa.fechar(); definirModoMenu('cliente', m); }} fade={FADE} />
         <div className="flex items-center gap-2.5 overflow-hidden rounded-lg bg-gray-50 p-2 border border-gray-100">
           <button type="button" onClick={() => setPerfilAberto(true)} title="Meu perfil"
             className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left hover:opacity-80">
@@ -403,6 +412,8 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
           </button>
         </div>
       </div>
+      <CaixaOpcoesMenu alvo={caixa.alvo} hrefAtivo={hrefAtivo}
+        onEntrar={caixa.manter} onSair={caixa.sairDaCaixa} onFechar={caixa.fechar} />
       {perfilAberto && <PerfilModalCliente onClose={() => setPerfilAberto(false)} />}
     </aside>
   );
