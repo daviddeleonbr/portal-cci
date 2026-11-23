@@ -2,15 +2,40 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
-      "versao": "1.4.0",
+      "versao": "1.4.1",
       "data": "2026-11-24",
-      "resumo": "LMC real: acompanhe as sobras e faltas com o escritural real, separado do LMC oficial.",
+      "resumo": "LMC gerencial: novo botão “Lançar medições” para lançar o escritural real de todos os tanques do dia.",
       "itens": [
         {
           "tipo": "novidade",
           "publico": "todos",
-          "titulo": "LMC real (gerencial)",
-          "descricao": "Na página LMC, a aba “Real” usa o escritural real lançado por vocês ou pela CCI. Perda/sobra e % são recalculadas na hora, e dá para registrar o motivo da diferença. O LMC oficial não muda."
+          "titulo": "Lançar medições",
+          "descricao": "Na aba Gerencial do LMC, o botão “Lançar medições” mostra todos os tanques do dia com o estoque medido. Digite o escritural real e veja a sobra/falta e a % na hora, com um campo para o motivo de cada tanque."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Gerencial só com dias lançados",
+          "descricao": "O LMC gerencial agora só calcula os dias com escritural real lançado. Os outros dias ficam em branco, como “Sem lançamento”."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Abas com nomes mais curtos",
+          "descricao": "As abas do LMC agora se chamam “Webposto” e “Gerencial”."
+        }
+      ]
+    },
+    {
+      "versao": "1.4.0",
+      "data": "2026-11-24",
+      "resumo": "LMC gerencial: acompanhe as sobras e faltas com o escritural real, separado do LMC do Webposto.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "LMC gerencial",
+          "descricao": "Na página LMC, a aba “Gerencial” usa o escritural real lançado por vocês ou pela CCI. Perda/sobra e % são recalculadas na hora, e dá para registrar o motivo da diferença. O LMC do Webposto não muda."
         }
       ]
     },

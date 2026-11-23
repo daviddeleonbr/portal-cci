@@ -6,7 +6,7 @@
 //
 //   contexto = { tipo: 'oficial' | 'real', empresa, de, ate, linhas, nomeDe(linha) → nome do combustível }
 // tipo 'real' = LMC gerencial (escritural real lançado manualmente): título
-// diferente, aviso de que não é o oficial, e colunas de motivo/oficial.
+// diferente, aviso de que não é o do Webposto, só dias lançados e coluna de motivo.
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -59,14 +59,14 @@ export function gerarPdfLmc({ tipo = 'oficial', empresa, de, ate, linhas, nomeDe
 
   doc.setFillColor(...verde); doc.rect(0, 0, W, 4, 'F');
   doc.setTextColor(17, 24, 39); doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
-  doc.text(real ? 'LMC real (gerencial) — Sobras e faltas de combustíveis' : 'LMC — Sobras e faltas de combustíveis', 12, 15);
+  doc.text(real ? 'LMC gerencial — Sobras e faltas de combustíveis' : 'LMC — Sobras e faltas de combustíveis', 12, 15);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(75, 85, 99);
   doc.text(`${empresa || ''}  ·  Período: ${dataBr(de)} a ${dataBr(ate)}`, 12, 21);
   doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} · Portal CCI`, W - 12, 21, { align: 'right' });
 
   if (real) {
     doc.setFontSize(8.5); doc.setTextColor(91, 33, 182);
-    doc.text('Escritural real lançado manualmente; medição do Webposto. Documento gerencial — não substitui o LMC oficial.', 12, 25.5);
+    doc.text('Escritural real lançado manualmente; medição do Webposto. Só dias lançados são calculados. Não substitui o LMC do Webposto.', 12, 25.5);
   }
   // Destaque
   doc.setFontSize(10.5);
@@ -106,7 +106,7 @@ export function gerarPdfLmc({ tipo = 'oficial', empresa, de, ate, linhas, nomeDe
       body: alertas.map(l => [
         dataBr(l.data), nomeDe(l), n0(l.disponivel), n0(l.saida), n0(l.escritural), n0(l.fechamento),
         ls(l.perdaSobra), pct(l.pct),
-        real ? [tanquesTexto(l), l.motivo ? `Motivo: ${l.motivo}` : '', l.ajustado ? `(oficial ${ls(l.oficial?.perdaSobra)})` : ''].filter(Boolean).join('\n') || '—'
+        real ? [tanquesTexto(l), l.motivo ? `Motivo: ${l.motivo}` : ''].filter(Boolean).join('\n') || '—'
           : (tanquesTexto(l) || '—'),
       ]),
       styles: { fontSize: 8, cellPadding: 1.4 },
@@ -130,14 +130,14 @@ export function gerarPdfLmc({ tipo = 'oficial', empresa, de, ate, linhas, nomeDe
     doc.setPage(i);
     const H = doc.internal.pageSize.getHeight();
     doc.setFontSize(7.5); doc.setTextColor(107, 114, 128);
-    doc.text(real ? 'LMC real: perda/sobra = medido (Webposto) - escritural real (manual; sem ajuste = oficial). Negativo = falta; positivo = sobra.' : 'Perda/sobra = medido - escritural (disponível - saída). Negativo = falta; positivo = sobra. Fonte: LMC do Webposto.', 12, H - 7);
+    doc.text(real ? 'LMC gerencial: perda/sobra = medido (Webposto) - escritural real lançado. Dias sem lançamento não entram. Negativo = falta; positivo = sobra.' : 'Perda/sobra = medido - escritural (disponível - saída). Negativo = falta; positivo = sobra. Fonte: LMC do Webposto.', 12, H - 7);
     doc.text(`Página ${i} de ${total}`, W - 12, H - 7, { align: 'right' });
   }
   return doc;
 }
 
 export function nomeArquivoLmc({ tipo, empresa, de, ate }, ext) {
-  return `LMC${tipo === 'real' ? '_real' : ''}_${nomeArquivo(empresa)}_${de}_a_${ate}.${ext}`;
+  return `LMC${tipo === 'real' ? '_gerencial' : ''}_${nomeArquivo(empresa)}_${de}_a_${ate}.${ext}`;
 }
 
 // ─── Excel ──────────────────────────────────────────────────────
@@ -153,10 +153,7 @@ export function exportarExcelLmc({ tipo = 'oficial', empresa, de, ate, linhas, n
     'Saída (L)': r2(l.saida), 'Escritural (L)': r2(l.escritural), 'Medido (L)': r2(l.fechamento),
     'Perda/sobra (L)': r2(l.perdaSobra), '% do disponível': l.pct == null ? null : Math.round(l.pct * 10000) / 100,
     'Acima de 0,6%': ehAlerta(l) ? 'Sim' : 'Não',
-    ...(real ? {
-      'Escritural oficial (L)': r2(l.oficial?.escritural), 'Perda/sobra oficial (L)': r2(l.oficial?.perdaSobra),
-      'Ajustado': l.ajustado ? 'Sim' : 'Não', 'Motivo': l.motivo || '',
-    } : {}),
+    ...(real ? { 'Lançado': l.lancado ? 'Sim' : 'Não', 'Motivo': l.motivo || '' } : {}),
   });
 
   const alertas = diasEmAlerta(linhas);
@@ -196,8 +193,8 @@ export function textoWhatsappLmc({ tipo = 'oficial', empresa, de, ate, linhas, n
   const alertas = diasEmAlerta(linhas);
   const resumo = resumoPorCombustivel({ linhas, nomeDe });
   const l = [];
-  l.push(real ? `*LMC real (gerencial) — ${empresa || ''}*` : `*LMC — ${empresa || ''}*`);
-  if (real) l.push('_Escritural real lançado manualmente; não é o LMC oficial._');
+  l.push(real ? `*LMC gerencial — ${empresa || ''}*` : `*LMC — ${empresa || ''}*`);
+  if (real) l.push('_Escritural real lançado manualmente; só dias lançados. Não é o LMC do Webposto._');
   l.push(`Período: ${dataBr(de)} a ${dataBr(ate)}`);
   l.push('');
   l.push(alertas.length
