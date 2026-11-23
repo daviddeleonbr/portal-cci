@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.1.1",
+      "data": "2026-11-23",
+      "resumo": "Um ajuste rápido: agora dá para saber em que versão o portal está.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Versão do portal no seu perfil",
+          "descricao": "Abra “Meu perfil” e veja, no rodapé, a versão do portal que você está usando."
+        }
+      ]
+    },
+    {
       "versao": "1.1.0",
       "data": "2026-11-23",
       "resumo": "O portal do cliente ficou pensado para o celular, com as cores da marca CCI.",

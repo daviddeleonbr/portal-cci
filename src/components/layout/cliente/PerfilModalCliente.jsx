@@ -14,6 +14,7 @@ import {
 import { useClienteSession } from '../../../hooks/useAuth';
 import { trocarEmpresaAtiva } from '../../../lib/auth';
 import { PERMISSOES_CLIENTE, alterarMinhaSenha } from '../../../services/usuariosSistemaService';
+import { VERSAO_ATUAL } from '../../../lib/novidades';
 
 const nomeEmp = (c) => c?.razao_social || c?.nome || 'Empresa';
 
@@ -126,8 +127,12 @@ export default function PerfilModalCliente({ onClose }) {
           {/* Troca de senha */}
           <TrocarSenha demo={demo} />
         </div>
-        {/* Sem botão "Sair" aqui — sair fica no rodapé do menu. Só o respiro da safe-area (iPhone). */}
-        <div className="md:hidden shrink-0 h-[env(safe-area-inset-bottom)]" aria-hidden="true" />
+        {/* Rodapé: versão do portal (de public/novidades.json). Sem "Sair" — fica no menu. */}
+        {VERSAO_ATUAL && (
+          <p className="shrink-0 border-t border-gray-100 px-4 md:px-6 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] md:pb-2.5 text-center text-xs text-gray-600">
+            Portal CCI · versão <span className="tabular-nums font-medium">{VERSAO_ATUAL}</span>
+          </p>
+        )}
       </div>
     </div>,
     document.body,
