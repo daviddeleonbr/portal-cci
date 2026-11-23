@@ -70,6 +70,10 @@ This is a **BPO contábil** (accounting outsourcing) product for fuel-station ne
 - **BPO** admin tools: conciliação bancária/caixas, manifestação de NF, caixa administrativo (`Bpo*` pages, `bpoConciliacaoService`, `extratosBancariosService`, `ofxCorrelacaoService`).
 - **Asaas** integration for boletos (via the `/api/asaas` proxy and `asaasApiService` / `asaasConfigService`).
 
+### Release notes ("O que há de novo")
+
+[public/novidades.json](public/novidades.json) is the single source of release notes; its **first** entry is the app version. On every deploy with user-visible changes, add a new entry at the top (`versao`, `data`, `resumo`, `itens[]` with `tipo` novidade|melhoria|correcao and `publico` cliente|admin|todos), written in plain language for end users. It's embedded in the bundle at build time (`__NOVIDADES__` in vite.config.js) and also fetched live by the old bundle when the service worker finds an update, so users see the new version's notes before updating ([NovaVersaoToast](src/components/ui/NovaVersaoToast.jsx) → [TelaNovidades](src/components/ui/TelaNovidades.jsx), logic in [src/lib/novidades.js](src/lib/novidades.js)). Keep `.json` out of the workbox `globPatterns` or the live fetch would get a stale copy.
+
 ### Routing notes
 
 Many legacy paths `<Navigate>`-redirect to current ones, and several admin "tab" pages (Cadastros, Financeiro, Parâmetros) are reached by multiple URLs that all render one component — the URL just picks the initial tab. When adding routes, mirror this and keep the `webposto`/`autosystem` pair in sync.

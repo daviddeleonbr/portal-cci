@@ -1,0 +1,60 @@
+{
+  "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
+  "versoes": [
+    {
+      "versao": "1.1.0",
+      "data": "2026-11-23",
+      "resumo": "O portal do cliente ficou pensado para o celular, com as cores da marca CCI.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Menu na parte de baixo da tela",
+          "descricao": "No celular, Tarefas, Sangrias, Notas e Outras contas ficam a um toque. As demais opções estão em “Mais”."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "Tarefas no celular",
+          "descricao": "O quadro mostra uma situação por vez e tem o botão “Iniciar tarefa”. A agenda mostra a semana e as tarefas do dia escolhido."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Planilha dos movimentos dos caixas",
+          "descricao": "Na Conciliação de caixas (Autosystem), o botão “Planilha” exporta os movimentos dos PDVs no período escolhido, sem as vendas de produtos."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Sangrias mais fáceis de lançar",
+          "descricao": "Cada funcionário virou um cartão com campo grande para o valor contado, e os totais ficam numa linha só."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Outras contas a pagar",
+          "descricao": "Valor com teclado numérico, escolhas em botões, foto do comprovante direto da câmera e o botão “Nova conta” sempre à mão."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Seu perfil organizado",
+          "descricao": "Abre de baixo para cima no celular, com a troca de empresa mais fácil e a alteração de senha recolhida."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Novo seletor de data",
+          "descricao": "Calendário grande, fácil de tocar, com atalhos como “Ontem” e “Hoje”."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Cores da marca CCI",
+          "descricao": "O verde e o amarelo da logo agora aparecem nos destaques, com mais contraste para leitura."
+        }
+      ]
+    }
+  ]
+}

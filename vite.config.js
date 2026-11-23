@@ -2,8 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'node:fs'
+
+// Notas de versão embutidas no bundle (a 1ª entrada = versão do app).
+// O mesmo arquivo é servido em /novidades.json p/ a versão antiga ler as
+// notas da nova antes de atualizar. Ver src/lib/novidades.js.
+const novidades = JSON.parse(readFileSync(new URL('./public/novidades.json', import.meta.url), 'utf-8'))
 
 export default defineConfig({
+  define: {
+    __NOVIDADES__: JSON.stringify({ versoes: novidades.versoes || [] }),
+  },
   plugins: [
     react(),
     tailwindcss(),
