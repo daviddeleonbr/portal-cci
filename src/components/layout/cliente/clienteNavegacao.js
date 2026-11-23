@@ -3,7 +3,7 @@ import {
   HelpCircle, Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
   ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet, Receipt,
-  Boxes, AlertTriangle, KeyRound, Fuel,
+  Boxes, AlertTriangle, KeyRound, Fuel, CalendarDays,
 } from 'lucide-react';
 
 // Menu do portal do cliente — compartilhado pela sidebar (ClienteSidebar)
@@ -54,6 +54,7 @@ export function buildNavigation(prefix, tipoCliente = 'webposto') {
         { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: ['sangrias', 'sangrias_consultar'], barraMobile: 'Sangrias' },
         { name: 'Resumo de caixa', href: `${prefix}/conferencia-recebimentos`, icon: ClipboardCheck, permissao: ['conferencia_recebimentos', 'conferencia_recebimentos_consultar'] },
         { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais', barraMobile: 'Notas' },
+        { name: 'Contas a Pagar', href: `${prefix}/bpo/contas-pagar`, icon: CalendarDays, permissao: 'bpo_contas_pagar' },
         { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas', barraMobile: 'Outras contas' },
         { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo' },
         { name: 'Acessos', href: `${prefix}/acessos`, icon: KeyRound, permissao: 'acessos' },

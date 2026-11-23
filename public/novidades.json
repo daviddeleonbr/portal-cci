@@ -2,6 +2,31 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.5.0",
+      "data": "2026-11-24",
+      "resumo": "Nova área de Contas a Pagar no BPO: veja o pagamento do dia e autorize as contas que a CCI incluiu no banco.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Pagamento do dia",
+          "descricao": "Em BPO › Contas a Pagar, a tela abre direto nas contas que a CCI incluiu no banco para pagar no dia, com o vencimento real de cada uma e o aviso de vencidas ou antecipadas. Depois de autorizar no banco, confirme no portal."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Agenda de pagamentos",
+          "descricao": "Na aba “Mais informações”: contas vencidas, do dia e dos próximos dias, calendário do mês e a lista completa das contas em aberto no seu sistema."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Contas a Pagar (BPO)",
+          "descricao": "Monte o pagamento do dia puxando vencidas e o que vence até o próximo dia de pagamento, antecipe ou pague depois, e acompanhe o que o cliente já autorizou. Dias de pagamento configuráveis por empresa."
+        }
+      ]
+    },
+    {
       "versao": "1.4.1",
       "data": "2026-11-24",
       "resumo": "LMC gerencial: novo botão “Lançar medições” para lançar o escritural real de todos os tanques do dia.",
