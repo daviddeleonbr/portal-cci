@@ -11,6 +11,7 @@ import {
 import * as tarefas from '../../services/tarefasService';
 import { ReferenciaBadge, SelectBusca, DocumentosEditor } from './CamposTarefas';
 import { STATUS_TAREFA, PRIORIDADES, statusEfetivo, bloqueioEnvio, fmtDataHora } from '../../utils/tarefas';
+import InputData from '../ui/InputData';
 
 export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAlterado }) {
   const [t, setT] = useState(null);
@@ -472,7 +473,7 @@ function EditarTarefa({ t, onCancelar, onSalvar }) {
           </select></div>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div><label className={lblEd}>Vence em</label><input type="date" value={f.data} onChange={e => set({ data: e.target.value })} className={inpEd} /></div>
+        <div><label className={lblEd}>Vence em</label><InputData value={f.data} onChange={e => set({ data: e.target.value })} className={inpEd} /></div>
         <div><label className={lblEd}>Hora</label><input type="time" value={f.hora} onChange={e => set({ hora: e.target.value })} className={inpEd} /></div>
         <div><label className={lblEd}>Prioridade</label>
           <select value={f.prioridade} onChange={e => set({ prioridade: e.target.value })} className={inpEd}>

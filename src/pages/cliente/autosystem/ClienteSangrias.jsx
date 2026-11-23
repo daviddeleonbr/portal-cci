@@ -18,6 +18,7 @@ import { formatCurrency } from '../../../utils/format';
 import { SecaoRetiradas, ResumoDepositoModal } from '../../../components/sangrias/RetiradasDeposito';
 import ConsultaSangrias from '../../../components/sangrias/ConsultaSangrias';
 import { erroRetiradas, resumoRetiradas, PERMISSAO_TAREFA_DEPOSITO } from '../../../utils/sangriasDeposito';
+import InputData from '../../../components/ui/InputData';
 
 // Datas locais (não UTC) — evita liberar "hoje" de noite no Brasil.
 function toLocalDateStr(d) {
@@ -324,7 +325,7 @@ export default function ClienteSangrias() {
         <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr_auto] gap-3 items-end">
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data da conciliação</label>
-            <input type="date" value={data} onChange={(e) => setData(e.target.value)}
+            <InputData value={data} onChange={(e) => setData(e.target.value)}
               max={ontemStr()}
               disabled={loadingDados}
               className={`w-full h-10 rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 disabled:opacity-50 ${

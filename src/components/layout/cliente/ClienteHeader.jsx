@@ -19,7 +19,7 @@ export default function ClienteHeader() {
   const cnpjCliente = cliente?.cnpj || '';
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-md px-3 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white px-3 sm:px-6">
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
         {/* Mobile: o menu abre pelo botão "Mais" da barra inferior (ClienteBottomNav) */}
         {tipoCliente === 'autosystem' ? (

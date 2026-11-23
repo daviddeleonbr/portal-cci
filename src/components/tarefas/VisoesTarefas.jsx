@@ -4,7 +4,8 @@
 // chips com contador — arrastar não funciona no toque) e a Agenda vira uma
 // faixa de dias + lista do dia escolhido (7 colunas não cabem na tela).
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEhCelular } from '../../hooks/useEhCelular';
 import { List, Columns3, CalendarDays, ChevronLeft, ChevronRight, Clock, Play, Loader2, ChevronRight as Seta } from 'lucide-react';
 import ListaTarefas from './ListaTarefas';
 import { ReferenciaBadge } from './CamposTarefas';
@@ -18,17 +19,6 @@ const VISOES = [
 ];
 // Padrão: Kanban. A escolha do usuário fica salva (chave v2 = todos recomeçam no Kanban).
 const lerVisao = () => { try { return localStorage.getItem('tarefas_visao_v2') || 'kanban'; } catch { return 'kanban'; } };
-
-// true abaixo de md (768px). useSyncExternalStore → acompanha giro/redimensionamento.
-const MQ_CELULAR = '(max-width: 767px)';
-const assinarMq = (cb) => {
-  if (typeof window === 'undefined' || !window.matchMedia) return () => {};
-  const mq = window.matchMedia(MQ_CELULAR);
-  mq.addEventListener('change', cb);
-  return () => mq.removeEventListener('change', cb);
-};
-const lerMq = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(MQ_CELULAR).matches : false);
-function useEhCelular() { return useSyncExternalStore(assinarMq, lerMq, () => false); }
 
 export default function VisoesTarefas({ tarefas, rotinas = [], gestor = false, onAbrir, onAlterado, onErro, abaInicial, vazio, visaoInicial }) {
   const [visao, setVisao] = useState(() => visaoInicial || lerVisao());
@@ -324,13 +314,13 @@ function QuadroCelular({ tarefas, gestor, onAbrir, onAlterado, onErro, vazio }) 
   const lista = porColuna[coluna] || [];
   return (
     <div>
-      <div role="tablist" aria-label="Situação" className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+      <div role="tablist" aria-label="Situação" className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 snap-x snap-mandatory scroll-px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {COLUNAS.map(c => {
           const on = c.k === coluna;
           const n = porColuna[c.k].length;
           return (
             <button key={c.k} role="tab" aria-selected={on} onClick={() => setColuna(c.k)}
-              className={`flex h-10 flex-shrink-0 items-center gap-2 rounded-full border px-3.5 text-sm font-medium whitespace-nowrap ${
+              className={`snap-start flex h-10 flex-shrink-0 items-center gap-2 rounded-full border px-3.5 text-sm font-medium whitespace-nowrap ${
                 on ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-700'}`}>
               {c.rot}
               <span className={`inline-flex min-w-[22px] h-[22px] items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums ${

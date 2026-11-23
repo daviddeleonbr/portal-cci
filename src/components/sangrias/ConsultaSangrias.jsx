@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { Eye, ExternalLink, Landmark, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import * as sangriasService from '../../services/clienteSangriasService';
 import { formatCurrency } from '../../utils/format';
+import InputData from '../ui/InputData';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const fmtData = (s) => { const [y, m, d] = String(s || '').slice(0, 10).split('-'); return d ? `${d}/${m}/${y}` : s; };
@@ -70,16 +71,16 @@ export default function ConsultaSangrias({ empresas }) {
         {modo === 'dia' ? (
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Dia</label>
-            <input type="date" value={ate} onChange={e => { setDe(e.target.value); setAte(e.target.value); }} className={inp} />
+            <InputData value={ate} onChange={e => { setDe(e.target.value); setAte(e.target.value); }} className={inp} />
           </div>
         ) : (<>
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">De</label>
-            <input type="date" value={de} onChange={e => setDe(e.target.value)} className={inp} />
+            <InputData value={de} onChange={e => setDe(e.target.value)} className={inp} />
           </div>
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Até</label>
-            <input type="date" value={ate} onChange={e => setAte(e.target.value)} className={inp} />
+            <InputData value={ate} onChange={e => setAte(e.target.value)} className={inp} />
           </div>
         </>)}
         {(empresas || []).length > 1 && (

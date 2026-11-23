@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Receipt, Plus, Loader2, AlertCircle, Search, RefreshCw,
+  Receipt, Plus, Loader2, AlertCircle, Search,
   Calendar, Trash2, Upload, File, Download, X, CheckCircle2,
   Info, Clock, Camera, ChevronDown,
 } from 'lucide-react';
@@ -14,6 +14,8 @@ import { useClienteSession } from '../../../hooks/useAuth';
 import * as ocService from '../../../services/outraContaService';
 import { formatCurrency } from '../../../utils/format';
 import CampoData from '../../../components/ui/CampoData';
+import IndicadorAtualizado from '../../../components/ui/IndicadorAtualizado';
+import { useAtualizacaoAutomatica } from '../../../hooks/useAtualizacaoAutomatica';
 
 // Rótulo curto das abas no celular (3 abas lado a lado, sem rolagem)
 const ABA_CURTA = { enviada: 'Aguardando', lancada: 'Lançadas', devolvida: 'Devolvidas' };
@@ -51,18 +53,35 @@ export default function ClienteOutrasContas() {
   // Aviso "Antes de enviar": no celular começa recolhido (ocupava meia tela)
   const [avisoAberto, setAvisoAberto] = useState(false);
 
-  const carregar = useCallback(async () => {
+  const [atualizadoEm, setAtualizadoEm] = useState(null);
+  const [atualizando, setAtualizando] = useState(false);
+
+  // silencioso = atualização automática / após ação (sem trocar a lista por
+  // "Carregando..."; um erro não apaga o que já está na tela)
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
     if (!cliente?.id) return;
-    setLoading(true); setError(null);
+    if (silencioso) setAtualizando(true); else { setLoading(true); setError(null); }
     try {
       const lista = await ocService.listarPorCliente(cliente.id);
       setContas(lista);
+      setAtualizadoEm(new Date());
+      if (silencioso) setError(null);
     } catch (err) {
-      setError(err.message);
-    } finally { setLoading(false); }
+      if (!silencioso) setError(err.message);
+    } finally { setLoading(false); setAtualizando(false); }
   }, [cliente?.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Sem botão "Atualizar": a CCI lança/devolve e a lista muda sozinha
+  // (tempo real filtrado pela empresa + ao voltar pro app).
+  const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
+  const { conectado } = useAtualizacaoAutomatica({
+    canal: `outras-contas:${cliente?.id || 'nenhum'}`,
+    tabelas: [{ table: 'outra_conta_pagar', filter: `cliente_id=eq.${cliente?.id}` }],
+    recarregar: recarregarSilencioso,
+    ativo: !!cliente?.id,
+  });
 
   const contagens = useMemo(() => {
     const c = { enviada: 0, lancada: 0, devolvida: 0 };
@@ -86,7 +105,7 @@ export default function ClienteOutrasContas() {
     if (!confirm(`Excluir "${conta.descricao}"?`)) return;
     try {
       await ocService.excluir(conta.id);
-      await carregar();
+      await carregar({ silencioso: true });
       setToast({ tipo: 'success', mensagem: 'Conta excluída' });
     } catch (err) {
       setToast({ tipo: 'error', mensagem: 'Erro ao excluir: ' + err.message });
@@ -101,12 +120,7 @@ export default function ClienteOutrasContas() {
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">Nova conta</span>
         </button>
-        <button onClick={carregar} disabled={loading}
-          aria-label="Atualizar"
-          className="hidden sm:inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors disabled:opacity-50 min-w-[44px] justify-center">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">Atualizar</span>
-        </button>
+        <IndicadorAtualizado em={atualizadoEm} conectado={conectado} atualizando={atualizando} />
       </PageHeader>
 
       {/* Aviso operacional */}
@@ -189,10 +203,6 @@ export default function ClienteOutrasContas() {
             </button>
           )}
         </div>
-        <button onClick={carregar} disabled={loading} aria-label="Atualizar lista"
-          className="sm:hidden flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 active:bg-gray-50 disabled:opacity-50">
-          <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
       </div>
 
       {error && (
@@ -317,7 +327,7 @@ export default function ClienteOutrasContas() {
         <ModalNovaConta
           cliente={cliente}
           onClose={() => setModalNova(false)}
-          onCriada={async () => { setModalNova(false); await carregar(); setToast({ tipo: 'success', mensagem: 'Conta registrada para a CCI lançar' }); }}
+          onCriada={async () => { setModalNova(false); await carregar({ silencioso: true }); setToast({ tipo: 'success', mensagem: 'Conta registrada para a CCI lançar' }); }}
           onErro={(msg) => setToast({ tipo: 'error', mensagem: msg })}
         />
       )}

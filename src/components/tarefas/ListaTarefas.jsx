@@ -43,10 +43,11 @@ export default function ListaTarefas({ tarefas, gestor = false, onAbrir, abaInic
   return (
     <div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
-        <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+        {/* Celular: a fileira vai até a borda da tela (-mx-4 = padding do main) — sem corte no meio da margem — e, ao soltar, SEMPRE alinha na margem o botão cuja borda esquerda estiver mais perto dela (snap-mandatory + snap-start + scroll-px) */}
+        <div className="flex gap-1.5 sm:gap-1 overflow-x-auto pb-1 -mx-4 px-4 sm:-mx-1 sm:px-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {ABAS.map(a => (
             <button key={a.k} onClick={() => setAba(a.k)} aria-pressed={aba === a.k}
-              className={`whitespace-nowrap rounded-full px-3.5 sm:px-3 h-10 sm:h-auto sm:py-1.5 text-sm sm:text-xs font-medium transition-colors ${
+              className={`snap-start flex-shrink-0 whitespace-nowrap rounded-full px-3.5 sm:px-3 h-10 sm:h-auto sm:py-1.5 text-sm sm:text-xs font-medium transition-colors ${
                 aba === a.k ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               {a.rot}
               <span className={`ml-1.5 tabular-nums ${aba === a.k ? 'text-white/70' : a.k === 'atrasadas' && contagem[a.k] ? 'text-rose-600 font-semibold' : 'text-gray-400'}`}>{contagem[a.k]}</span>

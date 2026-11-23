@@ -113,6 +113,8 @@
 }
 
 html {
+  /* "Tamanho do texto" (src/lib/tamanhoTexto.js): escala tudo que é rem */
+  font-size: calc(100% * var(--escala-texto, 1));
   font-family: 'Geist', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

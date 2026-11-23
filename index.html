@@ -8,11 +8,12 @@
     <link rel="icon" type="image/png" href="/logo-cci.png" />
     <link rel="apple-touch-icon" href="/logo-cci.png" />
     <link rel="mask-icon" href="/logo-cci.png" color="#1B8073" />
-    <!-- Fallback antes do JS aplicar: respeita prefers-color-scheme do SO.
-         Depois useTheme atualiza uma terceira meta (sem media) com o tema
-         efetivamente aplicado (que pode ter sido alternado manualmente). -->
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+    <!-- Cor da barra de status (PWA instalado / barra do navegador no celular)
+         = fundo do cabeçalho: #ffffff no claro, #1e293b no escuro. O script
+         anti-flash abaixo e o useTheme trocam o `content` conforme o tema
+         ESCOLHIDO no portal (não só o do sistema). Uma meta só, sem media —
+         com várias, o navegador usa a 1ª que combina e ignora a escolha. -->
+    <meta name="theme-color" content="#ffffff" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- PWA / instalação em tela inicial -->
@@ -39,6 +40,11 @@
           var t = localStorage.getItem('cci_theme');
           if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           if (t === 'dark') document.documentElement.classList.add('dark');
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', t === 'dark' ? '#1e293b' : '#ffffff');
+          // Tamanho do texto (src/lib/tamanhoTexto.js — mesma chave e escalas)
+          var esc = { grande: 1.15, muito_grande: 1.3 }[localStorage.getItem('cci_tamanho_texto')];
+          if (esc) document.documentElement.style.setProperty('--escala-texto', String(esc));
         } catch (e) { /* noop */ }
       })();
     </script>

@@ -56,6 +56,7 @@ import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
 import { classificarItem } from '../../../services/mapeamentoVendasService';
 import { formatCurrency } from '../../../utils/format';
+import InputData from '../../../components/ui/InputData';
 
 // ─── Helpers ─────────────────────────────────────────────────
 function ymd(d) {
@@ -549,13 +550,13 @@ export default function ClienteComercialOperacao() {
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
             <Calendar className="h-3 w-3" /> De
           </span>
-          <input type="date" value={dataInicial} max={dataFinal}
+          <InputData value={dataInicial} max={dataFinal}
             onChange={(e) => e.target.value && setDataInicial(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </label>
         <label className="flex items-center gap-2">
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Até</span>
-          <input type="date" value={dataFinal} min={dataInicial} max={hojeIso}
+          <InputData value={dataFinal} min={dataInicial} max={hojeIso}
             onChange={(e) => e.target.value && setDataFinal(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         </label>

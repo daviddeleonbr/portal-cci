@@ -1,10 +1,15 @@
 // "Minhas tarefas" — portal do cliente (Webposto e Autosystem).
 // O funcionário vê só as tarefas em que é responsável (RLS), executa
 // (checklist, evidências, comentários) e envia para a validação da CCI.
+// Sem botão "Atualizar": a lista se atualiza sozinha (tempo real + ao voltar
+// pro app) — ver useAtualizacaoAutomatica.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
+import IndicadorAtualizado from '../../components/ui/IndicadorAtualizado';
+import { useAtualizacaoAutomatica } from '../../hooks/useAtualizacaoAutomatica';
+import { useClienteSession } from '../../hooks/useAuth';
 import VisoesTarefas from '../../components/tarefas/VisoesTarefas';
 import TarefaDetalhe from '../../components/tarefas/TarefaDetalhe';
 import * as tarefasService from '../../services/tarefasService';
@@ -20,8 +25,13 @@ export default function ClienteTarefas() {
   const [atalho, setAtalho] = useState(null);
   const irPara = (aba) => setAtalho(a => ({ aba, seq: (a?.seq || 0) + 1 }));
 
-  const carregar = useCallback(async () => {
-    setCarregando(true); setErro('');
+  const session = useClienteSession();
+  const [atualizadoEm, setAtualizadoEm] = useState(null);
+  const [atualizando, setAtualizando] = useState(false);
+
+  // silencioso = atualização automática (sem spinner; erro não apaga a lista)
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
+    if (silencioso) setAtualizando(true); else { setCarregando(true); setErro(''); }
     try {
       const de = somarDiasYmd(hojeYmd(), -60);
       const [noPeriodo, antigas] = await Promise.all([
@@ -30,10 +40,22 @@ export default function ClienteTarefas() {
       ]);
       const vistos = new Set();
       setLista([...noPeriodo, ...antigas].filter(t => (vistos.has(t.id) ? false : vistos.add(t.id))));
-    } catch (e) { setErro(e.message); }
-    finally { setCarregando(false); }
+      setAtualizadoEm(new Date());
+      if (silencioso) setErro('');
+    } catch (e) { if (!silencioso) setErro(e.message); }
+    finally { setCarregando(false); setAtualizando(false); }
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Tempo real: qualquer mudança nas tarefas (ou nas partes delas) que o
+  // usuário pode ver recarrega a lista. A RLS filtra no servidor.
+  const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
+  const { conectado } = useAtualizacaoAutomatica({
+    canal: `tarefas:${session?.usuario?.id || 'anon'}`,
+    tabelas: [{ table: 'cci_tarefa' }, { table: 'cci_tarefa_checklist' }, { table: 'cci_tarefa_evidencia' }, { table: 'cci_tarefa_pedido' }],
+    recarregar: recarregarSilencioso,
+    ativo: !!session?.usuario?.id,
+  });
 
   const atrasadas = lista.filter(t => estaAtrasada(t)).length;
   const hoje = lista.filter(t => venceHoje(t)).length;
@@ -42,10 +64,7 @@ export default function ClienteTarefas() {
   return (
     <div>
       <PageHeader title="Minhas tarefas" description="Rotinas e tarefas atribuídas a você pela CCI">
-        <button onClick={carregar} disabled={carregando} aria-label="Atualizar tarefas"
-          className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white h-11 sm:h-auto min-w-[44px] px-3 sm:py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-          <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} /> <span className="hidden sm:inline">Atualizar</span>
-        </button>
+        <IndicadorAtualizado em={atualizadoEm} conectado={conectado} atualizando={atualizando} />
       </PageHeader>
 
       <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
@@ -58,13 +77,13 @@ export default function ClienteTarefas() {
       {carregando && lista.length === 0 ? (
         <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div>
       ) : (
-        <VisoesTarefas key={atalho?.seq || 0} tarefas={lista} onAbrir={t => setAbertaId(t.id)} onAlterado={carregar} onErro={setErro}
+        <VisoesTarefas key={atalho?.seq || 0} tarefas={lista} onAbrir={t => setAbertaId(t.id)} onAlterado={recarregarSilencioso} onErro={setErro}
           abaInicial={atalho?.aba || (atrasadas ? 'atrasadas' : 'abertas')}
           visaoInicial={atalho ? 'lista' : undefined}
           vazio="Nenhuma tarefa por aqui. As rotinas atribuídas pela CCI aparecem nesta tela." />
       )}
 
-      {abertaId && <TarefaDetalhe tarefaId={abertaId} onFechar={() => setAbertaId(null)} onAlterado={carregar} />}
+      {abertaId && <TarefaDetalhe tarefaId={abertaId} onFechar={() => setAbertaId(null)} onAlterado={recarregarSilencioso} />}
     </div>
   );
 }

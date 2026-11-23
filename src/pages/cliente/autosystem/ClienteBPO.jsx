@@ -9,6 +9,7 @@ import PageHeader from '../../../components/ui/PageHeader';
 import BpoConciliacaoCaixas from '../../BpoConciliacaoCaixas';
 import * as bpoConciliacaoService from '../../../services/bpoConciliacaoService';
 import { useClienteSession } from '../../../hooks/useAuth';
+import InputData from '../../../components/ui/InputData';
 
 // ─── Helpers de data ─────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -218,12 +219,12 @@ function AbaConciliacaoCaixa({ empresa, usuario }) {
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data inicial</label>
-            <input type="date" value={dataInicial} onChange={e => setDataInicial(e.target.value)}
+            <InputData value={dataInicial} onChange={e => setDataInicial(e.target.value)}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
           <div>
             <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Data final</label>
-            <input type="date" value={dataFinal} onChange={e => setDataFinal(e.target.value)}
+            <InputData value={dataFinal} onChange={e => setDataFinal(e.target.value)}
               className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           </div>
           <div className="flex items-center gap-2">

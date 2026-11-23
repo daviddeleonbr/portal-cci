@@ -21,6 +21,7 @@ import { SelectBusca } from '../../components/tarefas/CamposTarefas';
 import { useClienteSession } from '../../hooks/useAuth';
 import * as conferenciaService from '../../services/conferenciaRecebimentosService';
 import { formatCurrency } from '../../utils/format';
+import InputData from '../../components/ui/InputData';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const ontem = () => { const d = new Date(); d.setDate(d.getDate() - 1); return ymd(d); };
@@ -252,7 +253,7 @@ export function ResumoCaixa({ empresas, empresaInicial = '', tipoFixo = null, us
             )}
             <div>
               <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Data</label>
-              <input type="date" value={data} max={ontem()} onChange={e => setData(e.target.value)}
+              <InputData value={data} max={ontem()} onChange={e => setData(e.target.value)}
                 className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm" />
             </div>
             <button onClick={recarregar} disabled={carregando || !empresa}

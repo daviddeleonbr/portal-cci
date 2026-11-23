@@ -3,14 +3,16 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
-// Campo de data amigável pro celular. Substitui o <input type="date"> (cujo
-// calendário nativo é minúsculo no desktop e varia por aparelho).
-//  - Botão com a data por extenso ("Hoje", "qua, 19/11/2026").
-//  - Ao tocar: gaveta de baixo pra cima no mobile / caixa centralizada no
-//    desktop, com atalhos (Ontem / Hoje / Amanhã) e calendário com células
-//    de 44px (área mínima de toque).
+// Campo de data amigável pro celular. Duas formas de preencher:
+//  - DIGITAR: só números, as barras entram sozinhas ("23112026" → 23/11/2026),
+//    teclado numérico. Data completa e válida (e dentro de min/max) já vale;
+//    inválida fica marcada em vermelho; ao sair do campo incompleta, volta à última válida.
+//  - ESCOLHER: o botão de calendário abre uma gaveta de baixo pra cima (caixa
+//    centralizada no desktop) com atalhos (Ontem / Hoje / Amanhã) e calendário
+//    com células de 44px (área mínima de toque).
 // Valor = string 'YYYY-MM-DD' (mesmo contrato do input nativo); '' = vazio.
-// Renderiza via portal → funciona dentro de modais com overflow.
+// Gaveta via portal → funciona dentro de modais com overflow.
+// Para trocar um <input type="date"> sem mudar o desktop, use InputData.
 
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
   'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -27,24 +29,63 @@ const deIso = (s) => {
 const ATALHOS_PADRAO = [{ label: 'Ontem', dias: -1 }, { label: 'Hoje', dias: 0 }, { label: 'Amanhã', dias: 1 }];
 const somarDias = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
-function rotulo(iso) {
+// Dica ao lado da data digitada: "Hoje", "Ontem", "Amanhã" ou o dia da semana.
+function dica(iso) {
   const d = deIso(iso);
   if (!d) return '';
   const hoje = new Date();
   const dif = Math.round((d - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) / 86400000);
-  const data = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-  if (dif === 0) return `Hoje · ${data}`;
-  if (dif === -1) return `Ontem · ${data}`;
-  if (dif === 1) return `Amanhã · ${data}`;
-  return `${DIAS_CURTOS[d.getDay()]}, ${data}`;
+  if (dif === 0) return 'Hoje';
+  if (dif === -1) return 'Ontem';
+  if (dif === 1) return 'Amanhã';
+  return DIAS_CURTOS[d.getDay()];
+}
+// 'YYYY-MM-DD' → 'DD/MM/AAAA'
+const isoParaTexto = (iso) => { const d = deIso(iso); return d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : ''; };
+// Dígitos → 'DD/MM/AAAA' parcial, enquanto digita
+const mascara = (dig) => (dig.length <= 2 ? dig : dig.length <= 4 ? `${dig.slice(0, 2)}/${dig.slice(2)}` : `${dig.slice(0, 2)}/${dig.slice(2, 4)}/${dig.slice(4, 8)}`);
+// 'DDMMAAAA' → iso, só se a data existir (31/02 não passa)
+function digitosParaIso(dig) {
+  if (dig.length !== 8) return null;
+  const dd = Number(dig.slice(0, 2)), mm = Number(dig.slice(2, 4)), aa = Number(dig.slice(4, 8));
+  if (aa < 1900 || aa > 2100) return null;
+  const d = new Date(aa, mm - 1, dd);
+  return d.getFullYear() === aa && d.getMonth() === mm - 1 && d.getDate() === dd ? paraIso(d) : null;
 }
 
 export default function CampoData({
-  value = '', onChange, placeholder = 'Selecionar data', min, max,
+  value = '', onChange, placeholder = 'dd/mm/aaaa', min, max,
   titulo = 'Selecionar data', permitirLimpar = true, className = '', disabled = false,
-  atalhos: atalhosDias = null,
+  atalhos: atalhosDias = null, id, 'aria-label': ariaLabel,
 }) {
   const [aberto, setAberto] = useState(false);
+  // Texto digitado. Acompanha `value` quando ele muda por fora (calendário,
+  // atalho, pai) — ajuste durante o render, padrão recomendado do React.
+  const [texto, setTexto] = useState(() => isoParaTexto(value));
+  const [valorVisto, setValorVisto] = useState(value);
+  const [erro, setErro] = useState('');
+  if (value !== valorVisto) { setValorVisto(value); setTexto(isoParaTexto(value)); setErro(''); }
+
+  const digitar = (e) => {
+    const dig = e.target.value.replace(/\D/g, '').slice(0, 8);
+    setTexto(mascara(dig));
+    if (dig.length === 0) {
+      setErro('');
+      if (permitirLimpar && value) onChange?.('');
+      return;
+    }
+    if (dig.length < 8) { setErro(''); return; }
+    const iso = digitosParaIso(dig);
+    if (!iso) { setErro('Data inválida'); return; }
+    if ((min && iso < min) || (max && iso > max)) {
+      setErro(min && iso < min ? `A partir de ${isoParaTexto(min)}` : `Até ${isoParaTexto(max)}`);
+      return;
+    }
+    setErro('');
+    if (iso !== value) onChange?.(iso);
+  };
+  // Saiu do campo com data incompleta/inválida → volta à última válida
+  const sair = () => { if (erro || (texto && texto.length < 10)) { setTexto(isoParaTexto(value)); setErro(''); } };
   const hoje = useMemo(() => new Date(), []);
   const hojeIso = paraIso(hoje);
   const selecionada = deIso(value);
@@ -86,16 +127,27 @@ export default function CampoData({
   // `atalhos`: [{ label, dias }] relativos a hoje (ex.: dias -1 = ontem)
   const atalhos = (atalhosDias || ATALHOS_PADRAO).map(a => ({ label: a.label, iso: paraIso(somarDias(hoje, a.dias)) }));
 
+  const textoDica = !erro && texto.length === 10 && value ? dica(value) : '';
+
   return (
     <>
-      <button type="button" disabled={disabled} onClick={abrir}
-        aria-haspopup="dialog"
-        className={`w-full h-11 px-3 mt-1 flex items-center gap-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm text-left focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:opacity-50 ${className}`}>
-        <Calendar className="h-4 w-4 flex-shrink-0 text-gray-500" aria-hidden="true" />
-        <span className={`truncate ${value ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}`}>
-          {value ? rotulo(value) : placeholder}
-        </span>
-      </button>
+      {/* @container: o campo se adapta à PRÓPRIA largura. Estreito (< 13rem, ex.: De/Até lado a lado
+          no celular) → some a dica "Hoje/sáb" e o botão encolhe, pra data inteira caber. */}
+      <div className={`@container relative w-full h-11 mt-1 flex items-center rounded-lg border bg-white dark:bg-slate-800 text-sm focus-within:ring-2 ${
+        erro ? 'border-red-400 focus-within:ring-red-100' : 'border-gray-200 dark:border-white/10 focus-within:border-blue-500 focus-within:ring-blue-100 dark:focus-within:ring-blue-900/40'
+      } ${disabled ? 'opacity-50' : ''} ${className}`}>
+        <input id={id} type="text" inputMode="numeric" autoComplete="off" enterKeyHint="done"
+          value={texto} onChange={digitar} onBlur={sair} disabled={disabled}
+          placeholder={placeholder} maxLength={10}
+          aria-label={ariaLabel || titulo} aria-invalid={!!erro}
+          className="h-full min-w-0 flex-1 rounded-l-lg bg-transparent pl-2 @min-[13rem]:pl-3 pr-0 @min-[13rem]:pr-1 tracking-tight @min-[13rem]:tracking-normal text-[length:inherit] tabular-nums text-gray-900 dark:text-gray-100 placeholder:text-gray-400 outline-none" />
+        {textoDica && <span className="mr-1 hidden flex-shrink-0 text-xs text-gray-500 @min-[13rem]:inline" aria-hidden="true">{textoDica}</span>}
+        <button type="button" disabled={disabled} onClick={abrir} aria-haspopup="dialog" aria-label={`Abrir calendário — ${titulo}`}
+          className="flex h-full w-9 @min-[13rem]:w-11 flex-shrink-0 items-center justify-center rounded-r-lg border-l border-gray-100 dark:border-white/10 text-gray-600 hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed">
+          <Calendar className="h-[18px] w-[18px]" aria-hidden="true" />
+        </button>
+      </div>
+      {erro && <p className="mt-1 text-xs text-red-600" role="alert">{erro}</p>}
 
       {createPortal(
         <AnimatePresence>

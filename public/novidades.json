@@ -2,6 +2,43 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.2.0",
+      "data": "2026-11-24",
+      "resumo": "Texto maior para quem precisa, telas que se atualizam sozinhas e datas mais fáceis de preencher no celular.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Tamanho do texto",
+          "descricao": "Em “Meu perfil”, escolha Padrão, Grande ou Muito grande. Vale para todo o portal neste aparelho."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Tarefas e Outras contas se atualizam sozinhas",
+          "descricao": "Quando a CCI valida, devolve ou lança algo, a lista muda na hora. Não precisa mais tocar em “Atualizar”."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Datas: digite ou escolha no calendário",
+          "descricao": "No celular, digite só os números (as barras entram sozinhas) ou toque no calendário ao lado do campo."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "App instalado com as cores do tema",
+          "descricao": "A barra do topo acompanha o tema claro ou escuro escolhido no portal."
+        },
+        {
+          "tipo": "correcao",
+          "publico": "cliente",
+          "titulo": "Filtros de tarefas no celular",
+          "descricao": "Os botões de situação deslizam sem barra de rolagem e param sempre alinhados."
+        }
+      ]
+    },
+    {
       "versao": "1.1.1",
       "data": "2026-11-23",
       "resumo": "Um ajuste rápido: agora dá para saber em que versão o portal está.",

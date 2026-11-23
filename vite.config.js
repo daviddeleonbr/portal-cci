@@ -9,6 +9,29 @@ import { readFileSync } from 'node:fs'
 // notas da nova antes de atualizar. Ver src/lib/novidades.js.
 const novidades = JSON.parse(readFileSync(new URL('./public/novidades.json', import.meta.url), 'utf-8'))
 
+// Acessibilidade — "Tamanho do texto" (src/lib/tamanhoTexto.js). O app usa
+// milhares de tamanhos fixos em px (text-[11px]…), que não acompanham o
+// font-size da raiz. Este plugin reescreve TODO `font-size: Npx` do CSS final
+// para `calc(Npx * var(--escala-texto, 1))`: com a escala em 1 nada muda.
+// Dev: o CSS passa pelo transform; build: pelos assets .css no generateBundle.
+function escalaFonte() {
+  const temPx = /font-size:\s*\d*\.?\d+px/;
+  const trocar = (s) => s.replace(/font-size:\s*(\d*\.?\d+)px/g, (_, n) => `font-size:calc(${n}px * var(--escala-texto, 1))`);
+  return {
+    name: 'cci-escala-fonte',
+    enforce: 'post',
+    transform(code, id) {
+      if (!/\.css($|\?)/.test(id) || !temPx.test(code)) return null;
+      return { code: trocar(code), map: null };
+    },
+    generateBundle(_opts, bundle) {
+      for (const f of Object.values(bundle)) {
+        if (f.type === 'asset' && f.fileName.endsWith('.css')) f.source = trocar(String(f.source));
+      }
+    },
+  }
+}
+
 export default defineConfig({
   define: {
     __NOVIDADES__: JSON.stringify({ versoes: novidades.versoes || [] }),
@@ -16,6 +39,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    escalaFonte(),
     VitePWA({
       // 'prompt': o SW novo NÃO ativa sozinho — avisamos o usuário (toast
       // "Nova versão disponível") e ele aplica em 1 clique. Ver src/pwaUpdate.js
@@ -27,7 +51,9 @@ export default defineConfig({
         name: 'CCI · Portal do Cliente',
         short_name: 'CCI',
         description: 'Portal de BPO contábil — gestão financeira, vendas e operação de postos.',
-        theme_color: '#2563eb',
+        // Cor da barra de status do app instalado = fundo do cabeçalho claro.
+        // O tema (claro/escuro) troca em runtime pela meta theme-color (useTheme).
+        theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',

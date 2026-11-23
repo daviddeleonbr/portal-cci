@@ -15,6 +15,7 @@ import { useClienteSession } from '../../../hooks/useAuth';
 import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
 import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil, vencimentoEfetivoIso } from '../../../utils/diasUteis';
+import InputData from '../../../components/ui/InputData';
 
 // ─── Helpers ────────────────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -510,11 +511,11 @@ export default function ClienteContasPagar() {
           <span className={`text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap transition-colors ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-500'}`}>
             <Calendar className="h-3 w-3" /> Vencimento entre
           </span>
-          <input type="date" value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
+          <InputData value={venctoDe} onChange={e => setVenctoDe(e.target.value)}
             disabled={ignorarPeriodo}
             className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed" />
           <span className={`text-[10px] ${ignorarPeriodo ? 'text-gray-300' : 'text-gray-400'}`}>e</span>
-          <input type="date" value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
+          <InputData value={venctoAte} onChange={e => setVenctoAte(e.target.value)}
             disabled={ignorarPeriodo}
             className="h-9 rounded-lg border border-gray-200 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed" />
           <label

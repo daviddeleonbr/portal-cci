@@ -16,6 +16,7 @@ import * as mapService from '../../../services/mapeamentoService';
 import * as nfService from '../../../services/notaManifestacaoService';
 import { formatCurrency } from '../../../utils/format';
 import { numeroNotaDaChave, serieDaChave, formatNumeroNota } from '../../../utils/nfe';
+import InputData from '../../../components/ui/InputData';
 
 const STATUS_PILLS = {
   pendente:         { label: 'Pendente',      bg: 'bg-gray-100 dark:bg-white/[0.06]',      text: 'text-gray-700 dark:text-gray-300 dark:text-gray-600',    dot: 'bg-gray-400' },
@@ -158,10 +159,10 @@ export default function ClienteNotasFiscais() {
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
             <CalendarRange className="h-3 w-3" /> Emissão entre
           </span>
-          <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)}
+          <InputData value={dataDe} onChange={e => setDataDe(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
           <span className="text-[10px] text-gray-400">e</span>
-          <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)}
+          <InputData value={dataAte} onChange={e => setDataAte(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
         </div>
         <button onClick={sincronizar} disabled={sincronizando}
@@ -180,12 +181,12 @@ export default function ClienteNotasFiscais() {
           <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1 mb-1">
             <CalendarRange className="h-3 w-3" /> De
           </span>
-          <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)}
+          <InputData value={dataDe} onChange={e => setDataDe(e.target.value)}
             className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
         </label>
         <label className="block">
           <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1 block">Até</span>
-          <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)}
+          <InputData value={dataAte} onChange={e => setDataAte(e.target.value)}
             className="w-full h-10 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />
         </label>
       </div>

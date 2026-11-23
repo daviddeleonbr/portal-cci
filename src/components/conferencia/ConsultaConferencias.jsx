@@ -8,6 +8,7 @@ import { Eye, Loader2, RefreshCw, X } from 'lucide-react';
 import { SelectBusca } from '../tarefas/CamposTarefas';
 import * as conferenciaService from '../../services/conferenciaRecebimentosService';
 import { formatCurrency } from '../../utils/format';
+import InputData from '../ui/InputData';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const fmtData = (s) => { const [y, m, d] = String(s || '').slice(0, 10).split('-'); return d ? `${d}/${m}/${y}` : s; };
@@ -41,10 +42,14 @@ export default function ConsultaConferencias({ empresas }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
-        <div><label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">De</label>
-          <input type="date" value={de} onChange={e => setDe(e.target.value)} className={inp} /></div>
-        <div><label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Até</label>
-          <input type="date" value={ate} onChange={e => setAte(e.target.value)} className={inp} /></div>
+        {/* De / Até lado a lado (no celular, metade da linha cada). A largura mínima é em
+            rem: com "Tamanho do texto" Grande/Muito grande eles passam a ficar um embaixo do outro. */}
+        <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(8.75rem,1fr))] gap-2 sm:flex sm:w-auto sm:gap-3">
+          <div className="min-w-0"><label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">De</label>
+            <InputData value={de} onChange={e => setDe(e.target.value)} className={`${inp} w-full min-w-0`} /></div>
+          <div className="min-w-0"><label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Até</label>
+            <InputData value={ate} onChange={e => setAte(e.target.value)} className={`${inp} w-full min-w-0`} /></div>
+        </div>
         {(empresas || []).length > 1 && (
           <div className="min-w-[220px] flex-1"><label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Empresa</label>
             <SelectBusca value={empresaF} onChange={setEmpresaF} vazio="Todas"

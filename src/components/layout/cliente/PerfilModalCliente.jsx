@@ -9,12 +9,13 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  X, Mail, Network, Building2, LayoutGrid, KeyRound, Eye, EyeOff, Loader2, Check, Lock, ShieldCheck, ChevronDown, CircleCheck,
+  X, Mail, Network, Building2, LayoutGrid, KeyRound, Eye, EyeOff, Loader2, Check, Lock, ShieldCheck, ChevronDown, CircleCheck, Type,
 } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { trocarEmpresaAtiva } from '../../../lib/auth';
 import { PERMISSOES_CLIENTE, alterarMinhaSenha } from '../../../services/usuariosSistemaService';
 import { VERSAO_ATUAL } from '../../../lib/novidades';
+import { TAMANHOS_TEXTO, useTamanhoTexto, definirTamanhoTexto } from '../../../lib/tamanhoTexto';
 
 const nomeEmp = (c) => c?.razao_social || c?.nome || 'Empresa';
 
@@ -70,6 +71,7 @@ export default function PerfilModalCliente({ onClose }) {
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto overscroll-contain md:grid-cols-2">
           {/* Dados e acessos */}
           <div className="space-y-5 border-gray-100 px-4 md:px-6 py-4 md:py-5 md:border-r">
+            <SeletorTamanhoTexto />
             {rede && <Info icon={<Network className="h-4 w-4" />} titulo="Rede">{rede}</Info>}
             <Info icon={<LayoutGrid className="h-4 w-4" />} titulo="Páginas">
               {paginas.length} de {PERMISSOES_CLIENTE.length} páginas
@@ -136,6 +138,34 @@ export default function PerfilModalCliente({ onClose }) {
       </div>
     </div>,
     document.body,
+  );
+}
+
+// Acessibilidade: tamanho do texto do portal neste aparelho (ver src/lib/tamanhoTexto.js).
+// O "A" de cada opção usa um tamanho fixo proporcional, pra prévia ficar clara.
+const AMOSTRA_PX = { padrao: 15, grande: 18, muito_grande: 21 };
+function SeletorTamanhoTexto() {
+  const atual = useTamanhoTexto();
+  return (
+    <div>
+      <p id="rotulo-tamanho-texto" className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-600">
+        <Type className="h-4 w-4" aria-hidden="true" /> Tamanho do texto
+      </p>
+      <div role="radiogroup" aria-labelledby="rotulo-tamanho-texto" className="grid grid-cols-3 gap-2">
+        {TAMANHOS_TEXTO.map(t => {
+          const on = t.k === atual;
+          return (
+            <button key={t.k} type="button" role="radio" aria-checked={on} onClick={() => definirTamanhoTexto(t.k)}
+              className={`flex min-h-[64px] flex-col items-center justify-center gap-0.5 rounded-xl border px-2 py-2 transition-colors ${
+                on ? 'border-blue-700 bg-blue-50 text-blue-800 ring-1 ring-blue-700' : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'}`}>
+              <span className="font-semibold leading-none" style={{ fontSize: AMOSTRA_PX[t.k] }} aria-hidden="true">A</span>
+              <span className={`text-xs leading-tight ${on ? 'font-semibold' : ''}`}>{t.rot}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-xs text-gray-600">Vale para todo o portal neste aparelho.</p>
+    </div>
   );
 }
 

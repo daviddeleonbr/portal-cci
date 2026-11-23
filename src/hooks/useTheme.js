@@ -3,27 +3,30 @@ import { useEffect, useState, useCallback } from 'react';
 const STORAGE_KEY = 'cci_theme';
 
 // Cores da status bar do PWA quando instalado no celular.
-// Devem bater com o fundo do header da app (ClienteHeader bg-white/80 vs
-// bg-slate-900/80).
+// Devem bater EXATAMENTE com o fundo do cabeçalho (Header/ClienteHeader são
+// bg-white sólido; no escuro o index.css troca bg-white por #1e293b).
+// Manter em sincronia com o script anti-flash do index.html.
 const THEME_COLOR_LIGHT = '#ffffff';
-const THEME_COLOR_DARK  = '#0f172a'; // slate-900
+const THEME_COLOR_DARK  = '#1e293b'; // slate-800 = html.dark .bg-white
 
 function aplicarTema(tema) {
   const root = document.documentElement;
   if (tema === 'dark') root.classList.add('dark');
   else root.classList.remove('dark');
 
-  // Atualiza meta theme-color em runtime — o PWA usa pra cor da status bar.
-  // Mantém uma única meta sem media query: assim cobre o caso de o user
-  // ter forçado um tema diferente do prefers-color-scheme do SO.
+  // Atualiza a meta theme-color em runtime — o PWA usa pra cor da status bar.
+  // Atualiza TODAS e tira o `media`: com várias metas o navegador usa a 1ª
+  // que combina, e uma por prefers-color-scheme ignoraria o tema escolhido.
   if (typeof document !== 'undefined') {
-    let meta = document.querySelector('meta[name="theme-color"]:not([media])');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.setAttribute('name', 'theme-color');
-      document.head.appendChild(meta);
+    const cor = tema === 'dark' ? THEME_COLOR_DARK : THEME_COLOR_LIGHT;
+    let metas = document.querySelectorAll('meta[name="theme-color"]');
+    if (metas.length === 0) {
+      const m = document.createElement('meta');
+      m.setAttribute('name', 'theme-color');
+      document.head.appendChild(m);
+      metas = [m];
     }
-    meta.setAttribute('content', tema === 'dark' ? THEME_COLOR_DARK : THEME_COLOR_LIGHT);
+    metas.forEach(m => { m.removeAttribute('media'); m.setAttribute('content', cor); });
   }
 }
 
