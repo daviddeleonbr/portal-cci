@@ -102,7 +102,7 @@ export async function obter(id) {
       produtos:nf_manifestacao_produto(*),
       arquivos:nf_manifestacao_arquivo(*)`)
     .eq('id', id)
-    .single();
+    .maybeSingle(); // nota apagada / sem acesso → null (não "cannot coerce…")
   if (error) throw error;
   if (data?.produtos) data.produtos.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   return data;

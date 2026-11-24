@@ -72,7 +72,7 @@ export default function ClienteNotaFiscalDetalhe() {
     if (!silencioso) { setLoading(true); setError(null); }
     try {
       const n = await nfService.obter(id);
-      if (!n) throw new Error('Nota não encontrada');
+      if (!n) throw new Error('Esta nota não está mais disponível — ela pode ter sido removida ou sincronizada de novo. Volte para a lista e abra a nota outra vez.');
       // A nota pertence a uma das empresas da rede do usuário (Webposto: 1;
       // Autosystem: a empresa ativa que sincronizou). Valida por clientesRede.
       const pertence = clientesRede.some(c => c.id === n.cliente_id) || n.cliente_id === cliente?.id;
@@ -224,7 +224,7 @@ export default function ClienteNotaFiscalDetalhe() {
     return (
       <div>
         <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 mb-4">
-          <ArrowLeft className="h-4 w-4" /> Voltar
+          <ArrowLeft className="h-4 w-4" /> Voltar para a lista
         </Link>
         <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl p-6 text-sm text-red-800 dark:text-red-300 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />

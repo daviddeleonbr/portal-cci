@@ -81,7 +81,9 @@ export default function ClienteNotasFiscais() {
   const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
   useAtualizacaoAutomatica({
     canal: `nf-cliente-${cliente?.id || 'x'}`,
-    tabelas: [{ table: 'nf_manifestacao', filter: `cliente_id=eq.${cliente?.id}` }],
+    // sem filtro: o Realtime não entrega DELETE em assinatura filtrada (nota
+    // apagada ficava na lista). A RLS limita aos registros que o usuário vê.
+    tabelas: [{ table: 'nf_manifestacao' }],
     recarregar: recarregarSilencioso,
     ativo: !!cliente?.id,
   });

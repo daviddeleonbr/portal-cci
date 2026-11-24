@@ -65,7 +65,7 @@ export default function AdminNfManifestacaoDetalhe() {
     if (!silencioso) { setLoading(true); setError(null); }
     try {
       const n = await nfService.obter(id);
-      if (!n) throw new Error('Nota não encontrada');
+      if (!n) throw new Error('Esta nota não existe mais (foi removida ou sincronizada de novo). Volte para a lista.');
       setNota(n);
     } catch (err) {
       if (!silencioso) setError(err.message);
