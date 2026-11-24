@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.10.3",
+      "data": "2026-11-24",
+      "resumo": "Tela inicial do site melhor no celular.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Tela inicial no celular",
+          "descricao": "O botão Acessar portal agora fica sempre visível no topo, há um menu para chegar às seções e a página ficou mais curta e fácil de ler."
+        }
+      ]
+    },
+    {
       "versao": "1.10.2",
       "data": "2026-11-24",
       "resumo": "Tarefas no menu BPO também no portal da CCI.",

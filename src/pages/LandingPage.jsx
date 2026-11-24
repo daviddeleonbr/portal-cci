@@ -11,7 +11,7 @@ import {
   Wallet, Briefcase, FileBarChart, Database, Bot, LineChart, TrendingUp,
   TrendingDown, AlertTriangle, Clock, Users2, Target,
   Phone, Mail, ChevronRight, Star, PieChart, Activity,
-  MessageCircle, X, Loader2,
+  MessageCircle, X, Loader2, Menu, LogIn,
 } from 'lucide-react';
 import * as cciContatoService from '../services/cciContatoService';
 
@@ -56,77 +56,162 @@ function BackgroundFx() {
 }
 
 // ─── Navbar ────────────────────────────────────────────────────────────
+// Desktop (lg+): links na barra. Celular/tablet: logo + "Acessar portal" +
+// menu. O menu fica FORA do <header> porque o backdrop-blur dele viraria o
+// containing block do painel fixed.
+const LINKS_NAV = [
+  { label: 'Serviços', href: '#serviços' },
+  { label: 'Diferenciais', href: '#diferenciais' },
+  { label: 'Resultados', href: '#resultados' },
+  { label: 'Plataforma', href: '#plataforma' },
+  { label: 'Depoimentos', href: '#depoimentos' },
+];
+
 function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const links = [
-    { label: 'Serviços', href: '#serviços' },
-    { label: 'Diferenciais', href: '#diferenciais' },
-    { label: 'Resultados', href: '#resultados' },
-    { label: 'Plataforma', href: '#plataforma' },
-    { label: 'Depoimentos', href: '#depoimentos' },
-  ];
+  // Menu aberto: trava a rolagem, fecha no Esc e ao virar desktop
+  useEffect(() => {
+    if (!menuAberto) return;
+    const fechar = () => setMenuAberto(false);
+    const onKey = (e) => { if (e.key === 'Escape') fechar(); };
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    desktop.addEventListener('change', fechar);
+    return () => {
+      document.body.style.overflow = anterior;
+      window.removeEventListener('keydown', onKey);
+      desktop.removeEventListener('change', fechar);
+    };
+  }, [menuAberto]);
+
+  // Fecha o menu e só então rola (a página estava travada)
+  const irPara = (e, href) => {
+    e.preventDefault();
+    setMenuAberto(false);
+    setTimeout(() => document.getElementById(href.slice(1))?.scrollIntoView({ behavior: 'smooth' }), 60);
+  };
 
   return (
-    <header
-      className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'backdrop-blur-xl bg-[#070912]/70 border-b border-white/5 py-3'
-          : 'bg-transparent py-5'
-      }`}
-    >
-      <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-        <a href="#top" className="flex items-center gap-3 group">
-          {/* Logo nova — usada APENAS na topbar da landing. Componente
-              <LogoCCI> antigo continua em sidebar admin/cliente. */}
-          <img
-            src="/logo-cci-landing.png"
-            alt="CCI"
-            className="h-10 w-auto object-contain"
-            draggable={false}
-          />
-          <span className="h-8 w-px bg-slate-600 self-center" />
-          <div className="leading-tight text-slate-300 text-[10px] font-normal uppercase tracking-widest self-center">
-            <p>Consultoria</p>
-            <p>Inteligente</p>
-          </div>
-        </a>
+    <>
+      <header
+        className={`fixed top-0 inset-x-0 z-50 pt-[env(safe-area-inset-top)] transition-colors duration-300 ${
+          menuAberto
+            ? 'bg-[#070912] border-b border-white/5'
+            : scrolled
+              ? 'backdrop-blur-xl bg-[#070912]/70 border-b border-white/5'
+              : 'bg-transparent border-b border-transparent'
+        }`}
+      >
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-2 min-[360px]:gap-3 transition-[padding] duration-300 ${
+          scrolled || menuAberto ? 'py-2.5 lg:py-3' : 'py-3 lg:py-5'
+        }`}>
+          <a href="#top" onClick={(e) => irPara(e, '#top')} className="flex flex-shrink-0 items-center gap-3 group" aria-label="CCI — início">
+            {/* Logo nova — usada APENAS na topbar da landing. Componente
+                <LogoCCI> antigo continua em sidebar admin/cliente. */}
+            <img
+              src="/logo-cci-landing.png"
+              alt="CCI"
+              className="h-8 sm:h-10 w-auto object-contain"
+              draggable={false}
+            />
+            <span className="hidden sm:block lg:hidden xl:block h-8 w-px bg-slate-600 self-center" />
+            <div className="hidden sm:block lg:hidden xl:block leading-tight text-slate-300 text-[10px] font-normal uppercase tracking-widest self-center">
+              <p>Consultoria</p>
+              <p>Inteligente</p>
+            </div>
+          </a>
 
-        <nav className="hidden md:flex items-center gap-8">
-          {links.map(l => (
-            <a key={l.href} href={l.href}
+          <nav aria-label="Principal" className="hidden lg:flex items-center gap-6 xl:gap-8">
+            {LINKS_NAV.map(l => (
+              <a key={l.href} href={l.href}
+                className="text-[13px] text-slate-300 hover:text-white transition-colors relative group">
+                {l.label}
+                <span className="absolute -bottom-1 left-0 right-0 h-px bg-blue-500 scale-x-0 group-hover:scale-x-100 origin-left transition-transform" />
+              </a>
+            ))}
+            {/* Visor360 — abre o seletor (webposto / autosystem) */}
+            <Link to="/visor360"
               className="text-[13px] text-slate-300 hover:text-white transition-colors relative group">
-              {l.label}
+              Visor360
               <span className="absolute -bottom-1 left-0 right-0 h-px bg-blue-500 scale-x-0 group-hover:scale-x-100 origin-left transition-transform" />
-            </a>
-          ))}
-          {/* Visor360 — abre o seletor (webposto / autosystem) */}
-          <Link to="/visor360"
-            className="text-[13px] text-slate-300 hover:text-white transition-colors relative group">
-            Visor360
-            <span className="absolute -bottom-1 left-0 right-0 h-px bg-blue-500 scale-x-0 group-hover:scale-x-100 origin-left transition-transform" />
-          </Link>
-        </nav>
+            </Link>
+          </nav>
 
-        <div className="flex items-center gap-3">
-          <Link to="/portais"
-            className="hidden sm:inline-flex text-[13px] text-slate-300 hover:text-white transition-colors px-3 py-2">
-            Acessar portal
-          </Link>
-          <button type="button" onClick={dispararAgendar}
-            className="group relative inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-[13px] font-semibold text-white shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:scale-[1.02]">
-            <span className="absolute inset-0 rounded-full bg-blue-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
-            Agendar diagnóstico
-            <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-          </button>
+          {/* Desktop */}
+          <div className="hidden lg:flex items-center gap-3">
+            <Link to="/portais"
+              className="whitespace-nowrap text-[13px] text-slate-300 hover:text-white transition-colors px-3 py-2">
+              Acessar portal
+            </Link>
+            <button type="button" onClick={dispararAgendar}
+              className="group relative inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-blue-600 px-4 py-2 text-[13px] font-semibold text-white shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:scale-[1.02]">
+              <span className="absolute inset-0 rounded-full bg-blue-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
+              Agendar diagnóstico
+              <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+
+          {/* Celular / tablet */}
+          <div className="flex lg:hidden items-center gap-2">
+            <Link to="/portais"
+              className="inline-flex h-11 items-center gap-1.5 whitespace-nowrap rounded-full bg-blue-600 px-3.5 min-[360px]:px-4 text-[13.5px] font-semibold text-white active:bg-blue-700 transition-colors">
+              <LogIn className="hidden min-[360px]:block h-4 w-4" aria-hidden="true" />
+              Acessar portal
+            </Link>
+            <button type="button" onClick={() => setMenuAberto(v => !v)}
+              aria-label={menuAberto ? 'Fechar menu' : 'Abrir menu'} aria-expanded={menuAberto} aria-controls="menu-landing"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-100 active:bg-white/10 transition-colors">
+              {menuAberto ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <AnimatePresence>
+        {menuAberto && (
+          <motion.div id="menu-landing" key="menu"
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+            className="lg:hidden fixed inset-0 z-40 flex flex-col overflow-y-auto overscroll-contain bg-[#070912] px-5 pt-[calc(5.25rem+env(safe-area-inset-top))] pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
+          >
+            <nav aria-label="Menu" className="flex-1">
+              <ul className="divide-y divide-white/[0.07]">
+                {LINKS_NAV.map(l => (
+                  <li key={l.href}>
+                    <a href={l.href} onClick={(e) => irPara(e, l.href)}
+                      className="flex min-h-[54px] items-center justify-between text-[17px] font-medium text-slate-100 active:text-blue-300">
+                      {l.label}
+                      <ChevronRight className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                    </a>
+                  </li>
+                ))}
+                <li>
+                  <Link to="/visor360"
+                    className="flex min-h-[54px] items-center justify-between text-[17px] font-medium text-slate-100 active:text-blue-300">
+                    Visor360
+                    <ArrowUpRight className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                  </Link>
+                </li>
+              </ul>
+            </nav>
+            <button type="button" onClick={() => { setMenuAberto(false); dispararAgendar(); }}
+              className="mt-6 inline-flex h-12 w-full flex-shrink-0 items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 text-[15px] font-semibold text-white active:bg-white/10">
+              Agendar diagnóstico gratuito
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -136,7 +221,7 @@ function Hero() {
   const yMockup = useTransform(scrollYProgress, [0, 0.3], [0, -80]);
 
   return (
-    <section id="top" className="relative pt-36 pb-24 px-6 overflow-hidden">
+    <section id="top" className="relative pt-[calc(6.5rem+env(safe-area-inset-top))] sm:pt-36 pb-14 sm:pb-24 px-5 sm:px-6 overflow-hidden">
       <HeroVideoBackground />
       <div className="relative z-10 max-w-7xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
@@ -153,7 +238,7 @@ function Hero() {
         <motion.h1
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.05 }}
-          className="font-display text-center text-[44px] sm:text-6xl md:text-7xl font-semibold tracking-tight leading-[1.05] max-w-5xl mx-auto"
+          className="font-display text-balance sm:text-wrap text-center text-[clamp(2.125rem,10.5vw,2.75rem)] sm:text-6xl md:text-7xl font-semibold tracking-tight leading-[1.08] sm:leading-[1.05] max-w-5xl mx-auto"
         >
           O resultado que o seu posto{' '}
           <span className="text-blue-300">
@@ -165,7 +250,7 @@ function Hero() {
         <motion.p
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.15 }}
-          className="mt-7 text-center text-[17px] sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed"
+          className="mt-5 sm:mt-7 text-center text-[16px] sm:text-lg text-slate-300 sm:text-slate-400 max-w-2xl mx-auto leading-relaxed"
         >
           Consultoria, BPO financeiro e relatórios inteligentes para postos que querem
           parar de operar no escuro. Dados reais, decisões precisas, margem que aparece no caixa.
@@ -174,16 +259,16 @@ function Hero() {
         <motion.div
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.25 }}
-          className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3"
+          className="mt-8 sm:mt-10 mx-auto flex max-w-sm sm:max-w-none flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3"
         >
           <button type="button" onClick={dispararAgendar}
-            className="group relative inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3.5 text-[14px] font-semibold text-white shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:scale-[1.02]">
+            className="group relative inline-flex min-h-[50px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-blue-600 px-6 py-3.5 text-[15px] sm:text-[14px] font-semibold text-white shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 transition-all hover:scale-[1.02]">
             <span className="absolute inset-0 rounded-full bg-blue-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
             Agendar diagnóstico gratuito
             <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
           </button>
           <a href="#serviços"
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-6 py-3.5 text-[14px] font-medium text-slate-200 hover:bg-white/[0.06] hover:border-white/20 transition-all">
+            className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-full border border-white/15 sm:border-white/10 bg-white/[0.06] sm:bg-white/[0.03] px-6 py-3.5 text-[15px] sm:text-[14px] font-medium text-slate-200 hover:bg-white/[0.06] hover:border-white/20 transition-all">
             Ver como funciona
             <ChevronRight className="h-4 w-4" />
           </a>
@@ -191,7 +276,7 @@ function Hero() {
 
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}
-          className="mt-8 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-[12px] text-slate-500"
+          className="mt-6 sm:mt-8 flex flex-wrap items-center justify-center gap-x-5 sm:gap-x-7 gap-y-2 text-[12.5px] sm:text-[12px] text-slate-400 sm:text-slate-500"
         >
           <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> Sem mensalidade no diagnóstico</span>
           <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> Resposta em 24h úteis</span>
@@ -203,7 +288,7 @@ function Hero() {
           style={{ y: yMockup }}
           initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, delay: 0.4 }}
-          className="mt-20 relative max-w-6xl mx-auto"
+          className="mt-12 sm:mt-20 relative max-w-6xl mx-auto"
         >
           <HeroDashboardMock />
         </motion.div>
@@ -255,19 +340,21 @@ function HeroDashboardMock() {
             <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
-            <span className="ml-3 text-[11px] text-slate-500">portal.cci-consultoria.com.br/dashboard</span>
-            <span className="ml-auto text-[10px] text-slate-500">Atualizado agora</span>
+            <span className="ml-3 min-w-0 truncate text-[11px] text-slate-500">portal.cci-consultoria.com.br/dashboard</span>
+            <span className="ml-auto hidden sm:block flex-shrink-0 text-[10px] text-slate-500">Atualizado agora</span>
           </div>
           {/* Body */}
-          <div className="p-5 grid grid-cols-12 gap-4">
-            <div className="col-span-12 md:col-span-3 space-y-3">
+          <div className="p-3 sm:p-5 grid grid-cols-12 gap-3 sm:gap-4">
+            <div className="col-span-12 md:col-span-3 grid grid-cols-2 gap-3 md:block md:space-y-3">
               <MockKPI label="Margem bruta" value="24,8%" delta="+3,2 pp" up icon={TrendingUp} />
               <MockKPI label="Lucro líquido" value="R$ 287k" delta="+18%" up icon={Wallet} accent="emerald" />
-              <MockKPI label="Cancelamentos" value="0,4%" delta="-1,1 pp" up icon={AlertTriangle} accent="amber" />
+              <div className="hidden md:block">
+                <MockKPI label="Cancelamentos" value="0,4%" delta="-1,1 pp" up icon={AlertTriangle} accent="amber" />
+              </div>
             </div>
-            <div className="col-span-12 md:col-span-9 space-y-4">
+            <div className="col-span-12 md:col-span-9 min-w-0 space-y-3 sm:space-y-4">
               <MockChart />
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                 <MockMini title="Diesel S10" pct={42} accent="cyan" />
                 <MockMini title="Gasolina" pct={31} accent="violet" />
                 <MockMini title="Conveniência" pct={27} accent="emerald" />
@@ -311,10 +398,10 @@ function MockKPI({ label, value, delta, up, icon: Icon, accent = 'violet' }) {
   return (
     <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3.5">
       <div className="flex items-center gap-2 mb-2">
-        <div className={`h-7 w-7 rounded-md flex items-center justify-center ${accentMap[accent]}`}>
+        <div className={`h-7 w-7 flex-shrink-0 rounded-md flex items-center justify-center ${accentMap[accent]}`}>
           <Icon className="h-3.5 w-3.5" />
         </div>
-        <span className="text-[10.5px] uppercase tracking-wider text-slate-500">{label}</span>
+        <span className="min-w-0 text-[10px] sm:text-[10.5px] uppercase tracking-wide sm:tracking-wider leading-tight text-slate-400 sm:text-slate-500">{label}</span>
       </div>
       <p className="text-[20px] font-semibold tracking-tight text-white tabular-nums">{value}</p>
       <p className={`text-[10.5px] mt-0.5 inline-flex items-center gap-1 ${up ? 'text-emerald-300' : 'text-red-300'}`}>
@@ -334,24 +421,20 @@ function MockChart() {
           <p className="text-[12px] text-slate-300 font-medium">Lucro líquido — últimos 12 meses</p>
           <p className="text-[10.5px] text-slate-500">Tendência consolidada</p>
         </div>
-        <div className="flex items-center gap-3 text-[10px]">
+        <div className="hidden sm:flex items-center gap-3 text-[10px]">
           <span className="inline-flex items-center gap-1.5 text-slate-400"><span className="h-1.5 w-3 rounded-full bg-blue-400" /> Atual</span>
           <span className="inline-flex items-center gap-1.5 text-slate-500"><span className="h-1.5 w-3 rounded-full bg-slate-600" /> YoY</span>
         </div>
       </div>
-      <div className="flex items-end gap-1.5 h-32">
+      {/* itens com altura cheia: a barra em % precisa de pai com altura definida */}
+      <div className="flex items-stretch gap-1 sm:gap-1.5 h-28 sm:h-32">
         {bars.map((h, i) => (
-          <div key={i} className="flex-1 flex flex-col gap-0.5 items-stretch">
-            <div className="flex-1 flex items-end">
-              <div
-                className="w-full rounded-t bg-blue-500/70"
-                style={{ height: `${h}%` }}
-              />
-            </div>
+          <div key={i} className="flex-1 h-full flex items-end">
+            <div className="w-full rounded-t bg-blue-500/70" style={{ height: `${h}%` }} />
           </div>
         ))}
       </div>
-      <div className="mt-2 grid grid-cols-12 gap-1.5 text-[9px] text-slate-600 text-center">
+      <div className="mt-2 grid grid-cols-12 gap-1 sm:gap-1.5 text-[9px] text-slate-600 text-center">
         {['J','F','M','A','M','J','J','A','S','O','N','D'].map((m, i) => <span key={i}>{m}</span>)}
       </div>
     </div>
@@ -403,17 +486,17 @@ function Problems() {
     },
   ];
   return (
-    <section className="px-6 py-24 relative">
+    <section className="px-5 sm:px-6 py-14 sm:py-24 relative">
       <div className="max-w-6xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-50px' }} transition={{ duration: 0.6 }}
-          className="max-w-2xl mb-14"
+          className="max-w-2xl mb-8 sm:mb-14"
         >
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">
             Quase todo posto sofre disso
           </p>
-          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-balance sm:text-wrap text-[28px] sm:text-5xl font-semibold tracking-tight leading-tight">
             Vender muito não significa <span className="text-slate-400">lucrar muito.</span>
           </h2>
           <p className="mt-5 text-slate-400 text-[15px] leading-relaxed">
@@ -422,20 +505,22 @@ function Problems() {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {itens.map((it, i) => (
             <motion.div
               key={it.title}
               initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-30px' }}
               transition={{ duration: 0.5, delay: i * 0.08 }}
-              className="group rounded-2xl border border-white/10 bg-white/[0.02] p-6 hover:border-blue-400/30 hover:bg-white/[0.04] transition-all"
+              className="group flex gap-4 sm:block rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-6 hover:border-blue-400/30 hover:bg-white/[0.04] transition-all"
             >
-              <div className="h-10 w-10 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <div className="h-10 w-10 flex-shrink-0 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center sm:mb-4 group-hover:scale-110 transition-transform">
                 <it.icon className="h-4.5 w-4.5 text-red-300" />
               </div>
-              <h3 className="text-[15px] font-semibold text-white mb-1.5">{it.title}</h3>
-              <p className="text-[13px] text-slate-400 leading-relaxed">{it.text}</p>
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-semibold text-white mb-1 sm:mb-1.5">{it.title}</h3>
+                <p className="text-[14px] sm:text-[13px] text-slate-400 leading-relaxed">{it.text}</p>
+              </div>
             </motion.div>
           ))}
         </div>
@@ -492,17 +577,17 @@ function Services() {
   ];
 
   return (
-    <section id="serviços" className="px-6 py-24 relative">
+    <section id="serviços" className="scroll-mt-8 sm:scroll-mt-0 px-5 sm:px-6 py-14 sm:py-24 relative">
       <div className="max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }} transition={{ duration: 0.6 }}
-          className="max-w-2xl mb-16"
+          className="max-w-2xl mb-8 sm:mb-16"
         >
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">
             Como entregamos resultado
           </p>
-          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-balance sm:text-wrap text-[28px] sm:text-5xl font-semibold tracking-tight leading-tight">
             Três frentes, uma só missão:{' '}
             <span className="text-blue-300">
               colocar seu posto no lucro real.
@@ -510,14 +595,14 @@ function Services() {
           </h2>
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {blocos.map((b, i) => (
             <motion.div
               key={b.title}
               initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-50px' }}
               transition={{ duration: 0.6, delay: i * 0.1 }}
-              className={`group relative rounded-2xl border border-white/10 bg-white/[0.03] p-7 overflow-hidden transition-all hover:border-white/20 hover:shadow-2xl ${b.glow}`}
+              className={`group relative rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-7 overflow-hidden transition-all hover:border-white/20 hover:shadow-2xl ${b.glow}`}
             >
               {/* Glow lateral */}
               <div className={`absolute -top-32 -right-32 h-64 w-64 rounded-full ${b.accent} opacity-10 blur-3xl group-hover:opacity-20 transition-opacity`} />
@@ -528,11 +613,11 @@ function Services() {
                 </div>
                 <p className="text-[10.5px] uppercase tracking-[0.18em] text-slate-500 mb-2">{b.tag}</p>
                 <h3 className="text-xl font-semibold text-white tracking-tight mb-3 leading-snug">{b.title}</h3>
-                <p className="text-[13.5px] text-slate-400 leading-relaxed mb-6">{b.desc}</p>
+                <p className="text-[14px] sm:text-[13.5px] text-slate-400 leading-relaxed mb-5 sm:mb-6">{b.desc}</p>
 
                 <ul className="space-y-2.5">
                   {b.bullets.map((bl, j) => (
-                    <li key={j} className="flex items-start gap-2.5 text-[13px] text-slate-300">
+                    <li key={j} className="flex items-start gap-2.5 text-[14px] sm:text-[13px] text-slate-300">
                       <span className={`mt-0.5 h-4 w-4 rounded-full ${b.accent} flex items-center justify-center flex-shrink-0`}>
                         <Check className="h-2.5 w-2.5 text-white" />
                       </span>
@@ -561,15 +646,15 @@ function Differentials() {
   ];
 
   return (
-    <section id="diferenciais" className="px-6 py-24 relative">
+    <section id="diferenciais" className="scroll-mt-8 sm:scroll-mt-0 px-5 sm:px-6 py-14 sm:py-24 relative">
       <div className="max-w-6xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }} transition={{ duration: 0.6 }}
-          className="text-center mb-16 max-w-3xl mx-auto"
+          className="text-center mb-8 sm:mb-16 max-w-3xl mx-auto"
         >
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">Por que CCI</p>
-          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-balance sm:text-wrap text-[28px] sm:text-5xl font-semibold tracking-tight leading-tight">
             Construído por quem vive postos.{' '}
             <span className="text-slate-400">Não por consultoria genérica.</span>
           </h2>
@@ -581,13 +666,15 @@ function Differentials() {
               key={it.title}
               initial={{ opacity: 0 }} whileInView={{ opacity: 1 }}
               viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.05 }}
-              className="bg-[#0a0d18] p-7 hover:bg-[#0d111e] transition-colors"
+              className="flex gap-4 sm:block bg-[#0a0d18] p-4 sm:p-7 hover:bg-[#0d111e] transition-colors"
             >
-              <div className="h-9 w-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+              <div className="h-9 w-9 flex-shrink-0 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center sm:mb-4">
                 <it.icon className="h-4 w-4 text-blue-300" />
               </div>
-              <h3 className="text-[15px] font-semibold text-white mb-1.5">{it.title}</h3>
-              <p className="text-[13px] text-slate-400 leading-relaxed">{it.desc}</p>
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-semibold text-white mb-1 sm:mb-1.5">{it.title}</h3>
+                <p className="text-[14px] sm:text-[13px] text-slate-400 leading-relaxed">{it.desc}</p>
+              </div>
             </motion.div>
           ))}
         </div>
@@ -605,9 +692,9 @@ function Results() {
     { valor: '100%', label: 'Conciliação automatizada', sub: 'extrato vs sistema vs OFX' },
   ];
   return (
-    <section id="resultados" className="px-6 py-24 relative">
+    <section id="resultados" className="scroll-mt-8 sm:scroll-mt-0 px-5 sm:px-6 py-14 sm:py-24 relative">
       <div className="max-w-6xl mx-auto">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-10 sm:p-14 relative overflow-hidden">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-5 py-8 sm:p-14 relative overflow-hidden">
           <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl" />
           <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl" />
 
@@ -615,10 +702,10 @@ function Results() {
             <motion.div
               initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }}
-              className="max-w-2xl mb-12"
+              className="max-w-2xl mb-8 sm:mb-12"
             >
               <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300 mb-3">O resultado em números</p>
-              <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+              <h2 className="font-display text-balance sm:text-wrap text-[28px] sm:text-5xl font-semibold tracking-tight leading-tight">
                 Postos que viraram a chave{' '}
                 <span className="text-emerald-300">
                   e nunca mais voltaram.
@@ -626,19 +713,19 @@ function Results() {
               </h2>
             </motion.div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-7 sm:gap-6">
               {numeros.map((n, i) => (
                 <motion.div
                   key={n.label}
                   initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.08 }}
-                  className="relative pl-5 border-l border-white/10"
+                  className="relative pl-3.5 sm:pl-5 border-l border-white/10"
                 >
-                  <p className="text-4xl sm:text-5xl font-semibold tracking-tight text-white">
+                  <p className="text-[32px] leading-tight sm:text-5xl font-semibold tracking-tight text-white">
                     {n.valor}
                   </p>
                   <p className="mt-2 text-[14px] font-medium text-slate-200">{n.label}</p>
-                  <p className="mt-1 text-[12px] text-slate-500">{n.sub}</p>
+                  <p className="mt-1 text-[12px] text-slate-400 sm:text-slate-500">{n.sub}</p>
                 </motion.div>
               ))}
             </div>
@@ -661,15 +748,15 @@ function DashboardShowcase() {
   ];
 
   return (
-    <section id="plataforma" className="px-6 py-24 relative">
+    <section id="plataforma" className="scroll-mt-8 sm:scroll-mt-0 px-5 sm:px-6 py-14 sm:py-24 relative">
       <div className="max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }} transition={{ duration: 0.6 }}
-          className="max-w-2xl mb-14"
+          className="max-w-2xl mb-8 sm:mb-14"
         >
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">A plataforma</p>
-          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-balance sm:text-wrap text-[28px] sm:text-5xl font-semibold tracking-tight leading-tight">
             Um portal. Toda a saúde financeira do seu posto{' '}
             <span className="text-slate-400">em tempo real.</span>
           </h2>
@@ -685,8 +772,8 @@ function DashboardShowcase() {
             >
               <div className="rounded-xl overflow-hidden bg-[#0b0f1c]">
                 {/* Cabeçalho fake */}
-                <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between bg-[#0a0d18]">
-                  <div>
+                <div className="px-4 sm:px-5 py-4 border-b border-white/5 flex items-center justify-between gap-3 bg-[#0a0d18]">
+                  <div className="min-w-0">
                     <p className="text-[12px] font-semibold text-slate-100">Auto Posto Vista Verde · DRE Gerencial</p>
                     <p className="text-[10px] text-slate-500">Março/2026 · Comparado com Março/2025</p>
                   </div>
@@ -695,7 +782,7 @@ function DashboardShowcase() {
                   </span>
                 </div>
                 {/* Conteúdo */}
-                <div className="p-5 space-y-3">
+                <div className="p-3 sm:p-5 space-y-2 sm:space-y-3">
                   {[
                     { label: 'Receita bruta', val: 'R$ 4.187.230', pct: '+12,4%', up: true },
                     { label: 'CMV', val: 'R$ 3.348.290', pct: '+9,1%', up: false },
@@ -703,11 +790,11 @@ function DashboardShowcase() {
                     { label: 'Despesas operacionais', val: 'R$ 412.118', pct: '+3,2%', up: false },
                     { label: 'Lucro líquido', val: 'R$ 326.842', pct: '+44,1%', up: true, hi: true },
                   ].map((row) => (
-                    <div key={row.label} className={`flex items-center justify-between py-2 px-3 rounded-lg ${row.hi ? 'bg-blue-500/10 border border-blue-500/20' : 'border border-white/[0.04]'}`}>
+                    <div key={row.label} className={`flex items-center justify-between gap-2 py-2 px-3 rounded-lg ${row.hi ? 'bg-blue-500/10 border border-blue-500/20' : 'border border-white/[0.04]'}`}>
                       <span className={`text-[12.5px] ${row.hi ? 'font-semibold text-white' : 'text-slate-300'}`}>{row.label}</span>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[13px] font-mono tabular-nums ${row.hi ? 'text-white' : 'text-slate-200'}`}>{row.val}</span>
-                        <span className={`text-[11px] font-mono tabular-nums w-14 text-right ${row.up ? 'text-emerald-300' : 'text-amber-300'}`}>
+                      <div className="flex flex-shrink-0 items-center gap-1 sm:gap-3 whitespace-nowrap">
+                        <span className={`text-[12px] sm:text-[13px] font-mono tabular-nums ${row.hi ? 'text-white' : 'text-slate-200'}`}>{row.val}</span>
+                        <span className={`text-[10.5px] sm:text-[11px] font-mono tabular-nums w-[3.6rem] text-right ${row.up ? 'text-emerald-300' : 'text-amber-300'}`}>
                           {row.up ? '↑ ' : '↓ '}{row.pct}
                         </span>
                       </div>
@@ -719,19 +806,19 @@ function DashboardShowcase() {
           </div>
 
           {/* Lista de features ao lado */}
-          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="lg:col-span-2 grid grid-cols-2 gap-2.5 sm:gap-3">
             {features.map((f, i) => (
               <motion.div
                 key={f.title}
                 initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.06 }}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-4 hover:bg-white/[0.05] transition-colors"
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 sm:p-4 hover:bg-white/[0.05] transition-colors"
               >
                 <div className="h-8 w-8 rounded-lg bg-blue-500/15 flex items-center justify-center mb-3">
                   <f.icon className="h-4 w-4 text-blue-300" />
                 </div>
                 <p className="text-[13px] font-semibold text-white mb-1">{f.title}</p>
-                <p className="text-[11.5px] text-slate-400 leading-snug">{f.desc}</p>
+                <p className="text-[12.5px] sm:text-[11.5px] text-slate-400 leading-snug">{f.desc}</p>
               </motion.div>
             ))}
           </div>
@@ -761,26 +848,26 @@ function Testimonials() {
     },
   ];
   return (
-    <section id="depoimentos" className="px-6 py-24 relative">
+    <section id="depoimentos" className="scroll-mt-8 sm:scroll-mt-0 px-5 sm:px-6 py-14 sm:py-24 relative">
       <div className="max-w-6xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }} transition={{ duration: 0.6 }}
-          className="max-w-2xl mb-14"
+          className="max-w-2xl mb-8 sm:mb-14"
         >
           <p className="text-[11px] uppercase tracking-[0.2em] text-blue-300 mb-3">Quem já usa</p>
-          <h2 className="font-display text-3xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h2 className="font-display text-balance sm:text-wrap text-[28px] sm:text-5xl font-semibold tracking-tight leading-tight">
             Empresários de postos que decidiram <span className="text-slate-400">parar de adivinhar.</span>
           </h2>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="-mx-5 px-5 scroll-px-5 flex gap-3 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-6 sm:px-6 sm:scroll-px-6 md:mx-0 md:px-0 md:grid md:grid-cols-3 md:gap-5 md:overflow-visible">
           {itens.map((d, i) => (
             <motion.figure
               key={d.autor}
               initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.1 }}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 flex flex-col"
+              className="w-[85%] sm:w-[60%] md:w-auto flex-shrink-0 snap-start rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 flex flex-col"
             >
               <div className="flex items-center gap-1 mb-4 text-amber-300">
                 {[...Array(5)].map((_, k) => <Star key={k} className="h-3.5 w-3.5 fill-current" />)}
@@ -808,12 +895,12 @@ function Testimonials() {
 // ─── CTA Final ─────────────────────────────────────────────────────────
 function FinalCTA() {
   return (
-    <section id="cta" className="px-6 py-24 relative">
+    <section id="cta" className="scroll-mt-8 sm:scroll-mt-0 px-5 sm:px-6 py-14 sm:py-24 relative">
       <div className="max-w-5xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }} transition={{ duration: 0.7 }}
-          className="relative rounded-3xl overflow-hidden border border-white/10 bg-blue-700/25 p-12 sm:p-16 text-center"
+          className="relative rounded-3xl overflow-hidden border border-white/10 bg-blue-700/25 px-5 py-10 sm:p-16 text-center"
         >
           {/* Glow */}
           <div className="absolute inset-0 -z-10">
@@ -832,26 +919,26 @@ function FinalCTA() {
 
           <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3.5 py-1.5 text-[11px] font-medium text-slate-100 backdrop-blur mb-6">
             <Sparkles className="h-3 w-3 text-blue-300" />
-            Diagnóstico financeiro gratuito · Setor postos
+            <span>Diagnóstico financeiro gratuito<span className="hidden sm:inline"> · Setor postos</span></span>
           </span>
 
-          <h2 className="font-display text-4xl sm:text-6xl font-semibold tracking-tight leading-[1.05] max-w-3xl mx-auto">
+          <h2 className="font-display text-balance sm:text-wrap text-[32px] sm:text-6xl font-semibold tracking-tight leading-[1.05] max-w-3xl mx-auto">
             Pronto para parar de tomar decisões <span className="text-slate-300">no escuro?</span>
           </h2>
-          <p className="mt-6 text-[16px] text-slate-300 max-w-xl mx-auto leading-relaxed">
+          <p className="mt-4 sm:mt-6 text-[15.5px] sm:text-[16px] text-slate-300 max-w-xl mx-auto leading-relaxed">
             Em 30 minutos analisamos a saúde financeira do seu posto e mostramos
             onde está o lucro escondido. Sem custo, sem compromisso.
           </p>
 
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="mt-8 sm:mt-10 mx-auto flex max-w-sm sm:max-w-none flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
             <button type="button" onClick={dispararAgendar}
-              className="group relative inline-flex items-center gap-2 rounded-full bg-blue-600 px-7 py-4 text-[14.5px] font-semibold text-white shadow-2xl shadow-blue-500/40 hover:shadow-blue-500/60 transition-all hover:scale-[1.02]">
+              className="group relative inline-flex min-h-[50px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-blue-600 px-5 sm:px-7 py-3.5 sm:py-4 text-[15px] sm:text-[14.5px] font-semibold text-white shadow-2xl shadow-blue-500/40 hover:shadow-blue-500/60 transition-all hover:scale-[1.02]">
               <span className="absolute inset-0 rounded-full bg-blue-500 opacity-0 group-hover:opacity-100 blur-md transition-opacity -z-10" />
               Agendar diagnóstico gratuito
               <ArrowUpRight className="h-4 w-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </button>
             <button type="button" onClick={dispararAgendar}
-              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-7 py-4 text-[14.5px] font-medium text-white hover:bg-white/10 transition-all backdrop-blur">
+              className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-5 sm:px-7 py-3.5 sm:py-4 text-[15px] sm:text-[14.5px] font-medium text-white hover:bg-white/10 transition-all backdrop-blur">
               Falar no WhatsApp
               <Phone className="h-4 w-4" />
             </button>
@@ -869,10 +956,10 @@ function FinalCTA() {
 // ─── Footer ────────────────────────────────────────────────────────────
 function Footer() {
   return (
-    <footer className="px-6 pt-16 pb-10 border-t border-white/[0.06]">
+    <footer className="px-5 sm:px-6 pt-10 sm:pt-16 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-10 border-t border-white/[0.06]">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-10 mb-12">
-          <div className="md:col-span-5">
+        <div className="grid grid-cols-2 md:grid-cols-12 gap-x-6 gap-y-8 md:gap-10 mb-10 sm:mb-12">
+          <div className="col-span-2 md:col-span-5">
             <p className="text-[13px] text-slate-400 leading-relaxed max-w-md">
               Consultoria, BPO financeiro e relatórios inteligentes especializados em postos
               de combustível. Tecnologia, dados e gente para colocar o seu negócio no lucro real.
@@ -925,16 +1012,16 @@ function Footer() {
 function FooterCol({ titulo, links }) {
   return (
     <div className="md:col-span-2">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-4">{titulo}</p>
-      <ul className="space-y-2.5">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-2 sm:mb-4">{titulo}</p>
+      <ul className="sm:space-y-2.5">
         {links.map(([label, href]) => (
           <li key={label}>
             {href.startsWith('/') ? (
-              <Link to={href} className="text-[13px] text-slate-300 hover:text-white transition-colors">
+              <Link to={href} className="inline-block py-2 sm:py-0 text-[14px] sm:text-[13px] text-slate-300 hover:text-white transition-colors">
                 {label}
               </Link>
             ) : (
-              <a href={href} className="text-[13px] text-slate-300 hover:text-white transition-colors">
+              <a href={href} className="inline-block py-2 sm:py-0 text-[14px] sm:text-[13px] text-slate-300 hover:text-white transition-colors">
                 {label}
               </a>
             )}
@@ -987,7 +1074,7 @@ function ModalAgendar() {
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={close}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/70 backdrop-blur"
         >
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -995,13 +1082,13 @@ function ModalAgendar() {
             exit={{ opacity: 0, y: 20, scale: 0.98 }}
             transition={{ duration: 0.22 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg rounded-3xl border border-white/10 bg-gradient-to-br from-[#0f1126] via-[#0c0e1f] to-[#0a0c1a] backdrop-blur shadow-2xl overflow-hidden"
+            className="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl pb-[env(safe-area-inset-bottom)] border border-white/10 bg-gradient-to-br from-[#0f1126] via-[#0c0e1f] to-[#0a0c1a] backdrop-blur shadow-2xl"
           >
             {/* Header */}
             <div className="relative px-6 pt-6 pb-4">
-              <button onClick={close}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
-                <X className="h-4 w-4" />
+              <button type="button" onClick={close} aria-label="Fechar"
+                className="absolute top-2.5 right-2.5 inline-flex h-11 w-11 items-center justify-center rounded-full text-slate-400 hover:text-white transition-colors">
+                <X className="h-5 w-5" />
               </button>
               <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-[11px] font-medium text-blue-200 mb-3">
                 <Sparkles className="h-3 w-3" />
