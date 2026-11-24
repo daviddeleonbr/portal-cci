@@ -35,6 +35,7 @@ import { useAtualizarDados } from '../../../hooks/useAtualizarDados';
 import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
 import { mascarar } from '../../../utils/demoMascarar';
+import { useChaveApi } from '../../../hooks/useChaveApi';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -68,7 +69,7 @@ function extrairVal(c) {
 export default function ClienteDashboard() {
   const session = useClienteSession();
   const cliente = session?.cliente;
-  const chaveApiSessao = session?.chaveApi?.chave || null;
+  const chaveApiSessao = useChaveApi(session?.chaveApi?.id); // do banco — não vem mais na sessão
   const chaveApiNome   = session?.chaveApi?.nome  || '';
   const temPermFinanceiro = (session?.usuario?.permissoes || []).includes('financeiro');
 

@@ -7,6 +7,7 @@ import { useClienteSession } from '../../../hooks/useAuth';
 import * as qualityApi from '../../../services/qualityApiService';
 import * as mapeamentoService from '../../../services/mapeamentoService';
 import AbaApelidos from '../../../components/cliente/AbaApelidos';
+import { useChaveApi } from '../../../hooks/useChaveApi';
 
 const TIPO_OPTS = [
   { value: 'aditivada', label: 'Aditivada', cor: 'violet' },
@@ -73,6 +74,7 @@ export default function ClienteConfiguracoes() {
 
 function AbaMixGasolina({ chaveApi }) {
   const chaveApiId = chaveApi?.id;
+  const chaveApiKey = useChaveApi(chaveApiId); // do banco — não vem mais na sessão
   const [combustiveis, setCombustiveis] = useState([]);
   const [classificacao, setClassificacao] = useState(new Map());
   const [classOriginal, setClassOriginal] = useState(new Map());
@@ -83,13 +85,13 @@ function AbaMixGasolina({ chaveApi }) {
   const [busca, setBusca] = useState('');
 
   async function carregar() {
-    if (!chaveApiId || !chaveApi?.chave) return;
+    if (!chaveApiId || !chaveApiKey) return;
     setLoading(true);
     setErro('');
     setSucesso('');
     try {
       const [produtos, mixSalvo] = await Promise.all([
-        qualityApi.buscarProdutos(chaveApi.chave),
+        qualityApi.buscarProdutos(chaveApiKey),
         mapeamentoService.listarMixProdutosWebposto(chaveApiId),
       ]);
       // Apenas combustíveis: flag dedicada `combustivel = true` do endpoint PRODUTO
@@ -122,7 +124,7 @@ function AbaMixGasolina({ chaveApi }) {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { carregar(); }, [chaveApiId]);
+  useEffect(() => { carregar(); }, [chaveApiId, chaveApiKey]); // a chave chega do banco logo depois
 
   function setTipo(produtoCodigo, tipo) {
     setClassificacao(prev => {

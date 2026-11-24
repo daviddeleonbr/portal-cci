@@ -52,6 +52,7 @@ import { useAutoRefresh } from '../../../hooks/useAutoRefresh';
 import { useAtualizarDados } from '../../../hooks/useAtualizarDados';
 import { useEmpresasSelecionadas } from '../../../hooks/useEmpresasSelecionadas';
 import IndicadorAtualizacao from '../../../components/vendas/IndicadorAtualizacao';
+import { useChaveApi } from '../../../hooks/useChaveApi';
 
 // ─── Helpers de data ─────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export default function ClienteComercialVendas() {
   const session = useClienteSession();
   const cliente = session?.cliente;
   const clientesRede = session?.clientesRede || [];
-  const chaveApiSessao = session?.chaveApi?.chave || null;
+  const chaveApiSessao = useChaveApi(session?.chaveApi?.id); // do banco — não vem mais na sessão
 
   // Empresas elegíveis (com empresa_codigo). Em ambiente single-empresa,
   // `clientesRede` tem só 1 e empresasDisponiveis também.

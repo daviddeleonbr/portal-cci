@@ -25,6 +25,7 @@ import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
 import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
 import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
 import { isoDataBR } from '../../../utils/dataBR';
+import { useChaveApi } from '../../../hooks/useChaveApi';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function fmtNum(v, casas = 0) {
@@ -55,6 +56,7 @@ const ABAS = [
 export default function ClienteComercialProdutividade() {
   const session = useClienteSession();
   const chaveApi = session?.chaveApi;
+  const chaveApiKey = useChaveApi(chaveApi?.id); // do banco — não vem mais na sessão
   const clientesRede = useMemo(() => session?.clientesRede || [], [session]);
   const empresasDisponiveis = useMemo(
     () => clientesRede.filter(c => c.empresa_codigo != null && c.empresa_codigo !== ''),
@@ -131,7 +133,7 @@ export default function ClienteComercialProdutividade() {
   const fetchIdRef = useRef(0);
 
   const carregar = useCallback(async ({ force = false, silencioso = false } = {}) => {
-    if (!chaveApi?.chave || empresasSel.length === 0) return;
+    if (!chaveApiKey || empresasSel.length === 0) return;
     if (!dataDe || !dataAte || dataDe > dataAte) return;
     const myFetchId = ++fetchIdRef.current;
     setErro('');
@@ -172,7 +174,7 @@ export default function ClienteComercialProdutividade() {
       if (!silencioso) setEtapas(prev => prev.map(e => (e.id === id ? { ...e, status: 'ok' } : e)));
     };
     try {
-      const apiKey = chaveApi.chave;
+      const apiKey = chaveApiKey;
       const filtros = { dataInicial: dataDe, dataFinal: dataAte };
 
       // Catálogos (cacheados pelo qualityApi). Necessários para resolver nome
@@ -357,14 +359,14 @@ export default function ClienteComercialProdutividade() {
     } finally {
       if (myFetchId === fetchIdRef.current) setLoading(false);
     }
-  }, [chaveApi, empresasSel, dataDe, dataAte, mapaMix]);
+  }, [chaveApi, chaveApiKey, empresasSel, dataDe, dataAte, mapaMix]);
 
   // Auto-fetch: carregar() já checa cache exato internamente.
   useEffect(() => { carregar(); }, [carregar]);
 
   // Auto-refresh em background a cada 10 min (silencioso — sem banner)
   useAutoRefresh(() => {
-    if (chaveApi?.chave && empresasSel.length > 0) carregar({ force: true, silencioso: true });
+    if (chaveApiKey && empresasSel.length > 0) carregar({ force: true, silencioso: true });
   });
 
   // Refresh in-place quando o toast global (layout) pede atualização.

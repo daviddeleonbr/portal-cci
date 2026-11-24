@@ -21,8 +21,27 @@ export function getAdminSession() {
 export function getClienteSession() {
   try {
     const raw = localStorage.getItem(CLIENTE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? limparSegredosSessao(JSON.parse(raw)) : null;
   } catch { return null; }
+}
+
+// Sessões gravadas antes da correção do auth-login traziam a chave da API
+// Quality (chaveApi.chave/url_base) e as credenciais do banco Autosystem
+// (asRede.conexao_*_enc). Apaga do navegador na primeira leitura.
+function limparSegredosSessao(sessao) {
+  if (!sessao) return sessao;
+  let sujo = false;
+  const limpo = { ...sessao };
+  if (limpo.chaveApi && ('chave' in limpo.chaveApi || 'url_base' in limpo.chaveApi)) {
+    const { chave: _c, url_base: _u, ...resto } = limpo.chaveApi;
+    limpo.chaveApi = resto; sujo = true;
+  }
+  if (limpo.asRede && Object.keys(limpo.asRede).some(k => k.startsWith('conexao_'))) {
+    limpo.asRede = Object.fromEntries(Object.entries(limpo.asRede).filter(([k]) => !k.startsWith('conexao_')));
+    sujo = true;
+  }
+  if (sujo) { try { localStorage.setItem(CLIENTE_KEY, JSON.stringify(limpo)); } catch { /* noop */ } }
+  return limpo;
 }
 
 function setAdminSession(session) {
@@ -367,3 +386,7 @@ export async function sincronizarPermissoes(portal) {
     removidas: [...antes].filter(p => !depois.has(p)),
   };
 }
+
+// Ao carregar o app: limpa segredos de sessões gravadas antes da correção do
+// auth-login (ver limparSegredosSessao). Uma leitura basta.
+try { getClienteSession(); } catch { /* noop */ }

@@ -46,10 +46,13 @@ Deno.serve(async (req) => {
     // Mensagem genérica p/ não revelar se o email existe.
     if (!verif || !verif.valido) return json({ error: "E-mail ou senha inválidos." }, 401);
 
-    // 2) Carrega o usuário completo (com vínculo de rede).
+    // 2) Carrega o usuário (com vínculo de rede). SÓ campos seguros da rede:
+    //    nada de chaves_api.chave / url_base (chave da API Quality) nem das
+    //    credenciais do banco Autosystem (as_rede.conexao_*_enc). A chave da
+    //    Quality, quando o portal precisa, é lida de chaves_api sob RLS.
     const { data: usuario, error: errU } = await supabase
       .from("cci_usuarios_sistema")
-      .select("*, chaves_api(*), as_rede(*)")
+      .select("*, chaves_api(id, nome, provedor, ativo), as_rede(id, nome, slug, ativo, exibir_dre, exibir_fluxo_caixa, usa_visor360)")
       .eq("id", verif.id)
       .single();
     if (errU || !usuario) return json({ error: "Usuário não encontrado." }, 404);
