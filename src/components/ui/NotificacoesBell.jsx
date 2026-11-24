@@ -4,8 +4,10 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, BellRing, Check, CheckCheck, Info, AlertTriangle, CircleAlert, CircleCheck, Loader2, Smartphone } from 'lucide-react';
+import { Bell, BellRing, Check, CheckCheck, Info, AlertTriangle, CircleAlert, CircleCheck, Loader2, Smartphone, X } from 'lucide-react';
+import { useEhCelular } from '../../hooks/useEhCelular';
 import * as notificacoesService from '../../services/notificacoesService';
 import * as pushService from '../../services/pushService';
 
@@ -36,6 +38,20 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const ref = useRef(null);
+  const painelRef = useRef(null); // no celular o painel vai num portal (fora de `ref`)
+  // Celular: a lista abre em TELA INTEIRA (por cima da barra inferior);
+  // computador: menu suspenso.
+  const celular = useEhCelular();
+
+  // Tela inteira: trava a rolagem da página por trás; Esc fecha
+  useEffect(() => {
+    if (!open) return undefined;
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', esc);
+    let antes;
+    if (celular) { antes = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
+    return () => { window.removeEventListener('keydown', esc); if (celular) document.body.style.overflow = antes || ''; };
+  }, [open, celular]);
 
   const carregarContador = useCallback(async () => {
     if (!usuarioId) return;
@@ -71,7 +87,10 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
 
   // Click fora pra fechar
   useEffect(() => {
-    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onClick = (e) => {
+      if (ref.current?.contains(e.target) || painelRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
@@ -115,32 +134,49 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
         )}
       </button>
 
+      {/* No celular, portal no <body>: o header (sticky z-30) prenderia a camada
+          e a barra inferior (z-45) ficaria por cima da tela inteira. */}
+      {(() => { const painel = (
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-1.5rem)] bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden"
+            ref={painelRef}
+            role={celular ? 'dialog' : undefined} aria-modal={celular ? 'true' : undefined} aria-label="Notificações"
+            initial={celular ? { opacity: 0, y: 24 } : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={celular ? { opacity: 0, y: 24 } : { opacity: 0, y: -6 }}
+            transition={{ duration: celular ? 0.2 : 0.15 }}
+            className={celular
+              ? 'fixed inset-0 z-[60] flex flex-col bg-white pt-[env(safe-area-inset-top)]'
+              : 'absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-1.5rem)] bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden'}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <div>
-                <p className="text-[13px] font-semibold text-gray-900">Notificações</p>
-                <p className="text-[10.5px] text-gray-400">
+            <div className={`flex items-center justify-between gap-2 border-b border-gray-100 ${celular ? 'shrink-0 px-4 h-16' : 'px-4 py-3'}`}>
+              <div className="min-w-0">
+                <p className={`font-semibold text-gray-900 ${celular ? 'text-lg' : 'text-[13px]'}`}>Notificações</p>
+                <p className={`text-gray-400 ${celular ? 'text-xs' : 'text-[10.5px]'}`}>
                   {naoLidas > 0 ? `${naoLidas} não lida${naoLidas === 1 ? '' : 's'}` : 'Tudo em dia'}
                 </p>
               </div>
-              {naoLidas > 0 && (
-                <button onClick={marcarTodas}
-                  className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 font-medium">
-                  <CheckCheck className="h-3.5 w-3.5" />
-                  Marcar todas
-                </button>
-              )}
+              <div className="flex items-center gap-1">
+                {naoLidas > 0 && (
+                  <button onClick={marcarTodas}
+                    className={`inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium ${celular ? 'h-10 px-2 text-sm' : 'text-[11px]'}`}>
+                    <CheckCheck className={celular ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+                    Marcar todas
+                  </button>
+                )}
+                {celular && (
+                  <button onClick={() => setOpen(false)} aria-label="Fechar notificações"
+                    className="h-10 w-10 -mr-2 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100">
+                    <X className="h-5 w-5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Lista */}
-            <div className="max-h-[420px] overflow-y-auto">
+            <div className={celular ? 'flex-1 overflow-y-auto overscroll-contain' : 'max-h-[420px] overflow-y-auto'}>
               {loading && items.length === 0 ? (
                 <div className="py-10 flex items-center justify-center text-gray-400 gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -160,7 +196,7 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
                     return (
                       <li key={n.id}>
                         <button onClick={() => onClicarNotificacao(n)}
-                          className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                          className={`w-full flex items-start gap-3 px-4 ${celular ? 'py-4' : 'py-3'} text-left hover:bg-gray-50 transition-colors ${
                             naoLida ? 'bg-blue-50/30' : ''
                           }`}>
                           <div className={`rounded-lg ${cor.bg} p-1.5 flex-shrink-0 mt-0.5`}>
@@ -168,16 +204,13 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline gap-2">
-                              <p className={`text-[12.5px] truncate ${naoLida ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>
+                              <p className={`${celular ? 'text-sm' : 'text-[12.5px] truncate'} ${naoLida ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>
                                 {n.titulo}
                               </p>
-                              <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">{tempoRelativo(n.created_at)}</span>
+                              <span className={`ml-auto text-gray-400 flex-shrink-0 ${celular ? 'text-xs' : 'text-[10px]'}`}>{tempoRelativo(n.created_at)}</span>
                             </div>
                             {n.mensagem && (
-                              <p className="text-[11.5px] text-gray-600 mt-0.5 line-clamp-2">{n.mensagem}</p>
-                            )}
-                            {n.link && (
-                              <p className="text-[10.5px] text-blue-600 mt-1 truncate">{n.link}</p>
+                              <p className={`text-gray-600 mt-0.5 ${celular ? 'text-[13px] leading-snug line-clamp-4' : 'text-[11.5px] line-clamp-2'}`}>{n.mensagem}</p>
                             )}
                           </div>
                           {naoLida && (
@@ -191,16 +224,20 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
               )}
             </div>
 
-            {/* Push neste aparelho */}
-            <PushAparelho usuarioId={usuarioId} />
+            {/* Push neste aparelho (no celular, acima da barra de gestos) */}
+            <div className={celular ? 'shrink-0 pb-[env(safe-area-inset-bottom)] bg-gray-50/70' : ''}>
+              <PushAparelho usuarioId={usuarioId} />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
+      ); return celular && typeof document !== 'undefined' ? createPortal(painel, document.body) : painel; })()}
     </div>
   );
 }
 
-// Rodapé do sino: liga/desliga o push NESTE aparelho (celular ou computador).
+// Rodapé do sino: liga/desliga o push NESTE dispositivo (celular ou computador).
+// Sempre aparece — quando não dá pra ativar, explica o motivo.
 function PushAparelho({ usuarioId }) {
   const [st, setSt] = useState('carregando');
   const [ocupado, setOcupado] = useState(false);
@@ -223,10 +260,21 @@ function PushAparelho({ usuarioId }) {
     } finally { setOcupado(false); }
   };
 
-  if (st === 'carregando' || st === 'indisponivel') return null;
+  const aviso = (Icone, cor, texto) => (
+    <p className="flex items-start gap-2 text-[11.5px] text-gray-600">
+      <Icone className={`h-4 w-4 mt-0.5 shrink-0 ${cor}`} />
+      <span>{texto}</span>
+    </p>
+  );
   return (
     <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-3">
-      {st === 'precisa_instalar' ? (
+      {st === 'carregando' ? (
+        aviso(Loader2, 'text-gray-400 animate-spin', 'Verificando notificações neste dispositivo…')
+      ) : st === 'indisponivel' ? (
+        aviso(BellRing, 'text-gray-400', 'Este navegador não recebe notificações. Use o Chrome, o Edge ou o app instalado.')
+      ) : st === 'sem_sw' ? (
+        aviso(BellRing, 'text-gray-400', <>Notificações ainda não disponíveis aqui. Se apareceu o aviso de <strong>nova versão</strong>, atualize o app; senão, recarregue a página. (No ambiente de desenvolvimento elas não funcionam.)</>)
+      ) : st === 'precisa_instalar' ? (
         <p className="flex items-start gap-2 text-[11.5px] text-gray-600">
           <Smartphone className="h-4 w-4 mt-0.5 shrink-0 text-gray-500" />
           <span>Para receber no iPhone, instale o app: toque em <strong>Compartilhar</strong> e em <strong>Adicionar à Tela de Início</strong>, e abra por lá.</span>
@@ -240,11 +288,11 @@ function PushAparelho({ usuarioId }) {
         <div className="flex items-center gap-3">
           <BellRing className={`h-4 w-4 shrink-0 ${st === 'ativo' ? 'text-blue-600' : 'text-gray-400'}`} />
           <div className="min-w-0 flex-1">
-            <p className="text-[12.5px] font-medium text-gray-900">Receber no celular</p>
-            <p className="text-[10.5px] text-gray-500">{st === 'ativo' ? 'Ativo neste aparelho' : 'Avisos do BPO mesmo com o app fechado'}</p>
+            <p className="text-[12.5px] font-medium text-gray-900">Receber neste dispositivo</p>
+            <p className="text-[10.5px] text-gray-500">{st === 'ativo' ? 'Ativo neste dispositivo' : 'Avisos do BPO mesmo com o portal fechado'}</p>
           </div>
           <button type="button" role="switch" aria-checked={st === 'ativo'} onClick={alternar} disabled={ocupado}
-            aria-label="Receber notificações neste aparelho"
+            aria-label="Receber notificações neste dispositivo"
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${st === 'ativo' ? 'bg-blue-600' : 'bg-gray-300'}`}>
             {ocupado
               ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin text-white" />

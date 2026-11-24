@@ -37,13 +37,14 @@ async function registro() {
   ]);
 }
 
-// 'indisponivel' | 'precisa_instalar' (iPhone fora do app) | 'negado' | 'ativo' | 'inativo'
+// 'indisponivel' (navegador sem push) | 'sem_sw' (service worker não ativo — dev ou
+// atualização pendente) | 'precisa_instalar' (iPhone fora do app) | 'negado' | 'ativo' | 'inativo'
 export async function estado(usuarioId) {
   if (ehIOS() && !instaladoComoApp()) return 'precisa_instalar';
   if (!suportado()) return 'indisponivel';
   if (Notification.permission === 'denied') return 'negado';
   const reg = await registro();
-  if (!reg) return 'indisponivel';
+  if (!reg) return 'sem_sw';
   const sub = await reg.pushManager.getSubscription();
   if (!sub || !usuarioId) return 'inativo';
   const { data } = await supabase.from('push_inscricoes').select('id')

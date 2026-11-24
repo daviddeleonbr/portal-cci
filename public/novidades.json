@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.6.2",
+      "data": "2026-11-24",
+      "resumo": "Notificações em tela inteira no celular.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Notificações em tela inteira",
+          "descricao": "No celular, as notificações abrem em tela inteira, com textos maiores. A opção “Receber neste dispositivo” fica sempre no rodapé e explica quando ainda não dá para ativar."
+        }
+      ]
+    },
+    {
       "versao": "1.6.1",
       "data": "2026-11-24",
       "resumo": "Correção ao abrir notas fiscais que foram removidas.",
@@ -23,7 +36,7 @@
           "tipo": "novidade",
           "publico": "todos",
           "titulo": "Notificações no celular",
-          "descricao": "Ative em Notificações (sino) › “Receber no celular” e receba avisos do BPO mesmo com o app fechado: contas aguardando sua autorização, notas devolvidas ou lançadas. No iPhone, instale o app na tela de início."
+          "descricao": "Ative em Notificações (sino) › “Receber neste dispositivo” e receba avisos do BPO no celular ou no computador, mesmo com o portal fechado: contas aguardando sua autorização, notas devolvidas ou lançadas. No iPhone, instale o app na tela de início."
         },
         {
           "tipo": "melhoria",
