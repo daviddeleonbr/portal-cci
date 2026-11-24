@@ -59,13 +59,13 @@ const navigationAll = [
       { name: 'Parâmetros', href: '/admin/parametros', icon: Settings2, permissao: 'parametros' },
       { name: 'Relatórios Cliente', href: '/admin/relatorios-cliente', icon: BarChart3, permissao: 'relatorios_cliente' },
       { name: 'Relatórios BI', href: '/admin/relatorios-bi', icon: PieChart, permissao: 'relatorios_bi' },
-      { name: 'Tarefas', href: '/admin/tarefas', icon: ListChecks, permissao: 'tarefas' },
       { name: 'Caixa Administrativo', href: '/admin/bpo/caixa-administrativo', icon: WalletCards, permissao: 'caixa_administrativo' },
     ],
   },
   {
     section: 'BPO',
     items: [
+      { name: 'Tarefas', href: '/admin/tarefas', icon: ListChecks, permissao: 'tarefas' },
       { name: 'Conciliação de Caixas', href: '/admin/bpo/conciliacao-caixas', icon: Coins, permissao: 'conciliacao_caixas' },
       { name: 'Contas a Pagar', href: '/admin/bpo/contas-pagar', icon: CalendarDays, permissao: 'bpo_contas_pagar' },
       { name: 'LMC', href: '/admin/bpo/lmc', icon: Fuel, permissao: 'lmc' },
