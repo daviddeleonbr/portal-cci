@@ -2,6 +2,31 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.9.0",
+      "data": "2026-11-24",
+      "resumo": "Nova área de Contas a receber no BPO: veja quem está devendo a prazo.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Contas a receber (BPO)",
+          "descricao": "Veja as notas a prazo e faturas em aberto dos seus clientes: o que está vencido, o que vence hoje e nos próximos 7 dias, por vencimento ou por cliente."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Saudação no celular",
+          "descricao": "O \"Bom dia / Boa tarde / Boa noite\" do topo agora muda sozinho conforme o horário."
+        },
+        {
+          "tipo": "correcao",
+          "publico": "cliente",
+          "titulo": "Aviso de acessos com o nome da página",
+          "descricao": "Quando a CCI libera ou retira um acesso, o aviso mostra o nome da página (ex.: Contas a receber), e não um código interno."
+        }
+      ]
+    },
+    {
       "versao": "1.8.1",
       "data": "2026-11-24",
       "resumo": "Fechamento de caixa com a mesma diferença do Webposto e outras entradas separadas.",

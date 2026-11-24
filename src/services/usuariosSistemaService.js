@@ -135,6 +135,7 @@ export const PERMISSOES_CLIENTE = [
   { key: 'notas_fiscais', label: 'Notas Fiscais (manifestação)', grupo: 'Operacional' },
   { key: 'bpo_contas_pagar', label: 'Contas a pagar (BPO) · agenda de pagamentos', grupo: 'Operacional' },
   { key: 'bpo_contas_pagar_autorizar', label: 'Contas a pagar (BPO) · marcar como autorizada no banco', grupo: 'Operacional' },
+  { key: 'bpo_contas_receber', label: 'Contas a receber (BPO) · clientes a prazo em aberto', grupo: 'Operacional' },
   { key: 'outras_contas', label: 'Outras contas a pagar', grupo: 'Operacional' },
   { key: 'acessos', label: 'Acessos (logins e senhas de adquirentes/plataformas)', grupo: 'Operacional' },
   { key: 'lmc', label: 'LMC · Livro de Movimentação de Combustíveis (só Webposto, visualização)', grupo: 'Operacional' },

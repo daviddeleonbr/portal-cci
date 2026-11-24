@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Moon, Sun, Building2, Tag } from 'lucide-react';
 import LogoCCI from '../../ui/LogoCCI';
 import { useClienteSession } from '../../../hooks/useAuth';
@@ -5,6 +6,19 @@ import NotificacoesBell from '../../ui/NotificacoesBell';
 import BotaoInstalarApp from '../../cliente/BotaoInstalarApp';
 import { useTheme } from '../../../hooks/useTheme';
 import { useUsarApelido, toggleUsarApelido } from '../../../lib/apelidoPref';
+
+// "Bom dia" (até 12h) / "Boa tarde" (até 18h) / "Boa noite" — horário de
+// Brasília; reavalia a cada minuto, então muda sozinha com o portal aberto.
+const horaBR = () => Number(new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }).format(new Date()));
+const saudacaoDe = (h) => (h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite');
+function useSaudacao() {
+  const [saudacao, setSaudacao] = useState(() => saudacaoDe(horaBR()));
+  useEffect(() => {
+    const id = setInterval(() => setSaudacao(saudacaoDe(horaBR())), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return saudacao;
+}
 
 export default function ClienteHeader() {
   const session = useClienteSession();
@@ -21,9 +35,7 @@ export default function ClienteHeader() {
   const cnpjCliente = cliente?.cnpj || '';
   const nomeRede = tipoCliente === 'autosystem' ? (session?.asRede?.nome || 'Rede Autosystem') : (session?.chaveApi?.nome || nomeCliente);
   const primeiroNome = String(usuario?.nome || '').trim().split(/\s+/)[0] || '';
-  // saudação pelo horário de Brasília
-  const hora = Number(new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }).format(new Date()));
-  const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+  const saudacao = useSaudacao();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white px-3 sm:px-6">

@@ -27,6 +27,7 @@ const PAGINAS_ORDEM = [
   { rota: '/financeiro/contas-receber',  permissao: 'financeiro' },
   { rota: '/sangrias',                   permissao: ['sangrias', 'sangrias_consultar'] },
   { rota: '/fechamento-caixa',           permissao: 'fechamento_caixa' },
+  { rota: '/bpo/contas-receber',         permissao: 'bpo_contas_receber' },
   { rota: '/financeiro/notas-fiscais',   permissao: 'notas_fiscais' },
   { rota: '/bpo/outras-contas',          permissao: 'outras_contas' },
   { rota: '/bpo',                        permissao: 'bpo' },
