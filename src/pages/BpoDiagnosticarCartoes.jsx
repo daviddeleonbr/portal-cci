@@ -16,6 +16,7 @@ import {
 } from '../utils/layoutsCartoes';
 import * as modelosService from '../services/layoutsArquivoCartaoService';
 import * as catalogoCartaoService from '../services/bpoCartaoCatalogoService';
+import { isoDataBR } from '../utils/dataBR';
 
 // Layout do arquivo: embutido (Equals, Cielo…) ou modelo salvo ("m:<id>").
 // Modelo sem adquirente fixa = a adquirente vem de uma coluna (como a Equals).
@@ -28,7 +29,7 @@ function resolverLayout(chave, modelos) {
 }
 
 // ─── Helpers de datas ─────────────────────────────────────────
-function ymd(d) { return d.toISOString().split('T')[0]; }
+function ymd(d) { return isoDataBR(d); }
 function hojeStr() { return ymd(new Date()); }
 function inicioMesStr() { const d = new Date(); return ymd(new Date(d.getFullYear(), d.getMonth(), 1)); }
 

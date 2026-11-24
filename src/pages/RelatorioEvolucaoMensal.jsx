@@ -16,10 +16,11 @@ import * as qualityApi from '../services/qualityApiService';
 import { agregarVendasItens } from '../services/mapeamentoVendasService';
 import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
+import { isoDataBR } from '../utils/dataBR';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-function ymd(d) { return d.toISOString().split('T')[0]; }
+function ymd(d) { return isoDataBR(d); }
 function rangeMes(ano, mes) {
   const inicio = new Date(ano, mes - 1, 1);
   const fim = new Date(ano, mes, 0);

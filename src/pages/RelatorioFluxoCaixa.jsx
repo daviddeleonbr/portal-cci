@@ -28,6 +28,7 @@ import { useAnonimizador } from '../services/anonimizarService';
 import { nomeEmpresa } from '../utils/nomeEmpresa';
 import { useUsarApelido } from '../lib/apelidoPref';
 import ApelidoToggle from '../components/ui/ApelidoToggle';
+import { isoDataBR } from '../utils/dataBR';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -1780,14 +1781,14 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     if (movs.length === 0) return null;
     const NOMES = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
     const dowSeg = (ymd) => (new Date(ymd + 'T00:00:00').getDay() + 6) % 7; // 0=segunda … 6=domingo
-    const segundaDa = (ymd) => { const d = new Date(ymd + 'T00:00:00'); d.setDate(d.getDate() - dowSeg(ymd)); return d.toISOString().slice(0, 10); };
+    const segundaDa = (ymd) => { const d = new Date(ymd + 'T00:00:00'); d.setDate(d.getDate() - dowSeg(ymd)); return isoDataBR(d); };
 
     const semanas = new Map();
     movs.forEach((m) => {
       const key = segundaDa(m.data);
       if (!semanas.has(key)) {
         const fim = new Date(key + 'T00:00:00'); fim.setDate(fim.getDate() + 6);
-        semanas.set(key, { ini: key, fim: fim.toISOString().slice(0, 10), entradas: 0, saidas: 0, dia: Array.from({ length: 7 }, () => ({ e: 0, s: 0 })) });
+        semanas.set(key, { ini: key, fim: isoDataBR(fim), entradas: 0, saidas: 0, dia: Array.from({ length: 7 }, () => ({ e: 0, s: 0 })) });
       }
       const w = semanas.get(key); const dow = dowSeg(m.data);
       w.entradas += m.entrada; w.saidas += m.saida;
@@ -1902,7 +1903,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       if (m.data >= ini && m.data <= fim) netPorDia.set(m.data, (netPorDia.get(m.data) || 0) + (m.entrada - m.saida));
     });
     const nets = [];
-    for (let i = 0; i < dias; i++) { const d = new Date(d0); d.setDate(d.getDate() + i); nets.push(netPorDia.get(d.toISOString().slice(0, 10)) || 0); }
+    for (let i = 0; i < dias; i++) { const d = new Date(d0); d.setDate(d.getDate() + i); nets.push(netPorDia.get(isoDataBR(d)) || 0); }
 
     const totalVar = nets.reduce((s, x) => s + x, 0);
     const mu = totalVar / dias;                                   // média diária (R$/dia)
@@ -1914,7 +1915,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     const saldoAtual = ev.saldoFinal;
     const projs = [30, 60, 90].map(n => ({ dias: n, saldo: saldoAtual + mu * n }));
     const diasZero = (rate) => (rate < 0 && saldoAtual > 0) ? saldoAtual / (-rate) : null;
-    const addDias = (n) => { const d = new Date(fim + 'T00:00:00'); d.setDate(d.getDate() + Math.round(n)); return d.toISOString().slice(0, 10); };
+    const addDias = (n) => { const d = new Date(fim + 'T00:00:00'); d.setDate(d.getDate() + Math.round(n)); return isoDataBR(d); };
     const dCentral = diasZero(mu);
     const dPess = diasZero(ratePess);
 

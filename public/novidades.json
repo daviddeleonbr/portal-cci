@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.7.1",
+      "data": "2026-11-24",
+      "resumo": "Datas sempre no horário de Brasília.",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "todos",
+          "titulo": "Horário de Brasília",
+          "descricao": "O sistema passa a usar o horário de Brasília em tudo. Antes, depois das 21h algumas telas já consideravam o dia seguinte (datas padrão de filtros, emissão de boletos e notas)."
+        },
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Outras contas aguardando sempre visíveis",
+          "descricao": "Contas aguardando lançamento aparecem sempre, mesmo com data de pagamento futura ou sem data. O filtro de período vale para as lançadas e devolvidas."
+        }
+      ]
+    },
+    {
       "versao": "1.7.0",
       "data": "2026-11-24",
       "resumo": "Outras contas a pagar: confirmação antes de enviar, atualização automática e avisos no celular.",

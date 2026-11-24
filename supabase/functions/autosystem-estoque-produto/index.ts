@@ -28,6 +28,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { obterRede, executarQuery, decodeRowText } from '../_shared/autosystem-query.ts';
+import { hojeBR } from '../_shared/dataBR.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -70,9 +71,7 @@ serve(async (req) => {
   // Default: a partir de amanhã (inclusive estoques lançados hoje).
   let dataCorte = data_corte;
   if (!dataCorte) {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    dataCorte = d.toISOString().slice(0, 10);
+    dataCorte = hojeBR(1); // amanhã no fuso do Brasil
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');

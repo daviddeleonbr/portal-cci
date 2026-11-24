@@ -23,11 +23,12 @@ import { nomeEmpresa } from '../utils/nomeEmpresa';
 import { useUsarApelido } from '../lib/apelidoPref';
 import ApelidoToggle from '../components/ui/ApelidoToggle';
 import { useAnonimizador } from '../services/anonimizarService';
+import { isoDataBR } from '../utils/dataBR';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 function ymd(d) {
-  return d.toISOString().split('T')[0];
+  return isoDataBR(d);
 }
 
 function rangeMes(ano, mes) {

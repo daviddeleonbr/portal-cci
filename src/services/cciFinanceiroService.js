@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { isoDataBR } from '../utils/dataBR';
 
 // ═══════════════════════════════════════════════════════════
 // Geracao de codigo hierarquico
@@ -324,7 +325,7 @@ export async function atualizarContaPagar(id, campos) {
 export async function marcarComoPaga(id, { data_pagamento, valor_pago, juros, desconto, forma_pagamento, motivo_pagamento_id }) {
   const updateData = {
     status: 'pago',
-    data_pagamento: data_pagamento || new Date().toISOString().split('T')[0],
+    data_pagamento: data_pagamento || isoDataBR(new Date()),
     valor_pago: Number(valor_pago) || null,
     juros: Number(juros) || 0,
     desconto: Number(desconto) || 0,

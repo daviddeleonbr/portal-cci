@@ -1,3 +1,4 @@
+import { isoDataBR } from '../utils/dataBR';
 // Usa proxy do Vite em dev (/api/quality -> qualityautomacao.com.br/INTEGRACAO)
 const DEFAULT_URL_BASE = '/api/quality';
 const LIMITE_PADRAO = 1500;
@@ -188,8 +189,8 @@ function dividirIntervalo(dataInicial, dataFinal, diasPorChunk = DIAS_POR_CHUNK)
     chunkEnd.setDate(chunkEnd.getDate() + diasPorChunk - 1);
     if (chunkEnd > end) chunkEnd.setTime(end.getTime());
     chunks.push({
-      dataInicial: cursor.toISOString().split('T')[0],
-      dataFinal: chunkEnd.toISOString().split('T')[0],
+      dataInicial: isoDataBR(cursor),
+      dataFinal: isoDataBR(chunkEnd),
     });
     cursor = new Date(chunkEnd);
     cursor.setDate(cursor.getDate() + 1);
@@ -617,7 +618,7 @@ const DIAS_FRESCOS = 2; // últimos N dias vêm da Quality
 function isoHojeMenos(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return isoDataBR(d);
 }
 
 function maxIso(a, b) { return a > b ? a : b; }
@@ -788,7 +789,7 @@ function dividirPeriodoHibrido(dataInicial, dataFinal) {
   const corteMenos1 = (() => {
     const d = new Date(corte + 'T00:00:00');
     d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
+    return isoDataBR(d);
   })();
   return {
     cacheDe: dataInicial,

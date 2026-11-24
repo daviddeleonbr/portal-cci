@@ -20,6 +20,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { hojeBR } from '../_shared/dataBR.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -149,7 +150,7 @@ serve(async (req) => {
   }
   const supabase = createClient(supaUrl, supaKey, { auth: { persistSession: false } });
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR(); // fuso do Brasil
 
   // 1) Lista agendamentos devidos
   const { data: agendamentos, error: errAg } = await supabase

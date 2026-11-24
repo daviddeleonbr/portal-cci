@@ -18,6 +18,7 @@ import * as mapService from '../../../services/mapeamentoService';
 import * as qualityApi from '../../../services/qualityApiService';
 import { formatCurrency } from '../../../utils/format';
 import { ehDiaUtil, proximoDiaUtil, isoDate as isoDateUtil } from '../../../utils/diasUteis';
+import { isoDataBR } from '../../../utils/dataBR';
 
 // ─── Helpers ─────────────────────────────────────────────────
 function formatDataBR(s) {
@@ -269,7 +270,7 @@ export default function ClienteContasReceber() {
       // Todos os endpoints de contas a receber exigem dataInicial/dataFinal.
       // Janela: 2 anos para tras + 1 ano a frente, filtrando apenasPendente=true.
       const hoje = new Date();
-      const fmt = (d) => d.toISOString().slice(0, 10);
+      const fmt = (d) => isoDataBR(d);
       const doisAnosAtras = new Date(hoje); doisAnosAtras.setFullYear(hoje.getFullYear() - 2);
       const umAnoAFrente = new Date(hoje); umAnoAFrente.setFullYear(hoje.getFullYear() + 1);
 

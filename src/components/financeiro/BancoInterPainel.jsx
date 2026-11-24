@@ -11,9 +11,10 @@ import {
 import Modal from '../ui/Modal';
 import { formatCurrency } from '../../utils/format';
 import * as inter from '../../services/bancoInterService';
+import { isoDataBR } from '../../utils/dataBR';
 
-const hojeYmd = () => new Date().toISOString().slice(0, 10);
-const inicioMesYmd = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); };
+const hojeYmd = () => isoDataBR(new Date());
+const inicioMesYmd = () => { const d = new Date(); return isoDataBR(new Date(d.getFullYear(), d.getMonth(), 1)); };
 const fmtData = (s) => (s ? s.slice(0, 10).split('-').reverse().join('/') : '—');
 const fmtDataHora = (s) => (s ? new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 const diasAte = (s) => (s ? Math.floor((new Date(s) - new Date()) / 86400000) : null);
@@ -81,7 +82,7 @@ export default function BancoInterPainel() {
     let cancelado = false;
     const d = new Date(`${dataInicial}T12:00:00`);
     d.setDate(d.getDate() - 1);
-    inter.buscarSaldo(d.toISOString().slice(0, 10))
+    inter.buscarSaldo(isoDataBR(d))
       .then(s => { if (!cancelado) setSaldoAbertura(s?.disponivel != null ? Number(s.disponivel) : null); })
       .catch(() => { if (!cancelado) setSaldoAbertura(null); });
     return () => { cancelado = true; };

@@ -34,6 +34,7 @@ import EmpresaSeletorCompartilhado from '../../../components/vendas/EmpresaMulti
 import * as autosystemService from '../../../services/autosystemService';
 import * as usuariosService from '../../../services/usuariosSistemaService';
 import { formatCurrency } from '../../../utils/format';
+import { isoDataBR } from '../../../utils/dataBR';
 
 // ─── Helpers ────────────────────────────────────────────────
 function fmtQtd(n) {
@@ -656,7 +657,7 @@ export default function ClienteEstoques() {
     const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = isoDataBR(new Date());
     a.href = url;
     a.download = `plano-compras-${categoriaAba}-${hoje}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);

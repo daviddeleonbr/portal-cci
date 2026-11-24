@@ -52,8 +52,12 @@ export async function listarParaAdmin({ status, chaveApiId, dataDe, dataAte } = 
   if (Array.isArray(status)) q = q.in('status', status);
   else if (status)            q = q.eq('status', status);
 
-  if (dataDe)  q = q.gte('data_pagamento', dataDe);
-  if (dataAte) q = q.lte('data_pagamento', dataAte);
+  // Período (data de pagamento) só para lançadas/devolvidas: conta AGUARDANDO
+  // a CCI aparece sempre — com data futura ou sem data, ela sumia da fila.
+  if (dataDe || dataAte) {
+    const periodo = [dataDe && `data_pagamento.gte.${dataDe}`, dataAte && `data_pagamento.lte.${dataAte}`].filter(Boolean).join(',');
+    q = q.or(`status.eq.enviada,and(${periodo})`);
+  }
 
   const { data, error } = await q;
   if (error) throw error;

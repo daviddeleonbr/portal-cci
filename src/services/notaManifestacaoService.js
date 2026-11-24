@@ -16,6 +16,7 @@
 import { supabase } from '../lib/supabase';
 import * as qualityApi from './qualityApiService';
 import { buscarNotasManifestarAutosystem } from './autosystemService';
+import { isoDataBR } from '../utils/dataBR';
 
 const BUCKET = 'nfs-manifestacao';
 const TIPOS_ARQUIVO = ['nota_fiscal', 'boleto', 'foto_produto', 'foto_codigo_barras'];
@@ -124,10 +125,10 @@ export async function sincronizarComQuality({
   // Default: últimos `diasAtras` até hoje (formato YYYY-MM-DD).
   if (!dataInicial && diasAtras) {
     const d = new Date(); d.setDate(d.getDate() - diasAtras);
-    dataInicial = d.toISOString().slice(0, 10);
+    dataInicial = isoDataBR(d);
   }
   if (!dataFinal) {
-    dataFinal = new Date().toISOString().slice(0, 10);
+    dataFinal = isoDataBR(new Date());
   }
 
   const remotas = await qualityApi.buscarNotaManifestacao(apiKey, {

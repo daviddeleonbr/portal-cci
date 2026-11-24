@@ -14,6 +14,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { hojeBR } from '../_shared/dataBR.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,9 +38,7 @@ function json(body: unknown, status = 200) {
 }
 
 function isoDateOffset(deltaDias: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + deltaDias);
-  return d.toISOString().slice(0, 10);
+  return hojeBR(deltaDias); // fuso do Brasil
 }
 
 serve(async (req) => {

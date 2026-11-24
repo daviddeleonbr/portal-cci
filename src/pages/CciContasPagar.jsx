@@ -10,6 +10,7 @@ import Toast from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
 import * as cciService from '../services/cciFinanceiroService';
 import { formatCurrency } from '../utils/format';
+import { isoDataBR } from '../utils/dataBR';
 
 const STATUS_CFG = {
   aberto:    { label: 'Aberto',    color: 'bg-blue-50 text-blue-700 border-blue-200',        icon: Clock },
@@ -19,7 +20,7 @@ const STATUS_CFG = {
   cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-500 border-gray-200',       icon: XCircle },
 };
 
-function hojeStr() { return new Date().toISOString().split('T')[0]; }
+function hojeStr() { return isoDataBR(new Date()); }
 
 function calcStatus(c) {
   if (c.status === 'pago' || c.status === 'cancelado' || c.status === 'parcial') return c.status;

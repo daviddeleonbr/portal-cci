@@ -18,6 +18,7 @@ import * as propostasService from '../../services/propostasService';
 import * as servicosService from '../../services/servicosOferecidosService';
 import * as clientesService from '../../services/clientesService';
 import * as contratosService from '../../services/contratosService';
+import { isoDataBR } from '../../utils/dataBR';
 
 const CAT_LABEL = { bpo: 'BPO', fiscal: 'Fiscal', consultoria: 'Consultoria', tecnologia: 'Tecnologia', treinamento: 'Treinamento', outro: 'Outros' };
 const CAT_ORDEM = ['bpo', 'fiscal', 'consultoria', 'tecnologia', 'treinamento', 'outro'];
@@ -607,7 +608,7 @@ function ModalProposta({ open, propostaId, onClose, onSaved, onConverter, showTo
   const [buscaServico, setBuscaServico] = useState('');
 
   function estadoInicial() {
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = isoDataBR(new Date());
     return {
       cliente_id: '', cliente_nome: '', cliente_cnpj: '', cliente_email: '',
       titulo: '', descricao: '', observacoes: '',

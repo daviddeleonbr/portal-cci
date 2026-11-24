@@ -22,6 +22,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { X509Certificate } from "node:crypto";
 import { CORS, json } from "../_shared/auth-jwt.ts";
+import { hojeBR } from '../_shared/dataBR.ts';
 
 // Host por ambiente (coluna cci_inter_conta.ambiente).
 const HOSTS: Record<string, string> = {
@@ -444,7 +445,7 @@ async function emitirCobranca(sb: SupabaseClient, conta: Conta, body: any, usuar
     const linha = {
       codigo_solicitacao: codigo, conta_id: conta.id, seu_numero: seuNumero,
       pagador_nome: pagador.nome, pagador_cpf_cnpj: doc,
-      data_emissao: new Date().toISOString().slice(0, 10), data_vencimento: body.dataVencimento,
+      data_emissao: hojeBR() /* fuso do Brasil */, data_vencimento: body.dataVencimento,
       valor_nominal: valor, situacao: "EM_PROCESSAMENTO", detalhes: r, ...extra,
     };
     await sb.from("cci_inter_cobranca").upsert(linha, { onConflict: "codigo_solicitacao" });

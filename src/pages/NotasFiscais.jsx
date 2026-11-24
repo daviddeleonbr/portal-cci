@@ -16,6 +16,7 @@ import * as clientesService from '../services/clientesService';
 import * as agendamentosNf from '../services/agendamentosNfService';
 import { buscarCep } from '../services/viacepService';
 import { NBS_CODIGOS } from '../data/nbsCodigos';
+import { isoDataBR } from '../utils/dataBR';
 
 const STATUS_CONFIG = {
   PENDING:                   { label: 'Aguardando', color: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock },
@@ -826,7 +827,7 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
     cliente_bairro: '', cliente_cidade: '', cliente_estado: '',
     descricao: '', observacoes: '',
     valor: '', deducoes: '0',
-    data_emissao: new Date().toISOString().split('T')[0],
+    data_emissao: isoDataBR(new Date()),
     aliquota_iss: '',
     // Portal Nacional NFS-e (NBS) — formato 17.03.03
     national_service_code: '',
@@ -871,7 +872,7 @@ function ModalEmitir({ open, config, onClose, onEmit }) {
         cliente_bairro: '', cliente_cidade: '', cliente_estado: '',
         descricao: '', observacoes: '',
         valor: '', deducoes: '0',
-        data_emissao: new Date().toISOString().split('T')[0],
+        data_emissao: isoDataBR(new Date()),
         aliquota_iss: config.aliquota_iss || '',
         national_service_code: config.national_service_code || '',
         serie: config.serie || '1',
@@ -1563,7 +1564,7 @@ function AgendamentoTab({ loading, agendamentos, onNovo, onEditar, onToggle, onR
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `agendamentos-nf-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `agendamentos-nf-${isoDataBR(new Date())}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { isoDataBR } from '../utils/dataBR';
 
 // ───────────────────────────────────────────────────────────────
 // CRUD de agendamentos recorrentes de NFS-e.
@@ -85,7 +86,7 @@ export async function excluirAgendamento(id) {
 // expomos aqui pra permitir "emitir agora" manual no front).
 export async function registrarEmissao(id, { sucesso, mensagemErro = null }) {
   const update = sucesso
-    ? { ultima_emissao: new Date().toISOString().slice(0, 10),
+    ? { ultima_emissao: isoDataBR(new Date()),
         notas_emitidas: undefined, // gerenciado abaixo via RPC numa próxima iter
         ultimo_erro: null }
     : { ultimo_erro: mensagemErro };

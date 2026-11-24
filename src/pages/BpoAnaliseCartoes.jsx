@@ -12,11 +12,12 @@ import * as autosystemService from '../services/autosystemService';
 import { classificarItem } from '../services/mapeamentoVendasService';
 import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 import { formatCurrency } from '../utils/format';
+import { isoDataBR } from '../utils/dataBR';
 
-function hojeStr() { return new Date().toISOString().split('T')[0]; }
+function hojeStr() { return isoDataBR(new Date()); }
 function ontemStr() {
   const d = new Date(); d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+  return isoDataBR(d);
 }
 
 // Mesma heurística usada em BpoConciliacaoCaixas

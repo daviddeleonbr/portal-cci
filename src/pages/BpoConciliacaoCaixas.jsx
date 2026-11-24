@@ -27,8 +27,9 @@ import { classificarItem } from '../services/mapeamentoVendasService';
 import SeletorRedeBPO from '../components/ui/SeletorRedeBPO';
 import { formatCurrency } from '../utils/format';
 import { Lock, CheckCircle } from 'lucide-react';
+import { isoDataBR } from '../utils/dataBR';
 
-function hojeStr() { return new Date().toISOString().split('T')[0]; }
+function hojeStr() { return isoDataBR(new Date()); }
 
 // Categoriza nome da forma de pagamento em 4 grupos padrao
 function classificarForma(nome) {

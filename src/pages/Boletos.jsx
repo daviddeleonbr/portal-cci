@@ -13,11 +13,12 @@ import Toast from '../components/ui/Toast';
 import { formatCurrency } from '../utils/format';
 import * as inter from '../services/bancoInterService';
 import * as clientesService from '../services/clientesService';
+import { isoDataBR } from '../utils/dataBR';
 
-const hojeYmd = () => new Date().toISOString().slice(0, 10);
-const somarDias = (ymd, n) => { const d = new Date(`${ymd}T12:00:00`); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
-const inicioMes = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); };
-const fimMesSeguinte = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 2, 0).toISOString().slice(0, 10); };
+const hojeYmd = () => isoDataBR(new Date());
+const somarDias = (ymd, n) => { const d = new Date(`${ymd}T12:00:00`); d.setDate(d.getDate() + n); return isoDataBR(d); };
+const inicioMes = () => { const d = new Date(); return isoDataBR(new Date(d.getFullYear(), d.getMonth(), 1)); };
+const fimMesSeguinte = () => { const d = new Date(); return isoDataBR(new Date(d.getFullYear(), d.getMonth() + 2, 0)); };
 const fmtData = (s) => (s ? String(s).slice(0, 10).split('-').reverse().join('/') : '—');
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 

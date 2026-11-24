@@ -24,6 +24,7 @@ import { formatCurrency } from '../../../utils/format';
 import SeletorMesAno from '../../../components/vendas/SeletorMesAno';
 import { primeiroDiaMesIso, ultimoDiaMesIso } from '../../../utils/periodoMes';
 import SkeletonComercial from '../../../components/vendas/SkeletonComercial';
+import { isoDataBR } from '../../../utils/dataBR';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function fmtNum(v, casas = 0) {
@@ -926,7 +927,7 @@ function GraficoLinhaAcumulado({ vendedoras, dataDe, dataAte }) {
     const ini = new Date(`${dataDe}T00:00:00`);
     const fim = new Date(`${dataAte}T00:00:00`);
     for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
-      dias.push(d.toISOString().slice(0, 10));
+      dias.push(isoDataBR(d));
     }
     // Top 10 vendedoras por fat (gráfico fica ilegível com mais)
     const top = [...vendedoras]
