@@ -19,7 +19,6 @@ export function buildNavigation(prefix, tipoCliente = 'webposto') {
       section: 'Principal',
       items: [
         { name: 'Visão Geral', href: `${prefix}/dashboard`, icon: LayoutDashboard, permissao: 'dashboard' },
-        { name: 'Minhas tarefas', href: `${prefix}/tarefas`, icon: ClipboardCheck, permissao: 'tarefas', barraMobile: 'Tarefas' },
       ],
     },
     {
@@ -51,6 +50,7 @@ export function buildNavigation(prefix, tipoCliente = 'webposto') {
     {
       section: 'BPO',
       items: [
+        { name: 'Minhas tarefas', href: `${prefix}/tarefas`, icon: ClipboardCheck, permissao: 'tarefas', barraMobile: 'Tarefas' },
         { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: ['sangrias', 'sangrias_consultar'], barraMobile: 'Sangrias' },
         { name: 'Fechamento de caixa', href: `${prefix}/fechamento-caixa`, icon: Calculator, permissao: 'fechamento_caixa' },
         { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais', barraMobile: 'Notas' },

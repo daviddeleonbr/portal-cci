@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.10.1",
+      "data": "2026-11-24",
+      "resumo": "Minhas tarefas agora fica no menu BPO.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Minhas tarefas no BPO",
+          "descricao": "O item Minhas tarefas saiu da seção Principal e agora está no grupo BPO do menu, junto das outras rotinas com a CCI."
+        }
+      ]
+    },
+    {
       "versao": "1.10.0",
       "data": "2026-11-24",
       "resumo": "Resumo do dia anterior ao entrar no portal.",
