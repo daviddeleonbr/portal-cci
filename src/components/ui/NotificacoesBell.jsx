@@ -148,12 +148,12 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
             transition={{ duration: celular ? 0.2 : 0.15 }}
             className={celular
               ? 'fixed inset-0 z-[60] flex flex-col bg-white pt-[env(safe-area-inset-top)]'
-              : 'absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-1.5rem)] bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden'}
+              : 'absolute right-0 top-full mt-2 w-[420px] max-w-[calc(100vw-1.5rem)] bg-white rounded-xl border border-gray-200/70 shadow-xl z-50 overflow-hidden'}
           >
             {/* Header */}
             <div className={`flex items-center justify-between gap-2 border-b border-gray-100 ${celular ? 'shrink-0 px-4 h-16' : 'px-4 py-3'}`}>
               <div className="min-w-0">
-                <p className={`font-semibold text-gray-900 ${celular ? 'text-lg' : 'text-[13px]'}`}>Notificações</p>
+                <p className={`font-semibold text-gray-900 ${celular ? 'text-lg' : 'text-[14px]'}`}>Notificações</p>
                 <p className={`text-gray-400 ${celular ? 'text-xs' : 'text-[10.5px]'}`}>
                   {naoLidas > 0 ? `${naoLidas} não lida${naoLidas === 1 ? '' : 's'}` : 'Tudo em dia'}
                 </p>
@@ -176,7 +176,7 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
             </div>
 
             {/* Lista */}
-            <div className={celular ? 'flex-1 overflow-y-auto overscroll-contain' : 'max-h-[420px] overflow-y-auto'}>
+            <div className={celular ? 'flex-1 overflow-y-auto overscroll-contain' : 'max-h-[min(600px,70vh)] overflow-y-auto overscroll-contain'}>
               {loading && items.length === 0 ? (
                 <div className="py-10 flex items-center justify-center text-gray-400 gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -204,13 +204,13 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline gap-2">
-                              <p className={`${celular ? 'text-sm' : 'text-[12.5px] truncate'} ${naoLida ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>
+                              <p className={`${celular ? 'text-sm' : 'text-[13px] truncate'} ${naoLida ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>
                                 {n.titulo}
                               </p>
                               <span className={`ml-auto text-gray-400 flex-shrink-0 ${celular ? 'text-xs' : 'text-[10px]'}`}>{tempoRelativo(n.created_at)}</span>
                             </div>
                             {n.mensagem && (
-                              <p className={`text-gray-600 mt-0.5 ${celular ? 'text-[13px] leading-snug line-clamp-4' : 'text-[11.5px] line-clamp-2'}`}>{n.mensagem}</p>
+                              <p className={`text-gray-600 mt-0.5 ${celular ? 'text-[13px] leading-snug line-clamp-4' : 'text-[12px] leading-snug line-clamp-3'}`}>{n.mensagem}</p>
                             )}
                           </div>
                           {naoLida && (

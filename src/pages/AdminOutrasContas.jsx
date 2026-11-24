@@ -15,6 +15,7 @@ import * as ocService from '../services/outraContaService';
 import * as mapService from '../services/mapeamentoService';
 import { formatCurrency } from '../utils/format';
 import { useAtualizacaoAutomatica } from '../hooks/useAtualizacaoAutomatica';
+import IndicadorAtualizado from '../components/ui/IndicadorAtualizado';
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -60,6 +61,7 @@ export default function AdminOutrasContas() {
   const [motivoDevolucao, setMotivoDevolucao] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [toast, setToast] = useState(null);
+  const [atualizadoEm, setAtualizadoEm] = useState(null);
 
   useEffect(() => {
     mapService.listarChavesApi().then(setRedes).catch(() => setRedes([]));
@@ -73,6 +75,7 @@ export default function AdminOutrasContas() {
         chaveApiId: filtroRede === 'todas' ? null : filtroRede,
       });
       setContas(lista);
+      setAtualizadoEm(new Date());
     } catch (err) { if (!silencioso) setError(err.message); }
     finally { if (!silencioso) setLoading(false); }
   }, [dataDe, dataAte, filtroRede]);
@@ -81,7 +84,7 @@ export default function AdminOutrasContas() {
 
   // Tempo real: cliente enviou/excluiu uma conta ou anexou comprovante
   const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
-  useAtualizacaoAutomatica({
+  const { conectado, estado } = useAtualizacaoAutomatica({
     canal: `outras-contas-admin:${filtroRede}`,
     tabelas: [{ table: 'outra_conta_pagar' }, { table: 'outra_conta_arquivo' }],
     recarregar: recarregarSilencioso,
@@ -163,7 +166,8 @@ export default function AdminOutrasContas() {
             {redes.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
           </select>
         </div>
-        <button onClick={carregar} disabled={loading}
+        <IndicadorAtualizado em={atualizadoEm} conectado={conectado} estado={estado} className="whitespace-nowrap" />
+        <button onClick={() => carregar()} disabled={loading}
           aria-label="Atualizar"
           className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/[0.04] disabled:opacity-50 min-w-[44px] justify-center">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />

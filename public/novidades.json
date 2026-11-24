@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.7.3",
+      "data": "2026-11-24",
+      "resumo": "Atualização automática mais confiável e notificações maiores no computador.",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "todos",
+          "titulo": "Atualização automática mais confiável",
+          "descricao": "As telas que se atualizam sozinhas reconectam automaticamente quando a conexão cai e, enquanto isso, se atualizam a cada 30 segundos. O indicador mostra “ao vivo” ou “reconectando”."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Notificações maiores",
+          "descricao": "No computador, a lista de notificações ficou mais larga e mais alta, com textos maiores."
+        }
+      ]
+    },
+    {
       "versao": "1.7.2",
       "data": "2026-11-24",
       "resumo": "Corrija e reenvie outras contas devolvidas pela CCI.",
