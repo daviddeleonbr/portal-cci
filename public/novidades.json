@@ -2,6 +2,31 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.7.0",
+      "data": "2026-11-24",
+      "resumo": "Outras contas a pagar: confirmação antes de enviar, atualização automática e avisos no celular.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Confira antes de enviar",
+          "descricao": "Em Outras contas a pagar, ao tocar em “Enviar para CCI” aparece um resumo com todos os dados. Toque em “OK, enviar” ou em “Editar” para corrigir."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Outras contas em tempo real",
+          "descricao": "A lista de outras contas a pagar se atualiza sozinha quando a CCI lança ou devolve uma conta, ou quando o cliente envia uma nova."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "Avisos de outras contas no celular",
+          "descricao": "Receba um aviso quando uma conta for enviada, lançada ou devolvida. Ative em Notificações › “Receber neste dispositivo”."
+        }
+      ]
+    },
+    {
       "versao": "1.6.2",
       "data": "2026-11-24",
       "resumo": "Notificações em tela inteira no celular.",

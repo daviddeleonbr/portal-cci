@@ -14,6 +14,7 @@ import { useAdminSession } from '../hooks/useAuth';
 import * as ocService from '../services/outraContaService';
 import * as mapService from '../services/mapeamentoService';
 import { formatCurrency } from '../utils/format';
+import { useAtualizacaoAutomatica } from '../hooks/useAtualizacaoAutomatica';
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -64,19 +65,27 @@ export default function AdminOutrasContas() {
     mapService.listarChavesApi().then(setRedes).catch(() => setRedes([]));
   }, []);
 
-  const carregar = useCallback(async () => {
-    setLoading(true); setError(null);
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) { setLoading(true); setError(null); }
     try {
       const lista = await ocService.listarParaAdmin({
         dataDe, dataAte,
         chaveApiId: filtroRede === 'todas' ? null : filtroRede,
       });
       setContas(lista);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    } catch (err) { if (!silencioso) setError(err.message); }
+    finally { if (!silencioso) setLoading(false); }
   }, [dataDe, dataAte, filtroRede]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Tempo real: cliente enviou/excluiu uma conta ou anexou comprovante
+  const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
+  useAtualizacaoAutomatica({
+    canal: `outras-contas-admin:${filtroRede}`,
+    tabelas: [{ table: 'outra_conta_pagar' }, { table: 'outra_conta_arquivo' }],
+    recarregar: recarregarSilencioso,
+  });
 
   const contagens = useMemo(() => {
     const c = { enviada: 0, lancada: 0, devolvida: 0 };

@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import {
   Receipt, Plus, Loader2, AlertCircle, Search,
   Calendar, Trash2, Upload, File, Download, X, CheckCircle2,
-  Info, Clock, Camera, ChevronDown,
+  Info, Clock, Camera, ChevronDown, Pencil,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import Toast from '../../../components/ui/Toast';
@@ -74,11 +74,13 @@ export default function ClienteOutrasContas() {
   useEffect(() => { carregar(); }, [carregar]);
 
   // Sem botão "Atualizar": a CCI lança/devolve e a lista muda sozinha
-  // (tempo real filtrado pela empresa + ao voltar pro app).
+  // (tempo real + ao voltar pro app). SEM filtro: o Realtime não entrega DELETE
+  // em assinatura filtrada (conta excluída ficava na lista); a RLS limita ao que
+  // o usuário vê.
   const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
   const { conectado } = useAtualizacaoAutomatica({
     canal: `outras-contas:${cliente?.id || 'nenhum'}`,
-    tabelas: [{ table: 'outra_conta_pagar', filter: `cliente_id=eq.${cliente?.id}` }],
+    tabelas: [{ table: 'outra_conta_pagar' }, { table: 'outra_conta_arquivo' }],
     recarregar: recarregarSilencioso,
     ativo: !!cliente?.id,
   });
@@ -436,6 +438,8 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
   const [arquivo, setArquivo] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [tentouEnviar, setTentouEnviar] = useState(false);
+  // 'form' → preenchendo; 'confirmar' → revisão dos dados antes de enviar (OK / Editar)
+  const [etapa, setEtapa] = useState('form');
   const inputFileRef = useRef(null);
   const inputCameraRef = useRef(null);
 
@@ -453,9 +457,15 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
   const podeSalvar = faltando.length === 0;
   const benefDoc = mascaraDoc(benefDocDig, benefTipo);
 
-  const submit = async (e) => {
+  // "Enviar para CCI" não envia direto: valida e mostra a revisão
+  const revisar = (e) => {
     e?.preventDefault();
     setTentouEnviar(true);
+    if (!podeSalvar || salvando) return;
+    setEtapa('confirmar');
+  };
+
+  const enviar = async () => {
     if (!podeSalvar || salvando) return;
     setSalvando(true);
     try {
@@ -500,14 +510,19 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
             <Receipt className="h-5 w-5 text-blue-700 dark:text-blue-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 id="titulo-nova-conta" className="text-base font-semibold text-gray-900 dark:text-gray-100">Nova conta a pagar</h2>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">Contas sem nota fiscal</p>
+            <h2 id="titulo-nova-conta" className="text-base font-semibold text-gray-900 dark:text-gray-100">{etapa === 'confirmar' ? 'Confirme os dados' : 'Nova conta a pagar'}</h2>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{etapa === 'confirmar' ? 'Confira antes de enviar para a CCI' : 'Contas sem nota fiscal'}</p>
           </div>
           <button type="button" onClick={onClose} disabled={salvando} aria-label="Fechar"
             className="h-11 w-11 -mr-2 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 dark:text-gray-400 disabled:opacity-50"><X className="h-5 w-5" /></button>
         </div>
 
-        <form id="form-nova-conta" onSubmit={submit} noValidate className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-5">
+        {etapa === 'confirmar' ? (
+          <ResumoConta valor={valor} descricao={descricao.trim()} categoria={categoria} dataPgto={dataPgto} formaPgto={formaPgto}
+            benefNome={benefNome.trim()} benefDoc={benefDoc} benefTipo={benefTipo} observacao={observacao.trim()}
+            arquivo={arquivo} tamanhoArquivo={tamanhoArquivo} />
+        ) : (
+        <form id="form-nova-conta" onSubmit={revisar} noValidate className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-5">
           {/* Valor primeiro: é o dado principal, e já abre o teclado numérico */}
           <label className="block">
             <span className={CLS_LABEL}>Valor <span className="text-rose-600">*</span></span>
@@ -617,9 +632,24 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
             <input ref={inputCameraRef} type="file" className="hidden" accept="image/*" capture="environment" onChange={escolherArquivo} />
           </div>
         </form>
+        )}
 
         {/* Rodapé fixo: no celular, Enviar ocupa a largura toda (alvo grande, ao alcance do polegar) */}
         <div className="px-4 sm:px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 border-t border-gray-100 dark:border-white/10 bg-white dark:bg-slate-900">
+          {etapa === 'confirmar' ? (
+            /* Revisão: Editar (volta ao formulário, mantém tudo) | OK, enviar */
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setEtapa('form')} disabled={salvando}
+                className="inline-flex items-center justify-center gap-1.5 h-12 sm:h-11 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 px-4 text-base sm:text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 disabled:opacity-50">
+                <Pencil className="h-4 w-4" /> Editar
+              </button>
+              <button type="button" onClick={enviar} disabled={salvando} autoFocus
+                className="flex-1 sm:flex-none sm:ml-auto inline-flex items-center justify-center gap-2 h-12 sm:h-11 rounded-lg bg-blue-700 text-white px-5 text-base sm:text-sm font-semibold hover:bg-blue-800 disabled:opacity-60">
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {salvando ? 'Enviando…' : 'OK, enviar'}
+              </button>
+            </div>
+          ) : (<>
           {tentouEnviar && !podeSalvar && (
             <p className="mb-2 text-xs text-rose-600" role="alert">Falta preencher: {faltando.join(' e ')}.</p>
           )}
@@ -632,12 +662,42 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
             {/* Não fica desabilitado: tocar com campo faltando mostra o que falta */}
             <button type="submit" form="form-nova-conta" disabled={salvando}
               className="inline-flex items-center justify-center gap-2 h-12 sm:h-11 rounded-lg bg-blue-700 text-white px-4 text-base sm:text-sm font-semibold hover:bg-blue-800 disabled:opacity-60">
-              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {salvando ? 'Enviando…' : 'Enviar para CCI'}
+              <CheckCircle2 className="h-4 w-4" />
+              Enviar para CCI
             </button>
           </div>
+          </>)}
         </div>
       </motion.div>
+    </div>
+  );
+}
+
+// ─── Revisão antes de enviar ─────────────────────────────────
+function ResumoConta({ valor, descricao, categoria, dataPgto, formaPgto, benefNome, benefDoc, benefTipo, observacao, arquivo, tamanhoArquivo }) {
+  const cat = ocService.CATEGORIAS.find(c => c.key === categoria)?.label || categoria;
+  const forma = FORMAS_PGTO.find(f => f.key === formaPgto)?.label || '—';
+  const linha = (rotulo, valorTxt, vazio = 'Não informado') => (
+    <div className="flex items-start justify-between gap-4 py-2.5 border-b border-gray-100 dark:border-white/10 last:border-0">
+      <dt className="text-sm text-gray-600 dark:text-gray-400 flex-shrink-0">{rotulo}</dt>
+      <dd className={`text-sm text-right min-w-0 break-words ${valorTxt ? 'font-medium text-gray-900 dark:text-gray-100' : 'italic text-gray-400'}`}>{valorTxt || vazio}</dd>
+    </div>
+  );
+  return (
+    <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-4">
+      <div className="rounded-xl bg-blue-50 dark:bg-blue-500/10 px-4 py-3 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-800 dark:text-blue-300">Valor</p>
+        <p className="text-3xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{formatCurrency(valor)}</p>
+      </div>
+      <dl className="mt-3">
+        {linha('Descrição', descricao)}
+        {linha('Categoria', cat)}
+        {linha('Data do pagamento', dataPgto ? fmtData(dataPgto) : '')}
+        {linha('Forma de pagamento', forma)}
+        {linha('Beneficiário', [benefNome, benefDoc && `${benefTipo === 'pf' ? 'CPF' : 'CNPJ'} ${benefDoc}`].filter(Boolean).join(' · '))}
+        {linha('Observação', observacao)}
+        {linha('Comprovante', arquivo ? `${arquivo.name} (${tamanhoArquivo})` : '', 'Sem anexo')}
+      </dl>
     </div>
   );
 }
