@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { setItemResiliente } from './storageSafe';
 import { expandirSessaoAdmin } from '../services/usuariosSistemaService';
 import { removerAoSair as removerPushAoSair } from '../services/pushService';
+import { forcarRenovacao } from './authToken';
 
 // Chaves de sessao no localStorage (portais independentes)
 const ADMIN_KEY = 'cci_session_admin';
@@ -227,7 +228,7 @@ export async function acessarPortalDemo({ chaveApiId, asRedeId }) {
       'dashboard', 'comercial_vendas', 'comercial_operacao',
       'comercial_produtividade', 'comercial_estoques', 'financeiro',
       'documentos', 'notas_fiscais',
-      'sangrias', 'conferencia_recebimentos',
+      'sangrias', 'fechamento_caixa',
     ],
     empresas_permitidas: null,
   };
@@ -301,4 +302,68 @@ export function hasPermissaoAdmin(chave) {
 export function hasPermissaoCliente(chave) {
   const session = getClienteSession();
   return !!session?.usuario?.permissoes?.includes(chave);
+}
+
+// ==================== Permissões em tempo real ====================
+// O admin mudou as permissões (ou empresas/nível) do usuário: relê o cadastro,
+// renova o token (o JWT carrega as permissões que a RLS usa) e atualiza a sessão
+// — menu e rotas reagem na hora, sem sair e entrar. Usuário desativado → sai.
+// Retorna { mudou, adicionadas, removidas, inativo }.
+const ordenadas = (a) => [...(a || [])].map(String).sort();
+const iguais = (a, b) => JSON.stringify(ordenadas(a)) === JSON.stringify(ordenadas(b));
+
+export async function sincronizarPermissoes(portal) {
+  const key = portal === 'admin' ? ADMIN_KEY : CLIENTE_KEY;
+  let sessao;
+  try { sessao = JSON.parse(localStorage.getItem(key) || 'null'); } catch { sessao = null; }
+  const id = sessao?.usuario?.id;
+  if (!id || sessao?._demo) return { mudou: false };
+
+  const { data: row, error } = await supabase
+    .from('cci_usuarios_sistema')
+    .select('id, permissoes, empresas_permitidas, status, nivel_admin, is_master')
+    .eq('id', id)
+    .maybeSingle();
+  if (error || !row) return { mudou: false };
+
+  if (row.status && row.status !== 'ativo') {
+    if (portal === 'admin') logoutAdmin(); else logoutCliente();
+    return { mudou: true, inativo: true };
+  }
+
+  const u = sessao.usuario;
+  const mudouPerms = !iguais(u.permissoes, row.permissoes);
+  const mudouEmpresas = !iguais(u.empresas_permitidas, row.empresas_permitidas);
+  const mudouNivel = (u.nivel_admin ?? null) !== (row.nivel_admin ?? null) || !!u.is_master !== !!row.is_master;
+  if (!mudouPerms && !mudouEmpresas && !mudouNivel) return { mudou: false };
+
+  await forcarRenovacao(portal); // novo JWT com as permissões atuais
+  // relê a sessão (a renovação gravou os tokens novos) e troca só o usuário
+  let atual;
+  try { atual = JSON.parse(localStorage.getItem(key) || 'null') || sessao; } catch { atual = sessao; }
+  const nova = { ...atual, usuario: { ...atual.usuario, permissoes: row.permissoes || [],
+    empresas_permitidas: row.empresas_permitidas ?? null, nivel_admin: row.nivel_admin, is_master: row.is_master } };
+
+  // Cliente: empresas liberadas mudaram → refaz a lista da rede
+  if (portal !== 'admin' && mudouEmpresas) {
+    const col = nova.tipoCliente === 'autosystem' ? 'as_rede_id' : 'chave_api_id';
+    const val = nova.tipoCliente === 'autosystem' ? nova.asRede?.id : nova.chaveApi?.id;
+    if (val) {
+      const { data: emps } = await supabase.from('clientes').select('*').eq(col, val).eq('status', 'ativo').order('nome', { ascending: true });
+      const perm = Array.isArray(row.empresas_permitidas) && row.empresas_permitidas.length ? row.empresas_permitidas : null;
+      const rede = perm ? (emps || []).filter(c => perm.includes(c.id)) : (emps || []);
+      if (rede.length) {
+        nova.clientesRede = rede;
+        if (!rede.some(c => c.id === nova.cliente?.id)) nova.cliente = rede[0];
+      }
+    }
+  }
+
+  if (portal === 'admin') setAdminSession(nova); else setClienteSession(nova);
+  const antes = new Set(u.permissoes || []), depois = new Set(row.permissoes || []);
+  return {
+    mudou: true,
+    adicionadas: [...depois].filter(p => !antes.has(p)),
+    removidas: [...antes].filter(p => !depois.has(p)),
+  };
 }

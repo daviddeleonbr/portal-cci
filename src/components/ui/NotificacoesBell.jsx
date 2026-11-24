@@ -6,10 +6,14 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, BellRing, Check, CheckCheck, Info, AlertTriangle, CircleAlert, CircleCheck, Loader2, Smartphone, X } from 'lucide-react';
+import { Bell, BellRing, Check, CheckCheck, Info, AlertTriangle, CircleAlert, CircleCheck, Loader2, Smartphone, X,
+  CalendarDays, FileText, Receipt, ListChecks, Coins, ClipboardCheck, Megaphone } from 'lucide-react';
 import { useEhCelular } from '../../hooks/useEhCelular';
 import * as notificacoesService from '../../services/notificacoesService';
 import * as pushService from '../../services/pushService';
+import { useAtualizacaoAutomatica } from '../../hooks/useAtualizacaoAutomatica';
+import { sincronizarPermissoes } from '../../lib/auth';
+import Toast from './Toast';
 
 const COR_TIPO = {
   info:    { Icon: Info,         color: 'text-blue-500',    bg: 'bg-blue-50' },
@@ -17,6 +21,20 @@ const COR_TIPO = {
   aviso:   { Icon: AlertTriangle,color: 'text-amber-500',   bg: 'bg-amber-50' },
   erro:    { Icon: CircleAlert,  color: 'text-red-500',     bg: 'bg-red-50' },
 };
+
+// De onde veio a notificação — pelo link (vale também p/ as antigas).
+const ORIGENS = [
+  { key: 'contas_pagar', label: 'Contas a pagar', Icon: CalendarDays, re: /\/bpo\/contas-pagar/ },
+  { key: 'notas', label: 'Notas fiscais', Icon: FileText, re: /\/notas-fiscais|\/fiscal\/manifestacao/ },
+  { key: 'outras_contas', label: 'Outras contas', Icon: Receipt, re: /\/outras-contas/ },
+  { key: 'tarefas', label: 'Tarefas', Icon: ListChecks, re: /\/tarefas/ },
+  { key: 'sangrias', label: 'Sangrias', Icon: Coins, re: /\/sangrias/ },
+  { key: 'fechamento_caixa', label: 'Fechamento de caixa', Icon: ClipboardCheck, re: /\/fechamento-caixa|\/conferencia-recebimentos/ },
+];
+const ORIGEM_GERAL = { key: 'geral', label: 'Avisos da CCI', Icon: Megaphone };
+function origemDe(n) {
+  return ORIGENS.find(o => o.re.test(n?.link || '')) || ORIGEM_GERAL;
+}
 
 function tempoRelativo(iso) {
   if (!iso) return '';
@@ -39,6 +57,7 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
   const [loading, setLoading] = useState(false);
   const ref = useRef(null);
   const painelRef = useRef(null); // no celular o painel vai num portal (fora de `ref`)
+  const [filtro, setFiltro] = useState('todas'); // origem selecionada
   // Celular: a lista abre em TELA INTEIRA (por cima da barra inferior);
   // computador: menu suspenso.
   const celular = useEhCelular();
@@ -73,12 +92,44 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
     finally { setLoading(false); }
   }, [usuarioId]);
 
-  // Poll inicial + a cada 60s pro contador
+  // Poll inicial + a cada 60s pro contador (rede de segurança do tempo real)
   useEffect(() => {
     carregarContador();
     const t = setInterval(carregarContador, 60_000);
     return () => clearInterval(t);
   }, [carregarContador]);
+
+  // TEMPO REAL: notificação nova → atualiza o sino e confere as permissões.
+  // Se o admin mudou os acessos, a sessão e o token são renovados na hora
+  // (menu e rotas liberam sem sair e entrar) e aparece o aviso.
+  const portal = tema === 'cliente' ? 'cliente' : 'admin';
+  const [avisoAcesso, setAvisoAcesso] = useState(null);
+  const abertoRef = useRef(false);
+  useEffect(() => { abertoRef.current = open; }, [open]);
+  const aoMudar = useCallback(async () => {
+    if (abertoRef.current) carregarLista(); else carregarContador();
+    try {
+      const r = await sincronizarPermissoes(portal);
+      if (r?.mudou && !r.inativo) {
+        const partes = [];
+        if (r.adicionadas?.length) partes.push(`${r.adicionadas.length} liberado(s)`);
+        if (r.removidas?.length) partes.push(`${r.removidas.length} retirado(s)`);
+        setAvisoAcesso(`Seus acessos foram atualizados${partes.length ? ` (${partes.join(', ')})` : ''}.`);
+      }
+    } catch { /* silencioso: tenta de novo na próxima notificação */ }
+  }, [portal, carregarLista, carregarContador]);
+  useEffect(() => { if (usuarioId) aoMudar(); }, [usuarioId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!avisoAcesso) return undefined;
+    const t = setTimeout(() => setAvisoAcesso(null), 6000);
+    return () => clearTimeout(t);
+  }, [avisoAcesso]);
+  useAtualizacaoAutomatica({
+    canal: `notificacoes:${usuarioId || 'x'}`,
+    tabelas: [{ table: 'notificacoes', filter: `usuario_id=eq.${usuarioId}` }],
+    recarregar: aoMudar,
+    ativo: !!usuarioId,
+  });
 
   // Carrega a lista quando abre
   useEffect(() => {
@@ -175,6 +226,33 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
               </div>
             </div>
 
+            {/* Filtro por origem (só aparece com mais de uma origem na lista) */}
+            {(() => {
+              const presentes = [...ORIGENS, ORIGEM_GERAL]
+                .map(o => ({ ...o, total: items.filter(n => origemDe(n).key === o.key).length, novas: items.filter(n => !n.lida_em && origemDe(n).key === o.key).length }))
+                .filter(o => o.total > 0);
+              if (presentes.length < 2) return null;
+              const chip = (key, label, novas, Icon) => {
+                const on = filtro === key;
+                return (
+                  <button key={key} type="button" onClick={() => setFiltro(key)} aria-pressed={on}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 ${celular ? 'h-9 text-[13px]' : 'h-7 text-[11.5px]'} font-medium ring-1 ring-inset transition ${on ? 'bg-blue-600 text-white ring-blue-600' : 'bg-white text-gray-700 ring-gray-200 hover:bg-gray-50'}`}>
+                    {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
+                    {label}
+                    {novas > 0 && <span className={`min-w-[18px] rounded-full px-1 text-center text-[10px] font-bold leading-[18px] ${on ? 'bg-white/25 text-white' : 'bg-red-500 text-white'}`}>{novas}</span>}
+                  </button>
+                );
+              };
+              return (
+                <div className="shrink-0 border-b border-gray-100">
+                  <div className="flex gap-1.5 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {chip('todas', 'Todas', naoLidas, null)}
+                    {presentes.map(o => chip(o.key, o.label, o.novas, o.Icon))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Lista */}
             <div className={celular ? 'flex-1 overflow-y-auto overscroll-contain' : 'max-h-[min(600px,70vh)] overflow-y-auto overscroll-contain'}>
               {loading && items.length === 0 ? (
@@ -182,15 +260,17 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span className="text-xs">Carregando...</span>
                 </div>
-              ) : items.length === 0 ? (
+              ) : (filtro === 'todas' ? items : items.filter(n => origemDe(n).key === filtro)).length === 0 ? (
                 <div className="py-10 text-center px-4">
                   <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                   <p className="text-[12.5px] text-gray-500">Nenhuma notificação por enquanto.</p>
                 </div>
               ) : (
                 <ul className="divide-y divide-gray-100">
-                  {items.map(n => {
+                  {(filtro === 'todas' ? items : items.filter(n => origemDe(n).key === filtro)).map(n => {
                     const cor = COR_TIPO[n.tipo] || COR_TIPO.info;
+                    const origem = origemDe(n);
+                    const IconeOrigem = origem.Icon;
                     const Icone = cor.Icon;
                     const naoLida = !n.lida_em;
                     return (
@@ -203,6 +283,10 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
                             <Icone className={`h-3.5 w-3.5 ${cor.color}`} />
                           </div>
                           <div className="flex-1 min-w-0">
+                            {/* de onde veio */}
+                            <p className={`mb-0.5 inline-flex items-center gap-1 font-semibold uppercase tracking-wide text-blue-700 ${celular ? 'text-[10.5px]' : 'text-[10px]'}`}>
+                              <IconeOrigem className="h-3 w-3" aria-hidden="true" /> {origem.label}
+                            </p>
                             <div className="flex items-baseline gap-2">
                               <p className={`${celular ? 'text-sm' : 'text-[13px] truncate'} ${naoLida ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>
                                 {n.titulo}
@@ -232,6 +316,7 @@ export default function NotificacoesBell({ usuarioId, tema = 'admin' }) {
         )}
       </AnimatePresence>
       ); return celular && typeof document !== 'undefined' ? createPortal(painel, document.body) : painel; })()}
+      <Toast show={!!avisoAcesso} type="success" message={avisoAcesso} onClose={() => setAvisoAcesso(null)} />
     </div>
   );
 }

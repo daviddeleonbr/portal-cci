@@ -2,6 +2,31 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.8.0",
+      "data": "2026-11-24",
+      "resumo": "Novo Fechamento de caixa, notificações separadas por área e permissões liberadas na hora.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Fechamento de caixa",
+          "descricao": "Veja o fechamento de qualquer dia (ou de um turno): vendas por categoria de um lado e formas de recebimento do outro, acréscimos e descontos, devoluções ou vendas canceladas e aferições. Substitui o Resumo de caixa."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Notificações por área",
+          "descricao": "Cada notificação mostra de onde veio (Contas a pagar, Notas fiscais, Outras contas…) e dá para filtrar por área."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Acessos liberados na hora",
+          "descricao": "Quando a CCI muda as suas permissões, você recebe um aviso e as novas áreas já aparecem no menu, sem precisar sair e entrar."
+        }
+      ]
+    },
+    {
       "versao": "1.7.3",
       "data": "2026-11-24",
       "resumo": "Atualização automática mais confiável e notificações maiores no computador.",

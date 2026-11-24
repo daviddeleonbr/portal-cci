@@ -125,3 +125,13 @@ export async function getAccessTokenAtivo() {
   if (!session?.access_token) return ANON; // não logado → anon
   return await resolverToken(session, key, portal);
 }
+
+// Pede um token NOVO ao servidor agora (ignora a validade do atual). Usado quando
+// as permissões do usuário mudam: o auth-refresh relê o usuário no banco e o novo
+// JWT já sai com as permissões atuais (a RLS lê os claims). Retorna o token ou null.
+export async function forcarRenovacao(portal) {
+  const key = portal === 'admin' ? ADMIN_KEY : CLIENTE_KEY;
+  const session = lerSessao(key);
+  if (!session?.refresh_token) return null;
+  return renovar(portal, session, key);
+}

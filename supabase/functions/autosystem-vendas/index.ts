@@ -108,8 +108,9 @@ serve(async (req) => {
   try {
     // Autorização por-usuário: rede + permissão + empresa. `por_mes` alimenta o
     // Dashboard (permissão `dashboard`) além da página de Vendas; os demais
-    // modos são só da página de Vendas (`comercial_vendas`). Admin passa direto.
-    const permsNecessarias = por_mes ? ['comercial_vendas', 'dashboard'] : ['comercial_vendas'];
+    // modos servem a página de Vendas (`comercial_vendas`) e o Fechamento de caixa
+    // do cliente (`fechamento_caixa`). Admin passa direto.
+    const permsNecessarias = por_mes ? ['comercial_vendas', 'dashboard'] : ['comercial_vendas', 'fechamento_caixa'];
     await autorizarAcesso(supabase, req, redeId, { permissoes: permsNecessarias, empresasCodigos: empresaCodigos });
 
     const rede = await obterRede(supabase, redeId);
