@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.10.0",
+      "data": "2026-11-24",
+      "resumo": "Resumo do dia anterior ao entrar no portal.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Resumo de ontem",
+          "descricao": "Ao entrar no portal, veja os principais pontos do dia anterior: vendas, recebimentos, onde vendeu, empresas da rede e clientes a prazo vencidos. Aparece todo dia; marque \"Não mostrar mais hoje\" para esconder até amanhã. Para abrir de novo, toque no ícone de jornal no topo."
+        }
+      ]
+    },
+    {
       "versao": "1.9.0",
       "data": "2026-11-24",
       "resumo": "Nova área de Contas a receber no BPO: veja quem está devendo a prazo.",

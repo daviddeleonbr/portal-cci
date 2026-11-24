@@ -8,6 +8,7 @@ import ModalNovidades from '../../ui/ModalNovidades';
 import PrefetcherWebposto from './PrefetcherWebposto';
 import BannerModoDemo from './BannerModoDemo';
 import ModalPendenciasLogin from './ModalPendenciasLogin';
+import ModalResumoDia from './ModalResumoDia';
 import { useClienteSession } from '../../../hooks/useAuth';
 import { registrarPageview } from '../../../services/usoPortalService';
 import { EmpresaAtivaProvider } from '../../../contexts/EmpresaAtivaContext';
@@ -46,6 +47,7 @@ export default function ClienteLayout() {
 
       <ModalNovidades />
       <ModalPendenciasLogin />
+      <ModalResumoDia />
       <PrefetcherWebposto />
 
       {/* Backdrop mobile */}

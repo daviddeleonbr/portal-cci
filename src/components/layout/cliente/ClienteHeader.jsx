@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Moon, Sun, Building2, Tag } from 'lucide-react';
+import { Moon, Sun, Building2, Tag, Newspaper } from 'lucide-react';
+import { PERMISSOES_RESUMO, abrirResumoDia } from '../../../services/resumoDiaService';
 import LogoCCI from '../../ui/LogoCCI';
 import { useClienteSession } from '../../../hooks/useAuth';
 import NotificacoesBell from '../../ui/NotificacoesBell';
@@ -95,6 +96,14 @@ export default function ClienteHeader() {
 
         {/* Instalar o app (só quando ainda não instalado — ver BotaoInstalarApp) */}
         <BotaoInstalarApp />
+
+        {/* Reabre o "Resumo de ontem" (abre sozinho ao entrar, se não desativado) */}
+        {PERMISSOES_RESUMO.some(p => (usuario?.permissoes || []).includes(p)) && (
+          <button onClick={abrirResumoDia} title="Resumo de ontem" aria-label="Resumo de ontem"
+            className="rounded p-2 text-gray-500 hover:bg-gray-100 transition-colors">
+            <Newspaper className="h-5 w-5" />
+          </button>
+        )}
 
         {/* Theme toggle */}
         <button onClick={alternar}
