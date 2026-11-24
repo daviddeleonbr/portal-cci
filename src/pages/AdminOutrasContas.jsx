@@ -148,8 +148,9 @@ export default function AdminOutrasContas() {
     <div>
       <PageHeader title="Outras contas a pagar" description="Contas enviadas pelos clientes — adiantamentos, empréstimos, transferências">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
-            <CalendarRange className="h-3 w-3" /> Data pgto
+          <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap"
+            title="O período filtra as contas lançadas. Aguardando e devolvidas aparecem sempre.">
+            <CalendarRange className="h-3 w-3" /> Lançadas · data pgto
           </span>
           <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)}
             className="h-9 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 px-2 text-xs focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40" />

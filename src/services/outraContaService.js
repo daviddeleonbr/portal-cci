@@ -52,11 +52,14 @@ export async function listarParaAdmin({ status, chaveApiId, dataDe, dataAte } = 
   if (Array.isArray(status)) q = q.in('status', status);
   else if (status)            q = q.eq('status', status);
 
-  // Período (data de pagamento) só para lançadas/devolvidas: conta AGUARDANDO
-  // a CCI aparece sempre — com data futura ou sem data, ela sumia da fila.
+  // Pendências aparecem SEMPRE (aguardando a CCI e devolvidas aguardando o
+  // cliente) — com data de pagamento futura ou sem data elas sumiam.
+  // O período vale só para as LANÇADAS: pela data de pagamento, ou pela data
+  // do lançamento (fuso do Brasil) quando a conta não tem data de pagamento.
   if (dataDe || dataAte) {
-    const periodo = [dataDe && `data_pagamento.gte.${dataDe}`, dataAte && `data_pagamento.lte.${dataAte}`].filter(Boolean).join(',');
-    q = q.or(`status.eq.enviada,and(${periodo})`);
+    const pgto = [dataDe && `data_pagamento.gte.${dataDe}`, dataAte && `data_pagamento.lte.${dataAte}`].filter(Boolean).join(',');
+    const lanc = [dataDe && `lancada_em.gte.${dataDe}T00:00:00-03:00`, dataAte && `lancada_em.lte.${dataAte}T23:59:59.999-03:00`].filter(Boolean).join(',');
+    q = q.or(`status.in.(enviada,devolvida),and(status.eq.lancada,${pgto}),and(status.eq.lancada,data_pagamento.is.null,${lanc})`);
   }
 
   const { data, error } = await q;

@@ -49,6 +49,7 @@ export default function ClienteOutrasContas() {
   const [tab, setTab] = useState('enviada');
   const [busca, setBusca] = useState('');
   const [modalNova, setModalNova] = useState(false);
+  const [contaCorrigir, setContaCorrigir] = useState(null); // devolvida → corrigir e reenviar
   const [toast, setToast] = useState(null);
   // Aviso "Antes de enviar": no celular começa recolhido (ocupava meia tela)
   const [avisoAberto, setAvisoAberto] = useState(false);
@@ -242,7 +243,7 @@ export default function ClienteOutrasContas() {
               <span>{filtradas.length} {filtradas.length === 1 ? 'conta' : 'contas'}</span>
               <span>Total <strong className="tabular-nums text-gray-900 dark:text-gray-100">{formatCurrency(totalValor)}</strong></span>
             </div>
-            {filtradas.map(c => <CardConta key={c.id} conta={c} onExcluir={excluir} />)}
+            {filtradas.map(c => <CardConta key={c.id} conta={c} onExcluir={excluir} onCorrigir={setContaCorrigir} />)}
           </div>
 
           {/* Desktop: tabela */}
@@ -257,7 +258,7 @@ export default function ClienteOutrasContas() {
                     <th className="px-3 py-2.5">Beneficiário</th>
                     <th className="px-3 py-2.5 text-right">Valor</th>
                     <th className="px-3 py-2.5">Status</th>
-                    {tab === 'enviada' && <th className="px-2 py-2.5" />}
+                    {tab !== 'lancada' && <th className="px-2 py-2.5" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/10">
@@ -291,6 +292,14 @@ export default function ClienteOutrasContas() {
                             <p className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-1">em {fmtDataHora(c.lancada_em)}</p>
                           )}
                         </td>
+                        {tab === 'devolvida' && (
+                          <td className="px-2 py-3 text-right">
+                            <button onClick={() => setContaCorrigir(c)}
+                              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-700 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-blue-800">
+                              <Pencil className="h-3.5 w-3.5" /> Corrigir e reenviar
+                            </button>
+                          </td>
+                        )}
                         {tab === 'enviada' && (
                           <td className="px-2 py-3">
                             <button onClick={() => excluir(c)} title="Excluir"
@@ -309,7 +318,7 @@ export default function ClienteOutrasContas() {
                       Total: {filtradas.length} {filtradas.length === 1 ? 'conta' : 'contas'}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums text-[12.5px] text-gray-900 dark:text-gray-100">{formatCurrency(totalValor)}</td>
-                    <td colSpan={tab === 'enviada' ? 2 : 1} />
+                    <td colSpan={tab !== 'lancada' ? 2 : 1} />
                   </tr>
                 </tfoot>
               </table>
@@ -325,6 +334,17 @@ export default function ClienteOutrasContas() {
         <Plus className="h-5 w-5" aria-hidden="true" /> Nova conta
       </button>
 
+      {contaCorrigir && (
+        <ModalNovaConta
+          key={contaCorrigir.id}
+          cliente={cliente}
+          conta={contaCorrigir}
+          onClose={() => setContaCorrigir(null)}
+          onCriada={async () => { setContaCorrigir(null); await carregar({ silencioso: true }); setTab('enviada'); setToast({ tipo: 'success', mensagem: 'Conta corrigida e reenviada para a CCI' }); }}
+          onErro={(msg) => setToast({ tipo: 'error', mensagem: msg })}
+        />
+      )}
+
       {modalNova && (
         <ModalNovaConta
           cliente={cliente}
@@ -339,7 +359,7 @@ export default function ClienteOutrasContas() {
   );
 }
 
-function CardConta({ conta, onExcluir }) {
+function CardConta({ conta, onExcluir, onCorrigir }) {
   const cfg = STATUS_PILLS[conta.status];
   const cat = ocService.CATEGORIAS.find(c => c.key === conta.categoria);
   return (
@@ -367,6 +387,12 @@ function CardConta({ conta, onExcluir }) {
           <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} aria-hidden="true" />
           {cfg.label}{conta.status === 'lancada' && conta.lancada_em ? ` · ${fmtDataHora(conta.lancada_em)}` : ''}
         </span>
+        {conta.status === 'devolvida' && (
+          <button onClick={() => onCorrigir(conta)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-blue-700 px-4 text-[13px] font-semibold text-white active:bg-blue-800">
+            <Pencil className="h-4 w-4" aria-hidden="true" /> Corrigir e reenviar
+          </button>
+        )}
         {conta.status === 'enviada' && (
           <button onClick={() => onExcluir(conta)}
             className="-mr-2 inline-flex h-10 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium text-rose-700 dark:text-rose-400 active:bg-rose-50">
@@ -425,16 +451,20 @@ function Chip({ ativo, onClick, children }) {
   );
 }
 
-function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
-  const [categoria, setCategoria] = useState('outros');
-  const [descricao, setDescricao] = useState('');
-  const [valorCentavos, setValorCentavos] = useState(''); // só dígitos
-  const [dataPgto, setDataPgto] = useState('');
-  const [benefNome, setBenefNome] = useState('');
-  const [benefDocDig, setBenefDocDig] = useState(''); // só dígitos
-  const [benefTipo, setBenefTipo] = useState('pj');
-  const [formaPgto, setFormaPgto] = useState('pix');
-  const [observacao, setObservacao] = useState('');
+// `conta` (opcional): modo CORREÇÃO de uma conta devolvida — abre preenchido,
+// mostra o motivo e reenvia (status volta p/ 'enviada'; a CCI é notificada).
+function ModalNovaConta({ cliente, conta = null, onClose, onCriada, onErro }) {
+  const corrigindo = !!conta;
+  const [categoria, setCategoria] = useState(conta?.categoria || 'outros');
+  const [descricao, setDescricao] = useState(conta?.descricao || '');
+  const [valorCentavos, setValorCentavos] = useState(conta?.valor ? String(Math.round(Number(conta.valor) * 100)) : ''); // só dígitos
+  const [dataPgto, setDataPgto] = useState(conta?.data_pagamento || '');
+  const [benefNome, setBenefNome] = useState(conta?.beneficiario_nome || '');
+  const [benefDocDig, setBenefDocDig] = useState(String(conta?.beneficiario_documento || '').replace(/\D/g, '')); // só dígitos
+  const [benefTipo, setBenefTipo] = useState(conta?.beneficiario_tipo || 'pj');
+  const [formaPgto, setFormaPgto] = useState(conta?.forma_pagamento || 'pix');
+  const [observacao, setObservacao] = useState(conta?.observacao || '');
+  const anexosAtuais = conta?.arquivos?.length || 0;
   const [arquivo, setArquivo] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [tentouEnviar, setTentouEnviar] = useState(false);
@@ -469,19 +499,22 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
     if (!podeSalvar || salvando) return;
     setSalvando(true);
     try {
-      const conta = await ocService.criar({
-        cliente_id: cliente.id,
+      const campos = {
         categoria, descricao: descricao.trim(),
         valor,
         data_pagamento: dataPgto || null,
         beneficiario_nome: benefNome.trim() || null,
-        beneficiario_documento: benefDoc || null,
+        beneficiario_documento: benefDoc ? benefDoc.replace(/\D/g, '') : null,
         beneficiario_tipo: benefDoc ? benefTipo : null,
         forma_pagamento: formaPgto || null,
         observacao: observacao.trim() || null,
-      });
+      };
+      // correção: mesma conta volta para "aguardando" (gatilho avisa a CCI)
+      const salva = corrigindo
+        ? await ocService.atualizar(conta.id, { ...campos, status: 'enviada', enviada_em: new Date().toISOString() })
+        : await ocService.criar({ cliente_id: cliente.id, ...campos });
       if (arquivo) {
-        await ocService.adicionarArquivo({ contaId: conta.id, clienteId: cliente.id, file: arquivo });
+        await ocService.adicionarArquivo({ contaId: salva.id, clienteId: cliente.id, file: arquivo });
       }
       await onCriada();
     } catch (err) {
@@ -510,8 +543,8 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
             <Receipt className="h-5 w-5 text-blue-700 dark:text-blue-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 id="titulo-nova-conta" className="text-base font-semibold text-gray-900 dark:text-gray-100">{etapa === 'confirmar' ? 'Confirme os dados' : 'Nova conta a pagar'}</h2>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{etapa === 'confirmar' ? 'Confira antes de enviar para a CCI' : 'Contas sem nota fiscal'}</p>
+            <h2 id="titulo-nova-conta" className="text-base font-semibold text-gray-900 dark:text-gray-100">{etapa === 'confirmar' ? 'Confirme os dados' : corrigindo ? 'Corrigir e reenviar' : 'Nova conta a pagar'}</h2>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{etapa === 'confirmar' ? 'Confira antes de enviar para a CCI' : corrigindo ? 'Ajuste o que a CCI pediu e reenvie' : 'Contas sem nota fiscal'}</p>
           </div>
           <button type="button" onClick={onClose} disabled={salvando} aria-label="Fechar"
             className="h-11 w-11 -mr-2 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 dark:text-gray-400 disabled:opacity-50"><X className="h-5 w-5" /></button>
@@ -520,9 +553,17 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
         {etapa === 'confirmar' ? (
           <ResumoConta valor={valor} descricao={descricao.trim()} categoria={categoria} dataPgto={dataPgto} formaPgto={formaPgto}
             benefNome={benefNome.trim()} benefDoc={benefDoc} benefTipo={benefTipo} observacao={observacao.trim()}
-            arquivo={arquivo} tamanhoArquivo={tamanhoArquivo} />
+            arquivo={arquivo} tamanhoArquivo={tamanhoArquivo} anexosAtuais={anexosAtuais} />
         ) : (
         <form id="form-nova-conta" onSubmit={revisar} noValidate className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-5">
+          {corrigindo && conta.motivo_devolucao && (
+            <div className="rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">Motivo da devolução</p>
+              <p className="mt-0.5 text-sm text-rose-900 dark:text-rose-200">{conta.motivo_devolucao}</p>
+              <p className="mt-1 text-xs text-rose-700/90 dark:text-rose-300/80">Corrija os dados abaixo ou responda à CCI no campo <strong>Observação</strong>.</p>
+            </div>
+          )}
+
           {/* Valor primeiro: é o dado principal, e já abre o teclado numérico */}
           <label className="block">
             <span className={CLS_LABEL}>Valor <span className="text-rose-600">*</span></span>
@@ -604,7 +645,10 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
 
           {/* Anexo opcional */}
           <div>
-            <span className={`${CLS_LABEL} block mb-1`}>Comprovante (opcional)</span>
+            <span className={`${CLS_LABEL} block mb-1`}>{corrigindo ? 'Novo comprovante (opcional)' : 'Comprovante (opcional)'}</span>
+            {corrigindo && anexosAtuais > 0 && (
+              <p className="mb-1.5 text-xs text-gray-600 dark:text-gray-400">{anexosAtuais} comprovante(s) já anexado(s) continuam na conta.</p>
+            )}
             {arquivo ? (
               <div className="flex items-center gap-3 pl-3 min-h-[52px] rounded-lg border border-blue-200 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10">
                 <File className="h-5 w-5 text-blue-700 dark:text-blue-400 flex-shrink-0" />
@@ -646,7 +690,7 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
               <button type="button" onClick={enviar} disabled={salvando} autoFocus
                 className="flex-1 sm:flex-none sm:ml-auto inline-flex items-center justify-center gap-2 h-12 sm:h-11 rounded-lg bg-blue-700 text-white px-5 text-base sm:text-sm font-semibold hover:bg-blue-800 disabled:opacity-60">
                 {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                {salvando ? 'Enviando…' : 'OK, enviar'}
+                {salvando ? 'Enviando…' : corrigindo ? 'OK, reenviar' : 'OK, enviar'}
               </button>
             </div>
           ) : (<>
@@ -663,7 +707,7 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
             <button type="submit" form="form-nova-conta" disabled={salvando}
               className="inline-flex items-center justify-center gap-2 h-12 sm:h-11 rounded-lg bg-blue-700 text-white px-4 text-base sm:text-sm font-semibold hover:bg-blue-800 disabled:opacity-60">
               <CheckCircle2 className="h-4 w-4" />
-              Enviar para CCI
+              {corrigindo ? 'Reenviar para CCI' : 'Enviar para CCI'}
             </button>
           </div>
           </>)}
@@ -674,7 +718,7 @@ function ModalNovaConta({ cliente, onClose, onCriada, onErro }) {
 }
 
 // ─── Revisão antes de enviar ─────────────────────────────────
-function ResumoConta({ valor, descricao, categoria, dataPgto, formaPgto, benefNome, benefDoc, benefTipo, observacao, arquivo, tamanhoArquivo }) {
+function ResumoConta({ valor, descricao, categoria, dataPgto, formaPgto, benefNome, benefDoc, benefTipo, observacao, arquivo, tamanhoArquivo, anexosAtuais = 0 }) {
   const cat = ocService.CATEGORIAS.find(c => c.key === categoria)?.label || categoria;
   const forma = FORMAS_PGTO.find(f => f.key === formaPgto)?.label || '—';
   const linha = (rotulo, valorTxt, vazio = 'Não informado') => (
@@ -696,7 +740,7 @@ function ResumoConta({ valor, descricao, categoria, dataPgto, formaPgto, benefNo
         {linha('Forma de pagamento', forma)}
         {linha('Beneficiário', [benefNome, benefDoc && `${benefTipo === 'pf' ? 'CPF' : 'CNPJ'} ${benefDoc}`].filter(Boolean).join(' · '))}
         {linha('Observação', observacao)}
-        {linha('Comprovante', arquivo ? `${arquivo.name} (${tamanhoArquivo})` : '', 'Sem anexo')}
+        {linha('Comprovante', [anexosAtuais > 0 && `${anexosAtuais} já anexado(s)`, arquivo && `novo: ${arquivo.name} (${tamanhoArquivo})`].filter(Boolean).join(' · '), 'Sem anexo')}
       </dl>
     </div>
   );

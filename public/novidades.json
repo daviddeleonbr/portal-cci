@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.7.2",
+      "data": "2026-11-24",
+      "resumo": "Corrija e reenvie outras contas devolvidas pela CCI.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Corrigir e reenviar",
+          "descricao": "Quando a CCI devolver uma conta em Outras contas a pagar, toque em “Corrigir e reenviar”: o formulário abre preenchido com o motivo da devolução, você ajusta ou responde na observação e reenvia."
+        },
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Devolvidas sempre visíveis",
+          "descricao": "Contas devolvidas aparecem sempre na aba Devolvidas; o filtro de período vale só para as lançadas."
+        }
+      ]
+    },
+    {
       "versao": "1.7.1",
       "data": "2026-11-24",
       "resumo": "Datas sempre no horário de Brasília.",
