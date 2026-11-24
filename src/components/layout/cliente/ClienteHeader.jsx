@@ -1,4 +1,5 @@
 import { Moon, Sun, Building2, Tag } from 'lucide-react';
+import LogoCCI from '../../ui/LogoCCI';
 import { useClienteSession } from '../../../hooks/useAuth';
 import NotificacoesBell from '../../ui/NotificacoesBell';
 import BotaoInstalarApp from '../../cliente/BotaoInstalarApp';
@@ -18,11 +19,26 @@ export default function ClienteHeader() {
   const temApelidos = clientesRede.some(c => c.apelido && String(c.apelido).trim());
   const nomeCliente = cliente?.nome || 'Cliente';
   const cnpjCliente = cliente?.cnpj || '';
+  const nomeRede = tipoCliente === 'autosystem' ? (session?.asRede?.nome || 'Rede Autosystem') : (session?.chaveApi?.nome || nomeCliente);
+  const primeiroNome = String(usuario?.nome || '').trim().split(/\s+/)[0] || '';
+  // saudação pelo horário de Brasília
+  const hora = Number(new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }).format(new Date()));
+  const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-100 bg-white px-3 sm:px-6">
-      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-        {/* Mobile: o menu abre pelo botão "Mais" da barra inferior (ClienteBottomNav) */}
+      {/* Celular: logo + saudação + rede (o menu abre pelo "Mais" da barra inferior) */}
+      <div className="flex md:hidden items-center gap-2.5 min-w-0 flex-1">
+        <LogoCCI className="h-9 w-9 flex-shrink-0" />
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold leading-tight text-gray-900 truncate">
+            {saudacao}{primeiroNome ? `, ${primeiroNome}` : ''}
+          </p>
+          <p className="text-xs leading-tight text-gray-500 truncate">{nomeRede}</p>
+        </div>
+      </div>
+
+      <div className="hidden md:flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
         {tipoCliente === 'autosystem' ? (
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white flex-shrink-0">

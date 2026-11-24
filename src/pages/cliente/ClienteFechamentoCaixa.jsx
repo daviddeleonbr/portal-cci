@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Droplet, Fuel, Loader2,
-  MinusCircle, PlusCircle, RefreshCw, RotateCcw, ShoppingBag, Wallet, XCircle,
+  Calculator, MinusCircle, PlusCircle, RefreshCw, RotateCcw, ShoppingBag, Wallet, XCircle,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import InputData from '../../components/ui/InputData';
@@ -55,7 +55,6 @@ export default function ClienteFechamentoCaixa() {
   useEffect(() => { setTurno(null); carregar(); }, [carregar]);
 
   const f = useMemo(() => fechService.montar(bruto, turno), [bruto, turno]);
-  const diferenca = f ? f.totalRecebido - f.vendas.total : 0;
 
   const cabecalho = (
     <PageHeader title="Fechamento de caixa" description="Vendas, recebimentos, ajustes e aferições do dia" acoesNaLinha>
@@ -138,28 +137,75 @@ export default function ClienteFechamentoCaixa() {
           ))}
 
           {/* Resumo */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className={`grid grid-cols-2 gap-2 ${f.outrasEntradas.total !== 0 ? 'lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
             <Resumo rotulo="Vendido" valor={f.vendas.total} Icone={ShoppingBag} tom="text-blue-700 bg-blue-50" />
-            <Resumo rotulo="Recebido" valor={f.totalRecebido} Icone={Wallet} tom="text-emerald-700 bg-emerald-50" />
-            <div className="col-span-2 rounded-2xl border border-gray-200/60 bg-white p-3 shadow-sm sm:col-span-1 sm:p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Diferença</p>
-              <p className={`mt-1 text-xl font-bold tabular-nums ${Math.abs(diferenca) < 0.01 ? 'text-gray-900' : diferenca > 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                {diferenca > 0 ? '+' : ''}{formatCurrency(diferenca)}
+            {f.outrasEntradas.total !== 0 && (
+              <Resumo rotulo="Outras entradas" valor={f.outrasEntradas.total} Icone={PlusCircle} tom="text-gray-700 bg-gray-100" />
+            )}
+            <Resumo rotulo="Recebido" valor={f.totalRecebido} Icone={Wallet} tom="text-emerald-700 bg-emerald-50"
+              sub={f.apuradoCaixa != null ? 'apresentado na contagem' : null} />
+            {/* Diferença do caixa = a do Webposto (apresentado − apurado): sobra/falta */}
+            <div className={`rounded-2xl border border-gray-200/60 bg-white p-3 shadow-sm sm:p-4 ${f.outrasEntradas.total !== 0 ? '' : 'col-span-2 sm:col-span-1'}`}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">Diferença do caixa</p>
+              <p className={`mt-1 text-xl font-bold tabular-nums ${Math.abs(f.diferencaCaixa) < 0.005 ? 'text-gray-900' : f.diferencaCaixa > 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {f.diferencaCaixa > 0 ? '+' : ''}{formatCurrency(f.diferencaCaixa)}
               </p>
-              <p className="text-[11px] text-gray-500">recebido − vendido</p>
+              <p className="text-[11px] text-gray-500">
+                {Math.abs(f.diferencaCaixa) < 0.005 ? 'Caixa batido' : f.diferencaCaixa > 0 ? 'Sobra' : 'Falta'}
+                {f.tipo === 'webposto' ? ' · recebido − (vendas + outras entradas)' : ' · sobra − falta'}
+              </p>
             </div>
           </div>
 
-          {/* Vendas × Recebimentos */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Secao titulo="Vendas" total={f.vendas.total} Icone={ShoppingBag}
-              nota={f.porTurnoParcial ? 'Dia todo (sem separação por turno no Autosystem)' : null}>
-              {f.vendas.categorias.length === 0 ? <Vazio texto="Nenhuma venda neste período." /> : (
-                <ul className="divide-y divide-gray-100">
-                  {f.vendas.categorias.map(c => <CategoriaVenda key={c.chave} c={c} total={f.vendas.total} />)}
-                </ul>
-              )}
-            </Secao>
+          {/* Vendas + Outras entradas × Formas de recebimento */}
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <div className="space-y-4">
+              <Secao titulo="Vendas" total={f.vendas.total} Icone={ShoppingBag}
+                nota={f.porTurnoParcial ? 'Dia todo (sem separação por turno no Autosystem)' : null}>
+                {f.vendas.categorias.length === 0 ? <Vazio texto="Nenhuma venda neste período." /> : (
+                  <ul className="divide-y divide-gray-100">
+                    {f.vendas.categorias.map(c => <CategoriaVenda key={c.chave} c={c} total={f.vendas.total} />)}
+                  </ul>
+                )}
+              </Secao>
+
+              <Secao titulo="Outras entradas" total={f.outrasEntradas.total} Icone={PlusCircle}
+                nota={f.porTurnoParcial ? 'Dia todo · entram no caixa, mas não são venda' : 'Entram no caixa, mas não são venda'}>
+                {f.outrasEntradas.itens.length === 0 ? <Vazio texto="Nenhuma outra entrada." /> : (
+                  <ul className="divide-y divide-gray-100">
+                    {f.outrasEntradas.itens.map(i => (
+                      <li key={i.chave} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                        <span className="min-w-0">
+                          <span className="block truncate text-gray-800">{i.rotulo}</span>
+                          {i.nota && <span className="text-[11px] text-gray-500">{i.nota}</span>}
+                        </span>
+                        <span className={`shrink-0 font-semibold tabular-nums ${i.valor < 0 ? 'text-red-700' : 'text-gray-900'}`}>{formatCurrency(i.valor)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Secao>
+
+              {/* Vendas + Outras entradas (a conta, com o total em destaque) */}
+              <section className="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm ring-1 ring-blue-100">
+                <dl className="space-y-1.5 px-4 pt-3.5 pb-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="flex items-center gap-2 text-gray-600"><ShoppingBag className="h-4 w-4 text-gray-400" aria-hidden="true" /> Vendas</dt>
+                    <dd className="tabular-nums text-gray-800">{formatCurrency(f.vendas.total)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="flex items-center gap-2 text-gray-600"><PlusCircle className="h-4 w-4 text-gray-400" aria-hidden="true" /> Outras entradas</dt>
+                    <dd className={`tabular-nums ${f.outrasEntradas.total < 0 ? 'text-red-700' : 'text-gray-800'}`}>
+                      {f.outrasEntradas.total < 0 ? '−' : '+'} {formatCurrency(Math.abs(f.outrasEntradas.total))}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="flex items-center justify-between gap-3 border-t border-blue-100 bg-blue-50 px-4 py-3">
+                  <p className="text-[13px] font-bold text-blue-900">Vendas + Outras entradas</p>
+                  <p className="text-lg font-bold tabular-nums text-blue-900">{formatCurrency(f.totalEntradas)}</p>
+                </div>
+              </section>
+            </div>
 
             <Secao titulo="Formas de recebimento" total={f.totalRecebido} Icone={Wallet}>
               {f.recebimentos.length === 0 ? <Vazio texto="Nenhum recebimento neste período." /> : (
@@ -254,7 +300,7 @@ export default function ClienteFechamentoCaixa() {
   );
 }
 
-function Resumo({ rotulo, valor, Icone, tom, pequeno = false }) {
+function Resumo({ rotulo, valor, Icone, tom, pequeno = false, sub = null }) {
   return (
     <div className="rounded-2xl border border-gray-200/60 bg-white p-3 shadow-sm sm:p-4">
       <div className="flex items-center gap-2">
@@ -262,6 +308,7 @@ function Resumo({ rotulo, valor, Icone, tom, pequeno = false }) {
         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">{rotulo}</p>
       </div>
       <p className={`mt-1.5 font-bold tabular-nums text-gray-900 ${pequeno ? 'text-base' : 'text-xl'}`}>{formatCurrency(valor)}</p>
+      {sub && <p className="text-[11px] text-gray-500">{sub}</p>}
     </div>
   );
 }

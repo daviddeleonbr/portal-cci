@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.8.1",
+      "data": "2026-11-24",
+      "resumo": "Fechamento de caixa com a mesma diferença do Webposto e outras entradas separadas.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Fechamento de caixa mais claro",
+          "descricao": "A diferença do caixa agora é a mesma do sistema (recebido − vendas e outras entradas). As outras entradas (fundo de caixa e ajuste no dinheiro) aparecem separadas das vendas."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Saudação no celular",
+          "descricao": "No celular, o topo do portal mostra a logo da CCI, uma saudação com o seu nome e o nome da rede."
+        }
+      ]
+    },
+    {
       "versao": "1.8.0",
       "data": "2026-11-24",
       "resumo": "Novo Fechamento de caixa, notificações separadas por área e permissões liberadas na hora.",

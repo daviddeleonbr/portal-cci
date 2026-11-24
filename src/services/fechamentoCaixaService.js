@@ -106,17 +106,19 @@ async function carregarAutosystem(cliente, data) {
   const categorias = await autosystemService.listarContasCategorizadasRede(redeId).catch(() => []);
   const sobras = categorias.filter(c => c.categoria === 'sobra_caixa').map(c => String(c.codigo));
   const cartoes = categorias.filter(c => c.categoria === 'cartao_pix').map(c => String(c.codigo));
-  const [vendas, receb, grupos, contas, bombas] = await Promise.all([
+  const [vendas, receb, grupos, contas, bombas, outras] = await Promise.all([
     autosystemService.buscarVendasAutosystem(redeId, emp, { data_de: data, data_ate: data }),
     autosystemService.buscarRecebimentosAutosystem(redeId, emp,
       { data_de: data, data_ate: data, contas_creditar_extras: sobras, contas_debitar_todas: cartoes }),
     autosystemService.listarGruposProdutoRede(redeId).catch(() => []),
     autosystemService.buscarContasAutosystem(redeId).catch(() => []),
     autosystemService.buscarBombasAutosystem(redeId, emp, { data_de: data, data_ate: data }).catch(() => null),
+    // entradas no caixa que não são venda (conta_creditar fora de 4.1, sem sobra)
+    autosystemService.buscarOutrasEntradasAutosystem(redeId, emp, { data_de: data, data_ate: data, contas_creditar_excluir: sobras }).catch(() => []),
   ]);
   return {
     tipo: 'autosystem', data, vendas: vendas || [], receb: receb || [], categorias,
-    grupos: grupos || [], contas: contas || [], afericoes: bombas?.afericoes || [],
+    grupos: grupos || [], contas: contas || [], afericoes: bombas?.afericoes || [], outras: outras || [],
   };
 }
 
@@ -222,8 +224,31 @@ function montarWebposto(b, turno) {
 
   const totalVendas = soma(categorias, c => c.valor);
   const recebimentos = ordenarFormas([...formas.values()]);
+  // Diferença do CAIXA como no Webposto (Fechamento de Caixa): apresentado −
+  // apurado de cada caixa (campo CAIXA.diferenca) = sobra (+) / falta (−).
+  const caixasEscopo = b.caixas.filter(c => noTurno(c.caixaCodigo));
+  // O APURADO do Webposto não é só venda: inclui o fundo de caixa (troco do
+  // início do turno) e outros movimentos do caixa. Composição p/ a tela.
+  const fechadosEscopo = caixasEscopo.filter(c => c.fechado);
+  const apuradoCaixa = fechadosEscopo.length ? soma(fechadosEscopo, c => c.apurado) : null;
+  const fundoCaixa = soma(b.apresentados.filter(a => noTurno(a.caixaCodigo) && fechados.has(caixaId(a.caixaCodigo))), a => a.fundoCxDebApurado);
+  const vendasFechados = soma(categorias, c => c.valor); // vendas do escopo
+  // Outras entradas (Webposto): fundo de caixa + o resto do apurado que não é venda
+  const outrosMov = apuradoCaixa == null ? 0 : apuradoCaixa - vendasFechados - fundoCaixa;
+  const outrasItens = [
+    { chave: 'fundo', rotulo: 'Fundo de caixa (troco)', valor: fundoCaixa, nota: 'troco do início do turno' },
+    // Investigado (22/11): fica todo no DINHEIRO — dinheiro apurado − dinheiro das
+    // vendas (cartão/PIX/prazo batem). Troco/arredondamento ou movimento manual;
+    // a API não detalha (o campo VENDA.troco vem zerado).
+    { chave: 'ajuste_dinheiro', rotulo: 'Ajuste no dinheiro do caixa', valor: outrosMov, nota: 'dinheiro apurado − dinheiro das vendas (troco, arredondamento ou lançamento manual)' },
+  ].filter(i => Math.abs(i.valor) >= 0.005);
+  const totalOutras = soma(outrasItens, i => i.valor);
   return {
     tipo: 'webposto', turnos, turno: t, porTurnoParcial: false,
+    diferencaCaixa: soma(caixasEscopo, c => c.diferenca),
+    apuradoCaixa,
+    outrasEntradas: { itens: outrasItens, total: totalOutras },
+    totalEntradas: totalVendas + totalOutras,
     vendas: { categorias, total: totalVendas },
     acrescimos, descontos,
     recebimentos, totalRecebido: soma(recebimentos, f => f.valor),
@@ -291,6 +316,17 @@ function montarAutosystem(b, turno) {
     formas.set(cod, g);
   });
 
+  // Outras entradas (não-venda) por conta creditada — dia todo (sem turno)
+  const porConta = new Map();
+  (b.outras || []).forEach(e => {
+    const cod = String(e.conta_creditar || 'sem-conta');
+    const g = porConta.get(cod) || { chave: `conta:${cod}`, rotulo: nomeConta.get(cod) || catConta.get(cod)?.nome || `Conta ${cod}`, valor: 0, nota: null };
+    g.valor += num(e.valor);
+    porConta.set(cod, g);
+  });
+  const outrasItensAS = [...porConta.values()].filter(i => Math.abs(i.valor) >= 0.005).sort((x, y) => y.valor - x.valor);
+  const outrasAS = { itens: outrasItensAS, total: soma(outrasItensAS, i => i.valor) };
+
   const afericoes = b.afericoes
     .map(a => ({ produto: a.produto_nome || `Produto ${a.produto_codigo}`, bico: a.bico, litros: num(a.quantidade), valor: 0, hora: horaDe(a.hora) }))
     .sort((x, y) => x.hora.localeCompare(y.hora));
@@ -299,6 +335,11 @@ function montarAutosystem(b, turno) {
 
   return {
     tipo: 'autosystem', turnos, turno: t, porTurnoParcial: !!t,
+    // equivalente no Autosystem: sobra − falta de caixa
+    diferencaCaixa: sobra - falta,
+    apuradoCaixa: null,
+    outrasEntradas: outrasAS,
+    totalEntradas: soma(categorias, c => c.valor) + outrasAS.total,
     vendas: { categorias, total: soma(categorias, c => c.valor) },
     acrescimos, descontos,
     recebimentos, totalRecebido: soma(recebimentos, f => f.valor),
