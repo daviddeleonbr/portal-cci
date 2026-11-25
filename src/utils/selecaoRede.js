@@ -1,4 +1,4 @@
-// Seleção rede → empresa das consultas do admin (Sangrias, Resumos de caixa).
+// Seleção rede → empresa das consultas do admin (Sangrias, Relatório geral).
 // selecao = { rede: { tipo, id } | null, empresa: '' | TODAS | <id> }
 export const TODAS_DA_REDE = 'todas';
 export const SELECAO_VAZIA = { rede: null, empresa: '' };

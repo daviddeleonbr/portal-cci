@@ -8,7 +8,8 @@ import { TODAS_DA_REDE, empresasDaRede } from '../../utils/selecaoRede';
 const rot = 'mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500';
 
 // `admin`: { chavesApi, redesAutosystem, contagensPorRede, selecao, onSelecao }
-export default function SeletorRedeEmpresa({ empresas, admin, onTrocar }) {
+// `semTodas`: só uma empresa (sem "Todas as empresas da rede").
+export default function SeletorRedeEmpresa({ empresas, admin, onTrocar, semTodas = false }) {
   const id = useId();
   const { rede, empresa } = admin.selecao;
   const lista = useMemo(() => empresasDaRede(empresas, rede), [empresas, rede]);
@@ -25,7 +26,7 @@ export default function SeletorRedeEmpresa({ empresas, admin, onTrocar }) {
         <select id={id} data-empresa-consulta="" value={empresa} disabled={!rede} onChange={e => mudar({ rede, empresa: e.target.value })}
           className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-400">
           <option value="">{rede ? 'Selecione uma empresa...' : 'Escolha a rede primeiro'}</option>
-          {lista.length > 1 && <option value={TODAS_DA_REDE}>Todas as empresas da rede</option>}
+          {!semTodas && lista.length > 1 && <option value={TODAS_DA_REDE}>Todas as empresas da rede</option>}
           {lista.map(e => <option key={e.id} value={e.id}>{e.nome || e.razao_social || 'Empresa'}</option>)}
         </select>
       </div>

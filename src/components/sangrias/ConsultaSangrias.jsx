@@ -87,7 +87,7 @@ export default function ConsultaSangrias({ empresas, admin = null }) {
             ))}
           </div>
         </div>
-        {/* Mesmo layout do Resumo de caixa: no celular, De/Até lado a lado (metade da linha
+        {/* No celular, De/Até lado a lado (metade da linha
             cada; empilham com "Tamanho do texto" grande — largura mínima em rem) e o Dia
             ocupa a linha toda. No desktop, como antes. */}
         {modo === 'dia' ? (

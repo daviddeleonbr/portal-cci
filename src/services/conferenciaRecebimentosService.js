@@ -1,4 +1,4 @@
-// Conferência de recebimentos (portal do cliente): total recebido no dia, por
+// Conferência de recebimentos (aba Resumo de caixa do BPO): total recebido no dia, por
 // forma de pagamento, para UMA empresa — mesma base da Conciliação de caixas
 // da CCI (BpoConciliacaoCaixas):
 //   Webposto  → fechamento de caixa do Webposto (CARTAO + CAIXA_APRESENTADO),
@@ -189,17 +189,6 @@ export async function buscarConferencia(clienteId, data) {
     .select(COLS).eq('cliente_id', clienteId).eq('data', data).maybeSingle();
   if (error) throw error;
   return row;
-}
-
-export async function listarConferencias({ clienteIds, de, ate }) {
-  if (!clienteIds?.length) return [];
-  let q = supabase.from('cliente_conferencia_recebimentos').select(COLS)
-    .in('cliente_id', clienteIds).order('data', { ascending: false });
-  if (de) q = q.gte('data', de);
-  if (ate) q = q.lte('data', ate);
-  const { data, error } = await q;
-  if (error) throw error;
-  return data || [];
 }
 
 // itens: [{ chave, rotulo, tipo, sistema, conferido }]

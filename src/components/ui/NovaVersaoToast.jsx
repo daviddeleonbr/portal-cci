@@ -98,7 +98,7 @@ export default function NovaVersaoToast() {
 
   return (
     // Celular: acima da barra de navegação inferior do portal do cliente
-    <div className="fixed left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-1.5rem)] max-w-md bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-5">
+    <div className="no-print fixed left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-1.5rem)] max-w-md bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-5">
       <VidroLiquido role="status" className="vidro-entra">
         <div className="relative z-[2] flex items-center gap-2.5 py-3 pl-3.5 pr-2 sm:gap-3">
           <div className="vidro-icone hidden h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl min-[360px]:flex">

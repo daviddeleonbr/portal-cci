@@ -1,0 +1,171 @@
+/* Relatório geral dos caixas — folha plana (sem cartões): resumo em dois blocos,
+   seções numeradas e tabelas densas. Mesma folha na tela e no PDF. */
+.rg {
+  --rg-tinta: #0f172a; --rg-2: #475569; --rg-fio: #e2e8f0; --rg-fio-forte: #cbd5e1; --rg-marca: #10766e;
+  --rg-neg: #b91c1c; --rg-pos: #b45309; --rg-inc: #15803d;
+  --rg-faixa: #eef5f4; --rg-zebra: #f8fafc;
+  color: var(--rg-tinta); font-size: 12px; line-height: 1.35; font-variant-numeric: tabular-nums;
+}
+html.dark .rg {
+  --rg-tinta: #f1f5f9; --rg-2: #a8b5c7; --rg-fio: #26344a; --rg-fio-forte: #3b4b63; --rg-marca: #5ec4b8;
+  --rg-neg: #fca5a5; --rg-pos: #fcd34d; --rg-inc: #86efac;
+  --rg-faixa: rgba(94, 196, 184, 0.1); --rg-zebra: rgba(255, 255, 255, 0.025);
+}
+/* Timbrado: na tela, cabeçalho da marca; no PDF, a arte inteira em cada página */
+.rg-timbrado { display: none; }
+.rg-folha { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.rg-folha > thead > tr > td, .rg-folha > tbody > tr > td, .rg-folha > tfoot > tr > td { padding: 0; border: 0; }
+.rg-tb { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--rg-2); font-size: 11px; line-height: 1.45; }
+.rg-tb p { text-align: right; }
+.rg-tb strong { font-weight: 600; }
+.rg-tb-topo { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--rg-fio); background: linear-gradient(#fcb619, #fcb619) left bottom / 64px 2px no-repeat; }
+.rg-tb-topo svg { height: 58px; width: auto; flex-shrink: 0; }
+html.dark .rg-tb .st8 { fill: var(--rg-marca); }
+html.dark .rg-tb path:not([class]) { fill: var(--rg-tinta); }
+@media (max-width: 640px) { .rg-tb { font-size: 10px; } .rg-tb-topo svg { height: 44px; } }
+
+.rg-topo { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--rg-marca); }
+.rg-topo h2 { font-size: 16px; font-weight: 700; line-height: 1.2; }
+.rg-topo p { color: var(--rg-2); font-size: 11.5px; }
+
+/* Resumo: vendas | caixas */
+.rg-resumo { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 0; padding: 12px 0 2px; }
+.rg-resumo h4 { margin-bottom: 5px; font-size: 12px; font-weight: 700; color: var(--rg-marca); }
+.rg-resumo h4 small { margin-left: 6px; font-weight: 400; }
+.rg-resumo dl { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.rg-resumo dl > div { min-width: 84px; }
+.rg-resumo dt { color: var(--rg-2); font-size: 11px; }
+.rg-resumo dd { font-size: 14px; font-weight: 600; white-space: nowrap; line-height: 22px; }
+.rg-resumo .rg-forte dd { font-size: 17px; font-weight: 700; }
+.rg-resumo small { color: var(--rg-2); font-size: 10.5px; }
+@media (min-width: 1200px) {
+  .rg-resumo { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+  .rg-resumo section + section { padding-left: 24px; border-left: 1px solid var(--rg-fio-forte); }
+}
+.rg-duas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 28px; }
+@media (min-width: 1200px) { .rg-duas { grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); } }
+
+/* Faixa numerada de seção */
+.rg h3 { display: flex; align-items: baseline; gap: 8px; margin: 18px 0 2px; padding: 5px 10px; font-size: 12.5px; font-weight: 700; color: var(--rg-marca); background: var(--rg-faixa); border-left: 3px solid var(--rg-marca); }
+.rg h3 small { margin-left: auto; padding-left: 12px; font-size: 11px; font-weight: 400; color: var(--rg-2); text-align: right; }
+.rg-nota { margin-top: 5px; color: var(--rg-2); font-size: 11px; }
+.rg-rolagem { overflow-x: auto; }
+
+.rg-tab { width: 100%; border-collapse: collapse; }
+.rg-tab th { padding: 5px 10px 4px 0; text-align: left; font-size: 11px; font-weight: 600; color: var(--rg-2); border-bottom: 1px solid var(--rg-fio-forte); white-space: nowrap; }
+.rg-tab td { padding: 3px 10px 3px 0; border-bottom: 1px solid var(--rg-fio); vertical-align: top; }
+.rg-tab th:first-child, .rg-tab td:first-child { padding-left: 10px; }
+.rg-tab .n { text-align: right; white-space: nowrap; }
+.rg-tab tfoot td { font-weight: 700; border-bottom: 0; border-top: 1px solid var(--rg-fio-forte); }
+/* Tabelas do resumo: colunas fixas, linhas alternadas e divisória entre assuntos */
+.rg-zebra { table-layout: fixed; }
+.rg-zebra td { padding-top: 4px; padding-bottom: 4px; }
+.rg-zebra tbody tr:nth-child(even) td { background: var(--rg-zebra); }
+.rg-formas { min-width: 480px; }
+.rg-func { min-width: 720px; }
+.rg-tab .rg-div { border-left: 1px solid var(--rg-fio-forte); padding-left: 10px; }
+.rg-tab .rg-sup th { padding-top: 6px; padding-bottom: 1px; border-bottom: 0; text-align: center; font-weight: 700; color: var(--rg-tinta); }
+.rg-tab td.rg-neg, .rg-neg { color: var(--rg-neg); font-weight: 600; }
+.rg-tab td.rg-pos, .rg-pos { color: var(--rg-pos); font-weight: 600; }
+.rg-tab td.rg-inc, .rg-inc { color: var(--rg-inc); font-weight: 600; }
+.rg-mudo { color: var(--rg-2); }
+
+/* Alterações: turno → funcionário → registro (Campo | Antes | Depois). Só Antes e
+   Depois podem quebrar linha; as outras colunas ficam numa linha só. */
+.rg-alt { font-size: 12px; line-height: 1.45; min-width: 980px; }
+.rg-alt th { padding-top: 7px; padding-bottom: 7px; }
+.rg-alt th.m { width: 26%; }
+.rg-alt td { padding: 0 14px 0 0; border-bottom: 0; }
+.rg-alt th { padding-right: 14px; }
+.rg-alt tbody td:not(.m) { white-space: nowrap; }
+.rg-alt .m { overflow-wrap: anywhere; }
+.rg-alt .rg-ini td { padding-top: 7px; border-top: 1px solid var(--rg-fio); }
+.rg-alt .rg-ini td[rowspan='1'], .rg-alt .rg-ini td:not([rowspan]) { padding-bottom: 7px; }
+.rg-alt .rg-ini:has(+ .rg-cont) td { padding-bottom: 1px; }
+.rg-alt .rg-cont td { padding-bottom: 1px; }
+.rg-alt .rg-cont:not(:has(+ .rg-cont)) td { padding-bottom: 7px; }
+.rg-alt .rg-ini td:first-child { padding-left: 22px; }
+.rg-alt .rg-cont td:first-child { padding-left: 0; }
+.rg-alt .rg-turno td { padding: 7px 10px; font-size: 13px; font-weight: 700; background: var(--rg-zebra); border-top: 14px solid transparent; border-bottom: 1px solid var(--rg-fio-forte); background-clip: padding-box; }
+.rg-alt .rg-pessoa td { padding: 11px 10px 5px; font-weight: 700; color: var(--rg-marca); }
+.rg-alt .rg-turno span, .rg-alt .rg-pessoa span { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--rg-2); }
+.rg-alt .q:not(.rg-inc):not(.rg-pos):not(.rg-neg) { color: var(--rg-2); }
+.rg-alt .antes { color: var(--rg-2); }
+.rg-alt .depois { font-weight: 600; }
+
+@media print {
+  .rg, html.dark .rg {
+    --rg-tinta: #111; --rg-2: #4b5563; --rg-fio: #e5e7eb; --rg-fio-forte: #9ca3af; --rg-marca: #10766e;
+    --rg-neg: #b91c1c; --rg-pos: #92400e; --rg-inc: #166534;
+    --rg-faixa: #e8f2f0; --rg-zebra: #f5f7f9;
+    font-size: 8.5pt; line-height: 1.25; background: none !important; border: 0 !important; padding: 0 !important;
+  }
+  .rg-timbrado { display: block; position: fixed; top: 0; left: 0; width: 297mm; height: 210mm; z-index: 0; }
+  .rg-timbrado > svg { display: block; width: 297mm; height: 210mm; }
+  .rg-timbrado > .rg-marca { position: absolute; }
+  .rg-tb { display: none; }
+  .rg-folha { position: relative; z-index: 1; }
+  .rg-folha > thead { display: table-header-group; }
+  .rg-folha > tfoot { display: table-footer-group; }
+  .rg-espaco-topo { height: 29mm; }
+  .rg-espaco-base { height: 3mm; }
+  .rg-folha > tbody > tr > td { padding: 0 12mm; }
+  html.dark .rg .rg-folha > tbody > tr > td { background: none !important; }
+  /* Tema escuro ligado: o PDF sai sempre em papel branco */
+  html.dark { color-scheme: light !important; }
+  html.dark .rg td { color: var(--rg-tinta) !important; border-color: var(--rg-fio) !important; }
+  html.dark .rg .rg-turno td { border-top-color: transparent !important; }
+  html.dark .rg .rg-pessoa td { color: var(--rg-marca) !important; }
+  html.dark .rg td.rg-neg { color: var(--rg-neg) !important; }
+  html.dark .rg td.rg-pos { color: var(--rg-pos) !important; }
+  html.dark .rg td.rg-inc { color: var(--rg-inc) !important; }
+  html.dark .rg td.rg-mudo, html.dark .rg td.antes, html.dark .rg td.q:not(.rg-inc):not(.rg-pos):not(.rg-neg) { color: var(--rg-2) !important; }
+  .rg th { color: var(--rg-2) !important; border-color: var(--rg-fio-forte) !important; background: none !important; }
+  .rg .rg-sup th { color: var(--rg-tinta) !important; }
+  .rg .rg-div { border-left: 1px solid var(--rg-fio-forte) !important; }
+
+  .rg-topo { padding-bottom: 4px; }
+  .rg-topo h2 { font-size: 13pt; }
+  .rg-topo p { font-size: 8pt; }
+  .rg-resumo { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 0; padding: 8px 0 2px; }
+  .rg-resumo section { padding: 0 !important; }
+  .rg-resumo section + section { padding-left: 18px !important; border-left: 1px solid var(--rg-fio-forte); }
+  .rg-resumo dl { flex-wrap: nowrap; gap: 20px; }
+  .rg-resumo dl > div { min-width: 0; }
+  .rg-resumo h4 { font-size: 9pt; margin-bottom: 3px; }
+  .rg-resumo dt, .rg-resumo small { font-size: 7.5pt; }
+  .rg-resumo dd { font-size: 10pt; line-height: 14pt; }
+  .rg-resumo .rg-forte dd { font-size: 12pt; }
+  .rg-duas { grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); gap: 0 22px; }
+  .rg h3 { margin: 13px 0 1px; padding: 3px 8px; font-size: 9.5pt; break-after: avoid; background: var(--rg-faixa) !important; }
+  .rg h3 small { font-size: 7.5pt; }
+  .rg section { break-inside: avoid; }
+  .rg section.rg-longa { break-inside: auto; }
+  .rg-nota { font-size: 7.5pt; }
+  .rg-tab th { padding: 3px 8px 2px 0; font-size: 7.5pt; }
+  .rg-tab td { padding: 1.5px 8px 1.5px 0; }
+  .rg-tab th:first-child, .rg-tab td:first-child, .rg-tab .rg-div { padding-left: 8px; }
+  .rg-zebra td { padding-top: 3px; padding-bottom: 3px; }
+  .rg-zebra tbody tr:nth-child(even) td { background: var(--rg-zebra) !important; }
+  .rg-formas, .rg-func { min-width: 0; }
+  .rg-tab thead { display: table-header-group; }
+  .rg-tab tfoot { display: table-row-group; }
+  .rg-tab tr { break-inside: avoid; }
+  .rg-alt { font-size: 8pt; line-height: 1.35; min-width: 0; }
+  .rg-alt th { padding-top: 4px; padding-bottom: 4px; padding-right: 12px; }
+  .rg-alt td { padding: 0 12px 0 0; }
+  .rg-alt .rg-ini td { padding-top: 5px; }
+  .rg-alt .rg-ini td[rowspan='1'], .rg-alt .rg-ini td:not([rowspan]) { padding-bottom: 5px; }
+  .rg-alt .rg-ini:has(+ .rg-cont) td { padding-bottom: 1px; }
+  .rg-alt .rg-cont:not(:has(+ .rg-cont)) td { padding-bottom: 5px; }
+  .rg-alt .rg-ini td:first-child { padding-left: 16px; }
+  .rg-alt .rg-cont td:first-child { padding-left: 0; }
+  .rg-alt .rg-turno td { padding: 4px 8px; font-size: 9pt; border-top-width: 9px; background: var(--rg-zebra) !important; background-clip: padding-box !important; }
+  .rg-alt .rg-pessoa td { padding: 8px 8px 3px; color: var(--rg-marca) !important; }
+  .rg-alt .rg-turno span, .rg-alt .rg-pessoa span { font-size: 7.5pt; }
+  .rg-alt .rg-turno, .rg-alt .rg-pessoa { break-after: avoid; }
+  .rg-alt .rg-cont { break-before: avoid; }
+  /* Grupo pequeno não quebra de página: a continuação perderia turno e nome */
+  .rg-alt .rg-junto { break-inside: avoid; }
+  .rg-rolagem { overflow: visible; }
+}

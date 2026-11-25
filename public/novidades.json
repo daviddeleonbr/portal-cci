@@ -2,6 +2,37 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.16.0",
+      "data": "2026-11-25",
+      "resumo": "Novo Relatório geral na Conciliação de Caixas.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Relatório geral dos caixas",
+          "descricao": "Na Conciliação de Caixas: vendas, formas de recebimento, acréscimos, descontos, sangrias, sobras e faltas por funcionário e todas as alterações do caixa, com escolha de quem alterou. Sai em PDF no timbrado da CCI, já com o nome do arquivo."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Abas da Conciliação de Caixas",
+          "descricao": "Abas mais compactas, com destaque maior na selecionada, no tema claro e no escuro. No celular, a faixa rola para o lado."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Resumos de caixa do cliente",
+          "descricao": "A aba saiu, porque o cliente usa agora o Fechamento de caixa. Os resumos já confirmados continuam na aba Resumo de caixa."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Ícone de Contas a Pagar",
+          "descricao": "No menu, o ícone agora é a seta contrária à de Contas a Receber."
+        }
+      ]
+    },
+    {
       "versao": "1.15.2",
       "data": "2026-11-25",
       "resumo": "Aviso de nova versão mais confiável.",

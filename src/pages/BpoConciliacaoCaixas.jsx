@@ -9,13 +9,14 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import PageHeader from '../components/ui/PageHeader';
+import AbasPagina from '../components/ui/AbasPagina';
 import BpoAlteracoesCaixas from './BpoAlteracoesCaixas';
 import BpoAnaliseCartoes from './BpoAnaliseCartoes';
 import BpoDiagnosticarCartoes from './BpoDiagnosticarCartoes';
-import ConsultaConferencias from '../components/conferencia/ConsultaConferencias';
 import ConsultaSangrias from '../components/sangrias/ConsultaSangrias';
+import RelatorioGeralCaixas from '../components/bpo/RelatorioGeralCaixas';
 import { SELECAO_VAZIA } from '../utils/selecaoRede';
-import { ResumoCaixa } from './cliente/ClienteConferenciaRecebimentos';
+import ResumoCaixa from '../components/conferencia/ResumoCaixa';
 import { getAdminSession } from '../lib/auth';
 import Modal from '../components/ui/Modal';
 import * as clientesService from '../services/clientesService';
@@ -41,6 +42,16 @@ function classificarForma(nome) {
   return 'outros';
 }
 
+const ABAS = [
+  { id: 'conciliacao', rotulo: 'Conciliação de caixas', Icon: Coins },
+  { id: 'alteracoes', rotulo: 'Alterações em caixas', Icon: History },
+  { id: 'cartoes', rotulo: 'Análise de cartões', Icon: CreditCard },
+  { id: 'diagnosticar', rotulo: 'Diagnosticar', Icon: Stethoscope },
+  { id: 'sangrias', rotulo: 'Sangrias', Icon: Banknote },
+  { id: 'resumo', rotulo: 'Resumo de caixa', Icon: ClipboardCheck },
+  { id: 'relatorio', rotulo: 'Relatório geral', Icon: FileText },
+];
+
 export default function BpoConciliacaoCaixas({
   // Modo cliente: cliente fixo vindo da sessao (nao permite trocar rede/empresa).
   clienteFixed = null,
@@ -54,7 +65,7 @@ export default function BpoConciliacaoCaixas({
   const modoCliente = !!clienteFixed;
 
   // Aba ativa (só no admin). Modo cliente continua sem abas.
-  const [abaAtiva, setAbaAtiva] = useState('conciliacao'); // 'conciliacao' | 'alteracoes' | 'cartoes' | 'diagnosticar'
+  const [abaAtiva, setAbaAtiva] = useState('conciliacao'); // id de ABAS
 
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]);
@@ -135,6 +146,9 @@ export default function BpoConciliacaoCaixas({
     return m;
   }, [clientes]);
 
+  // Relatório geral: seleção própria; abre com a rede/empresa já escolhida na Conciliação
+  const [selRelatorio, setSelRelatorio] = useState(null);
+  const adminRelatorio = { chavesApi, redesAutosystem, contagensPorRede, selecao: selRelatorio || { rede: redeSel, empresa: clienteId || '' }, onSelecao: setSelRelatorio };
   const adminConsulta = { chavesApi, redesAutosystem, contagensPorRede, selecao: selConsulta, onSelecao: setSelConsulta };
 
   // Sincroniza `redeId` (string) com `redeSel` (objeto). Mantém compatibilidade
@@ -960,52 +974,7 @@ export default function BpoConciliacaoCaixas({
       </div>
 
       {/* Tabs (só modo admin) */}
-      {!modoCliente && (
-        <div className="flex items-center gap-1 mb-4 bg-gray-100 rounded-xl p-1 w-fit no-print">
-          <button onClick={() => setAbaAtiva('conciliacao')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-              abaAtiva === 'conciliacao' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <Coins className="h-4 w-4" /> Conciliação de caixas
-          </button>
-          <button onClick={() => setAbaAtiva('alteracoes')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-              abaAtiva === 'alteracoes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <History className="h-4 w-4" /> Alterações em caixas
-          </button>
-          <button onClick={() => setAbaAtiva('cartoes')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-              abaAtiva === 'cartoes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <CreditCard className="h-4 w-4" /> Análise de cartões
-          </button>
-          <button onClick={() => setAbaAtiva('diagnosticar')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-              abaAtiva === 'diagnosticar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <Stethoscope className="h-4 w-4" /> Diagnosticar
-          </button>
-          <button onClick={() => setAbaAtiva('sangrias')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-              abaAtiva === 'sangrias' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <Banknote className="h-4 w-4" /> Sangrias
-          </button>
-          <button onClick={() => setAbaAtiva('resumo')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-              abaAtiva === 'resumo' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <ClipboardCheck className="h-4 w-4" /> Resumo de caixa
-          </button>
-          <button onClick={() => setAbaAtiva('conferencias')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-              abaAtiva === 'conferencias' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <CheckCircle2 className="h-4 w-4" /> Resumos de caixa do cliente
-          </button>
-        </div>
-      )}
+      {!modoCliente && <AbasPagina abas={ABAS} ativa={abaAtiva} onTrocar={setAbaAtiva} rotulo="Conciliação de caixas" />}
 
       {/* Aba: Sangrias — só visualização dos fechamentos enviados pelos clientes
           (a mesma Consulta do portal do cliente) */}
@@ -1013,14 +982,14 @@ export default function BpoConciliacaoCaixas({
         <ConsultaSangrias empresas={clientes} admin={adminConsulta} />
       )}
 
-      {/* Aba: Resumo de caixa — a mesma conferência do portal do cliente, feita pela CCI */}
+      {/* Aba: Resumo de caixa — conferência dos recebimentos do dia, feita pela CCI */}
       {!modoCliente && abaAtiva === 'resumo' && (
-        <ResumoCaixa modoAdmin empresas={clientes} usuarioNome={getAdminSession()?.usuario?.nome} />
+        <ResumoCaixa empresas={clientes} usuarioNome={getAdminSession()?.usuario?.nome} />
       )}
 
-      {/* Aba: conferências de recebimentos enviadas pelos clientes (portal) */}
-      {!modoCliente && abaAtiva === 'conferencias' && (
-        <ConsultaConferencias empresas={clientes} admin={adminConsulta} />
+      {/* Aba: Relatório geral — vendas, recebimentos, funcionários e alterações numa folha só */}
+      {!modoCliente && abaAtiva === 'relatorio' && (
+        <RelatorioGeralCaixas empresas={clientes} admin={adminRelatorio} usuarioNome={getAdminSession()?.usuario?.nome} />
       )}
 
       {/* Aba: Alterações em caixas (embed do componente standalone) */}

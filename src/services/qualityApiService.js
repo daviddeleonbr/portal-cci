@@ -1098,6 +1098,15 @@ export async function buscarSangriasCaixa(apiKey, { dataInicial, dataFinal, empr
   });
 }
 
+// Caixas INDIVIDUAIS: uma linha por FUNCIONÁRIO de cada caixa (o mesmo caixaCodigo se
+// repete), com `apurado` e `diferenca` só dele — é a sobra/falta que o Webposto mostra por
+// funcionário. Sem `individual`, o CAIXA traz o caixa inteiro, com o responsável.
+export async function buscarCaixasIndividuais(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
+  return fetchPagParalelo(urlBase, 'V1/CAIXAS', apiKey, {
+    limite: 1000, dataInicial, dataFinal, empresaCodigo, individual: true,
+  });
+}
+
 // LMC — Livro de Movimentação de Combustíveis (endpoint /INTEGRACAO/V1/LMCS).
 // Uma linha por produto (combustível) por dia, com o detalhe por tanque
 // (lmcTanque), por bico (lmcBico: encerrantes, aferição, venda) e as notas de
