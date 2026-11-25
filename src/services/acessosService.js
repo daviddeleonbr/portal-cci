@@ -16,8 +16,10 @@ export const CATEGORIAS_ACESSO = [
 const COLS = `id, cliente_id, chave_api_id, as_rede_id, plataforma, categoria, url, login, senha, contrassenha,
   observacao, atualizado_por_nome, created_at, updated_at, cliente:clientes(id, nome, razao_social)`;
 
-export async function listarAcessos({ clienteIds } = {}) {
+// `rede`: 'w:<chave_api_id>' | 'a:<as_rede_id>' — só os acessos dessa rede (CCI).
+export async function listarAcessos({ clienteIds, rede } = {}) {
   let q = supabase.from('cci_acesso').select(COLS).order('plataforma');
+  if (rede) q = q.eq(rede.startsWith('w:') ? 'chave_api_id' : 'as_rede_id', rede.slice(2));
   if (clienteIds?.length) q = q.in('cliente_id', clienteIds);
   const { data, error } = await q;
   if (error) throw error;

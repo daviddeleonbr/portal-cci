@@ -14,11 +14,12 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { RefreshCw, RotateCw, Sparkles, X } from 'lucide-react';
 import { instalarAtualizacao, reiniciarPortal } from '../../pwaUpdate';
+import { useAdminSession, useClienteSession } from '../../hooks/useAuth';
 import TelaNovidades from './TelaNovidades';
 import VidroLiquido from './VidroLiquido';
 import {
   VERSOES, VERSAO_ATUAL, lerVersaoVista, marcarVersaoVista, buscarVersaoNova,
-  publicoDaRota, itensDoPublico, rotaSemAvisoDeVersao,
+  publicoDaRota, itensDoPublico, dentroDoSistema,
 } from '../../lib/novidades';
 
 // Tempo mínimo da tela de instalação — dá pra ler as novidades e ver o progresso.
@@ -37,6 +38,8 @@ function versaoPosAtualizacao() {
 export default function NovaVersaoToast() {
   const { pathname } = useLocation();
   const publico = publicoDaRota(pathname);
+  const admin = !!useAdminSession();
+  const cliente = !!useClienteSession();
 
   const [toast, setToast] = useState(null); // null | 'disponivel' | 'instalada'
   const [versaoNova, setVersaoNova] = useState(null); // entrada do novidades.json remoto
@@ -74,7 +77,9 @@ export default function NovaVersaoToast() {
     );
   }
 
-  if (rotaSemAvisoDeVersao(pathname)) return null;
+  // Fora do sistema (login, seletor de portais, landings…) nada aparece: o aviso
+  // fica guardado e surge quando a pessoa entra.
+  if (!dentroDoSistema(pathname, { admin, cliente })) return null;
 
   // Novidades da versão que acabou de entrar (uma vez). Se não houver nada
   // para esse público (ex.: só itens de admin e quem abriu é cliente), fica

@@ -5,7 +5,7 @@
 // categorias em botões deslizáveis, "Novo acesso" flutuante e o formulário
 // em gaveta de baixo pra cima (Modal). Desktop: como antes.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Eye, EyeOff, ExternalLink, KeyRound, Loader2, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { SelectBusca } from '../tarefas/CamposTarefas';
@@ -24,22 +24,32 @@ const fmtData = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-
 const linkUrl = (u) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
 
 // `admin`: CCI (pode excluir). `clientes`: empresas que o usuário pode escolher.
+// CCI: nada é buscado antes de escolher a rede (só vêm as senhas daquela rede);
+// a empresa é um filtro opcional.
 export default function PaginaAcessos({ admin = false, clientes, showToast }) {
   const [lista, setLista] = useState([]);
-  const [carregando, setCarregando] = useState(true);
+  const [carregando, setCarregando] = useState(!admin);
   const [busca, setBusca] = useState('');
   const [categoria, setCategoria] = useState('');
   const [empresaF, setEmpresaF] = useState('');
   const [redeF, setRedeF] = useState(''); // só CCI (cliente já está numa rede)
   const [editando, setEditando] = useState(null); // objeto | 'novo' | null
 
+  const faltaRede = admin && !redeF;
+  const pedidoRef = useRef(0); // só a busca mais recente vale (troca de rede)
   const carregar = useCallback(async () => {
+    const n = ++pedidoRef.current;
+    if (faltaRede) { setLista([]); setCarregando(false); return; }
     setCarregando(true);
-    try { setLista(await acessosService.listarAcessos()); }
-    catch (e) { showToast('error', 'Erro ao carregar acessos: ' + e.message); }
-    finally { setCarregando(false); }
-  }, [showToast]);
+    try {
+      const r = await acessosService.listarAcessos(admin ? { rede: redeF } : {});
+      if (n === pedidoRef.current) setLista(r);
+    } catch (e) { if (n === pedidoRef.current) showToast('error', 'Erro ao carregar acessos: ' + e.message); }
+    finally { if (n === pedidoRef.current) setCarregando(false); }
+  }, [showToast, admin, redeF, faltaRede]);
   useEffect(() => { carregar(); }, [carregar]);
+  // Troca de rede: tira da tela os acessos da rede anterior na hora
+  const trocarRede = (v) => { setRedeF(v); setEmpresaF(''); setLista([]); };
 
   const ordenados = useMemo(() => [...clientes].sort((a, b) => nomeCliente(a).localeCompare(nomeCliente(b))), [clientes]);
   const redes = useRedesClientes(clientes, admin);
@@ -72,6 +82,12 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        {admin && (
+          <div className="min-w-0 basis-full sm:basis-auto sm:w-60 sm:flex-none">
+            <SelectBusca value={redeF} onChange={trocarRede} vazio="Selecione a rede…"
+              placeholderBusca="Buscar rede…" vazioLista="Nenhuma rede encontrada." opcoes={redes} />
+          </div>
+        )}
         <div className="relative basis-full sm:min-w-[220px] sm:flex-1 sm:basis-auto">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
           <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar plataforma, login…"
@@ -84,13 +100,7 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
             </button>
           )}
         </div>
-        {admin && redes.length > 1 && (
-          <div className="min-w-0 flex-1 sm:w-56 sm:flex-none">
-            <SelectBusca value={redeF} onChange={v => { setRedeF(v); setEmpresaF(''); }} vazio="Todas as redes"
-              placeholderBusca="Buscar rede…" vazioLista="Nenhuma rede encontrada." opcoes={redes} />
-          </div>
-        )}
-        {clientes.length > 1 && (
+        {!faltaRede && clientes.length > 1 && (
           <div className="min-w-0 basis-full sm:basis-auto sm:w-64 sm:flex-none">
             <SelectBusca value={empresaF} onChange={setEmpresaF} vazio={redeF ? 'Todas as empresas da rede' : 'Todas as empresas'}
               placeholderBusca="Buscar empresa…" vazioLista="Nenhuma empresa encontrada."
@@ -122,7 +132,13 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
         </button>
       </div>
 
-      {carregando && lista.length === 0 ? (
+      {faltaRede ? (
+        <div className="rounded-xl border border-gray-200/70 bg-white p-10 text-center">
+          <KeyRound className="mx-auto mb-2 h-7 w-7 text-gray-400" aria-hidden="true" />
+          <p className="text-sm font-semibold text-gray-900">Selecione a rede</p>
+          <p className="mt-1 text-xs text-gray-600">Os acessos aparecem depois da seleção. A empresa é um filtro opcional.</p>
+        </div>
+      ) : carregando && lista.length === 0 ? (
         <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div>
       ) : filtrada.length === 0 ? (
         <div className="rounded-xl border border-gray-200/70 bg-white p-10 text-center text-sm text-gray-600">
@@ -259,7 +275,7 @@ export default function PaginaAcessos({ admin = false, clientes, showToast }) {
           empresaInicial={empresaF || (redeF && empresasFiltro.length === 1 ? empresasFiltro[0].id : '')}
           redeInicial={redeF || redeDe(clientes.find(c => c.id === empresaF))}
           onClose={() => setEditando(null)} showToast={showToast}
-          onSalvo={() => { setEditando(null); carregar(); }} />
+          onSalvo={(redeSalva) => { setEditando(null); if (faltaRede && redeSalva) trocarRede(redeSalva); else carregar(); }} />
       )}
     </div>
   );
@@ -359,7 +375,7 @@ function AcessoModal({ acesso, clientes, redes, empresaInicial, redeInicial, onC
           : { cliente_id: emp.id }),
       });
       showToast('success', acesso ? 'Acesso atualizado' : 'Acesso cadastrado');
-      onSalvo();
+      onSalvo(toda ? rede : redeDe(emp));
     } catch (ex) { setErro(ex.message); }
     finally { setSalvando(false); }
   }

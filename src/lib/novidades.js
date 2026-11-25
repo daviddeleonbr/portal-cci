@@ -44,16 +44,14 @@ export function itensDoPublico(entrada, publico) {
   return (entrada?.itens || []).filter(i => !i.publico || i.publico === 'todos' || publico === 'todos' || i.publico === publico);
 }
 
-// Rotas onde avisos de versão não aparecem: logins, landings, política,
-// proposta pública (experiência isolada para o prospect).
-export function rotaSemAvisoDeVersao(pathname = '') {
-  const p = pathname || '';
-  return (
-    p === '/' ||
-    p === '/admin' ||
-    p.startsWith('/cliente/login') ||
-    p === '/bpo-financeiro' ||
-    p === '/politica-privacidade' ||
-    p.startsWith('/proposta/')
-  );
+// Avisos de versão só aparecem DENTRO do sistema, com a sessão do portal ativa.
+// Logins, seletor de portais, senha, landings e proposta ficam de fora (lista do
+// que entra, não do que sai: rota pública nova não precisa ser lembrada aqui).
+export function dentroDoSistema(pathname = '', { admin = false, cliente = false } = {}) {
+  const p = (pathname || '').replace(/[/]+$/, '');
+  if (p.startsWith('/admin/')) return !!admin; // '/admin' é o login
+  if (p.startsWith('/cliente/webposto/') || p.startsWith('/cliente/autosystem/')) return !!cliente;
+  if (p.startsWith('/tela-cheia/cliente/')) return !!cliente;
+  if (p.startsWith('/tela-cheia/')) return !!admin;
+  return false;
 }

@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.15.1",
+      "data": "2026-11-25",
+      "resumo": "Aviso de atualização só dentro do sistema.",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "todos",
+          "titulo": "Aviso de nova versão",
+          "descricao": "O aviso de atualização não aparece mais antes de entrar. Ele surge só depois do login, dentro do sistema."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Acessos por rede",
+          "descricao": "A página Acessos mostra os logins e senhas só depois de escolher a rede. A empresa continua como filtro opcional."
+        }
+      ]
+    },
+    {
       "versao": "1.15.0",
       "data": "2026-11-25",
       "resumo": "Diagnóstico de cartões aponta adquirente diferente.",
