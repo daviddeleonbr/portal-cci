@@ -63,6 +63,18 @@ export function camposAlterados(item) {
 }
 export const TABELAS_OCULTAS = new Set(['Caixa Apresentado', 'Caixa']);
 
+// "Cartão Remessa" é de uma etapa POSTERIOR ao fechamento: depois de conferidos, os
+// cartões entram numa remessa quando o recebimento é feito. Não é alteração de caixa:
+// o campo sai do item, e a alteração que só mexeu nele some (ver semRemessa).
+const ehCampoRemessa = (campo) => /remessa/i.test(campo);
+function semRemessa(item) {
+  const limpar = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !ehCampoRemessa(k)));
+  const mudouAlgo = Object.keys(item.antes).some(ehCampoRemessa) || Object.keys(item.depois).some(ehCampoRemessa);
+  const limpo = { ...item, ctx: limpar(item.ctx), antes: limpar(item.antes), depois: limpar(item.depois) };
+  if (!mudouAlgo || item.operacao !== 'ALTERAR') return limpo;
+  return camposAlterados(limpo).length ? limpo : null; // só a remessa mudou → não é alteração
+}
+
 // Data do turno (movimento do caixa) → "2026-10-31" (p/ filtrar e ordenar).
 export function dataTurnoDoItem(caixa) {
   const m = String(caixa || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -140,6 +152,9 @@ export async function buscarAlteracoesCaixasWebposto({ chave, empresaCodigo, de,
     });
     });
   });
+  // Sem os registros de remessa de cartão (etapa posterior ao fechamento)
+  const semRemessas = lista.map(semRemessa).filter(Boolean);
+  lista.length = 0; lista.push(...semRemessas);
   // Cartão alterado sem caixa no texto → descobre o caixa pela Quality.
   await resolverCaixaCartoes(chave, Number(empresaCodigo), de, ate, lista)
     .catch(e => console.warn('[alteracoes] falha ao resolver caixa dos cartões', e));

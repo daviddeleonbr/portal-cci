@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.17.0",
+      "data": "2026-11-25",
+      "resumo": "Dashboard com o faturamento das notas fiscais.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Faturamento no Dashboard",
+          "descricao": "O Dashboard mostra o faturamento real da CCI pelas notas fiscais autorizadas: total do mês e comparação com o anterior, notas, clientes, ticket médio, os últimos 12 meses, o acumulado do ano e o valor por cliente. Visível para quem tem acesso a Notas Fiscais."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Alterações sem remessa de cartão",
+          "descricao": "No Relatório geral e em Alterações em caixas, a inclusão do cartão numa remessa não aparece mais como alteração, porque acontece depois do fechamento do caixa."
+        }
+      ]
+    },
+    {
       "versao": "1.16.0",
       "data": "2026-11-25",
       "resumo": "Novo Relatório geral na Conciliação de Caixas.",
