@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.12.0",
+      "data": "2026-11-25",
+      "resumo": "Portal da CCI instalado no computador.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Instalar no computador",
+          "descricao": "No Chrome e no Edge, o botão Instalar no computador aparece no topo, ao lado de Demo, enquanto o portal não estiver instalado. O CCI Admin abre em janela própria, direto no portal interno."
+        }
+      ]
+    },
+    {
       "versao": "1.11.1",
       "data": "2026-11-25",
       "resumo": "Barra do celular com as páginas que você usa.",

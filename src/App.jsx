@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import NovaVersaoToast from './components/ui/NovaVersaoToast';
+import ManifestoPortal from './components/layout/ManifestoPortal';
 
 // Landing
 import LandingPage from './pages/LandingPage';
@@ -126,6 +127,7 @@ import ErrorBoundary from './components/ui/ErrorBoundary';
 export default function App() {
   return (
     <BrowserRouter>
+      <ManifestoPortal />
       <Routes>
         {/* Landing comercial pública */}
         <Route path="/" element={<LandingPage />} />

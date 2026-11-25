@@ -3,6 +3,7 @@ import { useAdminSession } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
 import { useAnonimizador } from '../../services/anonimizarService';
 import NotificacoesBell from '../ui/NotificacoesBell';
+import BotaoInstalarComputador from './BotaoInstalarComputador';
 import { usePageHeader } from './PageHeaderContext';
 
 export default function Header({ onMenuClick }) {
@@ -35,6 +36,9 @@ export default function Header({ onMenuClick }) {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Só quando ainda não instalado neste computador */}
+        <BotaoInstalarComputador />
+
         <button onClick={() => setDemoAtivo(!demoAtivo)}
           title={demoAtivo ? 'Desligar modo demonstração (mostrar dados reais)' : 'Ligar modo demonstração (mascarar nome/CNPJ)'}
           className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${

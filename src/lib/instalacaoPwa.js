@@ -9,6 +9,11 @@
 //    passo (Compartilhar → Adicionar à Tela de Início). O Safari não informa se
 //    o app já foi instalado → "Já instalei" esconde o botão (salvo no aparelho).
 //  - Rodando como app instalado (display-mode standalone): nada aparece.
+//
+// São DOIS apps: o do cliente (manifesto do vite.config.js, abre em
+// /cliente/login) e o do admin (public/manifest-admin.webmanifest, abre em
+// /admin). `aplicarManifesto` troca o <link rel="manifest"> conforme o portal
+// aberto, e o navegador oferece a instalação do app certo.
 import { useSyncExternalStore } from 'react';
 
 const CHAVE_IOS_OK = 'cci_pwa_ios_instalado';
@@ -18,7 +23,27 @@ let instaladoAgora = false;
 
 const avisar = () => ouvintes.forEach(fn => fn());
 
+const MANIFESTO_ADMIN = '/manifest-admin.webmanifest';
+const MANIFESTO_CLIENTE = '/manifest.webmanifest';
+export function aplicarManifesto(pathname) {
+  const admin = pathname === '/admin' || pathname.startsWith('/admin/');
+  let link = document.querySelector('link[rel="manifest"]');
+  const atual = link?.getAttribute('href');
+  if (admin ? atual === MANIFESTO_ADMIN : atual !== MANIFESTO_ADMIN) return;
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'manifest';
+    document.head.appendChild(link);
+  }
+  link.setAttribute('href', admin ? MANIFESTO_ADMIN : MANIFESTO_CLIENTE);
+  // O evento guardado era do outro app; o navegador dispara de novo p/ este.
+  eventoInstalar = null;
+  instaladoAgora = false;
+  avisar();
+}
+
 if (typeof window !== 'undefined') {
+  aplicarManifesto(window.location.pathname);
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault(); // sem a mini-barra automática do Chrome; o portal mostra o botão
     eventoInstalar = e;

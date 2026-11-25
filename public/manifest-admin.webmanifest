@@ -1,0 +1,18 @@
+{
+  "id": "/admin",
+  "name": "CCI · Portal Administrativo",
+  "short_name": "CCI Admin",
+  "description": "Portal interno da CCI — BPO, consultoria e gestão dos clientes.",
+  "theme_color": "#10766e",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "scope": "/admin",
+  "start_url": "/admin",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/pwa-64x64.png", "sizes": "64x64", "type": "image/png" },
+    { "src": "/pwa-192x192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/pwa-512x512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
