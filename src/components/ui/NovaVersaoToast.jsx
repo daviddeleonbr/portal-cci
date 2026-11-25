@@ -15,6 +15,7 @@ import { useLocation } from 'react-router-dom';
 import { RefreshCw, RotateCw, Sparkles, X } from 'lucide-react';
 import { instalarAtualizacao, reiniciarPortal } from '../../pwaUpdate';
 import TelaNovidades from './TelaNovidades';
+import VidroLiquido from './VidroLiquido';
 import {
   VERSOES, VERSAO_ATUAL, lerVersaoVista, marcarVersaoVista, buscarVersaoNova,
   publicoDaRota, itensDoPublico, rotaSemAvisoDeVersao,
@@ -88,32 +89,34 @@ export default function NovaVersaoToast() {
 
   return (
     // Celular: acima da barra de navegação inferior do portal do cliente
-    <div className="fixed left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-2rem)] max-w-sm bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-4">
-      <div role="status" className="flex items-center gap-3 rounded-xl bg-gray-900 text-white shadow-2xl ring-1 ring-black/10 px-4 py-3">
-        <div className="h-9 w-9 rounded-lg bg-accent-500/20 flex items-center justify-center flex-shrink-0">
-          <Sparkles className="h-4 w-4 text-accent-300" aria-hidden="true" />
+    <div className="fixed left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-1.5rem)] max-w-md bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-5">
+      <VidroLiquido role="status" className="vidro-entra">
+        <div className="relative z-[2] flex items-center gap-2.5 py-3 pl-3.5 pr-2 sm:gap-3">
+          <div className="vidro-icone hidden h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl min-[360px]:flex">
+            <Sparkles className="h-[18px] w-[18px]" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-semibold leading-tight">
+              {instaladaEmOutraAba ? 'Nova versão instalada'
+                : versaoNova ? `Versão ${versaoNova.versao} disponível` : 'Nova versão disponível'}
+            </p>
+            <p className="vidro-texto-2 mt-0.5 text-[12px] font-medium leading-snug">
+              {instaladaEmOutraAba ? 'Reinicie o portal para usar a versão nova.'
+                : versaoNova ? 'Atualize para ver o que mudou.' : 'Atualize para carregar as últimas melhorias.'}
+            </p>
+          </div>
+          <button type="button" onClick={instaladaEmOutraAba ? reiniciarPortal : atualizar}
+            className="vidro-acao inline-flex h-11 flex-shrink-0 items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold">
+            {instaladaEmOutraAba
+              ? <><RotateCw className="h-3.5 w-3.5" aria-hidden="true" /> Reiniciar</>
+              : <><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Atualizar</>}
+          </button>
+          <button type="button" onClick={() => setToast(null)} aria-label="Dispensar"
+            className="vidro-fechar flex h-11 w-9 flex-shrink-0 items-center justify-center rounded-full">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold leading-tight">
-            {instaladaEmOutraAba ? 'Nova versão instalada'
-              : versaoNova ? `Versão ${versaoNova.versao} disponível` : 'Nova versão disponível'}
-          </p>
-          <p className="text-[12px] text-gray-300 leading-tight mt-0.5">
-            {instaladaEmOutraAba ? 'Reinicie o portal para usar a versão nova.'
-              : versaoNova ? 'Atualize para ver o que mudou.' : 'Atualize para carregar as últimas melhorias.'}
-          </p>
-        </div>
-        <button onClick={instaladaEmOutraAba ? reiniciarPortal : atualizar}
-          className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-white px-3 text-[13px] font-semibold text-gray-900 hover:bg-gray-100 flex-shrink-0">
-          {instaladaEmOutraAba
-            ? <><RotateCw className="h-3.5 w-3.5" aria-hidden="true" /> Reiniciar</>
-            : <><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Atualizar</>}
-        </button>
-        <button onClick={() => setToast(null)} aria-label="Dispensar"
-          className="-mr-2 flex h-10 w-8 items-center justify-center text-gray-400 hover:text-gray-200 flex-shrink-0">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      </VidroLiquido>
     </div>
   );
 }

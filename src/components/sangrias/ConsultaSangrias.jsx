@@ -3,12 +3,14 @@
 // quem enviou, apurado × contado × diferença, retiradas, valor a depositar e a
 // tarefa de depósito. Clique abre o detalhe por funcionário.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Eye, ExternalLink, Landmark, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import * as sangriasService from '../../services/clienteSangriasService';
 import { formatCurrency } from '../../utils/format';
 import InputData from '../ui/InputData';
+import SeletorRedeEmpresa, { AvisoSelecao } from '../bpo/SeletorRedeEmpresa';
+import { idsDaSelecao } from '../../utils/selecaoRede';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const fmtData = (s) => { const [y, m, d] = String(s || '').slice(0, 10).split('-'); return d ? `${d}/${m}/${y}` : s; };
@@ -18,7 +20,9 @@ const corDif = (v) => (Math.abs(Number(v) || 0) < 0.01 ? 'text-emerald-600' : Nu
 const inp = 'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
 // `empresas`: empresas que o usuário pode ver (session.clientesRede).
-export default function ConsultaSangrias({ empresas }) {
+// `admin` (portal da CCI): { chavesApi, redesAutosystem, contagensPorRede, selecao,
+// onSelecao }. Nada é buscado enquanto a rede e a empresa não forem escolhidas.
+export default function ConsultaSangrias({ empresas, admin = null }) {
   const hoje = new Date();
   const [de, setDe] = useState(() => ymd(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 30)));
   const [ate, setAte] = useState(() => ymd(hoje));
@@ -26,19 +30,33 @@ export default function ConsultaSangrias({ empresas }) {
   const [empresaF, setEmpresaF] = useState('');
   const [busca, setBusca] = useState('');
   const [lista, setLista] = useState([]);
-  const [carregando, setCarregando] = useState(true);
+  const [carregando, setCarregando] = useState(!admin);
   const [erro, setErro] = useState('');
   const [aberto, setAberto] = useState(null);
 
   const porId = useMemo(() => new Map((empresas || []).map(e => [e.id, e])), [empresas]);
-  const ids = useMemo(() => (empresaF ? [empresaF] : (empresas || []).map(e => e.id)), [empresaF, empresas]);
+  const ehAdmin = !!admin;
+  const selecao = admin?.selecao;
+  // null = falta escolher (só no admin) → não consulta
+  const ids = useMemo(() => {
+    if (ehAdmin) return idsDaSelecao(empresas, selecao);
+    return empresaF ? [empresaF] : (empresas || []).map(e => e.id);
+  }, [ehAdmin, selecao, empresaF, empresas]);
 
+  const pedidoRef = useRef(0); // só a busca mais recente vale (troca de empresa)
   const carregar = useCallback(async () => {
-    setCarregando(true); setErro('');
-    try { setLista(await sangriasService.listarFechamentos({ clienteIds: ids, de, ate })); }
-    catch (e) { setErro(e.message); }
-    finally { setCarregando(false); }
-  }, [ids, de, ate]);
+    const n = ++pedidoRef.current;
+    setErro('');
+    if (!ids) { setLista([]); setCarregando(false); return; }
+    setCarregando(true);
+    // Admin: não deixa na tela os dados da empresa anterior enquanto carrega
+    if (ehAdmin) setLista([]);
+    try {
+      const r = await sangriasService.listarFechamentos({ clienteIds: ids, de, ate });
+      if (n === pedidoRef.current) setLista(r);
+    } catch (e) { if (n === pedidoRef.current) setErro(e.message); }
+    finally { if (n === pedidoRef.current) setCarregando(false); }
+  }, [ids, de, ate, ehAdmin]);
   useEffect(() => { carregar(); }, [carregar]);
 
   const filtrada = useMemo(() => {
@@ -56,6 +74,7 @@ export default function ConsultaSangrias({ empresas }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm">
+        {ehAdmin && <SeletorRedeEmpresa empresas={empresas} admin={admin} onTrocar={() => setAberto(null)} />}
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Filtrar por</label>
           <div className="flex h-9 items-center rounded-lg bg-gray-100 p-0.5">
@@ -88,7 +107,7 @@ export default function ConsultaSangrias({ empresas }) {
             </div>
           </div>
         )}
-        {(empresas || []).length > 1 && (
+        {!ehAdmin && (empresas || []).length > 1 && (
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Empresa</label>
             <select value={empresaF} onChange={e => setEmpresaF(e.target.value)} className={inp}>
@@ -101,7 +120,7 @@ export default function ConsultaSangrias({ empresas }) {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por quem enviou…" className={`${inp} w-full pl-9`} />
         </div>
-        <button onClick={carregar} disabled={carregando}
+        <button onClick={carregar} disabled={carregando || !ids}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} /> Atualizar
         </button>
@@ -110,7 +129,9 @@ export default function ConsultaSangrias({ empresas }) {
       {erro && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
       <div className="overflow-hidden rounded-2xl border border-gray-200/60 bg-white shadow-sm">
-        {carregando && lista.length === 0 ? (
+        {!ids ? (
+          <AvisoSelecao rede={selecao.rede}>As sangrias enviadas aparecem depois da seleção.</AvisoSelecao>
+        ) : carregando && lista.length === 0 ? (
           <div className="flex justify-center py-14"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
         ) : filtrada.length === 0 ? (
           <p className="py-14 text-center text-sm text-gray-400">Nenhum fechamento de sangria enviado no período.</p>

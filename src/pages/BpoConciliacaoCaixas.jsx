@@ -14,6 +14,7 @@ import BpoAnaliseCartoes from './BpoAnaliseCartoes';
 import BpoDiagnosticarCartoes from './BpoDiagnosticarCartoes';
 import ConsultaConferencias from '../components/conferencia/ConsultaConferencias';
 import ConsultaSangrias from '../components/sangrias/ConsultaSangrias';
+import { SELECAO_VAZIA } from '../utils/selecaoRede';
 import { ResumoCaixa } from './cliente/ClienteConferenciaRecebimentos';
 import { getAdminSession } from '../lib/auth';
 import Modal from '../components/ui/Modal';
@@ -90,6 +91,8 @@ export default function BpoConciliacaoCaixas({
   const [expandidos, setExpandidos] = useState(new Set());
   // Fechamento de sangria registrado pelo responsavel no portal do cliente
   const [fechamentoSangria, setFechamentoSangria] = useState(null);
+  // Abas Sangrias e Resumos do cliente: mesma rede/empresa (fica ao trocar de aba)
+  const [selConsulta, setSelConsulta] = useState(SELECAO_VAZIA);
   // Status da conciliacao (admin marca como concluida)
   const [statusConciliacao, setStatusConciliacao] = useState(null);
   const [salvandoStatus, setSalvandoStatus] = useState(false);
@@ -131,6 +134,8 @@ export default function BpoConciliacaoCaixas({
     });
     return m;
   }, [clientes]);
+
+  const adminConsulta = { chavesApi, redesAutosystem, contagensPorRede, selecao: selConsulta, onSelecao: setSelConsulta };
 
   // Sincroniza `redeId` (string) com `redeSel` (objeto). Mantém compatibilidade
   // com o fluxo Quality existente — `redeId` só fica preenchido para Webposto.
@@ -1005,7 +1010,7 @@ export default function BpoConciliacaoCaixas({
       {/* Aba: Sangrias — só visualização dos fechamentos enviados pelos clientes
           (a mesma Consulta do portal do cliente) */}
       {!modoCliente && abaAtiva === 'sangrias' && (
-        <ConsultaSangrias empresas={clientes} />
+        <ConsultaSangrias empresas={clientes} admin={adminConsulta} />
       )}
 
       {/* Aba: Resumo de caixa — a mesma conferência do portal do cliente, feita pela CCI */}
@@ -1015,7 +1020,7 @@ export default function BpoConciliacaoCaixas({
 
       {/* Aba: conferências de recebimentos enviadas pelos clientes (portal) */}
       {!modoCliente && abaAtiva === 'conferencias' && (
-        <ConsultaConferencias empresas={clientes} />
+        <ConsultaConferencias empresas={clientes} admin={adminConsulta} />
       )}
 
       {/* Aba: Alterações em caixas (embed do componente standalone) */}

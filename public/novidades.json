@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.14.0",
+      "data": "2026-11-25",
+      "resumo": "Aviso de atualização com visual novo.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Aviso de nova versão",
+          "descricao": "O aviso de atualização ganhou visual de vidro e acompanha o tema claro ou escuro que você usa."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Sangrias e Resumos de caixa do cliente",
+          "descricao": "Na Conciliação de Caixas, essas abas só mostram os dados depois de escolher a rede e a empresa. Dá para escolher todas as empresas da rede, e a seleção vale para as duas abas."
+        }
+      ]
+    },
+    {
       "versao": "1.13.0",
       "data": "2026-11-25",
       "resumo": "Tarefas ao vivo.",
