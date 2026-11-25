@@ -108,6 +108,7 @@ import ClienteAcessos from './pages/cliente/ClienteAcessos';
 import ClienteBpoContasPagar from './pages/cliente/ClienteBpoContasPagar';
 import ClienteBpoContasReceber from './pages/cliente/ClienteBpoContasReceber';
 import BpoContasPagar from './pages/BpoContasPagar';
+import BpoContasReceber from './pages/BpoContasReceber';
 import AdminAcessos from './pages/AdminAcessos';
 import AdminLmc from './pages/AdminLmc';
 import WpLmc from './pages/cliente/webposto/ClienteLmc';
@@ -195,6 +196,7 @@ export default function App() {
           <Route path="/admin/acessos" element={<AdminAcessos />} />
           <Route path="/admin/bpo/lmc" element={<AdminLmc />} />
           <Route path="/admin/bpo/contas-pagar" element={<BpoContasPagar />} />
+          <Route path="/admin/bpo/contas-receber" element={<BpoContasReceber />} />
           {/* Rota desativada temporariamente — uso futuro */}
           {/* <Route path="/admin/orcamento-solicitacoes" element={<AdminOrcamentoSolicitacoes />} /> */}
           <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />

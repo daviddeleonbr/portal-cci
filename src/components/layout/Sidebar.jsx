@@ -9,7 +9,7 @@ import {
   Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
   MessageCircle, RefreshCw, Eye, AlertTriangle,
   Activity, FileSpreadsheet, Receipt, FileSignature, FileDown, ListChecks, KeyRound,
-  Fuel, CalendarDays,
+  Fuel, CalendarDays, ArrowDownLeft,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { nivelAdmin } from '../../services/usuariosSistemaService';
@@ -68,6 +68,7 @@ const navigationAll = [
       { name: 'Tarefas', href: '/admin/tarefas', icon: ListChecks, permissao: 'tarefas' },
       { name: 'Conciliação de Caixas', href: '/admin/bpo/conciliacao-caixas', icon: Coins, permissao: 'conciliacao_caixas' },
       { name: 'Contas a Pagar', href: '/admin/bpo/contas-pagar', icon: CalendarDays, permissao: 'bpo_contas_pagar' },
+      { name: 'Contas a Receber', href: '/admin/bpo/contas-receber', icon: ArrowDownLeft, permissao: 'bpo_contas_receber' },
       { name: 'LMC', href: '/admin/bpo/lmc', icon: Fuel, permissao: 'lmc' },
       { name: 'Manifestação de Notas', href: '/admin/fiscal/manifestacao', icon: FileSpreadsheet, permissao: 'notas_fiscais' },
       { name: 'Outras Contas a Pagar', href: '/admin/bpo/outras-contas', icon: Receipt, permissao: 'outras_contas' },

@@ -549,38 +549,40 @@ export function distribuirPagamentoTitulos(m, titulosPorPagamento) {
 // Por padrão filtramos `convertido=false` pra trazer só os títulos
 // "originais" ainda não convertidos — o crédito convertido aparece
 // integralmente na fonte DUPLICATA.
-export async function buscarTitulosReceber(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente, convertido = false } = {}, urlBase = DEFAULT_URL_BASE) {
+export async function buscarTitulosReceber(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente, chunkDias = CHUNK_PENDENTES, convertido = false } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'TITULO_RECEBER', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
-    chunkDays: CHUNK_PENDENTES,
+    chunkDays: chunkDias,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
     ...(convertido !== null && convertido !== undefined ? { convertido } : {}),
   });
 }
 
 // Duplicatas em aberto (contas a receber de clientes)
-export async function buscarDuplicatas(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
+export async function buscarDuplicatas(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente, chunkDias = CHUNK_PENDENTES } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'DUPLICATA', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
-    chunkDays: CHUNK_PENDENTES,
+    chunkDays: chunkDias,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
   });
 }
 
-// Cartoes em aberto (receber de adquirente)
-export async function buscarCartoes(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
+// Cartoes em aberto (receber de adquirente). O período filtra a EMISSÃO
+// (dataMovimento); com dataFiltro='VENCIMENTO' filtra o vencimento do crédito.
+export async function buscarCartoes(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente, dataFiltro } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'CARTAO', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
     chunkDays: CHUNK_PENDENTES,
+    ...(dataFiltro ? { dataFiltro } : {}),
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
   });
 }
 
 // Cheques em aberto
-export async function buscarCheques(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente } = {}, urlBase = DEFAULT_URL_BASE) {
+export async function buscarCheques(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente, chunkDias = CHUNK_PENDENTES } = {}, urlBase = DEFAULT_URL_BASE) {
   return fetchPagParalelo(urlBase, 'CHEQUE', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
-    chunkDays: CHUNK_PENDENTES,
+    chunkDays: chunkDias,
     ...(apenasPendente !== undefined ? { apenasPendente } : {}),
   });
 }

@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.11.0",
+      "data": "2026-11-25",
+      "resumo": "Contas a receber do cliente no portal da CCI.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Contas a Receber no BPO",
+          "descricao": "Escolha a rede e veja as notas a prazo, faturas, cheques e cartões em aberto do cliente, por vencimento, por cliente ou por empresa, com exportação para Excel. Cartões vencidos sem baixa ficam separados do total vencido. O acesso é liberado em Usuários do Sistema."
+        }
+      ]
+    },
+    {
       "versao": "1.10.3",
       "data": "2026-11-24",
       "resumo": "Tela inicial do site melhor no celular.",

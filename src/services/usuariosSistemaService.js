@@ -80,6 +80,7 @@ export const PERMISSOES_ADMIN = [
   { key: 'fiscal', label: 'Notas Fiscais e Agendamento', grupo: 'Fiscal' },
   { key: 'notas_fiscais', label: 'Manifestação de Notas (validar e lançar)', grupo: 'Fiscal' },
   { key: 'bpo_contas_pagar', label: 'Contas a pagar (agenda e inclusão no banco p/ autorização)', grupo: 'BPO' },
+  { key: 'bpo_contas_receber', label: 'Contas a receber do cliente (notas a prazo, faturas, cheques e cartões)', grupo: 'BPO' },
   { key: 'outras_contas', label: 'Outras contas a pagar (BPO)', grupo: 'BPO' },
   { key: 'acessos', label: 'Acessos (logins e senhas de adquirentes/plataformas dos clientes)', grupo: 'BPO' },
   { key: 'parametros', label: 'Parâmetros', grupo: 'Consultoria' },
