@@ -50,10 +50,13 @@ export default function ClienteTarefas() {
   // Tempo real: qualquer mudança nas tarefas (ou nas partes delas) que o
   // usuário pode ver recarrega a lista. A RLS filtra no servidor.
   const recarregarSilencioso = useCallback(() => carregar({ silencioso: true }), [carregar]);
+  const [versao, setVersao] = useState(0); // recarrega também a tarefa aberta
+  const aoMudar = useCallback(() => { setVersao(v => v + 1); return recarregarSilencioso(); }, [recarregarSilencioso]);
   const { conectado } = useAtualizacaoAutomatica({
     canal: `tarefas:${session?.usuario?.id || 'anon'}`,
     tabelas: [{ table: 'cci_tarefa' }, { table: 'cci_tarefa_checklist' }, { table: 'cci_tarefa_evidencia' }, { table: 'cci_tarefa_pedido' }],
-    recarregar: recarregarSilencioso,
+    recarregar: aoMudar,
+    conferirMs: 60_000,
     ativo: !!session?.usuario?.id,
   });
 
@@ -83,7 +86,7 @@ export default function ClienteTarefas() {
           vazio="Nenhuma tarefa por aqui. As rotinas atribuídas pela CCI aparecem nesta tela." />
       )}
 
-      {abertaId && <TarefaDetalhe tarefaId={abertaId} onFechar={() => setAbertaId(null)} onAlterado={recarregarSilencioso} />}
+      {abertaId && <TarefaDetalhe key={abertaId} tarefaId={abertaId} versao={versao} onFechar={() => setAbertaId(null)} onAlterado={recarregarSilencioso} />}
     </div>
   );
 }

@@ -1,13 +1,15 @@
 // Tarefas — visão da CCI (gestor): painel de execução, tarefas (com a fila de
 // validação) e rotinas recorrentes dos funcionários dos clientes.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutDashboard, ListChecks, Repeat, Plus, Loader2, Pencil, Trash2, Tags, ShieldCheck, AlertTriangle, Clock3, Copy,
   Search, Pause, Play,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
+import IndicadorAtualizado from '../components/ui/IndicadorAtualizado';
+import { useAtualizacaoAutomatica } from '../hooks/useAtualizacaoAutomatica';
 import VisoesTarefas from '../components/tarefas/VisoesTarefas';
 import TarefaDetalhe from '../components/tarefas/TarefaDetalhe';
 import { RotinaModal, DuplicarRotinaModal, NovaTarefaModal, SetoresModal } from '../components/tarefas/FormulariosTarefas';
@@ -57,8 +59,13 @@ export default function AdminTarefas() {
   const idsRede = useMemo(() => (redeK ? empresasFiltro.map(c => c.id) : null), [redeK, empresasFiltro]);
 
   // Período: últimos N dias até +60 (avulsas futuras) + pendentes mais antigas.
-  const carregar = useCallback(async () => {
-    setCarregando(true);
+  // silencioso = tempo real / depois de uma ação (sem spinner: a aba, o quadro e
+  // a rolagem ficam como estão). Só a busca mais recente vale (troca de filtro).
+  const [atualizadoEm, setAtualizadoEm] = useState(null);
+  const pedidoRef = useRef(0);
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
+    const n = ++pedidoRef.current;
+    if (!silencioso) setCarregando(true);
     try {
       const de = somarDiasYmd(hojeYmd(), -dias);
       const filtro = { clienteId: clienteId || undefined, clienteIds: clienteId ? undefined : idsRede || undefined };
@@ -68,15 +75,29 @@ export default function AdminTarefas() {
         tarefasService.listarRotinas(filtro),
         tarefasService.listarPedidosPendentes(),
       ]);
+      if (n !== pedidoRef.current) return;
       setPedidos(clienteId ? peds.filter(p => p.tarefa?.cliente?.id === clienteId)
         : idsRede ? peds.filter(p => idsRede.includes(p.tarefa?.cliente?.id)) : peds);
       const vistos = new Set();
       setLista([...noPeriodo, ...antigas].filter(t => (vistos.has(t.id) ? false : vistos.add(t.id))));
       setRotinas(rots);
-    } catch (e) { showToast('error', 'Erro ao carregar tarefas: ' + e.message); }
-    finally { setCarregando(false); }
+      setAtualizadoEm(new Date());
+    } catch (e) { if (!silencioso && n === pedidoRef.current) showToast('error', 'Erro ao carregar tarefas: ' + e.message); }
+    finally { if (n === pedidoRef.current) setCarregando(false); }
   }, [clienteId, idsRede, dias, showToast]);
   useEffect(() => { carregar(); }, [carregar]);
+  const recarregar = useCallback(() => carregar({ silencioso: true }), [carregar]);
+
+  // Tempo real: o funcionário iniciou, marcou item, anexou, comentou, enviou ou
+  // pediu prazo; outro admin criou/validou. Recarrega a lista e a tarefa aberta.
+  const [versao, setVersao] = useState(0);
+  const aoMudar = useCallback(() => { setVersao(v => v + 1); return recarregar(); }, [recarregar]);
+  const { conectado, estado } = useAtualizacaoAutomatica({
+    canal: 'tarefas-admin',
+    tabelas: [{ table: 'cci_tarefa' }, { table: 'cci_tarefa_checklist' }, { table: 'cci_tarefa_evidencia' }, { table: 'cci_tarefa_pedido' }, { table: 'cci_rotina' }],
+    recarregar: aoMudar,
+    conferirMs: 60_000,
+  });
 
   const recarregarSetores = () => tarefasService.listarSetores().then(setSetores).catch(() => {});
   const aguardando = lista.filter(t => t.status === 'aguardando_validacao').length + pedidos.length;
@@ -91,6 +112,7 @@ export default function AdminTarefas() {
     <div>
       <Toast {...toast} onClose={() => setToast(t => ({ ...t, show: false }))} />
       <PageHeader title="Tarefas" description="Rotinas de trabalho dos funcionários dos clientes — execução e validação pela CCI">
+        <IndicadorAtualizado em={atualizadoEm} conectado={conectado} estado={estado} className="whitespace-nowrap" />
         <button onClick={() => setModalSetores(true)}
           className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
           <Tags className="h-4 w-4" /> Setores
@@ -139,31 +161,31 @@ export default function AdminTarefas() {
         <Painel lista={lista} pedidos={pedidos} onAbrir={t => setAbertaId(t.id)} />
       ) : aba === 'tarefas' ? (
         <VisoesTarefas tarefas={lista} rotinas={rotinas} gestor onAbrir={t => setAbertaId(t.id)}
-          onAlterado={carregar} onErro={m => showToast('error', m)} abaInicial={aguardando ? 'validacao' : 'abertas'} />
+          onAlterado={recarregar} onErro={m => showToast('error', m)} abaInicial={aguardando ? 'validacao' : 'abertas'} />
       ) : (
         <TabelaRotinas rotinas={rotinas}
           onEditar={r => setModalRotina({ open: true, rotina: r })}
           setores={setores}
           onDuplicar={r => setDuplicar(r)}
           onAlternar={async r => {
-            try { await tarefasService.salvarRotina({ ...r, ativa: !r.ativa }); await carregar(); }
+            try { await tarefasService.salvarRotina({ ...r, ativa: !r.ativa }); await recarregar(); }
             catch (e) { showToast('error', e.message); }
           }}
           onExcluir={async r => {
             if (!confirm(`Excluir a rotina "${r.nome}"? As tarefas em aberto dela serão canceladas; as demais ficam no histórico.`)) return;
-            try { await tarefasService.excluirRotina(r.id); showToast('success', 'Rotina excluída'); await carregar(); }
+            try { await tarefasService.excluirRotina(r.id); showToast('success', 'Rotina excluída'); await recarregar(); }
             catch (e) { showToast('error', e.message); }
           }} />
       )}
 
-      {abertaId && <TarefaDetalhe tarefaId={abertaId} gestor onFechar={() => setAbertaId(null)} onAlterado={carregar} />}
+      {abertaId && <TarefaDetalhe key={abertaId} tarefaId={abertaId} gestor versao={versao} onFechar={() => setAbertaId(null)} onAlterado={recarregar} />}
       <RotinaModal open={modalRotina.open} rotina={modalRotina.rotina} clientes={clientes} setores={setores} showToast={showToast}
         onClose={() => setModalRotina({ open: false, rotina: null })}
-        onSalvo={() => { setModalRotina({ open: false, rotina: null }); carregar(); }} />
+        onSalvo={() => { setModalRotina({ open: false, rotina: null }); recarregar(); }} />
       {duplicar && <DuplicarRotinaModal rotina={duplicar} clientes={clientes} rotinas={rotinas}
-        onClose={() => setDuplicar(null)} onSalvo={carregar} />}
+        onClose={() => setDuplicar(null)} onSalvo={recarregar} />}
       <NovaTarefaModal open={modalTarefa} clientes={clientes} setores={setores} showToast={showToast}
-        onClose={() => setModalTarefa(false)} onSalvo={() => { setModalTarefa(false); carregar(); }} />
+        onClose={() => setModalTarefa(false)} onSalvo={() => { setModalTarefa(false); recarregar(); }} />
       <SetoresModal open={modalSetores} setores={setores} showToast={showToast}
         onClose={() => setModalSetores(false)} onSalvo={recarregarSetores} />
     </div>

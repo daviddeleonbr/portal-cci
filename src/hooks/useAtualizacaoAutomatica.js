@@ -10,6 +10,9 @@
 //  - PLANO B: enquanto não estiver "ao vivo", recarrega a cada 30s.
 //  - Ao voltar pro app (aba visível de novo / internet voltou): recarrega e,
 //    se o canal estiver caído, reconecta na hora.
+//  - `conferirMs` (opcional): além do tempo real, confere de tempos em tempos.
+//    Cobre o que não gera evento p/ o usuário: linha que ele deixou de ver
+//    (ex.: tarefa repassada a outra pessoa) e o que muda só com a hora (atrasou).
 //
 // Uso: const { conectado, estado } = useAtualizacaoAutomatica({ canal, tabelas, recarregar });
 //   estado: 'conectando' | 'ao_vivo' | 'reconectando'
@@ -23,7 +26,7 @@ const ESPERA_MS = 700;          // debounce dos eventos
 const POLLING_MS = 30_000;      // plano B enquanto o canal estiver fora
 const BACKOFF_MS = [3_000, 6_000, 15_000, 30_000, 60_000];
 
-export function useAtualizacaoAutomatica({ canal, tabelas, recarregar, ativo = true }) {
+export function useAtualizacaoAutomatica({ canal, tabelas, recarregar, ativo = true, conferirMs = 0 }) {
   const [estado, setEstado] = useState('conectando');
   const [tentativa, setTentativa] = useState(0); // muda → refaz o canal
   const falhasRef = useRef(0); // quedas seguidas (backoff); zera ao conectar
@@ -94,6 +97,13 @@ export function useAtualizacaoAutomatica({ canal, tabelas, recarregar, ativo = t
     // `tentativa` no deps: refaz o canal a cada reconexão
   }, [canal, chaveTabelas, ativo, tentativa]);
 
+  useEffect(() => {
+    if (!ativo || !conferirMs) return undefined;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') recarregarRef.current?.();
+    }, conferirMs);
+    return () => clearInterval(id);
+  }, [ativo, conferirMs]);
 
   return { conectado: estado === 'ao_vivo', estado };
 }

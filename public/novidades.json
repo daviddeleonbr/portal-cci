@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.13.0",
+      "data": "2026-11-25",
+      "resumo": "Tarefas ao vivo.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Tarefas ao vivo",
+          "descricao": "O painel, as tarefas e as rotinas se atualizam sozinhos quando o funcionário ou outra pessoa da CCI muda algo, sem sair da aba em que você está."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Tarefa aberta atualiza na hora",
+          "descricao": "Com a tarefa aberta, comentários, anexos, checklist e situação aparecem assim que mudam, sem perder o que você está digitando."
+        }
+      ]
+    },
+    {
       "versao": "1.12.0",
       "data": "2026-11-25",
       "resumo": "Portal da CCI instalado no computador.",

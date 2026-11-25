@@ -13,7 +13,9 @@ import { ReferenciaBadge, SelectBusca, DocumentosEditor } from './CamposTarefas'
 import { STATUS_TAREFA, PRIORIDADES, statusEfetivo, bloqueioEnvio, fmtDataHora } from '../../utils/tarefas';
 import InputData from '../ui/InputData';
 
-export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAlterado }) {
+// `versao`: a página soma 1 a cada mudança em tempo real → recarrega aqui também,
+// sem mexer no que estiver sendo digitado (edição, comentário, motivo).
+export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAlterado, versao = 0 }) {
   const [t, setT] = useState(null);
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -26,11 +28,26 @@ export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAl
   const inputCamera = useRef(null);
   const docAlvo = useRef(null);
 
-  const carregar = useCallback(async () => {
-    try { setT(await tarefas.buscarTarefa(tarefaId)); }
-    catch (e) { setErro(e.message); }
+  const pedidoRef = useRef(0); // só a busca mais recente vale
+  const carregar = useCallback(async ({ silencioso = false } = {}) => {
+    const n = ++pedidoRef.current;
+    try {
+      const nova = await tarefas.buscarTarefa(tarefaId);
+      if (n === pedidoRef.current) setT(nova);
+    } catch (e) {
+      if (n !== pedidoRef.current) return;
+      // PGRST116 = a linha sumiu p/ este usuário (excluída ou repassada)
+      if (e.code === 'PGRST116') { setT(null); setErro('Esta tarefa não está mais disponível para você.'); }
+      else if (!silencioso) setErro(e.message);
+    }
   }, [tarefaId]);
   useEffect(() => { carregar(); }, [carregar]);
+  const versaoVista = useRef(versao);
+  useEffect(() => {
+    if (versaoVista.current === versao) return;
+    versaoVista.current = versao;
+    carregar({ silencioso: true });
+  }, [versao, carregar]);
 
   // Executa uma ação, recarrega e avisa a lista.
   const acao = async (fn) => {
@@ -43,7 +60,12 @@ export default function TarefaDetalhe({ tarefaId, gestor = false, onFechar, onAl
   if (!t) {
     return (
       <Moldura onFechar={onFechar}>
-        <div className="flex justify-center py-16">{erro ? <p className="text-sm text-rose-600">{erro}</p> : <Loader2 className="h-6 w-6 animate-spin text-teal-600" />}</div>
+        <div className="flex flex-col items-center gap-4 px-5 py-16">{erro ? (
+          <>
+            <p className="text-center text-sm text-rose-600" role="status">{erro}</p>
+            <button type="button" onClick={onFechar} className="h-11 rounded-lg border border-gray-200 px-5 text-sm font-medium text-gray-700 hover:bg-gray-50">Fechar</button>
+          </>
+        ) : <Loader2 className="h-6 w-6 animate-spin text-teal-600" />}</div>
       </Moldura>
     );
   }
