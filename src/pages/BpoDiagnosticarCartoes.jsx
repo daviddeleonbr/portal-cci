@@ -17,6 +17,7 @@ import {
 import * as modelosService from '../services/layoutsArquivoCartaoService';
 import * as catalogoCartaoService from '../services/bpoCartaoCatalogoService';
 import { isoDataBR } from '../utils/dataBR';
+import { conciliarCartoes, resumoAdquirentes } from '../utils/conciliacaoCartoes';
 
 // Layout do arquivo: embutido (Equals, Cielo…) ou modelo salvo ("m:<id>").
 // Modelo sem adquirente fixa = a adquirente vem de uma coluna (como a Equals).
@@ -289,15 +290,10 @@ export default function BpoDiagnosticarCartoes() {
     setLoading(true); setError(null); setResultado(null);
     try {
       const sistemaRaw = [];
-      const foraCobertura = new Map(); // adquirente → nº de lançamentos não conferidos
       let semDocumento = 0;
-      // Adquirente que nenhum arquivo cobre (ex.: fora da Equals e sem arquivo próprio): não cobra.
-      const coberto = (adqNome) => {
-        if (!equalsTx.cobertos || equalsTx.cobertos.has(normBandeira(adqNome || ''))) return true;
-        const k = adqNome || '(sem adquirente)';
-        foraCobertura.set(k, (foraCobertura.get(k) || 0) + 1);
-        return false;
-      };
+      // Adquirente que nenhum arquivo cobre (ex.: fora da Equals e sem arquivo próprio): não
+      // cobra, mas segue na lista — pode ser uma venda lançada na adquirente errada.
+      const coberto = (adqNome) => !equalsTx.cobertos || equalsTx.cobertos.has(normBandeira(adqNome || ''));
 
       if (redeSel.tipo === 'webposto') {
         // Webposto: transações de cartão da Quality (CARTAO — autorização, valor,
@@ -325,11 +321,10 @@ export default function BpoDiagnosticarCartoes() {
           if (!cfg) return; // administradora não parametrizada (ex.: PIX) — fora do diagnóstico
           const aut = normAutorizacao(c.autorizacao);
           if (!aut) { semDocumento++; return; }
-          if (!coberto(cfg.adquirente)) return;
           const venda = vendaPorCodigo.get(Number(c.vendaCodigo));
           const func = (venda?.funcionarioNome || '').trim();
           sistemaRaw.push({
-            adquirente: normBandeira(cfg.adquirente), bandeira: normBandeira(cfg.bandeira || ''),
+            coberto: coberto(cfg.adquirente), adquirente: normBandeira(cfg.adquirente), bandeira: normBandeira(cfg.bandeira || ''),
             // Frota é sempre crédito (vale mesmo sem modalidade informada).
             modalidade: normModalidade(cfg.frota ? 'Crédito' : (cfg.modalidade || '')), autorizacao: aut,
             parcela: Number(c.parcela) || null, valor: Number(c.valor) || 0,
@@ -371,9 +366,8 @@ export default function BpoDiagnosticarCartoes() {
           const aut = normAutorizacao(base);
           const valor = Number(l.valor) || 0;
           if (!aut) { semDocumento++; return; }
-          if (!coberto(cfg.adquirente)) return;
           sistemaRaw.push({
-            adquirente: normBandeira(cfg.adquirente || ''), bandeira: normBandeira(cfg.bandeira || ''),
+            coberto: coberto(cfg.adquirente), adquirente: normBandeira(cfg.adquirente || ''), bandeira: normBandeira(cfg.bandeira || ''),
             modalidade: normModalidade(cfg.modalidade || ''), autorizacao: aut, parcela, valor,
             conta: cfg.codigo, contaNome: cfg.nome, data: l.data, turno: l.turno,
             documento: l.documento || '', obs: (l.obs || '').trim(), pessoa: l.pessoa_nome || '',
@@ -402,7 +396,7 @@ export default function BpoDiagnosticarCartoes() {
         const funcs = [...new Set(membros.map(m => m.funcionario).filter(Boolean))];
         const resps = [...new Set(membros.map(m => m.responsavel).filter(Boolean))];
         sistemaTx.push({
-          adquirente: f.adquirente, bandeira: f.bandeira, modalidade: f.modalidade,
+          coberto: f.coberto, adquirente: f.adquirente, bandeira: f.bandeira, modalidade: f.modalidade,
           autorizacao: f.autorizacao, valor: valorTotal,
           parcelas: membros.length, parceladoSistema: parcelado,
           conta: f.conta, contaNome: f.contaNome, data: f.data, turno: f.turno,
@@ -413,65 +407,17 @@ export default function BpoDiagnosticarCartoes() {
         });
       });
 
-      // 4) Conciliação. Adquirente, autorização e valor precisam bater; bandeira
-      //    e modalidade só contam quando OS DOIS lados têm o valor (vazio = não
-      //    se aplica — ex.: Good Card sem bandeira no sistema, arquivo sem débito/crédito).
-      const v2 = t => t.valor.toFixed(2);
-      const compat = (x, y) => !x || !y || x === y;
-      const usados = new Set();
-      const idxSis = new Map(); // adquirente|autorização|valor → [sistema]
-      sistemaTx.forEach(t => {
-        const k = `${t.adquirente}|${t.autorizacao}|${v2(t)}`;
-        const arr = idxSis.get(k) || []; arr.push(t); idxSis.set(k, arr);
+      // 4) Conciliação e prováveis (regras em utils/conciliacaoCartoes).
+      const { conciliadas, provaveis, soEquals, soSistema, naoConferidas } = conciliarCartoes(equalsTx.lista, sistemaTx);
+      const foraCobertura = new Map(); // adquirente → nº de lançamentos não conferidos
+      naoConferidas.forEach(t => {
+        const k = t.adquirente || '(sem adquirente)';
+        foraCobertura.set(k, (foraCobertura.get(k) || 0) + t.membros.length);
       });
-      const conciliadas = [], soEquals = [];
-      equalsTx.lista.forEach(e => {
-        const s = (idxSis.get(`${e.adquirente}|${e.autorizacao}|${v2(e)}`) || [])
-          .find(t => !usados.has(t) && compat(e.bandeira, t.bandeira) && compat(e.modalidade, t.modalidade));
-        if (s) { usados.add(s); conciliadas.push({ equals: e, sistema: s }); }
-        else soEquals.push(e);
-      });
-      const soSistema = sistemaTx.filter(t => !usados.has(t));
+      const fora = new Set(naoConferidas);
+      const conferidas = sistemaTx.filter(t => !fora.has(t));
 
-      // 5) PROVÁVEIS conciliações: dos restantes, casa quando SÓ um (ou um par
-      //    específico) dos campos diverge, mantendo o resto igual. Processa do mais
-      //    confiável (1 campo) para o menos (bandeira + tipo). O adquirente sempre
-      //    precisa bater; bandeira/tipo só "divergem" se os dois lados tiverem valor.
-      const difBand = (e, s) => e.bandeira && s.bandeira && e.bandeira !== s.bandeira;
-      const difModal = (e, s) => e.modalidade && s.modalidade && e.modalidade !== s.modalidade;
-      const PADROES_PROVAVEL = [
-        { motivo: 'valor', label: 'Valor diferente',
-          casa: (e, s) => e.autorizacao === s.autorizacao && v2(e) !== v2(s) && compat(e.bandeira, s.bandeira) && compat(e.modalidade, s.modalidade) },
-        { motivo: 'autorizacao', label: 'Autorização diferente',
-          casa: (e, s) => v2(e) === v2(s) && e.autorizacao !== s.autorizacao && compat(e.bandeira, s.bandeira) && compat(e.modalidade, s.modalidade) },
-        { motivo: 'bandeira', label: 'Bandeira diferente',
-          casa: (e, s) => e.autorizacao === s.autorizacao && v2(e) === v2(s) && difBand(e, s) && compat(e.modalidade, s.modalidade) },
-        { motivo: 'modalidade', label: 'Tipo diferente',
-          casa: (e, s) => e.autorizacao === s.autorizacao && v2(e) === v2(s) && difModal(e, s) && compat(e.bandeira, s.bandeira) },
-        { motivo: 'bandeira_modalidade', label: 'Bandeira e tipo diferentes',
-          casa: (e, s) => e.autorizacao === s.autorizacao && v2(e) === v2(s) && difBand(e, s) && difModal(e, s) },
-      ];
-
-      let restEquals = soEquals.slice();
-      let restSistema = soSistema.slice();
-      const provaveis = [];
-      PADROES_PROVAVEL.forEach(padrao => {
-        const porAdq = new Map();
-        restSistema.forEach(t => { const arr = porAdq.get(t.adquirente) || []; arr.push(t); porAdq.set(t.adquirente, arr); });
-        const sisUsado = new Set(), eqUsado = new Set();
-        restEquals.forEach((e, ei) => {
-          const s = (porAdq.get(e.adquirente) || []).find(t => !sisUsado.has(t) && padrao.casa(e, t));
-          if (!s) return;
-          provaveis.push({ equals: e, sistema: s, motivo: padrao.motivo, motivoLabel: padrao.label });
-          sisUsado.add(s); eqUsado.add(ei);
-        });
-        restEquals = restEquals.filter((_, i) => !eqUsado.has(i));
-        restSistema = restSistema.filter(t => !sisUsado.has(t));
-      });
-      const soEqualsFinal = restEquals;
-      const soSistemaFinal = restSistema;
-
-      // 6) ALERTAS de parcelamento: onde o sistema fatiou (parceladoSistema) mas a
+      // 5) ALERTAS de parcelamento: onde o sistema fatiou (parceladoSistema) mas a
       //    Equals NÃO indica parcelamento → o sistema parcelou um cartão que não é
       //    parcelado. (E o inverso: Equals parcelada mas o sistema não fatiou.)
       const alertasParcelamento = [];
@@ -486,12 +432,12 @@ export default function BpoDiagnosticarCartoes() {
 
       setResultado({
         totalEquals: equalsTx.lista.length,
-        totalSistema: sistemaTx.length,
-        conciliadas, provaveis, soEquals: soEqualsFinal, soSistema: soSistemaFinal, semDocumento,
+        totalSistema: conferidas.length,
+        conciliadas, provaveis, soEquals, soSistema, semDocumento,
         foraCobertura: [...foraCobertura.entries()],
         alertasParcelamento,
         valorEquals: equalsTx.total,
-        valorSistema: sistemaTx.reduce((s, t) => s + t.valor, 0),
+        valorSistema: conferidas.reduce((s, t) => s + t.valor, 0),
       });
     } catch (err) { setError(err.message || 'Falha ao diagnosticar.'); }
     finally { setLoading(false); }
@@ -561,7 +507,8 @@ export default function BpoDiagnosticarCartoes() {
           <h3 className="text-sm font-semibold text-gray-800">Arquivos de vendas (Equals e/ou adquirentes)</h3>
           <p className="mt-0.5 text-[11px] text-gray-500">
             Envie a Equals e, se a empresa tiver adquirente fora dela, o relatório da própria adquirente. O sistema é conferido só
-            nas adquirentes cobertas pelos arquivos.
+            nas adquirentes cobertas pelos arquivos. Venda lançada em outra adquirente, com a mesma autorização e valor, aparece como
+            “Adquirente diferente”.
           </p>
         </div>
 
@@ -806,6 +753,8 @@ function DiferencaProvavel({ p }) {
   const sis = (v) => <span className="font-mono text-rose-700">{v}</span>;
   const eq = (v) => <span className="font-mono text-emerald-700">{v}</span>;
   switch (p.motivo) {
+    case 'adquirente':
+      return <>adquirente no sistema {sis(s.adquirente)} ≠ arquivo {eq(e.adquirente)}</>;
     case 'valor':
       return <>valor no sistema {sis(formatCurrency(s.valor))} ≠ {e.origem || 'arquivo'} {eq(formatCurrency(e.valor))}</>;
     case 'bandeira':
@@ -826,10 +775,12 @@ function LinhaAjuste({ item }) {
       <div className="pl-16 pr-4 py-2 flex items-start gap-3">
         <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-0.5 flex-shrink-0">{p.motivoLabel || 'Corrigir'}</span>
         <p className="text-[12.5px] text-gray-700 leading-relaxed">
-          Conta <strong>{rotuloConta(p.sistema.conta, p.sistema.contaNome)}</strong> em <strong>{fmtDataBR(p.sistema.data)}</strong> (adquirente {p.equals.adquirente || '—'},
-          {p.motivo === 'autorizacao'
-            ? <> {formatCurrency(p.equals.valor)}</>
-            : <> autorização <span className="font-mono">{p.equals.autorizacao}</span></>}):
+          Conta <strong>{rotuloConta(p.sistema.conta, p.sistema.contaNome)}</strong> em <strong>{fmtDataBR(p.sistema.data)}</strong> (
+          {p.motivo === 'adquirente'
+            ? <>{[p.equals.bandeira || p.sistema.bandeira, p.equals.modalidade || p.sistema.modalidade].filter(Boolean).map(x => `${x} · `)}autorização <span className="font-mono">{p.equals.autorizacao}</span> · {formatCurrency(p.equals.valor)}</>
+            : <>adquirente {p.equals.adquirente || '—'},{p.motivo === 'autorizacao'
+              ? <> {formatCurrency(p.equals.valor)}</>
+              : <> autorização <span className="font-mono">{p.equals.autorizacao}</span></>}</>}):
           {' '}<DiferencaProvavel p={p} />. → Conferir e corrigir no sistema.
         </p>
       </div>
@@ -901,19 +852,34 @@ function AlertasParcelamento({ itens }) {
 function ListaProvaveis({ itens }) {
   const [aberto, setAberto] = useState(true);
   if (!itens || itens.length === 0) return null;
+  const trocas = resumoAdquirentes(itens);
   return (
     <div className="bg-white rounded-xl border border-sky-200 overflow-hidden">
       <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-sky-50/50 text-left">
-        <span className="text-[12.5px] font-semibold text-sky-700">Prováveis conciliações <span className="text-gray-400">({itens.length})</span> — igual em quase tudo, divergindo em um campo (valor, autorização, bandeira ou tipo)</span>
+        <span className="text-[12.5px] font-semibold text-sky-700">Prováveis conciliações <span className="text-gray-400">({itens.length})</span> — igual em quase tudo, divergindo em um campo (adquirente, valor, autorização, bandeira ou tipo)</span>
         <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${aberto ? 'rotate-90' : ''}`} />
       </button>
+      {aberto && trocas.length > 0 && (
+        <div className="border-t border-sky-100 px-4 py-2.5">
+          <p className="text-[11px] font-semibold text-gray-600">Lançadas em outra adquirente</p>
+          <ul className="mt-1.5 flex flex-wrap gap-2">
+            {trocas.map(g => (
+              <li key={`${g.sistema}|${g.arquivo}`} className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[11.5px] text-gray-700">
+                Sistema <strong className="text-rose-700">{g.sistema}</strong> · arquivo <strong className="text-emerald-700">{g.arquivo}</strong>
+                <span className="text-gray-600"> · {g.qtd} {g.qtd === 1 ? 'venda' : 'vendas'} · {formatCurrency(g.valor)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-gray-500">Se for a mesma adquirente com nomes diferentes, acerte o nome na parametrização da rede ou no arquivo.</p>
+        </div>
+      )}
       {aberto && (
         <div className="overflow-x-auto border-t border-sky-100">
           <table className="w-full text-[11.5px]">
             <thead className="bg-sky-50/60 text-gray-500">
               <tr>
                 <th className="text-left px-3 py-1.5 font-semibold">Divergência</th>
-                <th className="text-left px-3 py-1.5 font-semibold">Adquirente</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Adquirente (Sist. / Arquivo)</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Bandeira (Sist. / Arquivo)</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Tipo (Sist. / Arquivo)</th>
                 <th className="text-left px-3 py-1.5 font-semibold">Autorização (Sist. / Arquivo)</th>
@@ -931,7 +897,7 @@ function ListaProvaveis({ itens }) {
                 return (
                   <tr key={i} className="border-t border-sky-50">
                     <td className="px-3 py-1"><span className="inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-0.5">{p.motivoLabel}</span></td>
-                    <td className="px-3 py-1 text-gray-700">{p.equals.adquirente || '—'}</td>
+                    <td className="px-3 py-1">{par('adquirente', p.sistema.adquirente || '—', p.equals.adquirente || '—')}</td>
                     <td className="px-3 py-1">{par('bandeira', p.sistema.bandeira || '—', p.equals.bandeira || '—')}</td>
                     <td className="px-3 py-1">{par('modalidade', p.sistema.modalidade || '—', p.equals.modalidade || '—')}</td>
                     <td className="px-3 py-1">{par('autorizacao', p.sistema.autorizacao, p.equals.autorizacao)}{p.sistema.conta ? <span className="text-gray-400"> · conta {p.sistema.conta}</span> : null}</td>
