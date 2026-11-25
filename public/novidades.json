@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.11.1",
+      "data": "2026-11-25",
+      "resumo": "Barra do celular com as páginas que você usa.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Barra inferior no celular",
+          "descricao": "A barra agora mostra até quatro páginas liberadas para você, com o botão Mais sempre no fim. O que não couber na barra continua no Mais."
+        }
+      ]
+    },
+    {
       "versao": "1.11.0",
       "data": "2026-11-25",
       "resumo": "Contas a receber do cliente no portal da CCI.",

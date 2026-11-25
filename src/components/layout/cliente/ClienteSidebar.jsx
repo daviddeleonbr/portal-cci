@@ -4,12 +4,11 @@ import { useMemo, useState, useEffect } from 'react';
 import { useLocation, NavLink, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, X, LogOut, PieChart, ArrowUpRight, UserRound } from 'lucide-react';
-import { buildNavigation, filtrarNavegacao } from './clienteNavegacao';
+import { navegacaoDaSessao, hrefAtivoDoMenu, itensBarraMobile, itensDoMenu } from './clienteNavegacao';
 import { useClienteSession } from '../../../hooks/useAuth';
 import LogoCCI from '../../ui/LogoCCI';
 import { logoutCliente } from '../../../lib/auth';
 import PerfilModalCliente from './PerfilModalCliente';
-import * as pendenciasService from '../../../services/pendenciasService';
 
 function isSubtreeActive(item, pathname) {
   if (item.href && (pathname === item.href || pathname.startsWith(item.href + '/'))) return true;
@@ -19,7 +18,7 @@ function isSubtreeActive(item, pathname) {
 
 // Desktop: 4 modos do "Controle do menu" (src/lib/modoMenu.js); textos usam `FADE` (classes do modo).
 
-export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
+export default function ClienteSidebar({ mobileOpen, onMobileClose, badges = {} }) {
   const location = useLocation();
   const navigate = useNavigate();
   const session = useClienteSession();
@@ -44,32 +43,8 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
   const FADE = cm.fade;
   const caixa = useCaixaOpcoes(modo);
 
-  const navigation = useMemo(
-    () => {
-      const nav = filtrarNavegacao(buildNavigation(prefix, tipoCliente), usuario?.permissoes, flagSource);
-      return usaVisor360
-        ? nav.filter(s => s.section !== 'Comercial' && s.section !== 'Financeiro')
-        : nav;
-    },
-    [prefix, tipoCliente, usuario?.permissoes, flagSource, usaVisor360],
-  );
-
-  // Calcula o href "mais específico" que case com a URL atual. Evita o bug
-  // de "/bpo" e "/bpo/outras-contas" ativarem simultaneamente — apenas o
-  // mais longo (o que melhor identifica a página) fica destacado.
-  const hrefAtivo = useMemo(() => {
-    const todos = [];
-    navigation.forEach(s => s.items.forEach(it => {
-      if (it.href) todos.push(it.href);
-      if (it.children) it.children.forEach(c => { if (c.href) todos.push(c.href); });
-    }));
-    let melhor = '';
-    todos.forEach(href => {
-      const bate = location.pathname === href || location.pathname.startsWith(href + '/');
-      if (bate && href.length > melhor.length) melhor = href;
-    });
-    return melhor;
-  }, [navigation, location.pathname]);
+  const navigation = useMemo(() => navegacaoDaSessao(session), [session]);
+  const hrefAtivo = useMemo(() => hrefAtivoDoMenu(navigation, location.pathname), [navigation, location.pathname]);
 
   const [expanded, setExpanded] = useState(() => {
     const open = new Set();
@@ -86,27 +61,6 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
     }));
     setExpanded(next);
   }, [location.pathname, navigation]);
-
-  // Badge de "Pendências" — conta pendências ATIVAS pra esse cliente
-  // (respeita escopo de rede/cliente + janela + recorrência).
-  const chaveApiId = session?.chaveApi?.id;
-  const clientesIds = useMemo(
-    () => (session?.clientesRede || []).map(c => c.id),
-    [session?.clientesRede],
-  );
-  const [badges, setBadges] = useState({});
-  useEffect(() => {
-    if (!chaveApiId && clientesIds.length === 0) return;
-    let cancelado = false;
-    (async () => {
-      try {
-        const n = await pendenciasService.contarAbertasCliente({ clientesIds, chaveApiId });
-        if (!cancelado) setBadges({ pendencias: n });
-      } catch { /* silencioso */ }
-    })();
-    return () => { cancelado = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chaveApiId, clientesIds.join(','), location.pathname]);
 
   const toggleExpand = (name) => {
     setExpanded(prev => {
@@ -130,19 +84,18 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
 
   // Menu do celular (gaveta "Mais"): grade de blocos, sem os atalhos que já
   // estão na barra inferior. Submenus (children) entram achatados.
-  const secoesMobile = useMemo(() => navigation
-    .map(sec => ({
-      ...sec,
-      items: sec.items.flatMap(it => (it.children ? it.children.map(c => ({ ...c, icon: c.icon || it.icon })) : [it]))
-        .filter(it => it.href && !it.barraMobile),
-    }))
-    .filter(sec => sec.items.length > 0), [navigation]);
+  const secoesMobile = useMemo(() => {
+    const naBarra = new Set(itensBarraMobile(navigation).map(i => i.href));
+    return navigation
+      .map(sec => ({ ...sec, items: itensDoMenu([sec]).filter(it => !naBarra.has(it.href)) }))
+      .filter(sec => sec.items.length > 0);
+  }, [navigation]);
 
   // Desktop (≥lg): igual ao Visor360 — recolhida (rail de ícones, 64px) por padrão
   // e expande ao passar o mouse, SOBREPONDO o conteúdo (não empurra a página).
   // Mobile (<lg): gaveta de BAIXO PRA CIMA (botão "Mais" da ClienteBottomNav),
   // largura cheia, encostada logo acima da barra inferior — tocar "Mais" de
-  // novo fecha. Os atalhos da barra ficam escondidos aqui (max-lg:hidden).
+  // novo fecha. Os atalhos da barra não se repetem aqui (secoesMobile).
   return (
     <aside data-menu-lateral=""
       aria-label="Menu"
@@ -269,7 +222,7 @@ export default function ClienteSidebar({ mobileOpen, onMobileClose }) {
                       to={item.href}
                       title={modo === 'opcoes' || modo === 'recolhido' ? undefined : item.name}
                       {...caixa.propsItem(item)}
-                      className={`relative flex items-center gap-3 rounded-md ${item.barraMobile ? 'max-lg:hidden' : ''} px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
+                      className={`relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
                         isActive
                           ? 'bg-blue-50 text-blue-700'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'

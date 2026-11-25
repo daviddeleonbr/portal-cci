@@ -10,6 +10,7 @@ import BannerModoDemo from './BannerModoDemo';
 import ModalPendenciasLogin from './ModalPendenciasLogin';
 import ModalResumoDia from './ModalResumoDia';
 import { useClienteSession } from '../../../hooks/useAuth';
+import { useBadgesCliente } from '../../../hooks/useBadgesCliente';
 import { registrarPageview } from '../../../services/usoPortalService';
 import { EmpresaAtivaProvider } from '../../../contexts/EmpresaAtivaContext';
 import { useModoMenu, classesModoMenu } from '../../../lib/modoMenu';
@@ -25,6 +26,7 @@ export default function ClienteLayout() {
   // Painel admin consulta em /admin/uso-portal.
   const location = useLocation();
   const session = useClienteSession();
+  const badges = useBadgesCliente();
   useEffect(() => {
     if (!session?.usuario?.id) return;
     registrarPageview({
@@ -59,6 +61,7 @@ export default function ClienteLayout() {
       <ClienteSidebar
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
+        badges={badges}
       />
       {/* Margem = largura recolhida; a sidebar expandida (hover) sobrepõe o conteúdo */}
       <div className={`relative ${margemMenu} lg:transition-[margin] lg:duration-300`}>
@@ -81,6 +84,7 @@ export default function ClienteLayout() {
       <ClienteBottomNav
         maisAberto={mobileOpen}
         onMaisClick={() => setMobileOpen(v => !v)}
+        badges={badges}
       />
     </div></EmpresaAtivaProvider>
   );

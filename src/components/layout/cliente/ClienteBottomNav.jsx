@@ -2,26 +2,20 @@ import { useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { MoreHorizontal } from 'lucide-react';
 import { useClienteSession } from '../../../hooks/useAuth';
-import { buildNavigation, filtrarNavegacao } from './clienteNavegacao';
+import { navegacaoDaSessao, hrefAtivoDoMenu, itensBarraMobile } from './clienteNavegacao';
 
 // Barra inferior do portal do cliente — só no celular (<lg).
-// Atalhos = itens marcados com `barraMobile` no menu (Tarefas, Sangrias,
-// Notas, Outras contas), respeitando as mesmas permissões/flags da sidebar.
-// "Mais" abre o drawer lateral, que no mobile esconde esses atalhos e
-// mostra só o resto.
-export default function ClienteBottomNav({ onMaisClick, maisAberto = false }) {
-  const location = useLocation();
+// No máximo 5 ícones: até 4 atalhos do que o usuário pode acessar + "Mais",
+// sempre no fim (regra em itensBarraMobile). "Mais" abre a gaveta com o resto
+// do menu, o perfil e o sair.
+export default function ClienteBottomNav({ onMaisClick, maisAberto = false, badges = {} }) {
+  const { pathname } = useLocation();
   const session = useClienteSession();
-  const tipoCliente = session?.tipoCliente || 'webposto';
-  const prefix = `/cliente/${tipoCliente}`;
-  const flagSource = tipoCliente === 'autosystem' ? session?.asRede : session?.cliente;
+  const navigation = useMemo(() => navegacaoDaSessao(session), [session]);
+  const atalhos = useMemo(() => itensBarraMobile(navigation), [navigation]);
+  const hrefAtivo = hrefAtivoDoMenu(navigation, pathname);
 
-  const atalhos = useMemo(() => {
-    const nav = filtrarNavegacao(buildNavigation(prefix, tipoCliente), session?.usuario?.permissoes, flagSource);
-    return nav.flatMap(s => s.items).filter(it => it.barraMobile && it.href);
-  }, [prefix, tipoCliente, session?.usuario?.permissoes, flagSource]);
-
-  const ativo = (href) => location.pathname === href || location.pathname.startsWith(href + '/');
+  const ativo = (href) => href === hrefAtivo;
   const algumAtalhoAtivo = atalhos.some(a => ativo(a.href));
   const maisAtivo = maisAberto || !algumAtalhoAtivo;
 
@@ -46,12 +40,18 @@ export default function ClienteBottomNav({ onMaisClick, maisAberto = false }) {
         {atalhos.map(item => {
           const Icon = item.icon;
           const on = !maisAberto && ativo(item.href);
+          const badge = item.badgeKey ? badges[item.badgeKey] || 0 : 0;
           return (
-            <NavLink key={item.href} to={item.href} className={`${base} ${cor(on)}`}>
-              <span className={pilula(on)}>
+            <NavLink key={item.href} to={item.href} aria-label={badge > 0 ? `${item.name}, ${badge} em aberto` : item.name} className={`${base} ${cor(on)}`}>
+              <span className={`relative ${pilula(on)}`}>
                 <Icon className="h-5 w-5" aria-hidden="true" />
+                {badge > 0 && (
+                  <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#be123c] px-1 text-[10px] font-bold text-[#ffffff] tabular-nums" aria-hidden="true">
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
               </span>
-              <span className="truncate max-w-full px-1">{item.barraMobile}</span>
+              <span className="truncate max-w-full px-0.5 tracking-tight">{item.curto || item.name}</span>
             </NavLink>
           );
         })}
