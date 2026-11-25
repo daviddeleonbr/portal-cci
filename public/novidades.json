@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.15.2",
+      "data": "2026-11-25",
+      "resumo": "Aviso de nova versão mais confiável.",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "todos",
+          "titulo": "Aviso de nova versão",
+          "descricao": "O aviso podia não aparecer, principalmente no app instalado. Agora o portal confere com mais frequência e avisa em todas as atualizações."
+        }
+      ]
+    },
+    {
       "versao": "1.15.1",
       "data": "2026-11-25",
       "resumo": "Aviso de atualização só dentro do sistema.",

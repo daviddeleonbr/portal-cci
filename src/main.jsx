@@ -9,7 +9,7 @@ import './lib/instalacaoPwa'
 
 // Registra o service worker e passa a checar deploys novos periodicamente.
 // Quando há versão nova, dispara o evento que o NovaVersaoToast escuta.
-iniciarAtualizacaoPwa(() => window.dispatchEvent(new Event('pwa:nova-versao')));
+iniciarAtualizacaoPwa();
 
 // Hidrata o cache RAM do IndexedDB ANTES de renderizar a app.
 // Garante que no mount de qualquer página Webposto, o cache já está

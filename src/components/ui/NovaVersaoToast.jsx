@@ -13,7 +13,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { RefreshCw, RotateCw, Sparkles, X } from 'lucide-react';
-import { instalarAtualizacao, reiniciarPortal } from '../../pwaUpdate';
+import { avisoPendente, instalarAtualizacao, reiniciarPortal } from '../../pwaUpdate';
 import { useAdminSession, useClienteSession } from '../../hooks/useAuth';
 import TelaNovidades from './TelaNovidades';
 import VidroLiquido from './VidroLiquido';
@@ -55,6 +55,10 @@ export default function NovaVersaoToast() {
     const onInstaladaEmOutraAba = () => setToast('instalada');
     window.addEventListener('pwa:nova-versao', onNova);
     window.addEventListener('pwa:versao-instalada', onInstaladaEmOutraAba);
+    // Aviso que saiu antes de a tela montar (versão nova já estava baixada)
+    const pendente = avisoPendente();
+    if (pendente === 'instalada') onInstaladaEmOutraAba();
+    else if (pendente) onNova();
     return () => {
       window.removeEventListener('pwa:nova-versao', onNova);
       window.removeEventListener('pwa:versao-instalada', onInstaladaEmOutraAba);
