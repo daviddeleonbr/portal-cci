@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 
 // Colunas seguras (NUNCA inclui senha/senha_hash — o RLS revoga o SELECT
 // dessas colunas). Todo select da tabela usa esta lista.
-const COLS = 'id, nome, email, tipo, chave_api_id, as_rede_id, permissoes, status, is_master, nivel_admin, empresas_permitidas, ultimo_acesso, observacoes, criado_por, created_at, updated_at';
+const COLS = 'id, nome, email, tipo, chave_api_id, as_rede_id, permissoes, status, is_master, nivel_admin, empresas_permitidas, expediente, ultimo_acesso, observacoes, criado_por, created_at, updated_at';
 
 // ========== Hierarquia de níveis de admin (1..3) ==========
 // N3 gere N2/N1/clientes (não N3); N2 gere N1/clientes; N1 não gere ninguém.
@@ -90,11 +90,7 @@ export const PERMISSOES_ADMIN = [
   { key: 'conciliacao_caixas', label: 'Conciliação de Caixas', grupo: 'BPO' },
   { key: 'lmc', label: 'LMC · Livro de Movimentação de Combustíveis (Webposto)', grupo: 'BPO' },
   { key: 'caixa_administrativo', label: 'Caixa Administrativo', grupo: 'Consultoria' },
-  { key: 'notificacoes', label: 'Notificações (enviar)', grupo: 'Comunicação' },
-  { key: 'mensagens_iniciais', label: 'Mensagens Iniciais (modal cliente)', grupo: 'Comunicação' },
-  { key: 'melhorias', label: 'Melhorias de Sistema (sugestões clientes)', grupo: 'Comunicação' },
   { key: 'uso_portal', label: 'Uso do Portal (analytics)', grupo: 'Comunicação' },
-  { key: 'suporte_admin', label: 'Chat de Suporte (responder)', grupo: 'Comunicação' },
   { key: 'webposto_sync', label: 'Webposto · Sincronia de vendas (cache)', grupo: 'Configurações' },
 ];
 
@@ -141,9 +137,7 @@ export const PERMISSOES_CLIENTE = [
   { key: 'acessos', label: 'Acessos (logins e senhas de adquirentes/plataformas)', grupo: 'Operacional' },
   { key: 'lmc', label: 'LMC · Livro de Movimentação de Combustíveis (só Webposto, visualização)', grupo: 'Operacional' },
   { key: 'lmc_editar', label: 'LMC gerencial · lançar o escritural real e o motivo (não altera o LMC do Webposto)', grupo: 'Operacional' },
-  { key: 'suporte', label: 'Suporte', grupo: 'Atendimento' },
   { key: 'pendencias', label: 'Pendências', grupo: 'Atendimento' },
-  { key: 'melhorias', label: 'Melhorias do Sistema', grupo: 'Atendimento' },
   { key: 'trocar_empresa', label: 'Alternar entre empresas da rede', grupo: 'Administração da Rede' },
   { key: 'gerenciar_usuarios', label: 'Gerenciar usuários da rede', grupo: 'Administração da Rede' },
   { key: 'configuracoes', label: 'Configurações de rede', grupo: 'Administração da Rede' },
@@ -271,6 +265,13 @@ export async function atualizarUsuario(id, campos) {
 // senha atual (hash) e grava a nova — migration 202.
 export async function alterarMinhaSenha(atual, nova) {
   const { error } = await supabase.rpc('cci_alterar_minha_senha', { p_atual: atual, p_nova: nova });
+  if (error) throw error;
+}
+
+// Horário de trabalho (avisos de tarefa só dentro dele; null = a qualquer hora).
+// RPC valida quem pode (CCI ou gestor da rede) e o formato — migration 230.
+export async function definirExpediente(usuarioId, expediente) {
+  const { error } = await supabase.rpc('cci_definir_expediente', { p_usuario: usuarioId, p_expediente: expediente });
   if (error) throw error;
 }
 

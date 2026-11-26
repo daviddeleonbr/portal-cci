@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { Loader2, AlertCircle } from 'lucide-react';
 import RelatorioFluxoCaixa from './RelatorioFluxoCaixa';
 import * as clientesService from '../services/clientesService';
@@ -10,6 +10,9 @@ import * as autosystemService from '../services/autosystemService';
 // com `asRedeId` + lista de empresas.
 export default function RelatorioFluxoCaixaAsRede() {
   const { asRedeId } = useParams();
+  // ?empresas=id1,id2: só essas empresas da rede (multiseleção em Consultoria)
+  const [searchParams] = useSearchParams();
+  const filtro = searchParams.get('empresas') || '';
   const [redeContexto, setRedeContexto] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -24,11 +27,15 @@ export default function RelatorioFluxoCaixaAsRede() {
           clientesService.listarClientes(),
         ]);
         if (!rede) throw new Error('Rede Autosystem não encontrada');
-        const empresas = (todosClientes || []).filter(c =>
+        let empresas = (todosClientes || []).filter(c =>
           c.as_rede_id === asRedeId
           && c.status === 'ativo'
           && c.empresa_codigo != null
         );
+        if (filtro) {
+          const ids = new Set(filtro.split(','));
+          empresas = empresas.filter(e => ids.has(e.id));
+        }
         if (empresas.length === 0) {
           throw new Error('Nenhuma empresa Autosystem ativa encontrada nesta rede');
         }
@@ -44,7 +51,7 @@ export default function RelatorioFluxoCaixaAsRede() {
         setLoading(false);
       }
     })();
-  }, [asRedeId]);
+  }, [asRedeId, filtro]);
 
   if (loading) {
     return (
@@ -66,7 +73,7 @@ export default function RelatorioFluxoCaixaAsRede() {
   return (
     <RelatorioFluxoCaixa
       redeContexto={redeContexto}
-      backHref="/admin/relatorios-cliente"
+      backHref="/admin/consultoria/fluxo-caixa"
     />
   );
 }

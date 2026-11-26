@@ -2,6 +2,37 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.18.0",
+      "data": "2026-11-25",
+      "resumo": "Avisos de tarefa no horário de trabalho e relatórios direto no menu.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "Avisos de tarefa",
+          "descricao": "Quem é responsável por uma tarefa recebe aviso quando ela é criada e 1 hora antes do vencimento, sempre dentro do seu horário de trabalho. O horário de cada pessoa é configurado no cadastro de usuários (ícone de relógio)."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Relatórios no menu",
+          "descricao": "DRE, Fluxo de Caixa, Análise de IA e Análise de Lançamentos ganharam item próprio no menu, com escolha de rede e empresa no topo. No DRE, no Fluxo e na IA dá para marcar várias empresas."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Ícones de contas",
+          "descricao": "Contas a Pagar e Contas a Receber ganharam setas opostas no menu e nas notificações."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Menu mais enxuto",
+          "descricao": "Saíram Suporte, Melhorias do Sistema, Mensagens Iniciais, Notificações (envio) e Evolução Mensal."
+        }
+      ]
+    },
+    {
       "versao": "1.17.0",
       "data": "2026-11-25",
       "resumo": "Dashboard com o faturamento das notas fiscais.",

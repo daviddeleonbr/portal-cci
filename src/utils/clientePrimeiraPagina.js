@@ -32,9 +32,7 @@ const PAGINAS_ORDEM = [
   { rota: '/bpo/outras-contas',          permissao: 'outras_contas' },
   { rota: '/bpo',                        permissao: 'bpo' },
   { rota: '/acessos',                    permissao: 'acessos' },
-  { rota: '/suporte',                    permissao: 'suporte' },
   // Também dependem de permissão (iguais à sidebar e às rotas).
-  { rota: '/melhorias',                  permissao: 'melhorias' },
   // Administração da rede (só pra quem gerencia)
   { rota: '/usuarios',                   permissao: 'gerenciar_usuarios' },
   { rota: '/configuracoes',              permissao: 'configuracoes' },

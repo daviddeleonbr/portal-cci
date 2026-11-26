@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Sparkles, Loader2, AlertCircle, Building2, Network, Zap, Key,
   RefreshCw, Wand2, Info, ShoppingCart, FileBarChart, Wallet, GitBranch, Lock, Printer,
@@ -28,6 +28,20 @@ import Modal from '../components/ui/Modal';
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
+// Multiseleção: só as empresas escolhidas (vazio = todas)
+function soDoFiltro(empresas, filtro) {
+  if (!filtro) return empresas;
+  const ids = new Set(filtro.split(','));
+  return empresas.filter(e => ids.has(e.id));
+}
+// "Rede X · 2 de 5 empresas" quando nem todas estão na análise (vai para o relatório)
+function nomeComFiltro(nome, escolhidas, todas) {
+  if (escolhidas.length >= todas.length) return nome;
+  return escolhidas.length === 1
+    ? `${nome} · ${escolhidas[0].nome || escolhidas[0].razao_social || 'Empresa'}`
+    : `${nome} · ${escolhidas.length} de ${todas.length} empresas`;
+}
+
 export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webposto' } = {}) {
   const { clienteId, chaveApiId, asRedeId } = useParams();
   const isAutosystem = origem === 'autosystem';
@@ -39,6 +53,9 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
   // Contexto (cliente OU rede virtual)
   const [loading, setLoading] = useState(true);
   // contextoBase = rede/empresa inteira; `contexto` (abaixo) = filtrado pela categoria.
+  // ?empresas=id1,id2 (rede): só essas empresas — multiseleção em Consultoria
+  const [searchParams] = useSearchParams();
+  const filtroEmpresas = searchParams.get('empresas') || '';
   const [contextoBase, setContexto] = useState(null); // { tipo, cliente?, rede?, empresaCodigos?, chaveApi }
   // Categoria de empresa (só rede): '' = geral (todas as empresas).
   const [categoriaIA, setCategoriaIA] = useState('');
@@ -101,16 +118,17 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
             clientesService.listarClientes(),
           ]);
           if (!rede) throw new Error('Rede Autosystem não encontrada');
-          const empresas = (todosClientes || []).filter(c =>
+          const todasAs = (todosClientes || []).filter(c =>
             c.as_rede_id === asRedeId && c.status === 'ativo' && c.empresa_codigo != null);
+          const empresas = soDoFiltro(todasAs, filtroEmpresas);
           if (empresas.length === 0) throw new Error('Nenhuma empresa Autosystem ativa encontrada nesta rede');
           const empresaCodigos = empresas.map(e => Number(e.empresa_codigo));
           setContexto({
             tipo: 'rede-as',
-            rede,
+            rede: { ...rede, nome: nomeComFiltro(rede.nome, empresas, todasAs) },
             empresas,
             empresaCodigos,
-            cliente: { nome: rede.nome, _empresaCodigos: empresaCodigos },
+            cliente: { nome: nomeComFiltro(rede.nome, empresas, todasAs), _empresaCodigos: empresaCodigos },
           });
         } else if (modoRede) {
           escopoMascara = { asRedeId: null, chaveApiId };
@@ -120,15 +138,17 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
           ]);
           const chave = chaves.find(c => c.id === chaveApiId);
           if (!chave) throw new Error('Rede não encontrada');
-          const empresas = (clientes || []).filter(c => c.chave_api_id === chaveApiId
+          const todasWp = (clientes || []).filter(c => c.chave_api_id === chaveApiId
             && c.usa_webposto && c.empresa_codigo && c.status !== 'inativo');
+          const empresas = soDoFiltro(todasWp, filtroEmpresas);
+          if (empresas.length === 0) throw new Error('Nenhuma empresa Webposto ativa encontrada nesta rede');
           setContexto({
             tipo: 'rede',
-            rede: chave,
+            rede: { ...chave, nome: nomeComFiltro(chave.nome, empresas, todasWp) },
             chaveApi: chave.chave,
             empresas,
             cliente: {
-              nome: chave.nome,
+              nome: nomeComFiltro(chave.nome, empresas, todasWp),
               _empresas: empresas,
               _empresaCodigos: empresas.map(e => Number(e.empresa_codigo)),
             },
@@ -155,7 +175,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
       finally { setLoading(false); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clienteId, chaveApiId, modoRede]);
+  }, [clienteId, chaveApiId, modoRede, filtroEmpresas]);
 
   // Quando troca mes, limpa a tela na hora (a carga do cache abaixo repopula).
   useEffect(() => {
@@ -222,9 +242,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
       asId = asRedeId || null;
     }
     const base = montarEscopo({ tipo, clienteId: cliId, chaveApiId: chvId, asRedeId: asId });
-    const escopo = base && categoriaIA && tipo !== 'empresa' ? `${base}|cat:${categoriaIA}` : base;
+    let escopo = base && categoriaIA && tipo !== 'empresa' ? `${base}|cat:${categoriaIA}` : base;
+    if (escopo && filtroEmpresas && tipo !== 'empresa') escopo = `${escopo}|emp:${filtroEmpresas.split(',').sort().join(',')}`;
     return escopo ? { escopo, tipo, clienteId: cliId, chaveApiId: chvId, asRedeId: asId } : null;
-  }, [contexto, clienteId, chaveApiId, asRedeId, categoriaIA]);
+  }, [contexto, clienteId, chaveApiId, asRedeId, categoriaIA, filtroEmpresas]);
 
   // ─── Carrega o cache (resultado da IA + nota) do periodo ─────────
   // Evita regenerar (economiza tokens) e traz de volta as notas ja escritas.
@@ -460,7 +481,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
           Seu usuário não tem permissão para acessar as análises com IA. Solicite ao administrador
           a permissão <strong>Análise com IA (Claude)</strong> em Cadastros &gt; Usuários do Sistema.
         </p>
-        <button onClick={() => navigate('/admin/relatorios-cliente')}
+        <button onClick={() => navigate('/admin/consultoria/analise-ia')}
           className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 text-[12px] font-semibold transition-colors">
           <ArrowLeft className="h-3.5 w-3.5" /> Voltar aos relatórios
         </button>
@@ -491,7 +512,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
   const podeGerarGeral = resultados.vendas?.mesKey === mesKey
     && resDre?.mesKey === mesKey && resultados.fluxo?.mesKey === mesKey;
 
-  const voltarHref = modoRede ? '/admin/relatorios-cliente' : `/admin/relatorios-cliente/${contexto.cliente?.id}`;
+  const voltarHref = '/admin/consultoria/analise-ia';
 
   return (
     <div>

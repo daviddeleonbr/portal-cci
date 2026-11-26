@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, Pencil, Trash2, Loader2, Search, Users, Mail, Building2,
-  Check, Eye, EyeOff, KeyRound, ShieldCheck, AlertCircle,
+  Check, Eye, EyeOff, KeyRound, ShieldCheck, AlertCircle, Clock,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import Toast from '../../../components/ui/Toast';
 import Modal from '../../../components/ui/Modal';
 import SeletorPermissoes from '../../../components/usuarios/SeletorPermissoes';
+import ModalExpediente from '../../../components/usuarios/ModalExpediente';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as usuariosService from '../../../services/usuariosSistemaService';
 
@@ -18,6 +19,7 @@ export default function ClienteUsuarios() {
   const podeGerenciar = !!usuarioLogado?.permissoes?.includes('gerenciar_usuarios');
 
   const [usuarios, setUsuarios] = useState([]);
+  const [expediente, setExpediente] = useState(null); // usuário com o modal de horário aberto
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   const [modal, setModal] = useState({ open: false, data: null });
@@ -183,6 +185,10 @@ export default function ClienteUsuarios() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => setExpediente(u)} title="Horário de trabalho (avisos de tarefa)"
+                            className="rounded p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
+                            <Clock className="h-3.5 w-3.5" />
+                          </button>
                           <button onClick={() => setModal({ open: true, data: u })} title="Editar"
                             className="rounded p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
                             <Pencil className="h-3.5 w-3.5" />
@@ -205,6 +211,8 @@ export default function ClienteUsuarios() {
         </div>
       )}
 
+      {expediente && <ModalExpediente usuario={expediente} onClose={() => setExpediente(null)}
+        onSalvo={(exp) => { setUsuarios(l => l.map(x => (x.id === expediente.id ? { ...x, expediente: exp } : x))); showToast('success', 'Horário de trabalho salvo.'); }} />}
       <ModalUsuarioRede open={modal.open} data={modal.data} empresas={empresasDisponiveis}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 

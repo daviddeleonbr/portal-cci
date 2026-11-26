@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import ClienteSidebar from './ClienteSidebar';
 import ClienteHeader from './ClienteHeader';
 import ClienteBottomNav from './ClienteBottomNav';
-import ModalNovidades from '../../ui/ModalNovidades';
 import PrefetcherWebposto from './PrefetcherWebposto';
 import BannerModoDemo from './BannerModoDemo';
 import ModalPendenciasLogin from './ModalPendenciasLogin';
@@ -47,7 +46,6 @@ export default function ClienteLayout() {
       <BannerModoDemo />
       {/* Fundo cinza claro liso (app-bg-cliente) — sem as manchas teal decorativas */}
 
-      <ModalNovidades />
       <ModalPendenciasLogin />
       <ModalResumoDia />
       <PrefetcherWebposto />

@@ -89,7 +89,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const clienteId = clienteIdOverride || params.clienteId;
   const navigate = useNavigate();
   const modoRede = !!redeContexto;
-  const backTarget = backHref || (modoRede ? '/admin/relatorios-cliente' : `/admin/relatorios-cliente/${clienteId}`);
+  const backTarget = backHref || '/admin/consultoria/fluxo-caixa';
 
   const [cliente, setCliente] = useState(null);
   const [mascaras, setMascaras] = useState([]);

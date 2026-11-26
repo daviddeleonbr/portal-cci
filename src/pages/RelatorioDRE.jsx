@@ -152,7 +152,7 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
   const tcQtd = telaCheia ? searchParams.get('qtd') : null;
   const tcSnap = telaCheia ? searchParams.get('snap') : null; // token do snapshot (cache)
   const usarApelido = useUsarApelido();
-  const backTarget = backHref || (modoRede ? '/admin/relatorios-cliente' : `/admin/relatorios-cliente/${clienteId}`);
+  const backTarget = backHref || '/admin/consultoria/dre';
 
   const [cliente, setCliente] = useState(null);
   const [mascaras, setMascaras] = useState([]);

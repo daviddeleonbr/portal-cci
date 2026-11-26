@@ -5,18 +5,17 @@ import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronLeft, LogOut,
-  LayoutDashboard, FolderKanban, Wallet, FileText, BarChart3, Settings2,
-  Coins, WalletCards, PieChart, Settings, Bell, Megaphone, Lightbulb,
-  MessageCircle, RefreshCw, Eye, AlertTriangle,
+  LayoutDashboard, FolderKanban, Wallet, FileText, Settings2,
+  Coins, WalletCards, PieChart, Settings,
+  RefreshCw, Eye, AlertTriangle,
   Activity, FileSpreadsheet, Receipt, FileSignature, FileDown, ListChecks, KeyRound,
-  Fuel, ArrowUpRight, ArrowDownLeft,
+  Fuel, ArrowUpRight, ArrowDownLeft, FileBarChart, Sparkles, FlaskConical,
 } from 'lucide-react';
 import { useAdminSession } from '../../hooks/useAuth';
 import { nivelAdmin } from '../../services/usuariosSistemaService';
 import LogoCCI from '../ui/LogoCCI';
 import { logoutAdmin } from '../../lib/auth';
 import * as pendenciasService from '../../services/pendenciasService';
-import * as melhoriasService from '../../services/melhoriasService';
 
 const navigationAll = [
   {
@@ -57,7 +56,10 @@ const navigationAll = [
     section: 'Consultoria',
     items: [
       { name: 'Parâmetros', href: '/admin/parametros', icon: Settings2, permissao: 'parametros' },
-      { name: 'Relatórios Cliente', href: '/admin/relatorios-cliente', icon: BarChart3, permissao: 'relatorios_cliente' },
+      { name: 'DRE', href: '/admin/consultoria/dre', icon: FileBarChart, permissao: 'relatorios_cliente' },
+      { name: 'Fluxo de Caixa', href: '/admin/consultoria/fluxo-caixa', icon: Wallet, permissao: 'relatorios_cliente' },
+      { name: 'Análise de IA', href: '/admin/consultoria/analise-ia', icon: Sparkles, permissaoTodas: ['relatorios_cliente', 'analise_ia'] },
+      { name: 'Análise de Lançamentos', href: '/admin/consultoria/analise-lancamentos', icon: FlaskConical, permissao: 'relatorios_cliente' },
       { name: 'Relatórios BI', href: '/admin/relatorios-bi', icon: PieChart, permissao: 'relatorios_bi' },
       { name: 'Caixa Administrativo', href: '/admin/bpo/caixa-administrativo', icon: WalletCards, permissao: 'caixa_administrativo' },
     ],
@@ -85,10 +87,6 @@ const navigationAll = [
     section: 'Comunicações',
     items: [
       { name: 'Pendências', href: '/admin/pendencias', icon: AlertTriangle, badgeKey: 'pendencias' },
-      { name: 'Notificações', href: '/admin/notificacoes', icon: Bell, permissao: 'notificacoes' },
-      { name: 'Mensagens Iniciais', href: '/admin/mensagens-iniciais', icon: Megaphone, permissao: 'mensagens_iniciais' },
-      { name: 'Melhorias do Sistema', href: '/admin/melhorias', icon: Lightbulb, permissao: 'melhorias', badgeKey: 'melhorias' },
-      { name: 'Suporte (chat)', href: '/admin/suporte', icon: MessageCircle, permissao: 'suporte_admin' },
     ],
   },
   {
@@ -104,7 +102,7 @@ const navigationAll = [
 
 // Filtra navegacao com base nas permissoes do usuario logado.
 // Suporta `permissao` (string única — precisa ter) e `permissaoQualquer`
-// (array — basta ter pelo menos uma). Útil em itens agrupados (Cadastros).
+// (array — basta ter pelo menos uma) e `permissaoTodas` (array — precisa de todas). Útil em itens agrupados (Cadastros).
 function filtrarNavegacao(usuario) {
   const perms = new Set(usuario?.permissoes || []);
   const nivel = nivelAdmin(usuario);
@@ -112,6 +110,7 @@ function filtrarNavegacao(usuario) {
     if (item.nivelMinimo && nivel < item.nivelMinimo) return false;
     if (item.permissao && !perms.has(item.permissao)) return false;
     if (item.permissaoQualquer && !item.permissaoQualquer.some(p => perms.has(p))) return false;
+    if (item.permissaoTodas && !item.permissaoTodas.every(p => perms.has(p))) return false;
     return true;
   };
   return navigationAll
@@ -154,18 +153,15 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
   const FADE = cm.fade;
   const caixa = useCaixaOpcoes(modo);
 
-  // Contadores pra badges em "Pendências" e "Melhorias do Sistema".
+  // Contador pro badge de "Pendências".
   // Re-carrega ao navegar (admin pode ter resolvido algo na página anterior).
   const [badges, setBadges] = useState({});
   useEffect(() => {
     let cancelado = false;
     (async () => {
       try {
-        const [pend, melh] = await Promise.all([
-          pendenciasService.contarAbertasAdmin().catch(() => 0),
-          melhoriasService.contarAbertasAdmin().catch(() => 0),
-        ]);
-        if (!cancelado) setBadges({ pendencias: pend, melhorias: melh });
+        const pend = await pendenciasService.contarAbertasAdmin().catch(() => 0);
+        if (!cancelado) setBadges({ pendencias: pend });
       } catch { /* silencioso — badge zerado se falhar */ }
     })();
     return () => { cancelado = true; };

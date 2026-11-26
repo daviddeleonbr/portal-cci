@@ -5,6 +5,7 @@
 // pro app) — ver useAtualizacaoAutomatica.
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import IndicadorAtualizado from '../../components/ui/IndicadorAtualizado';
@@ -20,6 +21,14 @@ export default function ClienteTarefas() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [abertaId, setAbertaId] = useState(null);
+  // Notificação de tarefa → /tarefas?tarefa=<id>: abre a tarefa e limpa o parâmetro
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tarefaDaUrl = searchParams.get('tarefa');
+  useEffect(() => {
+    if (!tarefaDaUrl) return;
+    setAbertaId(tarefaDaUrl);
+    setSearchParams(p => { const n = new URLSearchParams(p); n.delete('tarefa'); return n; }, { replace: true });
+  }, [tarefaDaUrl, setSearchParams]);
   // Toque num resumo (Atrasadas / Vencem hoje / Em validação) → abre a Lista
   // já filtrada. `seq` remonta as visões com a aba escolhida.
   const [atalho, setAtalho] = useState(null);

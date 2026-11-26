@@ -1,9 +1,9 @@
 import {
   LayoutDashboard, BarChart3, TrendingUp, PieChart,
-  HelpCircle, Coins, UserCog, ClipboardCheck,
+  Coins, UserCog, ClipboardCheck,
   ShoppingCart, Activity, Gauge,
-  ArrowUpRight, ArrowDownLeft, Settings, Lightbulb, FileSpreadsheet, Receipt,
-  Boxes, AlertTriangle, KeyRound, Fuel, CalendarDays, Calculator,
+  ArrowUpRight, ArrowDownLeft, Settings, FileSpreadsheet, Receipt,
+  Boxes, AlertTriangle, KeyRound, Fuel, Calculator,
 } from 'lucide-react';
 
 // Menu do portal do cliente — compartilhado pela sidebar (ClienteSidebar)
@@ -54,7 +54,7 @@ export function buildNavigation(prefix, tipoCliente = 'webposto') {
         { name: 'Sangrias', href: `${prefix}/sangrias`, icon: Coins, permissao: ['sangrias', 'sangrias_consultar'], curto: 'Sangrias', barraMobile: true },
         { name: 'Fechamento de caixa', href: `${prefix}/fechamento-caixa`, icon: Calculator, permissao: 'fechamento_caixa', curto: 'Caixa' },
         { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais', curto: 'Notas', barraMobile: true },
-        { name: 'Contas a Pagar', href: `${prefix}/bpo/contas-pagar`, icon: CalendarDays, permissao: 'bpo_contas_pagar', curto: 'Pagar BPO' },
+        { name: 'Contas a Pagar', href: `${prefix}/bpo/contas-pagar`, icon: ArrowUpRight, permissao: 'bpo_contas_pagar', curto: 'Pagar BPO' },
         { name: 'Contas a Receber', href: `${prefix}/bpo/contas-receber`, icon: ArrowDownLeft, permissao: 'bpo_contas_receber', curto: 'Receb. BPO' },
         { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas', curto: 'Outras', barraMobile: true },
         { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo', curto: 'Serviços' },
@@ -67,8 +67,6 @@ export function buildNavigation(prefix, tipoCliente = 'webposto') {
       section: 'Atendimento',
       items: [
         { name: 'Pendências', href: `${prefix}/pendencias`, icon: AlertTriangle, badgeKey: 'pendencias', permissao: 'pendencias', curto: 'Pendências' },
-        { name: 'Suporte', href: `${prefix}/suporte`, icon: HelpCircle, permissao: 'suporte', curto: 'Suporte' },
-        { name: 'Melhorias do Sistema', href: `${prefix}/melhorias`, icon: Lightbulb, permissao: 'melhorias', curto: 'Melhorias' },
       ],
     },
     {

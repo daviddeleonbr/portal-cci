@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, BellRing, Check, CheckCheck, Info, AlertTriangle, CircleAlert, CircleCheck, Loader2, Smartphone, X,
-  CalendarDays, FileText, Receipt, ListChecks, Coins, ClipboardCheck, Megaphone } from 'lucide-react';
+  ArrowUpRight, ArrowDownLeft, FileText, Receipt, ListChecks, Coins, ClipboardCheck, Megaphone } from 'lucide-react';
 import { useEhCelular } from '../../hooks/useEhCelular';
 import * as notificacoesService from '../../services/notificacoesService';
 import * as pushService from '../../services/pushService';
@@ -24,8 +24,8 @@ const COR_TIPO = {
 
 // De onde veio a notificação — pelo link (vale também p/ as antigas).
 const ORIGENS = [
-  { key: 'contas_pagar', label: 'Contas a pagar', Icon: CalendarDays, re: /\/bpo\/contas-pagar/ },
-  { key: 'contas_receber', label: 'Contas a receber', Icon: Receipt, re: /\/bpo\/contas-receber/ },
+  { key: 'contas_pagar', label: 'Contas a pagar', Icon: ArrowUpRight, re: /\/bpo\/contas-pagar/ },
+  { key: 'contas_receber', label: 'Contas a receber', Icon: ArrowDownLeft, re: /\/bpo\/contas-receber/ },
   { key: 'notas', label: 'Notas fiscais', Icon: FileText, re: /\/notas-fiscais|\/fiscal\/manifestacao/ },
   { key: 'outras_contas', label: 'Outras contas', Icon: Receipt, re: /\/outras-contas/ },
   { key: 'tarefas', label: 'Tarefas', Icon: ListChecks, re: /\/tarefas/ },

@@ -225,7 +225,7 @@ export default function RelatorioAnaliseLancamentosRede() {
       <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
         className="flex items-center justify-between gap-4 mb-6 no-print">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => navigate('/admin/relatorios-cliente')}
+          <button onClick={() => navigate('/admin/consultoria/analise-lancamentos')}
             className="flex items-center justify-center h-9 w-9 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-all flex-shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </button>

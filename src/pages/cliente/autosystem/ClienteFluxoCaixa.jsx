@@ -1,6 +1,6 @@
 // Fluxo de Caixa do cliente Autosystem.
 // Reutiliza o componente <RelatorioFluxoCaixa> (mesmo usado pelo admin em
-// /admin/relatorios-cliente/rede-as/:asRedeId/fluxo-caixa), montando o
+// /admin/consultoria/fluxo-caixa/rede-as/:asRedeId — fluxo-caixa), montando o
 // redeContexto a partir da sessão. Sempre agrega a rede inteira pelas
 // empresas que o usuário pode ver (session.clientesRede, filtrado por
 // empresas_permitidas no login).

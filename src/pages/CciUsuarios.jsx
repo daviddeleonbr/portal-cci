@@ -3,12 +3,13 @@ import {
   Plus, Pencil, Trash2, Loader2, Search, Shield, Users, Mail,
   Check, Eye, EyeOff, KeyRound, UserCog, ChevronLeft, ChevronRight,
   IdCard, Lock as LockIcon, ShieldCheck, Network, Calendar,
-  SlidersHorizontal, RotateCcw, Building2,
+  SlidersHorizontal, RotateCcw, Building2, Clock,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
 import SeletorPermissoes from '../components/usuarios/SeletorPermissoes';
+import ModalExpediente from '../components/usuarios/ModalExpediente';
 import * as usuariosService from '../services/usuariosSistemaService';
 import * as clientesService from '../services/clientesService';
 import * as mapeamentoService from '../services/mapeamentoService';
@@ -39,6 +40,7 @@ export default function CciUsuarios({ embedded = false }) {
   const session = useAdminSession();
   const ator = session?.usuario || null;
   const [usuarios, setUsuarios] = useState([]);
+  const [expediente, setExpediente] = useState(null); // usuário com o modal de horário aberto
   const [clientes, setClientes] = useState([]);
   const [chavesApi, setChavesApi] = useState([]); // lista de redes Webposto
   const [redesAutosystem, setRedesAutosystem] = useState([]); // lista de redes Autosystem
@@ -299,6 +301,9 @@ export default function CciUsuarios({ embedded = false }) {
                   <IconeAcao title="Permissões" disabled={!podeGerir}
                     onClick={() => setModalPerms({ open: true, data: u })}
                     className="hover:text-blue-600 hover:bg-blue-50"><SlidersHorizontal className="h-4 w-4" /></IconeAcao>
+                  <IconeAcao title="Horário de trabalho (avisos de tarefa)" disabled={!podeGerir && ator?.nivel_admin !== 3}
+                    onClick={() => setExpediente(u)}
+                    className="hover:text-blue-600 hover:bg-blue-50"><Clock className="h-3.5 w-3.5" /></IconeAcao>
                   <IconeAcao title="Editar" disabled={!podeGerir}
                     onClick={() => setModal({ open: true, data: u })}
                     className="hover:text-blue-600 hover:bg-blue-50"><Pencil className="h-3.5 w-3.5" /></IconeAcao>
@@ -315,6 +320,8 @@ export default function CciUsuarios({ embedded = false }) {
         </ul>
       )}
 
+      {expediente && <ModalExpediente usuario={expediente} onClose={() => setExpediente(null)}
+        onSalvo={(exp) => { setUsuarios(l => l.map(x => (x.id === expediente.id ? { ...x, expediente: exp } : x))); showToast('success', 'Horário de trabalho salvo.'); }} />}
       <ModalUsuario open={modal.open} data={modal.data}
         chavesApi={chavesApi} redesAutosystem={redesAutosystem}
         empresasPorRede={empresasPorRede} clientes={clientes}

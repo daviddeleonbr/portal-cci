@@ -28,17 +28,8 @@ import Mapeamento from './pages/Mapeamento';
 import ContasAnalise from './pages/ContasAnalise';
 import ParametrizacoesFluxo from './pages/ParametrizacoesFluxo';
 import Colaboradores from './pages/Colaboradores';
-import RelatoriosCliente, { ClienteRelatoriosHub } from './pages/RelatoriosCliente';
-import RelatorioDRE from './pages/RelatorioDRE';
-import RelatorioAnaliseLancamentos from './pages/RelatorioAnaliseLancamentos';
-import RelatorioFluxoCaixa from './pages/RelatorioFluxoCaixa';
-import RelatorioEvolucaoMensal from './pages/RelatorioEvolucaoMensal';
-import RelatorioDRERede from './pages/RelatorioDRERede';
 import RelatorioDREAsRede from './pages/RelatorioDREAsRede';
-import RelatorioFluxoCaixaRede from './pages/RelatorioFluxoCaixaRede';
-import RelatorioFluxoCaixaAsRede from './pages/RelatorioFluxoCaixaAsRede';
-import RelatorioAnaliseIA from './pages/RelatorioAnaliseIA';
-import RelatorioAnaliseLancamentosRede from './pages/RelatorioAnaliseLancamentosRede';
+import RelatoriosConsultoria, { RedirecionarRelatorioAntigo, RelatorioDaEmpresa, RelatorioDaRede } from './pages/RelatoriosConsultoria';
 import CciPlanoContas from './pages/CciPlanoContas';
 import CciFornecedores from './pages/CciFornecedores';
 import CciContasPagar from './pages/CciContasPagar';
@@ -48,11 +39,7 @@ import BpoConciliacaoCaixas from './pages/BpoConciliacaoCaixas';
 import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
 import BpoAlteracoesCaixas from './pages/BpoAlteracoesCaixas';
 import CciRelatoriosBi from './pages/CciRelatoriosBi';
-import CciNotificacoes from './pages/CciNotificacoes';
-import CciMensagensIniciais from './pages/CciMensagensIniciais';
-import CciMelhorias from './pages/CciMelhorias';
 import CciUsoPortal from './pages/CciUsoPortal';
-import ClienteMelhorias from './pages/cliente/ClienteMelhorias';
 import AdminConfiguracoes from './pages/AdminConfiguracoes';
 
 // Cliente
@@ -68,7 +55,6 @@ import WpBPO from './pages/cliente/webposto/ClienteBPO';
 import WpDocumentos from './pages/cliente/webposto/ClienteDocumentos';
 import WpContasPagar from './pages/cliente/webposto/ClienteContasPagar';
 import WpContasReceber from './pages/cliente/webposto/ClienteContasReceber';
-import WpSuporte from './pages/cliente/webposto/ClienteSuporte';
 import WpSangrias from './pages/cliente/webposto/ClienteSangrias';
 import ClienteFechamentoCaixa from './pages/cliente/ClienteFechamentoCaixa';
 import WpUsuarios from './pages/cliente/webposto/ClienteUsuarios';
@@ -83,7 +69,6 @@ import AdminNfManifestacao from './pages/AdminNfManifestacao';
 import AdminNfManifestacaoDetalhe from './pages/AdminNfManifestacaoDetalhe';
 import WpOutrasContas from './pages/cliente/webposto/ClienteOutrasContas';
 import AdminOutrasContas from './pages/AdminOutrasContas';
-import AdminSuporte from './pages/AdminSuporte';
 import AdminWebpostoSync from './pages/AdminWebpostoSync';
 import AdminPortalDemo from './pages/AdminPortalDemo';
 import AdminPendencias from './pages/AdminPendencias';
@@ -101,7 +86,6 @@ import AsDocumentos from './pages/cliente/autosystem/ClienteDocumentos';
 import AsContasPagar from './pages/cliente/autosystem/ClienteContasPagar';
 import AsContasReceber from './pages/cliente/autosystem/ClienteContasReceber';
 import AsNotasFiscais from './pages/cliente/autosystem/ClienteNotasFiscais';
-import AsSuporte from './pages/cliente/autosystem/ClienteSuporte';
 import AsSangrias from './pages/cliente/autosystem/ClienteSangrias';
 import ClienteTarefas from './pages/cliente/ClienteTarefas';
 import AdminTarefas from './pages/AdminTarefas';
@@ -190,7 +174,6 @@ export default function App() {
           <Route path="/admin/fiscal/manifestacao" element={<AdminNfManifestacao />} />
           <Route path="/admin/fiscal/manifestacao/:id" element={<AdminNfManifestacaoDetalhe />} />
           <Route path="/admin/bpo/outras-contas" element={<AdminOutrasContas />} />
-          <Route path="/admin/suporte" element={<AdminSuporte />} />
           <Route path="/admin/webposto-sync" element={<AdminWebpostoSync />} />
           <Route path="/admin/portal-demo" element={<AdminPortalDemo />} />
           <Route path="/admin/pendencias" element={<AdminPendencias />} />
@@ -210,21 +193,18 @@ export default function App() {
           {/* Ferramentas — restritas ao admin nível 3 */}
           <Route path="/admin/ferramentas/exportacao-contabil" element={<RequireNivelAdmin nivel={3}><AdminExportacaoContabil /></RequireNivelAdmin>} />
 
-          {/* Relatorios Cliente (analises por empresa) */}
-          <Route path="/admin/relatorios-cliente" element={<RelatoriosCliente />} />
-          <Route path="/admin/relatorios-cliente/:clienteId" element={<ClienteRelatoriosHub />} />
-          <Route path="/admin/relatorios-cliente/:clienteId/dre" element={<RelatorioDRE />} />
-          <Route path="/admin/relatorios-cliente/:clienteId/analise-lancamentos" element={<RelatorioAnaliseLancamentos />} />
-          <Route path="/admin/relatorios-cliente/:clienteId/fluxo-caixa" element={<RelatorioFluxoCaixa />} />
-          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/dre" element={<RelatorioDRERede />} />
-          <Route path="/admin/relatorios-cliente/rede-as/:asRedeId/dre" element={<RelatorioDREAsRede />} />
-          <Route path="/admin/relatorios-cliente/rede-as/:asRedeId/fluxo-caixa" element={<RelatorioFluxoCaixaAsRede />} />
-          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/fluxo-caixa" element={<RelatorioFluxoCaixaRede />} />
-          <Route path="/admin/relatorios-cliente/:clienteId/analise-ia" element={<RelatorioAnaliseIA />} />
-          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/analise-ia" element={<RelatorioAnaliseIA modoRede={true} />} />
-          <Route path="/admin/relatorios-cliente/rede-as/:asRedeId/analise-ia" element={<RelatorioAnaliseIA modoRede={true} origem="autosystem" />} />
-          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/analise-lancamentos" element={<RelatorioAnaliseLancamentosRede />} />
-          <Route path="/admin/relatorios-cliente/:clienteId/evolucao" element={<RelatorioEvolucaoMensal />} />
+          {/* Relatórios da consultoria: um item por relatório na sidebar, com rede/empresa no topo */}
+          <Route path="/admin/consultoria/:tipo" element={<RelatoriosConsultoria />}>
+            <Route path="empresa/:clienteId" element={<RelatorioDaEmpresa />} />
+            <Route path="rede/:chaveApiId" element={<RelatorioDaRede sistema="webposto" />} />
+            <Route path="rede-as/:asRedeId" element={<RelatorioDaRede sistema="autosystem" />} />
+          </Route>
+          {/* Links antigos do hub "Relatórios Cliente" */}
+          <Route path="/admin/relatorios-cliente" element={<RedirecionarRelatorioAntigo para="hub" />} />
+          <Route path="/admin/relatorios-cliente/:clienteId" element={<RedirecionarRelatorioAntigo para="empresaHub" />} />
+          <Route path="/admin/relatorios-cliente/:clienteId/:tipo" element={<RedirecionarRelatorioAntigo para="empresa" />} />
+          <Route path="/admin/relatorios-cliente/rede/:chaveApiId/:tipo" element={<RedirecionarRelatorioAntigo para="rede" />} />
+          <Route path="/admin/relatorios-cliente/rede-as/:asRedeId/:tipo" element={<RedirecionarRelatorioAntigo para="redeAs" />} />
 
           {/* BPO */}
           <Route path="/admin/bpo/conciliacao-caixas" element={<BpoConciliacaoCaixas />} />
@@ -235,9 +215,6 @@ export default function App() {
           <Route path="/admin/relatorios-bi" element={<CciRelatoriosBi />} />
           <Route path="/admin/contato" element={<Navigate to="/admin/configuracoes" replace />} />
           <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
-          <Route path="/admin/notificacoes" element={<CciNotificacoes />} />
-          <Route path="/admin/mensagens-iniciais" element={<CciMensagensIniciais />} />
-          <Route path="/admin/melhorias" element={<CciMelhorias />} />
           <Route path="/admin/uso-portal" element={<CciUsoPortal />} />
 
           {/* Relatorios (kept for compatibility) */}
@@ -272,10 +249,8 @@ export default function App() {
           <Route path="/cliente/webposto/tarefas" element={<RequirePermissaoCliente permissao="tarefas"><ClienteTarefas /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/acessos" element={<RequirePermissaoCliente permissao="acessos"><ClienteAcessos /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/lmc" element={<RequirePermissaoCliente permissao="lmc"><WpLmc /></RequirePermissaoCliente>} />
-          <Route path="/cliente/webposto/suporte" element={<RequirePermissaoCliente permissao="suporte"><WpSuporte /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/pendencias" element={<RequirePermissaoCliente permissao="pendencias"><WpPendencias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/pendencias" element={<RequirePermissaoCliente permissao="pendencias"><WpPendencias /></RequirePermissaoCliente>} />
-          <Route path="/cliente/webposto/melhorias" element={<RequirePermissaoCliente permissao="melhorias"><ClienteMelhorias /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/usuarios" element={<WpUsuarios />} />
           <Route path="/cliente/webposto/comercial" element={<Navigate to="/cliente/webposto/comercial/vendas" replace />} />
           <Route path="/cliente/webposto/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><ErrorBoundary><WpComercialVendas /></ErrorBoundary></RequirePermissaoCliente>} />
@@ -305,8 +280,6 @@ export default function App() {
           <Route path="/cliente/autosystem/bpo/contas-pagar" element={<RequirePermissaoCliente permissao="bpo_contas_pagar"><ClienteBpoContasPagar /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/bpo/contas-receber" element={<RequirePermissaoCliente permissao="bpo_contas_receber"><ClienteBpoContasReceber /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/acessos" element={<RequirePermissaoCliente permissao="acessos"><ClienteAcessos /></RequirePermissaoCliente>} />
-          <Route path="/cliente/autosystem/suporte" element={<RequirePermissaoCliente permissao="suporte"><AsSuporte /></RequirePermissaoCliente>} />
-          <Route path="/cliente/autosystem/melhorias" element={<RequirePermissaoCliente permissao="melhorias"><ClienteMelhorias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/usuarios" element={<AsUsuarios />} />
           <Route path="/cliente/autosystem/comercial" element={<Navigate to="/cliente/autosystem/comercial/vendas" replace />} />
           <Route path="/cliente/autosystem/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><AsComercialVendas /></RequirePermissaoCliente>} />
@@ -326,7 +299,6 @@ export default function App() {
         <Route path="/cliente/financeiro/contas-pagar" element={<Navigate to="/cliente/webposto/financeiro/contas-pagar" replace />} />
         <Route path="/cliente/financeiro/contas-receber" element={<Navigate to="/cliente/webposto/financeiro/contas-receber" replace />} />
         <Route path="/cliente/sangrias" element={<Navigate to="/cliente/webposto/sangrias" replace />} />
-        <Route path="/cliente/suporte" element={<Navigate to="/cliente/webposto/suporte" replace />} />
         <Route path="/cliente/usuarios" element={<Navigate to="/cliente/webposto/usuarios" replace />} />
         <Route path="/cliente/comercial/vendas" element={<Navigate to="/cliente/webposto/comercial/vendas" replace />} />
         <Route path="/cliente/comercial/operacao" element={<Navigate to="/cliente/webposto/comercial/operacao" replace />} />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { Loader2, AlertCircle } from 'lucide-react';
 import RelatorioDRE from './RelatorioDRE';
 import * as clientesService from '../services/clientesService';
@@ -9,6 +9,9 @@ import * as mapService from '../services/mapeamentoService';
 // Reusa o RelatorioDRE passando `redeContexto` com a lista de empresaCodigos.
 export default function RelatorioDRERede() {
   const { chaveApiId } = useParams();
+  // ?empresas=id1,id2: só essas empresas da rede (multiseleção em Consultoria)
+  const [searchParams] = useSearchParams();
+  const filtro = searchParams.get('empresas') || '';
   const [redeContexto, setRedeContexto] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -24,12 +27,16 @@ export default function RelatorioDRERede() {
         ]);
         const chave = (chaves || []).find(c => c.id === chaveApiId);
         if (!chave) throw new Error('Rede não encontrada');
-        const empresas = (todosClientes || []).filter(c =>
+        let empresas = (todosClientes || []).filter(c =>
           c.chave_api_id === chaveApiId
           && c.status === 'ativo'
           && c.usa_webposto
           && c.empresa_codigo != null
         );
+        if (filtro) {
+          const ids = new Set(filtro.split(','));
+          empresas = empresas.filter(e => ids.has(e.id));
+        }
         if (empresas.length === 0) {
           throw new Error('Nenhuma empresa Webposto ativa encontrada nesta rede');
         }
@@ -45,7 +52,7 @@ export default function RelatorioDRERede() {
         setLoading(false);
       }
     })();
-  }, [chaveApiId]);
+  }, [chaveApiId, filtro]);
 
   if (loading) {
     return (
@@ -67,7 +74,7 @@ export default function RelatorioDRERede() {
   return (
     <RelatorioDRE
       redeContexto={redeContexto}
-      backHref="/admin/relatorios-cliente"
+      backHref="/admin/consultoria/dre"
     />
   );
 }

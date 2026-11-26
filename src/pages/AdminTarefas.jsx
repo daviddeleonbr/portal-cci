@@ -2,6 +2,7 @@
 // validação) e rotinas recorrentes dos funcionários dos clientes.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   LayoutDashboard, ListChecks, Repeat, Plus, Loader2, Pencil, Trash2, Tags, ShieldCheck, AlertTriangle, Clock3, Copy,
   Search, Pause, Play,
@@ -36,6 +37,14 @@ export default function AdminTarefas() {
   const [pedidos, setPedidos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [abertaId, setAbertaId] = useState(null);
+  // Notificação de tarefa → /tarefas?tarefa=<id>: abre a tarefa e limpa o parâmetro
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tarefaDaUrl = searchParams.get('tarefa');
+  useEffect(() => {
+    if (!tarefaDaUrl) return;
+    setAbertaId(tarefaDaUrl);
+    setSearchParams(p => { const n = new URLSearchParams(p); n.delete('tarefa'); return n; }, { replace: true });
+  }, [tarefaDaUrl, setSearchParams]);
   const [modalRotina, setModalRotina] = useState({ open: false, rotina: null });
   const [modalTarefa, setModalTarefa] = useState(false);
   const [duplicar, setDuplicar] = useState(null);

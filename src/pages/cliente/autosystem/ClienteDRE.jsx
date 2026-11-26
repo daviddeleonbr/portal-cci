@@ -1,6 +1,6 @@
 // DRE do cliente Autosystem.
 // Reutiliza o componente <RelatorioDRE> (mesmo usado pelo admin em
-// /admin/relatorios-cliente/rede-as/:asRedeId/dre), montando o
+// /admin/consultoria/dre/rede-as/:asRedeId — dre), montando o
 // redeContexto a partir da sessão. O DRE é SEMPRE da rede inteira —
 // agregando todas as empresas que o usuário pode ver
 // (session.clientesRede, já filtrado por `empresas_permitidas`).
