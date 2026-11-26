@@ -76,7 +76,8 @@ export async function enviarArquivosRetiradas(clienteId, data, retiradas) {
         .upload(arquivo_path, r.arquivo, { contentType: r.arquivo.type || undefined, upsert: false });
       if (error) throw error;
     }
-    saida.push({ descricao: r.descricao.trim(), valor: Number(r.valor), arquivo_path, arquivo_nome });
+    // funcionario: { funcionario_codigo, caixa_codigo, funcionario_nome, turno } — de quem saiu
+    saida.push({ descricao: r.descricao.trim(), valor: Number(r.valor), arquivo_path, arquivo_nome, ...(r.funcionario || {}) });
   }
   return saida;
 }

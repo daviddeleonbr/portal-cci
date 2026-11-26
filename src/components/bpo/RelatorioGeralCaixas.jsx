@@ -15,11 +15,11 @@ import './relatorioGeralCaixas.css';
 
 const MAX_DIAS = 31;
 const dataBR = (s) => String(s || '').split('-').reverse().join('/');
-// Nome do PDF: caixa_auto_posto_trivela_2_24-11-2026 (barra não pode em nome de arquivo)
+// Nome do PDF: parecer_auto_posto_trivela_2_24-11-2026 (barra não pode em nome de arquivo)
 const nomeArquivo = (empresa, de, ate) => {
   const nome = String(empresa || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   const dia = (s) => dataBR(s).replace(/\//g, '-');
-  return ['caixa', nome, de === ate ? dia(de) : `${dia(de)}_a_${dia(ate)}`].filter(Boolean).join('_');
+  return ['parecer', nome, de === ate ? dia(de) : `${dia(de)}_a_${dia(ate)}`].filter(Boolean).join('_');
 };
 const dias = (de, ate) => Math.round((new Date(`${ate}T12:00:00`) - new Date(`${de}T12:00:00`)) / 86400000) + 1;
 const ontem = () => { const d = new Date(); d.setDate(d.getDate() - 1); return isoDataBR(d); };
@@ -294,8 +294,13 @@ function Sangrias({ s, variosDias }) {
             <thead><tr>{variosDias && <th>Data</th>}<th>Turno</th><th>Funcionário</th><th className="n">Apurado</th><th className="n">Apresentado</th><th className="n">Alterações</th><th className="n">Diferença</th></tr></thead>
             <tbody>
               {s.linhas.map((l, i) => (
-                <tr key={i}>{variosDias && <td>{dataBR(l.dia)}</td>}<td>{l.turno || '–'}</td><td>{l.nome}</td><td className="n">{v(l.apurado)}</td><td className="n">{v(l.apresentado)}</td>
-                  <td className="n">{sinal(l.alteracoes)}</td><td className="n">{fim(l.diferenca)}</td></tr>
+                <tr key={i} className={l.retirada ? 'rg-retirada' : undefined}>{variosDias && <td>{dataBR(l.dia)}</td>}
+                  {l.retirada
+                    ? <td colSpan={2} style={l.detalhe ? { paddingLeft: 22 } : undefined}><em>{l.detalhe ? '↳ ' : ''}(−) Retirada antes do depósito: {l.nome}</em></td>
+                    : <><td>{l.turno || '–'}</td><td>{l.nome}</td></>}
+                  <td className="n">{l.retirada ? <span className="rg-mudo">–</span> : v(l.apurado)}</td><td className="n">{v(l.apresentado)}</td>
+                  {/* retirada: valor sem cor (não é falta), mas soma no total */}
+                  <td className="n">{sinal(l.alteracoes)}</td><td className="n">{l.retirada ? sinal(l.diferenca) : fim(l.diferenca)}</td></tr>
               ))}
               {s.linhas.length === 0 && <tr><td colSpan={variosDias ? 7 : 6} className="rg-mudo">Nenhuma sangria no período.</td></tr>}
             </tbody>
@@ -305,7 +310,7 @@ function Sangrias({ s, variosDias }) {
           </table>
         </div>
       )}
-      {s?.linhas?.length > 0 && <p className="rg-nota">Apurado: sangria no sistema quando o cliente confirmou a contagem. Alterações: o que mudou no sistema depois disso. Diferença: apresentado − (apurado + alterações).</p>}
+      {s?.linhas?.length > 0 && <p className="rg-nota">Apurado: sangria no sistema quando o cliente confirmou a contagem. Alterações: o que mudou no sistema depois disso. Diferença: apresentado − (apurado + alterações). Retiradas antes do depósito (lançadas pelo cliente na conferência) saem do apresentado: do funcionário de quem saiu o dinheiro (mostrada logo abaixo dele) ou, quando não foi informado, numa linha no fim do dia.</p>}
       {variosDias && quem && <p className="rg-nota">Conferida por: {quem}.</p>}
       {s?.semConferencia?.length > 0 && <p className="rg-nota rg-pos">Ainda sem conferência do cliente: {s.semConferencia.map(dataBR).join(', ')}. Nesses dias, o apurado é o valor atual no sistema.</p>}
       {s?.atualIndisponivel && <p className="rg-nota rg-pos">Não foi possível consultar as sangrias no sistema agora (ou nenhuma conta está habilitada para sangrias): as alterações não foram calculadas.</p>}

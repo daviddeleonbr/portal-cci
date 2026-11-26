@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { modeloAutosystem } from './relatorioGeralCaixas';
+import { modeloAutosystem, modeloSangrias } from './relatorioGeralCaixas';
 
 // Caso Diamante Negro (26/11/2026): conta única 1.5 "SOBRA E FALTA DE CAIXA" cadastrada
 // como falta; quem lança é a CCI, mas o relatório do Autosystem agrupa pelo responsável do PDV.
@@ -41,5 +41,44 @@ describe('relatório geral — sobras e faltas do Autosystem', () => {
     const r = { ...rec('1.5', '1.1.2.1', 10, null, ''), responsavel_pessoa_id: undefined, responsavel_nome: undefined };
     const m = modeloAutosystem({ categoriaConta, recebimentos: [r] });
     expect(m.funcionarios.map(f => [f.nome, f.falta])).toEqual([['CCI', 10]]);
+  });
+});
+
+// Caso Dona Rosa II 25/11/2026: R$ 40,00 retirados para o combustível do depósito; no
+// Webposto a sangria da Kassandra caiu 40,00 (virou despesa).
+describe('relatório geral — sangrias com retiradas antes do depósito', () => {
+  const fechamentos = [{ data: '2026-11-25', confirmado_por: 'Karina', confirmado_em: '2026-11-26T14:41:00Z',
+    registros: [
+      { funcionarioCodigo: 187144, caixaCodigo: 1, nome: 'DERIVAN', dinheiroApurado: 460, dinheiroApresentado: 460 },
+      { funcionarioCodigo: 195657, caixaCodigo: 2, nome: 'KASSANDRA', dinheiroApurado: 6149.75, dinheiroApresentado: 6149.75 },
+      { funcionarioCodigo: 201638, caixaCodigo: 3, nome: 'MIRELLE', dinheiroApurado: 2074.68, dinheiroApresentado: 2085 },
+    ],
+    retiradas: [{ descricao: 'combustível para deposito', valor: 40 }] }];
+  const atuais = [
+    { dia: '2026-11-25', func: 187144, caixa: 1, nome: 'DERIVAN', turno: '1º TURNO', ordem: 1, valor: 460 },
+    { dia: '2026-11-25', func: 195657, caixa: 2, nome: 'KASSANDRA', turno: '2º TURNO', ordem: 2, valor: 6109.75 },
+    { dia: '2026-11-25', func: 201638, caixa: 3, nome: 'MIRELLE', turno: '3º TURNO', ordem: 3, valor: 2085 },
+  ];
+
+  it('retirada com funcionário: sai do apresentado dele (= sistema) e aparece logo abaixo', () => {
+    const comFunc = [{ ...fechamentos[0], retiradas: [{ descricao: 'combustível para deposito', valor: 40, funcionario_codigo: 195657, caixa_codigo: 2, funcionario_nome: 'KASSANDRA' }] }];
+    const s = modeloSangrias({ fechamentos: comFunc, atuais });
+    const nomes = s.linhas.map(l => (l.detalhe ? `↳ ${l.nome}` : l.nome));
+    expect(nomes).toEqual(['DERIVAN', 'KASSANDRA', '↳ combustível para deposito', 'MIRELLE']);
+    const kas = s.linhas.find(l => l.nome === 'KASSANDRA');
+    expect(kas.apresentado).toBeCloseTo(6109.75);
+    expect(kas.diferenca).toBeCloseTo(0);
+    expect(s.totais.apresentado).toBeCloseTo(8654.75); // detalhe não conta de novo
+    expect(s.totais.diferenca).toBeCloseTo(0);
+  });
+
+  it('retirada sem funcionário (antiga): linha no fim do dia', () => {
+    const s = modeloSangrias({ fechamentos, atuais });
+    const ret = s.linhas.find(l => l.retirada);
+    expect(ret).toMatchObject({ nome: 'combustível para deposito', apresentado: -40, diferenca: -40 });
+    expect(s.linhas.at(-1).retirada).toBe(true); // vem depois dos funcionários
+    expect(s.totais.apresentado).toBeCloseTo(8654.75);
+    expect(s.totais.alteracoes).toBeCloseTo(-29.68);
+    expect(s.totais.diferenca).toBeCloseTo(0);
   });
 });

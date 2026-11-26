@@ -31,7 +31,9 @@ export function ResponsavelDeposito({ clienteId, value, onChange }) {
 
 const inp = 'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
-export function SecaoRetiradas({ travado, fechamento, retiradas, setRetiradas, totalApresentado, podeCriarTarefa, clienteId, onTarefaCriada, showToast }) {
+// `funcionarios`: opcoesFuncionarioRetirada(registros) — com mais de um, cada retirada
+// diz de qual funcionário saiu (obrigatório; ver erroRetiradas).
+export function SecaoRetiradas({ travado, fechamento, retiradas, setRetiradas, totalApresentado, podeCriarTarefa, clienteId, onTarefaCriada, showToast, funcionarios = [] }) {
   const salvas = fechamento?.retiradas || [];
   const resumo = travado
     ? { total: Number(fechamento?.total_retiradas || 0), deposito: Number(fechamento?.valor_deposito ?? fechamento?.total_apresentado ?? 0) }
@@ -57,7 +59,10 @@ export function SecaoRetiradas({ travado, fechamento, retiradas, setRetiradas, t
             <ul className="divide-y divide-gray-100">
               {salvas.map((r, i) => (
                 <li key={i} className="flex items-center gap-3 py-2">
-                  <span className="flex-1 text-sm text-gray-800">{r.descricao}</span>
+                  <span className="flex-1 text-sm text-gray-800">
+                    {r.descricao}
+                    {r.funcionario_nome && <span className="block text-[11px] text-gray-500">De {r.funcionario_nome}{r.turno ? ` · ${r.turno}` : ''}</span>}
+                  </span>
                   {r.arquivo_path && (
                     <button onClick={() => abrirArquivo(r.arquivo_path)} className="inline-flex items-center gap-1 text-[12px] text-blue-600 hover:underline">
                       <ExternalLink className="h-3.5 w-3.5" /> {r.arquivo_nome || 'Arquivo'}
@@ -77,6 +82,13 @@ export function SecaoRetiradas({ travado, fechamento, retiradas, setRetiradas, t
               <div key={r.chave} className="flex flex-col gap-2 rounded-lg border border-gray-100 p-2 sm:flex-row sm:items-center">
                 <input value={r.descricao} onChange={e => altera(r.chave, { descricao: e.target.value })} placeholder="Descrição (ex.: pagamento de frete)"
                   className={`${inp} flex-1`} />
+                {funcionarios.length > 1 && (
+                  <select value={r.func || ''} onChange={e => altera(r.chave, { func: e.target.value })} title="De qual funcionário saiu o dinheiro"
+                    className={`${inp} w-full sm:w-56 ${r.func ? '' : 'text-gray-400'}`}>
+                    <option value="">De qual funcionário?</option>
+                    {funcionarios.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )}
                 <input type="number" step="0.01" min="0" inputMode="decimal" value={r.valor} onChange={e => altera(r.chave, { valor: e.target.value })}
                   placeholder="0,00" className={`${inp} w-full font-mono text-right sm:w-32`} />
                 {r.arquivo ? (

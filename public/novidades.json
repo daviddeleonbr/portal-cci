@@ -2,6 +2,31 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.23.0",
+      "data": "2026-11-26",
+      "resumo": "Retiradas por funcionário nas sangrias e novo nome do PDF do Relatório geral.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Retiradas por funcionário",
+          "descricao": "Ao lançar uma retirada antes do depósito, informe de qual funcionário saiu o dinheiro."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Sangrias no Relatório geral",
+          "descricao": "O apresentado de cada funcionário já vem sem as retiradas dele (igual ao sistema) e a retirada aparece logo abaixo. Retiradas sem funcionário aparecem no fim do dia."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Nome do PDF do Relatório geral",
+          "descricao": "O arquivo agora é salvo como parecer_empresa_data."
+        }
+      ]
+    },
+    {
       "versao": "1.22.1",
       "data": "2026-11-26",
       "resumo": "Sobras e faltas por funcionário no Relatório geral (Autosystem).",

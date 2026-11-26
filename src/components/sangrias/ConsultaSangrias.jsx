@@ -314,7 +314,10 @@ function DetalheFechamento({ f, empresa, historico = [], podeReabrir = false, on
               <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
                 {f.retiradas.map((r, i) => (
                   <li key={i} className="flex items-center gap-3 px-3 py-2 text-sm">
-                    <span className="flex-1 text-gray-800">{r.descricao}</span>
+                    <span className="flex-1 text-gray-800">
+                      {r.descricao}
+                      {r.funcionario_nome && <span className="block text-[11px] text-gray-500">De {r.funcionario_nome}{r.turno ? ` · ${r.turno}` : ''}</span>}
+                    </span>
                     {r.arquivo_path && (
                       <button onClick={() => abrirArquivo(r.arquivo_path)} className="inline-flex items-center gap-1 text-[12px] text-blue-600 hover:underline">
                         <ExternalLink className="h-3.5 w-3.5" /> {r.arquivo_nome || 'Arquivo'}

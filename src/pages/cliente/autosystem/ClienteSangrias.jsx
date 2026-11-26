@@ -17,7 +17,7 @@ import * as autosystemService from '../../../services/autosystemService';
 import { formatCurrency } from '../../../utils/format';
 import { SecaoRetiradas, ResumoDepositoModal } from '../../../components/sangrias/RetiradasDeposito';
 import ConsultaSangrias from '../../../components/sangrias/ConsultaSangrias';
-import { erroRetiradas, resumoRetiradas, PERMISSAO_TAREFA_DEPOSITO } from '../../../utils/sangriasDeposito';
+import { erroRetiradas, opcoesFuncionarioRetirada, resumoRetiradas, retiradasComFuncionario, PERMISSAO_TAREFA_DEPOSITO } from '../../../utils/sangriasDeposito';
 import InputData from '../../../components/ui/InputData';
 
 // Datas locais (não UTC) — evita liberar "hoje" de noite no Brasil.
@@ -188,6 +188,10 @@ export default function ClienteSangrias() {
     ));
   };
 
+  // De quem pode ter saído uma retirada: funcionários com sangria ou dinheiro contado.
+  const funcsRetirada = useMemo(() => opcoesFuncionarioRetirada(
+    registros.filter(r => Number(r.dinheiroApurado || 0) || Number(r.dinheiroApresentado || 0))), [registros]);
+
   const totais = useMemo(() => {
     let apurado = 0, apresentado = 0;
     registros.forEach(r => {
@@ -223,7 +227,7 @@ export default function ClienteSangrias() {
       showToast('error', 'Informe o nome do responsável pela contagem.');
       return;
     }
-    const erroRet = erroRetiradas(retiradas, totais.apresentado);
+    const erroRet = erroRetiradas(retiradas, totais.apresentado, funcsRetirada.length);
     if (erroRet) { showToast('error', erroRet); return; }
     if (!cienciaConfirmada) {
       showToast('error', 'Confirme a ciência dos valores antes de salvar.');
@@ -250,7 +254,7 @@ export default function ClienteSangrias() {
         registros: regsParaSalvar,
         confirmado_por: responsavel.trim(),
         observacoes: observacoes.trim() || null,
-        retiradas: totais.apresentado > 0 ? retiradas : [],
+        retiradas: totais.apresentado > 0 ? retiradasComFuncionario(retiradas, funcsRetirada) : [],
       });
       let fechado = row;
       if (podeCriarTarefa && Number(row.valor_deposito) > 0) {
@@ -521,7 +525,7 @@ export default function ClienteSangrias() {
             </div>
           </div>
 
-          <SecaoRetiradas travado={travado} fechamento={fechamento} retiradas={retiradas} setRetiradas={setRetiradas}
+          <SecaoRetiradas travado={travado} fechamento={fechamento} retiradas={retiradas} setRetiradas={setRetiradas} funcionarios={funcsRetirada}
             totalApresentado={totais.apresentado} podeCriarTarefa={podeCriarTarefa} clienteId={empresa?.id} showToast={showToast}
             onTarefaCriada={async () => setFechamento(await sangriasService.buscarFechamento(empresa.id, data))} />
 
