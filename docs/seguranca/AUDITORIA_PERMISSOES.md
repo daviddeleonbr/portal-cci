@@ -169,8 +169,16 @@ por empresa.
 - **Tela nova**: `PainelAcessosUsuario` (admin e gerente do cliente), `EditorPermissoes`
   (módulos da seção 4, busca, dependências, restritas, +/− do que muda), `ModelosPermissao`.
   Organização em `src/utils/permissoesCatalogo.js`.
+- **Migration 238** (redes do admin N1): coluna `cci_usuarios_sistema.acesso_redes`
+  (null = todas; `{chaves_api, as_redes, empresas}`), RPC `cci_definir_acesso_redes`
+  (quem gere o alvo), RLS em `clientes`, `chaves_api`, `as_rede`, `empresas_api` lendo
+  a restrição do banco (`cci_admin_acesso()`, vale na hora). Aba **Redes** no painel de
+  acessos (`AbaRedesAdmin`, helpers em `src/utils/acessoRedes.js`). N2/N3 ignoram.
 
 ### Pendente
+- Redes do admin N1 nas **tabelas de dados** por `cliente_id`/rede (vendas, tarefas,
+  conciliações, contas…) e nas Edge Functions autosystem (`autorizarRede` deixa todo admin
+  passar). Hoje o N1 restrito só não chega nelas porque os seletores saem dos catálogos.
 - S9: exigir a chave no RLS de `outra_conta_pagar`, `nf_manifestacao`,
   `bpo_conciliacoes_caixas`, `cliente_administradoras`, `as_rede_conta_cartao`.
 - S10: restringir a leitura de `cci_usuarios_sistema` pelo cliente a quem tem `gerenciar_usuarios`.

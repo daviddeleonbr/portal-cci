@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.25.0",
+      "data": "2026-11-26",
+      "resumo": "Redes e empresas por admin nível 1.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Redes e empresas de cada admin N1",
+          "descricao": "Nova aba Redes no painel de acessos: escolha as redes inteiras ou empresas avulsas que um admin nível 1 pode ver. Por padrão, todos continuam com acesso a todas."
+        }
+      ]
+    },
+    {
       "versao": "1.24.2",
       "data": "2026-11-26",
       "resumo": "Pendências e Portal demo com permissão própria.",

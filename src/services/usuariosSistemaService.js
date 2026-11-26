@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 
 // Colunas seguras (NUNCA inclui senha/senha_hash — o RLS revoga o SELECT
 // dessas colunas). Todo select da tabela usa esta lista.
-const COLS = 'id, nome, email, tipo, chave_api_id, as_rede_id, permissoes, status, is_master, nivel_admin, empresas_permitidas, expediente, ultimo_acesso, observacoes, criado_por, created_at, updated_at';
+const COLS = 'id, nome, email, tipo, chave_api_id, as_rede_id, permissoes, status, is_master, nivel_admin, empresas_permitidas, acesso_redes, expediente, ultimo_acesso, observacoes, criado_por, created_at, updated_at';
 
 // ========== Hierarquia de níveis de admin (1..3) ==========
 // N3 gere N2/N1/clientes (não N3); N2 gere N1/clientes; N1 não gere ninguém.
@@ -256,12 +256,23 @@ export async function atualizarUsuario(id, campos) {
   const { error } = await supabase.rpc('cci_gerir_atualizar_usuario', { p_id: id, p_dados: payload });
   if (error) throw error;
 
+  // Redes/empresas do admin N1 (migration 238) — só quando o painel mexeu.
+  if ('acesso_redes' in campos) await definirAcessoRedes(id, campos.acesso_redes);
+
   // Troca de senha (se informada) — com HASH server-side.
   if (senha) {
     const { error: errSenha } = await supabase.rpc('cci_admin_definir_senha', { p_usuario_id: id, p_senha: senha });
     if (errSenha) throw new Error('Dados salvos, mas falha ao atualizar a senha: ' + errSenha.message);
   }
   return { id };
+}
+
+// Redes e empresas que um admin N1 acessa. null = todas (padrão);
+// { chaves_api: [], as_redes: [], empresas: [] } = rede inteira ou empresa avulsa.
+// Vale via RLS em clientes/chaves_api/as_rede/empresas_api (migration 238).
+export async function definirAcessoRedes(id, acesso) {
+  const { error } = await supabase.rpc('cci_definir_acesso_redes', { p_id: id, p_acesso: acesso ?? null });
+  if (error) throw error;
 }
 
 // O próprio usuário troca a senha (modal "Meu perfil"): o servidor confere a
@@ -299,6 +310,7 @@ function sanitizarPayload(campos) {
   delete p.chaves_api; // relacao retornada pelo select
   delete p.as_rede;    // idem (autosystem)
   delete p.rede_tipo;  // campo de UI, nao existe na tabela
+  delete p.acesso_redes; // RPC própria (definirAcessoRedes)
 
   if (p.tipo === 'admin') {
     p.chave_api_id = null;

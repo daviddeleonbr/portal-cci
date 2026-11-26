@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Check, Lock, Building2, ShieldCheck, Shield, ListChecks, UserRound, Eye, EyeOff, AlertTriangle, Search } from 'lucide-react';
+import { Loader2, Check, Lock, Building2, ShieldCheck, Shield, ListChecks, UserRound, Eye, EyeOff, AlertTriangle, Search, Network } from 'lucide-react';
 import PainelLateral from '../ui/PainelLateral';
 import EditorPermissoes from './EditorPermissoes';
+import AbaRedesAdmin from './AbaRedesAdmin';
+import { diffAcesso, contarAcesso, estadoRede, normalizarAcesso } from '../../utils/acessoRedes';
 import { diffPermissoes, organizarCatalogo, rotuloPermissao } from '../../utils/permissoesCatalogo';
 import { NIVEIS_ADMIN } from '../../services/usuariosSistemaService';
 
@@ -16,10 +18,11 @@ import { NIVEIS_ADMIN } from '../../services/usuariosSistemaService';
 //   comDados    : mostra a aba Dados (nome, e-mail, senha, status)
 //   nivel       : { pode: boolean } → aba Nível (admin)
 //   contexto    : texto curto do vínculo (ex.: nome da rede)
+//   redes       : [{ id, tipo, nome, empresas }] → aba Redes (admin N1, migration 238)
 //   onSave(patch) : async; lança erro p/ manter o painel aberto
 export default function PainelAcessosUsuario({
   open, onClose, usuario, tipoAlvo = 'cliente', tipoCliente, catalogo, concedivel = null, perfis = [],
-  empresas = [], soSelecionadas = false, comDados = false, nivel = null, contexto = '', onSave,
+  empresas = [], soSelecionadas = false, comDados = false, nivel = null, contexto = '', redes = null, onSave,
 }) {
   const novo = !usuario?.id;
   const inicial = useMemo(() => ({
@@ -28,6 +31,7 @@ export default function PainelAcessosUsuario({
     empresas_permitidas: usuario?.empresas_permitidas?.length ? usuario.empresas_permitidas
       : (novo && soSelecionadas ? empresas.map(e => e.id) : null),
     nivel_admin: usuario?.nivel_admin ?? (tipoAlvo === 'admin' ? 1 : null),
+    acesso_redes: normalizarAcesso(usuario?.acesso_redes),
   }), [usuario, novo, concedivel, soSelecionadas, empresas, tipoAlvo]);
 
   const [d, setD] = useState(inicial);
@@ -58,15 +62,21 @@ export default function PainelAcessosUsuario({
   const empMudou = (empAntes === null) !== (empDepois === null) || empRemovidas.length > 0 || empAdicionadas.length > 0;
   const dadosMudou = comDados && (d.nome !== inicial.nome || d.email !== inicial.email || !!d.senha || d.status !== inicial.status);
   const nivelMudou = !!nivel?.pode && d.nivel_admin !== inicial.nivel_admin;
-  const qtdAlteracoes = dp.adicionadas.length + dp.removidas.length + (empMudou ? 1 : 0) + (dadosMudou ? 1 : 0) + (nivelMudou ? 1 : 0);
-  const retira = dp.removidas.length > 0 || empRemovidas.length > 0
+  // Redes do admin: só N1 (N2/N3 veem tudo).
+  const comRedes = tipoAlvo === 'admin' && !!redes && (d.nivel_admin || 1) === 1;
+  const dr = comRedes ? diffAcesso(inicial.acesso_redes, d.acesso_redes, redes) : { adicionadas: [], removidas: [] };
+  const redesMudou = dr.adicionadas.length + dr.removidas.length > 0;
+  const qtdAlteracoes = dp.adicionadas.length + dp.removidas.length + (empMudou ? 1 : 0) + (dadosMudou ? 1 : 0) + (nivelMudou ? 1 : 0) + (redesMudou ? 1 : 0);
+  const retira = dp.removidas.length > 0 || empRemovidas.length > 0 || dr.removidas.length > 0
     || (comDados && !novo && d.status === 'inativo' && inicial.status !== 'inativo')
     || (nivelMudou && (d.nivel_admin || 1) < (inicial.nivel_admin || 1));
 
   // ── validação ────────────────────────────────────────────────
   const semEmpresa = tipoAlvo === 'cliente' && empDepois !== null && empDepois.size === 0;
+  const contRedes = comRedes ? contarAcesso(d.acesso_redes, redes) : null;
+  const semRede = !!contRedes && contRedes.total === 0;
   const faltaDados = comDados && (!d.nome.trim() || !d.email.trim() || (novo && d.senha.trim().length < 6));
-  const podeSalvar = !salvando && !semEmpresa && !faltaDados && (novo || qtdAlteracoes > 0);
+  const podeSalvar = !salvando && !semEmpresa && !semRede && !faltaDados && (novo || qtdAlteracoes > 0);
 
   const fechar = () => { if (qtdAlteracoes > 0 && !salvando) setDescartar(true); else onClose(); };
 
@@ -78,6 +88,7 @@ export default function PainelAcessosUsuario({
       const patch = { permissoes: d.permissoes };
       if (tipoAlvo === 'cliente') patch.empresas_permitidas = d.empresas_permitidas;
       if (nivel?.pode) patch.nivel_admin = d.nivel_admin;
+      if (comRedes && redesMudou) patch.acesso_redes = d.acesso_redes;
       if (comDados) Object.assign(patch, { nome: d.nome.trim(), email: d.email.trim(), status: d.status, ...(d.senha ? { senha: d.senha } : {}) });
       await onSave(patch);
     } catch (e) {
@@ -89,6 +100,7 @@ export default function PainelAcessosUsuario({
     ...(comDados ? [{ id: 'dados', label: 'Dados', icon: UserRound }] : []),
     { id: 'permissoes', label: 'Permissões', icon: ShieldCheck, badge: d.permissoes.filter(k => catalogo.some(p => p.key === k)).length },
     ...(tipoAlvo === 'cliente' ? [{ id: 'empresas', label: 'Empresas', icon: Building2, badge: todasEmp ? 'todas' : empDepois.size, alerta: semEmpresa }] : []),
+    ...(comRedes ? [{ id: 'redes', label: 'Redes', icon: Network, badge: contRedes ? contRedes.total : 'todas', alerta: semRede }] : []),
     ...(nivel?.pode ? [{ id: 'nivel', label: 'Nível', icon: Shield, badge: `N${d.nivel_admin || 1}` }] : []),
     { id: 'resumo', label: 'Resumo', icon: ListChecks, badge: qtdAlteracoes || undefined },
   ];
@@ -180,6 +192,11 @@ export default function PainelAcessosUsuario({
             onChange={(v) => setD(x => ({ ...x, empresas_permitidas: v }))} semEmpresa={semEmpresa} />
         )}
 
+        {aba === 'redes' && comRedes && (
+          <AbaRedesAdmin redes={redes} valor={d.acesso_redes} semAcesso={semRede}
+            onChange={(v) => setD(x => ({ ...x, acesso_redes: v }))} />
+        )}
+
         {aba === 'nivel' && (
           <div className="space-y-1.5">
             <p className="text-[11px] text-gray-500 dark:text-gray-400">Só administradores nível 3 alteram o nível. O nível define quem o usuário pode gerir; as permissões definem as telas.</p>
@@ -200,6 +217,7 @@ export default function PainelAcessosUsuario({
           <Resumo catalogo={catalogo} tipoAlvo={tipoAlvo} d={d} dp={dp} empresas={empresas}
             empAdicionadas={empAdicionadas} empRemovidas={empRemovidas} empMudou={empMudou}
             nivelMudou={nivelMudou} nivelAntes={inicial.nivel_admin} confirmando={confirmando}
+            dr={dr} redes={comRedes ? redes : null}
             statusMudou={comDados && !novo && d.status !== inicial.status} novo={novo} />
         )}
       </div>
@@ -305,11 +323,11 @@ function AbaEmpresas({ empresas, valor, soSelecionadas, antesTodas, onChange, se
   );
 }
 
-function Resumo({ catalogo, tipoAlvo, d, dp, empresas, empAdicionadas, empRemovidas, empMudou, nivelMudou, nivelAntes, confirmando, statusMudou, novo }) {
+function Resumo({ catalogo, tipoAlvo, d, dp, empresas, empAdicionadas, empRemovidas, empMudou, nivelMudou, nivelAntes, confirmando, statusMudou, novo, dr, redes }) {
   const grupos = organizarCatalogo(catalogo, tipoAlvo)
     .map(g => ({ ...g, itens: g.itens.filter(p => d.permissoes.includes(p.key)) }))
     .filter(g => g.itens.length);
-  const temAlteracao = dp.adicionadas.length || dp.removidas.length || empMudou || nivelMudou || statusMudou;
+  const temAlteracao = dp.adicionadas.length || dp.removidas.length || empMudou || nivelMudou || statusMudou || dr.adicionadas.length || dr.removidas.length;
   const titulo = 'mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400';
   return (
     <div className="space-y-4">
@@ -330,6 +348,8 @@ function Resumo({ catalogo, tipoAlvo, d, dp, empresas, empAdicionadas, empRemovi
             {empAdicionadas.map(e => <li key={`+e${e.id}`} className="text-emerald-700 dark:text-emerald-400">+ Empresa {e.nome}</li>)}
             {empRemovidas.map(e => <li key={`-e${e.id}`} className="text-rose-700 dark:text-rose-400">− Empresa {e.nome}</li>)}
             {empMudou && !d.empresas_permitidas && <li className="text-emerald-700 dark:text-emerald-400">+ Todas as empresas, inclusive futuras</li>}
+            {dr.adicionadas.map(t => <li key={`+r${t}`} className="text-emerald-700 dark:text-emerald-400">+ {t}</li>)}
+            {dr.removidas.map(t => <li key={`-r${t}`} className="text-rose-700 dark:text-rose-400">− {t}</li>)}
             {nivelMudou && <li className="text-gray-700 dark:text-gray-300">Nível N{nivelAntes || 1} → N{d.nivel_admin || 1}</li>}
             {statusMudou && <li className={d.status === 'inativo' ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}>{d.status === 'inativo' ? '− Usuário desativado (não entra mais)' : '+ Usuário reativado'}</li>}
           </ul>
@@ -354,6 +374,29 @@ function Resumo({ catalogo, tipoAlvo, d, dp, empresas, empAdicionadas, empRemovi
           ))}
         </dl>
       </section>
+
+      {redes && (
+        <section>
+          <p className={titulo}>Redes e empresas</p>
+          {!d.acesso_redes
+            ? <p className="text-[12px] text-gray-700 dark:text-gray-300">Todas as redes e empresas, inclusive as cadastradas depois.</p>
+            : (
+              <ul className="space-y-0.5 text-[12px] text-gray-700 dark:text-gray-300">
+                {redes.map(r => {
+                  const est = estadoRede(d.acesso_redes, r);
+                  if (est === 'nenhuma') return null;
+                  return (
+                    <li key={`${r.tipo}:${r.id}`}>
+                      <span className="font-medium">{r.nome}</span>
+                      {est === 'inteira' ? ' · rede inteira' : `: ${r.empresas.filter(e => d.acesso_redes.empresas.includes(e.id)).map(e => e.nome).join(', ')}`}
+                    </li>
+                  );
+                })}
+                {contarAcesso(d.acesso_redes, redes).total === 0 && <li className="text-gray-400">Nenhuma</li>}
+              </ul>
+            )}
+        </section>
+      )}
 
       {tipoAlvo === 'cliente' && (
         <section>

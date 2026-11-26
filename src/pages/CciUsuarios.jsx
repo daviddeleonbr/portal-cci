@@ -18,6 +18,7 @@ import * as clientesService from '../services/clientesService';
 import * as mapeamentoService from '../services/mapeamentoService';
 import * as autosystemService from '../services/autosystemService';
 import { useAdminSession } from '../hooks/useAuth';
+import { contarAcesso } from '../utils/acessoRedes';
 
 // Pill do nível/tipo do usuário (N1/N2/N3 ou Cliente).
 function NivelPill({ usuario }) {
@@ -146,6 +147,17 @@ export default function CciUsuarios({ embedded = false }) {
     });
     return m;
   }, [clientes]);
+
+  // Redes (com empresas) para a aba Redes do admin N1 — migration 238.
+  const redesAcesso = useMemo(() => {
+    const emp = (campo, id) => clientes.filter(c => c[campo] === id)
+      .map(c => ({ id: c.id, nome: c.nome, cnpj: c.cnpj }))
+      .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    return [
+      ...chavesApi.map(r => ({ id: r.id, tipo: 'wp', nome: r.nome, empresas: emp('chave_api_id', r.id) })),
+      ...redesAutosystem.map(r => ({ id: r.id, tipo: 'as', nome: r.nome, empresas: emp('as_rede_id', r.id) })),
+    ].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  }, [chavesApi, redesAutosystem, clientes]);
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -315,6 +327,10 @@ export default function CciUsuarios({ embedded = false }) {
                       ? <span className="text-emerald-600 font-medium">acesso total (N3)</span>
                       : <>{nPerms} {nPerms === 1 ? 'permissão' : 'permissões'}</>}
                     {u.tipo === 'cliente' && <>{' · '}{restrito ? `${u.empresas_permitidas.length} empresa(s)` : 'todas as empresas'}</>}
+                    {u.tipo === 'admin' && usuariosService.nivelAdmin(u) === 1 && u.acesso_redes && (() => {
+                      const c = contarAcesso(u.acesso_redes, redesAcesso);
+                      return <>{' · '}<span className="text-amber-600">{c.inteiras} rede(s){c.avulsas ? ` + ${c.avulsas} empresa(s)` : ''}</span></>;
+                    })()}
                   </p>
                 </div>
                 <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -355,6 +371,7 @@ export default function CciUsuarios({ embedded = false }) {
           empresas={empresasDoUsuario(modalPerms.data, clientes)}
           nivel={{ pode: modalPerms.data.tipo === 'admin' && usuariosService.podeDefinirNivel(ator) }}
           contexto={(modalPerms.data.chaves_api || modalPerms.data.as_rede)?.nome || ''}
+          redes={modalPerms.data.tipo === 'admin' ? redesAcesso : null}
           onClose={() => setModalPerms({ open: false, data: null })}
           onSave={(patch) => salvarPermissoes(modalPerms.data, patch)} />
       )}
