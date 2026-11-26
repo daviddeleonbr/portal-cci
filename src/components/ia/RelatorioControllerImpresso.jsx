@@ -101,7 +101,7 @@ export default function RelatorioControllerImpresso({ insights: ia = {}, pacote 
               {(pacote.caixa?.maioresFatores || []).length > 0 && (
                 <TabelaDados
                   colunas={[{ chave: 'c', titulo: 'Conta' }, { chave: 'a', titulo: per.anterior, num: true }, { chave: 'b', titulo: per.atual, num: true }, { chave: 'd', titulo: 'Diferença', num: true }, { chave: 'p', titulo: '%', num: true }]}
-                  linhas={pacote.caixa.maioresFatores.map(m => ({ c: `${m.conta} (${m.caminho})`, a: fmt(m.anterior), b: fmt(m.atual), d: fmt(m.diferenca), p: pctTxt(m.pct) }))} />
+                  linhas={pacote.caixa.maioresFatores.map(m => ({ c: `${m.conta} (${m.caminho}${m.mesesComMovimento6m != null ? ` · movimentou em ${m.mesesComMovimento6m} de 6 meses` : ""})`, a: fmt(m.anterior), b: fmt(m.atual), d: fmt(m.diferenca), p: pctTxt(m.pct) }))} />
               )}
               {lista(ia.investigacao_variacoes || [], (v) => <><span className="rd-forte">{v.conta}:</span> {v.explicacao}{v.consequencia ? ` Consequência: ${v.consequencia}` : ''}{v.recorrencia ? ` (${v.recorrencia})` : ''}{grau(v.grau)}{base(v.evidencias)}{marca(v)}</>)}
               {Object.keys(investigacoes).length > 0 && (
@@ -115,6 +115,7 @@ export default function RelatorioControllerImpresso({ insights: ia = {}, pacote 
                         <p><span className="rd-forte">{inv.conta}</span>{grau(r.grau)} — {r.resumo}</p>
                         {lista([['O que mudou', c.o_que_mudou], ['Quem explica', c.quem_explica], ['Cruzamento', c.cruzamento], ['Pontual ou recorrente', c.recorrencia], ['Causa mais provável', c.causa_provavel], ['Consequência', c.consequencia], ['O que fazer', c.recomendacao]].filter(([, x]) => x), ([k, x]) => <><span className="rd-forte">{k}:</span> {x}</>)}
                         {(r.conferir || []).length > 0 && <p className="rd-muted">Conferir: {r.conferir.join('; ')}</p>}
+                        {(r.dados_faltando || []).length > 0 && <p className="rd-muted">Faltou: {r.dados_faltando.join('; ')}</p>}
                         {base(r.evidencias)}{marca(r)}
                       </div>
                     );
