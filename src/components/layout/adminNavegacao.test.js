@@ -25,12 +25,11 @@ describe('guardas de rota do admin (mesma regra do menu)', () => {
     expect(adminAtendeRegra(n1(['acessos']), regra)).toBe(false);
   });
 
-  it('Contratos exige a permissão; Pendências e Portal demo (sem chave) seguem visíveis a todos', () => {
-    const nomes = filtrarNavegacao(n1([])).flatMap(s => s.items.map(i => i.name));
-    expect(nomes).not.toContain('Contratos');
-    expect(nomes).toEqual(expect.arrayContaining(['Pendências', 'Portal cliente · Demo']));
-    expect(filtrarNavegacao(n1(['contratos'])).flatMap(s => s.items.map(i => i.name))).toContain('Contratos');
-    expect(primeiraPaginaAdmin(n1([]))).toBe('/admin/pendencias');
+  it('Contratos, Pendências e Portal demo exigem a permissão de cada um', () => {
+    const nomes = (perms) => filtrarNavegacao(n1(perms)).flatMap(s => s.items.map(i => i.name));
+    expect(nomes([])).toEqual([]);
+    expect(primeiraPaginaAdmin(n1([]))).toBeNull();
+    expect(nomes(['contratos', 'pendencias', 'portal_demo'])).toEqual(['Contratos', 'Pendências', 'Portal cliente · Demo']);
   });
 
   it('nível mínimo: Exportação contábil só N3', () => {

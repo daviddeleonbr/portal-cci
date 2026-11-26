@@ -175,8 +175,8 @@ export default function App() {
           <Route path="/admin/fiscal/manifestacao/:id" element={<RequirePermissaoAdmin permissao="notas_fiscais"><AdminNfManifestacaoDetalhe /></RequirePermissaoAdmin>} />
           <Route path="/admin/bpo/outras-contas" element={<RequirePermissaoAdmin permissao="outras_contas"><AdminOutrasContas /></RequirePermissaoAdmin>} />
           <Route path="/admin/webposto-sync" element={<RequirePermissaoAdmin permissao="webposto_sync"><AdminWebpostoSync /></RequirePermissaoAdmin>} />
-          <Route path="/admin/portal-demo" element={<AdminPortalDemo />} />
-          <Route path="/admin/pendencias" element={<AdminPendencias />} />
+          <Route path="/admin/portal-demo" element={<RequirePermissaoAdmin permissao="portal_demo"><AdminPortalDemo /></RequirePermissaoAdmin>} />
+          <Route path="/admin/pendencias" element={<RequirePermissaoAdmin permissao="pendencias"><AdminPendencias /></RequirePermissaoAdmin>} />
           <Route path="/admin/tarefas" element={<RequirePermissaoAdmin permissao="tarefas"><AdminTarefas /></RequirePermissaoAdmin>} />
           <Route path="/admin/acessos" element={<RequirePermissaoAdmin permissao="acessos"><AdminAcessos /></RequirePermissaoAdmin>} />
           <Route path="/admin/bpo/lmc" element={<RequirePermissaoAdmin permissao="lmc"><AdminLmc /></RequirePermissaoAdmin>} />

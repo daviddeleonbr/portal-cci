@@ -92,6 +92,8 @@ export const PERMISSOES_ADMIN = [
   { key: 'lmc', label: 'LMC · Livro de Movimentação de Combustíveis (Webposto)', grupo: 'BPO' },
   { key: 'caixa_administrativo', label: 'Caixa Administrativo', grupo: 'Consultoria' },
   { key: 'uso_portal', label: 'Uso do Portal (analytics)', grupo: 'Comunicação' },
+  { key: 'pendencias', label: 'Pendências (comunicação com os clientes)', grupo: 'Consultoria' },
+  { key: 'portal_demo', label: 'Portal cliente · Demo', grupo: 'Configurações' },
   { key: 'webposto_sync', label: 'Webposto · Sincronia de vendas (cache)', grupo: 'Configurações' },
 ];
 

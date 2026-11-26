@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.24.2",
+      "data": "2026-11-26",
+      "resumo": "Pendências e Portal demo com permissão própria.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Pendências e Portal demo com permissão",
+          "descricao": "Pendências (categoria Consultoria) e Portal cliente · Demo (Gestão interna) agora têm permissão própria na tela de acessos. Só vê quem tiver a permissão marcada."
+        }
+      ]
+    },
+    {
       "versao": "1.24.1",
       "data": "2026-11-26",
       "resumo": "Permissão de Contratos em Gestão interna.",
