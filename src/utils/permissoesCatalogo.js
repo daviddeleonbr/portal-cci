@@ -12,7 +12,7 @@ export const MODULOS_CLIENTE = [
   'Operacional', 'Financeiro', 'Gestão de usuários', 'Administração da rede',
 ];
 export const MODULOS_ADMIN = [
-  'Principal', 'Cadastros', 'Gestão de usuários', 'Financeiro da CCI',
+  'Principal', 'Cadastros', 'Gestão interna', 'Gestão de usuários', 'Financeiro da CCI',
   'Relatórios e indicadores', 'Operacional (BPO)', 'Financeiro (BPO)', 'Administração e configurações',
 ];
 
@@ -60,7 +60,7 @@ const META_ADMIN = {
   usuarios:             { modulo: 'Gestão de usuários', acao: 'administrar', desc: 'Aba Usuários em Cadastros (a gestão exige nível 2 ou 3).', restrita: true },
   contas_pagar:         { modulo: 'Financeiro da CCI', acao: 'editar', desc: 'Financeiro da CCI: contas a pagar, a receber e boletos.' },
   contas_receber:       { modulo: 'Financeiro da CCI', acao: 'ver', desc: 'Cobranças do Banco Inter.' },
-  contratos:            { modulo: 'Financeiro da CCI', acao: 'editar', desc: 'Contratos ativos, propostas e catálogo de serviços.' },
+  contratos:            { modulo: 'Gestão interna', acao: 'editar', desc: 'Contratos ativos, propostas e catálogo de serviços.' },
   banco_inter:          { modulo: 'Financeiro da CCI', acao: 'aprovar', desc: 'Extrato e saldo do Banco Inter da CCI.', restrita: true, depende: ['contas_pagar'] },
   relatorios_cliente:   { modulo: 'Relatórios e indicadores', acao: 'ver', desc: 'DRE, fluxo de caixa e análise de lançamentos dos clientes.' },
   analise_ia:           { modulo: 'Relatórios e indicadores', acao: 'ver', desc: 'Análises com IA (Controller).', depende: ['relatorios_cliente'] },

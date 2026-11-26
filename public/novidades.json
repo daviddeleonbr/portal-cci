@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.24.1",
+      "data": "2026-11-26",
+      "resumo": "Permissão de Contratos em Gestão interna.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Contratos em Gestão interna",
+          "descricao": "Na tela de acessos, a permissão de Contratos agora fica na categoria Gestão interna, como no menu."
+        }
+      ]
+    },
+    {
       "versao": "1.24.0",
       "data": "2026-11-26",
       "resumo": "Nova tela de permissões e acessos, mais segurança na gestão de usuários e faturas pagas em parte no Contas a Receber.",
