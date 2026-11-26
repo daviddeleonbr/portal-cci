@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import * as controllerIA from '../services/analiseControllerService';
 import RelatorioController from '../components/ia/RelatorioController';
+import RelatorioControllerImpresso from '../components/ia/RelatorioControllerImpresso';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as mascaraDreService from '../services/mascaraDreService';
@@ -785,8 +786,13 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
             resultado={resultados.controller}
             onGerar={gerarController}
             aviso={!mascaraFluxoId ? 'Selecione uma máscara de Fluxo para continuar' : null}
-            renderResultado={(res) => <RelatorioController insights={res.insights} pacote={res.dados}
-              onInvestigar={investigarContaController} onPerguntar={perguntarAoController} ocupado={ocupadoController} sugeridas={controllerIA.PERGUNTAS_SUGERIDAS} />}
+            renderResultado={(res) => (<>
+              <div className="no-print">
+                <RelatorioController insights={res.insights} pacote={res.dados}
+                  onInvestigar={investigarContaController} onPerguntar={perguntarAoController} ocupado={ocupadoController} sugeridas={controllerIA.PERGUNTAS_SUGERIDAS} />
+              </div>
+              <RelatorioControllerImpresso insights={res.insights} pacote={res.dados} empresa={paneProps.empresa} periodo={paneProps.periodoLabel} modoRede={paneProps.modoRede} nota={paneProps.nota} />
+            </>)}
           />
         );
         return null;

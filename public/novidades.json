@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.21.0",
+      "data": "2026-11-26",
+      "resumo": "PDF completo da análise do Controller.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "PDF do Controller",
+          "descricao": "O botão Imprimir PDF da aba Controller gera um relatório completo em papel timbrado: resumo, geração de caixa, contas que mais mudaram (com as investigações feitas), DRE × caixa, capital de giro, diagnóstico, plano de ação, conclusão e as perguntas respondidas, cada conclusão com os valores que a sustentam."
+        }
+      ]
+    },
+    {
       "versao": "1.20.0",
       "data": "2026-11-26",
       "resumo": "Investigar contas e perguntar ao Controller.",
