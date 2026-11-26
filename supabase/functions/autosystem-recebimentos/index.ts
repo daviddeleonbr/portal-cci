@@ -43,7 +43,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const TEXT_COLUMNS = new Set(['conta_debitar', 'conta_creditar', 'modo_recebimento', 'documento', 'usuario', 'usuario_nome']);
+const TEXT_COLUMNS = new Set(['conta_debitar', 'conta_creditar', 'modo_recebimento', 'documento', 'usuario', 'usuario_nome', 'responsavel_nome']);
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -104,10 +104,20 @@ serve(async (req) => {
         m.valor,
         convert_to(coalesce(m.usuario::text, ''), 'LATIN1')          as usuario,
         u.pessoa                                                      as usuario_pessoa_id,
-        convert_to(coalesce(pe.nome::text, ''), 'LATIN1')             as usuario_nome
+        convert_to(coalesce(pe.nome::text, ''), 'LATIN1')             as usuario_nome,
+        cx.pessoa                                                     as responsavel_pessoa_id,
+        convert_to(coalesce(pr.nome::text, ''), 'LATIN1')             as responsavel_nome
       from movto m
       left join usuario u  on u.nome    = m.usuario
       left join pessoa  pe on pe.grid   = u.pessoa
+      -- Responsável do PDV/turno (tela Conferência de Caixa): (empresa, data, turno, conta)
+      -- é único em caixa. A conta do PDV é o lado 1.1.2 do lançamento — na sobra o PDV
+      -- é debitado, na falta e nos recebimentos é creditado. Quem lançou (usuario) pode
+      -- ser outra pessoa (ex.: a CCI lançando a sobra/falta).
+      left join caixa   cx on cx.empresa = m.empresa and cx.data = m.data and cx.turno = m.turno
+                          and cx.conta = case when m.conta_creditar::text like '1.1.2%'
+                                              then m.conta_creditar::text else m.conta_debitar::text end
+      left join pessoa  pr on pr.grid   = cx.pessoa
       where (
             m.conta_creditar::text like '1.1.2%'
          or m.conta_creditar::text = any($4::text[])

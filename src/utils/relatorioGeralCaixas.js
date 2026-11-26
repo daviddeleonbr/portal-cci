@@ -161,11 +161,20 @@ export function modeloAutosystem({ vendas = [], recebimentos = [], outrasEntrada
   let semConta = 0;
   recebimentos.forEach(r => {
     const valor = num(r.valor);
-    const f = func(r.usuario_pessoa_id, nomeDe(r.usuario_nome, r.usuario));
     const credito = r.conta_creditar ? categoriaConta.get(String(r.conta_creditar)) : null;
     const debito = r.modo_recebimento ? categoriaConta.get(String(r.modo_recebimento)) : null;
-    if (credito === 'sobra_caixa' || debito === 'sobra_caixa') { f.sobra += valor; return; }
-    if (debito === 'falta_caixa') { f.falta += valor; return; }
+    // Sobra/falta: vai para o RESPONSÁVEL do PDV/turno (como no relatório do Autosystem),
+    // não para quem lançou (muitas vezes a CCI). Sem responsável (Edge antiga), quem lançou.
+    // Pelo lado do lançamento: conta de sobra/falta creditada = sobra (PDV debitado);
+    // debitada = falta (PDV creditado) — vale para conta única 'sobra e falta' e separadas.
+    const ehSF = (c) => c === 'sobra_caixa' || c === 'falta_caixa';
+    if (ehSF(credito) || ehSF(debito)) {
+      const f = r.responsavel_pessoa_id != null || r.responsavel_nome
+        ? func(r.responsavel_pessoa_id, r.responsavel_nome)
+        : func(r.usuario_pessoa_id, nomeDe(r.usuario_nome, r.usuario));
+      if (ehSF(credito)) f.sobra += valor; else f.falta += valor;
+      return;
+    }
     if (!debito) semConta += 1;
     formas[debito in formas ? debito : 'outros'] += valor;
   });

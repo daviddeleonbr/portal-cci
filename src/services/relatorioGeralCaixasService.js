@@ -20,7 +20,10 @@ export async function carregarRelatorio({ empresa, chave, de, ate }) {
       autosystemService.listarContasCategorizadasRede(rede),
       autosystemService.listarGruposProdutoRede(rede),
     ]);
-    const sobras = (contas || []).filter(c => c.categoria === 'sobra_caixa').map(c => String(c.codigo));
+    // Contas de sobra/falta (algumas redes usam UMA conta, ex. 1.5 'SOBRA E FALTA', cadastrada
+    // como falta): o lançamento que CREDITA nela é sobra (o PDV é debitado) e não pode cair
+    // em Outras entradas; por isso entram as duas categorias.
+    const sobras = (contas || []).filter(c => c.categoria === 'sobra_caixa' || c.categoria === 'falta_caixa').map(c => String(c.codigo));
     const [vendas, recebimentos, outrasEntradas] = await Promise.all([
       autosystemService.buscarVendasAutosystem(rede, cods, periodo),
       autosystemService.buscarRecebimentosAutosystem(rede, cods, { ...periodo, contas_creditar_extras: sobras }),

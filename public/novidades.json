@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.22.1",
+      "data": "2026-11-26",
+      "resumo": "Sobras e faltas por funcionário no Relatório geral (Autosystem).",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Sobras e faltas no Relatório geral",
+          "descricao": "No Autosystem, as sobras e faltas de caixa agora vão para o responsável de cada PDV/turno, como no relatório do próprio Autosystem, e não para quem fez o lançamento. Sobras lançadas na conta única \"Sobra e falta de caixa\" também passaram a aparecer."
+        }
+      ]
+    },
+    {
       "versao": "1.22.0",
       "data": "2026-11-26",
       "resumo": "Reabertura da conferência de sangrias com histórico.",
