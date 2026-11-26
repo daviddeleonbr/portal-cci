@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Coins, Loader2, AlertCircle, Calendar, CheckCircle2,
-  TrendingUp, TrendingDown, RefreshCw, Lock, History, Save,
+  TrendingUp, TrendingDown, RefreshCw, Lock, History, Save, RotateCcw,
   Building2,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
@@ -57,6 +57,9 @@ export default function ClienteSangrias() {
 
   const [data, setData] = useState(ontemStr());
   const [fechamento, setFechamento] = useState(null);
+  // Última reabertura do dia pela CCI (migration 233): avisa o motivo enquanto
+  // o dia está aberto de novo. Recarrega junto com o fechamento (dia/empresa).
+  const [reabertura, setReabertura] = useState(null);
   const [registros, setRegistros] = useState([]);
   const [responsavel, setResponsavel] = useState(usuario?.nome || '');
   const [observacoes, setObservacoes] = useState('');
@@ -199,6 +202,16 @@ export default function ClienteSangrias() {
   );
 
   const travado = !!fechamento;
+  const idReab = empresa?.id;
+  useEffect(() => {
+    let vivo = true;
+    setReabertura(null);
+    if (idReab && data) {
+      sangriasService.buscarUltimaReabertura(idReab, data)
+        .then(r => { if (vivo) setReabertura(r); }).catch(() => {});
+    }
+    return () => { vivo = false; };
+  }, [idReab, data, travado]);
 
   const abrirConfirmacao = () => {
     if (!empresa || travado) return;
@@ -351,6 +364,20 @@ export default function ClienteSangrias() {
           </button>
         </div>
       </div>
+
+      {/* Dia reaberto pela CCI */}
+      {reabertura && !travado && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4 flex items-start gap-3">
+          <RotateCcw className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Conferência reaberta pela CCI</p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              Reaberta em <strong>{new Date(reabertura.reaberto_em).toLocaleString('pt-BR')}</strong>{reabertura.reaberto_por_nome ? <> por <strong>{reabertura.reaberto_por_nome}</strong></> : null}.
+              Motivo: {reabertura.motivo}. Confira os valores e confirme o fechamento de novo.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Aviso de fechamento */}
       {travado && (

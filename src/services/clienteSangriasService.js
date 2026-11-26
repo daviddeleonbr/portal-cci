@@ -118,3 +118,37 @@ export async function listarFechamentos({ clienteIds, de, ate }) {
   if (error) throw error;
   return data || [];
 }
+
+// ─── Reabertura pela CCI + histórico (migration 233) ─────────────
+// Reabrir apaga o fechamento (o cliente conta e confirma de novo) depois de
+// guardar a foto completa dele em cliente_sangrias_reabertura. Só admin.
+export async function reabrirFechamento(fechamentoId, motivo) {
+  const { data, error } = await supabase.rpc('cci_sangria_reabrir', { p_fechamento: fechamentoId, p_motivo: motivo });
+  if (error) throw error;
+  return data;
+}
+
+const COLS_REABERTURA = 'id, fechamento_id, cliente_id, data, motivo, snapshot, tarefa_deposito_id, tarefa_acao, tarefa_status, reaberto_por_nome, reaberto_em';
+
+// Histórico de reaberturas das empresas/período (RLS limita às empresas visíveis).
+export async function listarReaberturas({ clienteIds, de, ate }) {
+  if (!clienteIds?.length) return [];
+  let q = supabase.from('cliente_sangrias_reabertura').select(COLS_REABERTURA)
+    .in('cliente_id', clienteIds)
+    .order('reaberto_em', { ascending: false });
+  if (de) q = q.gte('data', de);
+  if (ate) q = q.lte('data', ate);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+// Última reabertura de um dia (aviso na tela de contagem do cliente).
+export async function buscarUltimaReabertura(clienteId, data) {
+  if (!clienteId || !data) return null;
+  const { data: row, error } = await supabase.from('cliente_sangrias_reabertura').select(COLS_REABERTURA)
+    .eq('cliente_id', clienteId).eq('data', data)
+    .order('reaberto_em', { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return row;
+}

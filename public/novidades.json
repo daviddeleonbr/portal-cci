@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.22.0",
+      "data": "2026-11-26",
+      "resumo": "Reabertura da conferência de sangrias com histórico.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Reabrir conferência de sangrias",
+          "descricao": "No detalhe de um dia em Sangrias, a CCI pode reabrir a conferência informando o motivo. A conferência anterior fica guardada no histórico e, se a tarefa de depósito ainda estiver em aberto, ela é cancelada."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "cliente",
+          "titulo": "Dia de sangria reaberto",
+          "descricao": "Quando a CCI reabre a conferência de um dia, a tela de contagem mostra o aviso com o motivo para você conferir e confirmar de novo. O histórico de reaberturas aparece na consulta de sangrias."
+        }
+      ]
+    },
+    {
       "versao": "1.21.2",
       "data": "2026-11-26",
       "resumo": "PDF do Controller mais completo.",
