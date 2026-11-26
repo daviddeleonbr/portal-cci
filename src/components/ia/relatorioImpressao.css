@@ -308,3 +308,7 @@
   .rd-layout tfoot { display: table-footer-group; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* O tema escuro do app clareia o texto de tabelas (html.dark table em index.css);
+   no relatório impresso o papel é sempre branco, então a tabela volta ao grafite. */
+html.dark .rd-doc-wrap table { color: var(--grafite); }

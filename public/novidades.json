@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.21.1",
+      "data": "2026-11-26",
+      "resumo": "Tabelas legíveis nos PDFs dos relatórios de IA.",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Cores das tabelas no PDF",
+          "descricao": "Com o tema escuro ligado, o texto das tabelas dos relatórios de IA em PDF saía quase invisível. Agora sai sempre escuro sobre o papel branco."
+        }
+      ]
+    },
+    {
       "versao": "1.21.0",
       "data": "2026-11-26",
       "resumo": "PDF completo da análise do Controller.",
