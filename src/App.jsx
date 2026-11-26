@@ -105,7 +105,7 @@ import AsEstoques from './pages/cliente/autosystem/ClienteEstoques';
 import AsConfiguracoes from './pages/cliente/autosystem/ClienteConfiguracoes';
 
 // Auth
-import { RequireAdmin, RequireNivelAdmin, RequireCliente, RequirePermissaoCliente, RequireDashboardCliente } from './components/auth/RequireAuth';
+import { RequireAdmin, RequireNivelAdmin, RequirePermissaoAdmin, RequireDashboardAdmin, RequireCliente, RequirePermissaoCliente, RequireDashboardCliente } from './components/auth/RequireAuth';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 
 export default function App() {
@@ -132,18 +132,18 @@ export default function App() {
         {/* Admin Portal */}
         <Route path="/admin" element={<Login />} />
         <Route element={<RequireAdmin><AppLayout /></RequireAdmin>}>
-          <Route path="/admin/dashboard" element={<Dashboard />} />
+          <Route path="/admin/dashboard" element={<RequireDashboardAdmin><Dashboard /></RequireDashboardAdmin>} />
 
           {/* Cadastros — página única com tabs (Clientes, Colaboradores,
               Usuários, Fornecedores, Plano de Contas, Motivos).
               Todos os paths antigos continuam funcionando — a URL controla
               a aba inicial. */}
-          <Route path="/admin/cadastros"     element={<Cadastros />} />
-          <Route path="/admin/clientes"      element={<Cadastros />} />
-          <Route path="/admin/colaboradores" element={<Cadastros />} />
+          <Route path="/admin/cadastros"     element={<RequirePermissaoAdmin qualquer={['clientes', 'colaboradores', 'usuarios', 'fornecedores', 'plano_contas', 'motivos']}><Cadastros /></RequirePermissaoAdmin>} />
+          <Route path="/admin/clientes"      element={<RequirePermissaoAdmin qualquer={['clientes', 'colaboradores', 'usuarios', 'fornecedores', 'plano_contas', 'motivos']}><Cadastros /></RequirePermissaoAdmin>} />
+          <Route path="/admin/colaboradores" element={<RequirePermissaoAdmin qualquer={['clientes', 'colaboradores', 'usuarios', 'fornecedores', 'plano_contas', 'motivos']}><Cadastros /></RequirePermissaoAdmin>} />
 
           {/* Parametros (tabs: Mascaras DRE | Mapeamento) */}
-          <Route path="/admin/parametros" element={<Parametros />}>
+          <Route path="/admin/parametros" element={<RequirePermissaoAdmin permissao="parametros"><Parametros /></RequirePermissaoAdmin>}>
             <Route index element={<Navigate to="mascaras" replace />} />
             <Route path="mascaras" element={<Parametrizacoes />} />
             <Route path="fluxo-caixa" element={<ParametrizacoesFluxo />} />
@@ -156,45 +156,45 @@ export default function App() {
           <Route path="/admin/parametrizacoes/mapeamento" element={<Navigate to="/admin/parametros/mapeamento" replace />} />
 
           {/* Cadastros CCI — todos os paths abrem a página única <Cadastros /> */}
-          <Route path="/admin/cadastros/plano-contas" element={<Cadastros />} />
-          <Route path="/admin/cadastros/fornecedores" element={<Cadastros />} />
-          <Route path="/admin/cadastros/motivos"     element={<Cadastros />} />
-          <Route path="/admin/cadastros/usuarios"    element={<Cadastros />} />
+          <Route path="/admin/cadastros/plano-contas" element={<RequirePermissaoAdmin qualquer={['clientes', 'colaboradores', 'usuarios', 'fornecedores', 'plano_contas', 'motivos']}><Cadastros /></RequirePermissaoAdmin>} />
+          <Route path="/admin/cadastros/fornecedores" element={<RequirePermissaoAdmin qualquer={['clientes', 'colaboradores', 'usuarios', 'fornecedores', 'plano_contas', 'motivos']}><Cadastros /></RequirePermissaoAdmin>} />
+          <Route path="/admin/cadastros/motivos"     element={<RequirePermissaoAdmin qualquer={['clientes', 'colaboradores', 'usuarios', 'fornecedores', 'plano_contas', 'motivos']}><Cadastros /></RequirePermissaoAdmin>} />
+          <Route path="/admin/cadastros/usuarios"    element={<RequirePermissaoAdmin qualquer={['clientes', 'colaboradores', 'usuarios', 'fornecedores', 'plano_contas', 'motivos']}><Cadastros /></RequirePermissaoAdmin>} />
 
           {/* Financeiro CCI — página única com tabs (Contas a Pagar / Receber).
               Os 3 paths abrem o mesmo componente; a URL controla a aba inicial. */}
-          <Route path="/admin/financeiro"                 element={<Financeiro />} />
-          <Route path="/admin/financeiro/contas-pagar"    element={<Financeiro />} />
-          <Route path="/admin/financeiro/contas-receber"  element={<Financeiro />} />
-          <Route path="/admin/financeiro/banco-inter"     element={<Financeiro />} />
-          <Route path="/admin/boletos" element={<Boletos />} />
+          <Route path="/admin/financeiro"                 element={<RequirePermissaoAdmin permissao="contas_pagar"><Financeiro /></RequirePermissaoAdmin>} />
+          <Route path="/admin/financeiro/contas-pagar"    element={<RequirePermissaoAdmin permissao="contas_pagar"><Financeiro /></RequirePermissaoAdmin>} />
+          <Route path="/admin/financeiro/contas-receber"  element={<RequirePermissaoAdmin permissao="contas_pagar"><Financeiro /></RequirePermissaoAdmin>} />
+          <Route path="/admin/financeiro/banco-inter"     element={<RequirePermissaoAdmin permissao="contas_pagar"><Financeiro /></RequirePermissaoAdmin>} />
+          <Route path="/admin/boletos" element={<RequirePermissaoAdmin permissao="contas_pagar"><Boletos /></RequirePermissaoAdmin>} />
 
           {/* Fiscal */}
-          <Route path="/admin/notas-fiscais" element={<NotasFiscais />} />
-          <Route path="/admin/fiscal/manifestacao" element={<AdminNfManifestacao />} />
-          <Route path="/admin/fiscal/manifestacao/:id" element={<AdminNfManifestacaoDetalhe />} />
-          <Route path="/admin/bpo/outras-contas" element={<AdminOutrasContas />} />
-          <Route path="/admin/webposto-sync" element={<AdminWebpostoSync />} />
+          <Route path="/admin/notas-fiscais" element={<RequirePermissaoAdmin permissao="fiscal"><NotasFiscais /></RequirePermissaoAdmin>} />
+          <Route path="/admin/fiscal/manifestacao" element={<RequirePermissaoAdmin permissao="notas_fiscais"><AdminNfManifestacao /></RequirePermissaoAdmin>} />
+          <Route path="/admin/fiscal/manifestacao/:id" element={<RequirePermissaoAdmin permissao="notas_fiscais"><AdminNfManifestacaoDetalhe /></RequirePermissaoAdmin>} />
+          <Route path="/admin/bpo/outras-contas" element={<RequirePermissaoAdmin permissao="outras_contas"><AdminOutrasContas /></RequirePermissaoAdmin>} />
+          <Route path="/admin/webposto-sync" element={<RequirePermissaoAdmin permissao="webposto_sync"><AdminWebpostoSync /></RequirePermissaoAdmin>} />
           <Route path="/admin/portal-demo" element={<AdminPortalDemo />} />
           <Route path="/admin/pendencias" element={<AdminPendencias />} />
-          <Route path="/admin/tarefas" element={<AdminTarefas />} />
-          <Route path="/admin/acessos" element={<AdminAcessos />} />
-          <Route path="/admin/bpo/lmc" element={<AdminLmc />} />
-          <Route path="/admin/bpo/contas-pagar" element={<BpoContasPagar />} />
-          <Route path="/admin/bpo/contas-receber" element={<BpoContasReceber />} />
+          <Route path="/admin/tarefas" element={<RequirePermissaoAdmin permissao="tarefas"><AdminTarefas /></RequirePermissaoAdmin>} />
+          <Route path="/admin/acessos" element={<RequirePermissaoAdmin permissao="acessos"><AdminAcessos /></RequirePermissaoAdmin>} />
+          <Route path="/admin/bpo/lmc" element={<RequirePermissaoAdmin permissao="lmc"><AdminLmc /></RequirePermissaoAdmin>} />
+          <Route path="/admin/bpo/contas-pagar" element={<RequirePermissaoAdmin permissao="bpo_contas_pagar"><BpoContasPagar /></RequirePermissaoAdmin>} />
+          <Route path="/admin/bpo/contas-receber" element={<RequirePermissaoAdmin permissao="bpo_contas_receber"><BpoContasReceber /></RequirePermissaoAdmin>} />
           {/* Rota desativada temporariamente — uso futuro */}
           {/* <Route path="/admin/orcamento-solicitacoes" element={<AdminOrcamentoSolicitacoes />} /> */}
-          <Route path="/admin/fiscal/notas-fiscais" element={<NotasFiscais />} />
-          <Route path="/admin/fiscal/agendamento" element={<NotasFiscais />} />
+          <Route path="/admin/fiscal/notas-fiscais" element={<RequirePermissaoAdmin permissao="fiscal"><NotasFiscais /></RequirePermissaoAdmin>} />
+          <Route path="/admin/fiscal/agendamento" element={<RequirePermissaoAdmin permissao="fiscal"><NotasFiscais /></RequirePermissaoAdmin>} />
 
           {/* Contratos — gestão de contratos ativos, propostas e catálogo de serviços */}
-          <Route path="/admin/contratos" element={<Contratos />} />
+          <Route path="/admin/contratos" element={<RequirePermissaoAdmin permissao="contratos"><Contratos /></RequirePermissaoAdmin>} />
 
           {/* Ferramentas — restritas ao admin nível 3 */}
           <Route path="/admin/ferramentas/exportacao-contabil" element={<RequireNivelAdmin nivel={3}><AdminExportacaoContabil /></RequireNivelAdmin>} />
 
           {/* Relatórios da consultoria: um item por relatório na sidebar, com rede/empresa no topo */}
-          <Route path="/admin/consultoria/:tipo" element={<RelatoriosConsultoria />}>
+          <Route path="/admin/consultoria/:tipo" element={<RequirePermissaoAdmin permissao="relatorios_cliente"><RelatoriosConsultoria /></RequirePermissaoAdmin>}>
             <Route path="empresa/:clienteId" element={<RelatorioDaEmpresa />} />
             <Route path="rede/:chaveApiId" element={<RelatorioDaRede sistema="webposto" />} />
             <Route path="rede-as/:asRedeId" element={<RelatorioDaRede sistema="autosystem" />} />
@@ -207,18 +207,18 @@ export default function App() {
           <Route path="/admin/relatorios-cliente/rede-as/:asRedeId/:tipo" element={<RedirecionarRelatorioAntigo para="redeAs" />} />
 
           {/* BPO */}
-          <Route path="/admin/bpo/conciliacao-caixas" element={<BpoConciliacaoCaixas />} />
-          <Route path="/admin/bpo/caixa-administrativo" element={<BpoCaixaAdministrativo />} />
-          <Route path="/admin/bpo/alteracoes-caixas" element={<BpoAlteracoesCaixas />} />
+          <Route path="/admin/bpo/conciliacao-caixas" element={<RequirePermissaoAdmin permissao="conciliacao_caixas"><BpoConciliacaoCaixas /></RequirePermissaoAdmin>} />
+          <Route path="/admin/bpo/caixa-administrativo" element={<RequirePermissaoAdmin permissao="caixa_administrativo"><BpoCaixaAdministrativo /></RequirePermissaoAdmin>} />
+          <Route path="/admin/bpo/alteracoes-caixas" element={<RequirePermissaoAdmin permissao="conciliacao_caixas"><BpoAlteracoesCaixas /></RequirePermissaoAdmin>} />
 
           {/* Relatórios de BI (Power BI) */}
-          <Route path="/admin/relatorios-bi" element={<CciRelatoriosBi />} />
+          <Route path="/admin/relatorios-bi" element={<RequirePermissaoAdmin permissao="relatorios_bi"><CciRelatoriosBi /></RequirePermissaoAdmin>} />
           <Route path="/admin/contato" element={<Navigate to="/admin/configuracoes" replace />} />
-          <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
-          <Route path="/admin/uso-portal" element={<CciUsoPortal />} />
+          <Route path="/admin/configuracoes" element={<RequirePermissaoAdmin permissao="parametros"><AdminConfiguracoes /></RequirePermissaoAdmin>} />
+          <Route path="/admin/uso-portal" element={<RequirePermissaoAdmin permissao="uso_portal"><CciUsoPortal /></RequirePermissaoAdmin>} />
 
           {/* Relatorios (kept for compatibility) */}
-          <Route path="/admin/relatorios" element={<Relatorios />} />
+          <Route path="/admin/relatorios" element={<RequirePermissaoAdmin permissao="relatorios_cliente"><Relatorios /></RequirePermissaoAdmin>} />
         </Route>
 
         {/* Cliente Portal */}
@@ -251,7 +251,7 @@ export default function App() {
           <Route path="/cliente/webposto/lmc" element={<RequirePermissaoCliente permissao="lmc"><WpLmc /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/pendencias" element={<RequirePermissaoCliente permissao="pendencias"><WpPendencias /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/pendencias" element={<RequirePermissaoCliente permissao="pendencias"><WpPendencias /></RequirePermissaoCliente>} />
-          <Route path="/cliente/webposto/usuarios" element={<WpUsuarios />} />
+          <Route path="/cliente/webposto/usuarios" element={<RequirePermissaoCliente permissao="gerenciar_usuarios"><WpUsuarios /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial" element={<Navigate to="/cliente/webposto/comercial/vendas" replace />} />
           <Route path="/cliente/webposto/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><ErrorBoundary><WpComercialVendas /></ErrorBoundary></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/comercial/operacao" element={<RequirePermissaoCliente permissao="comercial_operacao"><WpComercialOperacao /></RequirePermissaoCliente>} />
@@ -280,7 +280,7 @@ export default function App() {
           <Route path="/cliente/autosystem/bpo/contas-pagar" element={<RequirePermissaoCliente permissao="bpo_contas_pagar"><ClienteBpoContasPagar /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/bpo/contas-receber" element={<RequirePermissaoCliente permissao="bpo_contas_receber"><ClienteBpoContasReceber /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/acessos" element={<RequirePermissaoCliente permissao="acessos"><ClienteAcessos /></RequirePermissaoCliente>} />
-          <Route path="/cliente/autosystem/usuarios" element={<AsUsuarios />} />
+          <Route path="/cliente/autosystem/usuarios" element={<RequirePermissaoCliente permissao="gerenciar_usuarios"><AsUsuarios /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/comercial" element={<Navigate to="/cliente/autosystem/comercial/vendas" replace />} />
           <Route path="/cliente/autosystem/comercial/vendas" element={<RequirePermissaoCliente permissao="comercial_vendas"><AsComercialVendas /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/comercial/operacao" element={<RequirePermissaoCliente permissao="comercial_operacao"><AsComercialOperacao /></RequirePermissaoCliente>} />
@@ -305,8 +305,8 @@ export default function App() {
         <Route path="/cliente/comercial/produtividade" element={<Navigate to="/cliente/webposto/comercial/produtividade" replace />} />
 
         {/* Modo Tela Cheia — aba nova, sem layout (100% da tela) */}
-        <Route path="/tela-cheia/dre/rede-as/:asRedeId" element={<RequireAdmin><RelatorioDREAsRede telaCheia /></RequireAdmin>} />
-        <Route path="/tela-cheia/cliente/dre" element={<RequireCliente><AsDRE telaCheia /></RequireCliente>} />
+        <Route path="/tela-cheia/dre/rede-as/:asRedeId" element={<RequirePermissaoAdmin permissao="relatorios_cliente"><RelatorioDREAsRede telaCheia /></RequirePermissaoAdmin>} />
+        <Route path="/tela-cheia/cliente/dre" element={<RequirePermissaoCliente permissao="dre"><AsDRE telaCheia /></RequirePermissaoCliente>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

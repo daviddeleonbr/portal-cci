@@ -522,12 +522,21 @@ export async function buscarTitulosReceber(apiKey, { dataInicial, dataFinal, emp
 }
 
 // Duplicatas em aberto (contas a receber de clientes)
+// apenasPendente=true na API DEIXA DE FORA a duplicata paga em parte (situacao
+// "Parcial", pendente=true) — ex.: Maxxpavi na Dona Rosa, saldo 2.538,09 sumia.
+// Então busca tudo e filtra aqui: pendente e com saldo. valorPendente = saldo
+// (líquido − pago), que as telas leem antes do valor cheio.
 export async function buscarDuplicatas(apiKey, { dataInicial, dataFinal, empresaCodigo, apenasPendente, chunkDias = CHUNK_PENDENTES } = {}, urlBase = DEFAULT_URL_BASE) {
-  return fetchPagParalelo(urlBase, 'DUPLICATA', apiKey, {
+  const dups = await fetchPagParalelo(urlBase, 'DUPLICATA', apiKey, {
     limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
     chunkDays: chunkDias,
-    ...(apenasPendente !== undefined ? { apenasPendente } : {}),
+    ...(apenasPendente === false ? { apenasPendente } : {}),
   });
+  if (!apenasPendente) return dups;
+  return dups
+    .filter(d => d.pendente !== false)
+    .map(d => ({ ...d, valorPendente: Math.round(((Number(d.valorLiquido ?? d.valorDuplicata) || 0) - (Number(d.valorPago) || 0)) * 100) / 100 }))
+    .filter(d => d.valorPendente > 0.004);
 }
 
 // Cartoes em aberto (receber de adquirente). O período filtra a EMISSÃO

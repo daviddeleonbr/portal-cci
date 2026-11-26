@@ -56,7 +56,8 @@ export function buildNavigation(prefix, tipoCliente = 'webposto') {
         { name: 'Notas Fiscais', href: `${prefix}/financeiro/notas-fiscais`, icon: FileSpreadsheet, permissao: 'notas_fiscais', curto: 'Notas', barraMobile: true },
         { name: 'Contas a Pagar', href: `${prefix}/bpo/contas-pagar`, icon: ArrowUpRight, permissao: 'bpo_contas_pagar', curto: 'Pagar BPO' },
         { name: 'Contas a Receber', href: `${prefix}/bpo/contas-receber`, icon: ArrowDownLeft, permissao: 'bpo_contas_receber', curto: 'Receb. BPO' },
-        { name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas', curto: 'Outras', barraMobile: true },
+        // Outras Contas: a página só existe no Webposto (no Autosystem o link caía em `/`)
+        ...(tipoCliente === 'webposto' ? [{ name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas', curto: 'Outras', barraMobile: true }] : []),
         { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo', curto: 'Serviços' },
         { name: 'Acessos', href: `${prefix}/acessos`, icon: KeyRound, permissao: 'acessos', curto: 'Acessos' },
         // LMC: por enquanto só Webposto (endpoint /INTEGRACAO/V1/LMCS)

@@ -1,4 +1,5 @@
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, Link } from 'react-router-dom';
+import { adminAtendeRegra, primeiraPaginaAdmin } from '../layout/adminNavegacao';
 import { Lock } from 'lucide-react';
 import { useAdminSession, useClienteSession } from '../../hooks/useAuth';
 import { primeiraPaginaPermitida, temAcessoDashboard } from '../../utils/clientePrimeiraPagina';
@@ -38,6 +39,56 @@ export function RequireNivelAdmin({ nivel = 3, children }) {
     );
   }
   return children;
+}
+
+// Bloqueia a rota admin pela MESMA regra que esconde o item no menu
+// (adminNavegacao.js): permissao | permissaoQualquer | permissaoTodas.
+// Antes só o menu escondia — quem digitava a URL entrava. O banco continua
+// sendo a proteção real (RLS); isto fecha a porta da interface.
+export function RequirePermissaoAdmin({ permissao, qualquer, todas, children }) {
+  const session = useAdminSession();
+  const location = useLocation();
+  if (!session) {
+    return <Navigate to="/admin" replace state={{ from: location.pathname }} />;
+  }
+  const regra = { permissao, permissaoQualquer: qualquer, permissaoTodas: todas };
+  if (adminAtendeRegra(session.usuario, regra)) return children;
+  const inicio = primeiraPaginaAdmin(session.usuario);
+  return <AcessoRestritoAdmin inicio={inicio && inicio !== location.pathname ? inicio : null} />;
+}
+
+// Dashboard é o destino do login: sem a permissão, vai p/ a 1ª página do menu.
+export function RequireDashboardAdmin({ children }) {
+  const session = useAdminSession();
+  const location = useLocation();
+  if (!session) {
+    return <Navigate to="/admin" replace state={{ from: location.pathname }} />;
+  }
+  if (adminAtendeRegra(session.usuario, { permissao: 'dashboard' })) return children;
+  const inicio = primeiraPaginaAdmin(session.usuario);
+  if (inicio && inicio !== '/admin/dashboard') return <Navigate to={inicio} replace />;
+  return <AcessoRestritoAdmin />;
+}
+
+function AcessoRestritoAdmin({ inicio = null }) {
+  return (
+    <div className="px-6 py-16">
+      <div className="bg-white rounded-2xl border border-gray-200/60 px-6 py-12 text-center shadow-sm max-w-lg mx-auto dark:bg-slate-900 dark:border-white/10">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 mb-3 dark:bg-amber-500/10 dark:text-amber-300">
+          <Lock className="h-5 w-5" />
+        </div>
+        <p className="text-base font-semibold text-gray-900 mb-1 dark:text-gray-100">Acesso restrito</p>
+        <p className="text-[13px] text-gray-500 leading-relaxed dark:text-gray-400">
+          Seu usuário não tem permissão para esta página. Peça a um administrador nível 2 ou 3.
+        </p>
+        {inicio && (
+          <Link to={inicio} className="mt-4 inline-block text-[13px] font-medium text-blue-600 hover:underline dark:text-blue-400">
+            Ir para o início
+          </Link>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function RequireCliente({ children }) {

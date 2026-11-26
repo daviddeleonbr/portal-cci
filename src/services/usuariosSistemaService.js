@@ -76,6 +76,7 @@ export const PERMISSOES_ADMIN = [
   { key: 'contas_pagar', label: 'Contas a Pagar', grupo: 'Financeiro' },
   { key: 'contas_receber', label: 'Contas a Receber', grupo: 'Financeiro' },
   { key: 'banco_inter', label: 'Banco Inter (extrato e saldo da CCI)', grupo: 'Financeiro' },
+  { key: 'contratos', label: 'Contratos (ativos, propostas e catálogo de serviços)', grupo: 'Financeiro' },
   { key: 'tarefas', label: 'Tarefas (rotinas e validação dos funcionários dos clientes)', grupo: 'Consultoria' },
   { key: 'fiscal', label: 'Notas Fiscais e Agendamento', grupo: 'Fiscal' },
   { key: 'notas_fiscais', label: 'Manifestação de Notas (validar e lançar)', grupo: 'Fiscal' },

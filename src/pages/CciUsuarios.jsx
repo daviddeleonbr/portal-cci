@@ -3,12 +3,15 @@ import {
   Plus, Pencil, Trash2, Loader2, Search, Shield, Users, Mail,
   Check, Eye, EyeOff, KeyRound, UserCog, ChevronLeft, ChevronRight,
   IdCard, Lock as LockIcon, ShieldCheck, Network, Calendar,
-  SlidersHorizontal, RotateCcw, Building2, Clock,
+  SlidersHorizontal, RotateCcw, Clock, Wand2,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Toast from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
-import SeletorPermissoes from '../components/usuarios/SeletorPermissoes';
+import EditorPermissoes from '../components/usuarios/EditorPermissoes';
+import PainelAcessosUsuario from '../components/usuarios/PainelAcessosUsuario';
+import ModelosPermissao from '../components/usuarios/ModelosPermissao';
+import * as perfisService from '../services/perfisPermissaoService';
 import ModalExpediente from '../components/usuarios/ModalExpediente';
 import * as usuariosService from '../services/usuariosSistemaService';
 import * as clientesService from '../services/clientesService';
@@ -54,6 +57,8 @@ export default function CciUsuarios({ embedded = false }) {
   const [confirm, setConfirm] = useState({ open: false });
   const [resetInfo, setResetInfo] = useState({ open: false });
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
+  const [perfis, setPerfis] = useState([]);       // modelos de permissão (migration 235)
+  const [modelosAberto, setModelosAberto] = useState(false);
 
   const showToast = (type, message) => {
     setToast({ show: true, type, message });
@@ -63,12 +68,14 @@ export default function CciUsuarios({ embedded = false }) {
   const carregar = useCallback(async () => {
     try {
       setLoading(true);
-      const [us, cs, chs, ars] = await Promise.all([
+      const [us, cs, chs, ars, pfs] = await Promise.all([
         usuariosService.listarUsuarios(),
         clientesService.listarClientes(),
         mapeamentoService.listarChavesApi(),
         autosystemService.listarRedes().catch(() => []),
+        perfisService.listarPerfis().catch(() => []),
       ]);
+      setPerfis(pfs || []);
       setUsuarios(us);
       setClientes(cs || []);
       setChavesApi((chs || []).filter(c => c.ativo !== false));
@@ -107,15 +114,20 @@ export default function CciUsuarios({ embedded = false }) {
     } catch (err) { showToast('error', err.message); }
   };
 
-  // Salva só permissões/empresas/nível (via modal de permissões).
+  // Salva só permissões/empresas/nível (painel de acessos). Erro sobe p/ o
+  // painel, que fica aberto mostrando a mensagem do banco.
   const salvarPermissoes = async (u, patch) => {
-    try {
-      await usuariosService.atualizarUsuario(u.id, { tipo: u.tipo, ...patch });
-      showToast('success', 'Permissões atualizadas');
-      setModalPerms({ open: false, data: null });
-      await carregar();
-    } catch (err) { showToast('error', err.message); }
+    await usuariosService.atualizarUsuario(u.id, { tipo: u.tipo, ...patch });
+    showToast('success', `Acessos de ${u.nome} atualizados`);
+    setModalPerms({ open: false, data: null });
+    await carregar();
   };
+
+  // O que o ator pode CONCEDER a um alvo (espelha cci_validar_concessao, 234):
+  // N3 tudo; admin gerindo cliente, todo o catálogo de cliente; N2 gerindo
+  // admin, só as chaves que ele tem.
+  const concedivelPara = (alvoTipo) => (
+    alvoTipo === 'cliente' || usuariosService.nivelAdmin(ator) === 3 ? null : new Set(ator?.permissoes || []));
 
   const resetarSenha = async (u) => {
     try {
@@ -184,6 +196,10 @@ export default function CciUsuarios({ embedded = false }) {
 
       {!embedded && (
         <PageHeader title="Usuários do Sistema" description="Gerenciamento de acessos aos portais admin e cliente">
+          <button onClick={() => setModelosAberto(true)} title="Modelos de permissão (Gerente, Financeiro...)"
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-white/10 dark:bg-slate-900 dark:text-gray-200">
+            <Wand2 className="h-4 w-4" /> Modelos
+          </button>
           <button onClick={() => setModal({ open: true, data: null })}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
             <Plus className="h-4 w-4" /> Novo Usuário
@@ -191,7 +207,11 @@ export default function CciUsuarios({ embedded = false }) {
         </PageHeader>
       )}
       {embedded && (
-        <div className="flex justify-end mb-4">
+        <div className="flex justify-end gap-2 mb-4">
+          <button onClick={() => setModelosAberto(true)} title="Modelos de permissão (Gerente, Financeiro...)"
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-white/10 dark:bg-slate-900 dark:text-gray-200">
+            <Wand2 className="h-4 w-4" /> Modelos
+          </button>
           <button onClick={() => setModal({ open: true, data: null })}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
             <Plus className="h-4 w-4" /> Novo Usuário
@@ -298,7 +318,7 @@ export default function CciUsuarios({ embedded = false }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-0.5 flex-shrink-0">
-                  <IconeAcao title="Permissões" disabled={!podeGerir}
+                  <IconeAcao title="Acessos (permissões, empresas e nível)" disabled={!podeGerir}
                     onClick={() => setModalPerms({ open: true, data: u })}
                     className="hover:text-blue-600 hover:bg-blue-50"><SlidersHorizontal className="h-4 w-4" /></IconeAcao>
                   <IconeAcao title="Horário de trabalho (avisos de tarefa)" disabled={!podeGerir && ator?.nivel_admin !== 3}
@@ -322,15 +342,24 @@ export default function CciUsuarios({ embedded = false }) {
 
       {expediente && <ModalExpediente usuario={expediente} onClose={() => setExpediente(null)}
         onSalvo={(exp) => { setUsuarios(l => l.map(x => (x.id === expediente.id ? { ...x, expediente: exp } : x))); showToast('success', 'Horário de trabalho salvo.'); }} />}
-      <ModalUsuario open={modal.open} data={modal.data}
+      <ModalUsuario open={modal.open} data={modal.data} perfis={perfis} concedivelPara={concedivelPara}
         chavesApi={chavesApi} redesAutosystem={redesAutosystem}
         empresasPorRede={empresasPorRede} clientes={clientes}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
-      <ModalPermissoes open={modalPerms.open} usuario={modalPerms.data} ator={ator}
-        clientes={clientes}
-        onClose={() => setModalPerms({ open: false, data: null })}
-        onSave={salvarPermissoes} />
+      {modalPerms.data && (
+        <PainelAcessosUsuario open={modalPerms.open} usuario={modalPerms.data} tipoAlvo={modalPerms.data.tipo}
+          tipoCliente={modalPerms.data.tipo === 'cliente' ? (modalPerms.data.as_rede_id ? 'autosystem' : 'webposto') : undefined}
+          catalogo={usuariosService.permissoesPorTipo(modalPerms.data.tipo)} concedivel={concedivelPara(modalPerms.data.tipo)}
+          perfis={perfis.filter(p => p.tipo === modalPerms.data.tipo && p.ativo)}
+          empresas={empresasDoUsuario(modalPerms.data, clientes)}
+          nivel={{ pode: modalPerms.data.tipo === 'admin' && usuariosService.podeDefinirNivel(ator) }}
+          contexto={(modalPerms.data.chaves_api || modalPerms.data.as_rede)?.nome || ''}
+          onClose={() => setModalPerms({ open: false, data: null })}
+          onSave={(patch) => salvarPermissoes(modalPerms.data, patch)} />
+      )}
+      <ModelosPermissao open={modelosAberto} onClose={() => setModelosAberto(false)}
+        onAlterado={() => perfisService.listarPerfis().then(setPerfis).catch(() => {})} />
 
       <Modal open={confirm.open} onClose={() => setConfirm({ open: false })}
         title={confirm.tipo === 'reset' ? 'Resetar senha' : 'Excluir usuário'} size="sm"
@@ -377,157 +406,11 @@ function IconeAcao({ title, onClick, disabled, className = '', children }) {
 
 // Editor de permissões estilo cci_v360_as: modal compacto com abas segmentadas
 // (Permissões / Empresas / Nível) e chips de toggle.
-function ModalPermissoes({ open, usuario, ator, clientes, onClose, onSave }) {
-  const [aba, setAba] = useState('permissoes');
-  const [draft, setDraft] = useState({ permissoes: [], empresas_permitidas: null, nivel_admin: null });
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!open || !usuario) return;
-    setDraft({
-      permissoes: usuario.permissoes || [],
-      empresas_permitidas: usuario.empresas_permitidas || null,
-      nivel_admin: usuariosService.nivelAdmin(usuario),
-    });
-    setAba('permissoes');
-  }, [open, usuario]);
-
-  const ehCliente = usuario?.tipo === 'cliente';
-  const redeTipo = usuario?.as_rede_id ? 'autosystem' : 'webposto';
-  const podeNivel = !ehCliente && usuariosService.podeDefinirNivel(ator);
-  const catalogo = usuario ? usuariosService.permissoesPorTipo(usuario.tipo) : [];
-
-  const empresasDaRede = useMemo(() => {
-    if (!usuario || !ehCliente) return [];
-    return (clientes || []).filter(c =>
-      (usuario.chave_api_id && c.chave_api_id === usuario.chave_api_id) ||
-      (usuario.as_rede_id && c.as_rede_id === usuario.as_rede_id));
-  }, [clientes, usuario, ehCliente]);
-
-  const acessoTotal = !draft.empresas_permitidas || draft.empresas_permitidas.length === 0;
-  const empPermitida = (id) => acessoTotal || (draft.empresas_permitidas || []).includes(id);
-  const toggleEmp = (id) => setDraft(d => {
-    const atuais = Array.isArray(d.empresas_permitidas) ? [...d.empresas_permitidas] : empresasDaRede.map(e => e.id);
-    const i = atuais.indexOf(id);
-    if (i >= 0) atuais.splice(i, 1); else atuais.push(id);
-    return { ...d, empresas_permitidas: atuais.length === empresasDaRede.length ? null : atuais };
-  });
-
-  const abas = [
-    { id: 'permissoes', label: 'Permissões', icon: <ShieldCheck className="h-3.5 w-3.5" />, badge: (draft.permissoes || []).length || '—' },
-    ...(ehCliente ? [{ id: 'empresas', label: 'Empresas', icon: <Building2 className="h-3.5 w-3.5" />, badge: acessoTotal ? 'todas' : (draft.empresas_permitidas || []).length }] : []),
-    ...(podeNivel ? [{ id: 'nivel', label: 'Nível', icon: <Shield className="h-3.5 w-3.5" />, badge: `N${draft.nivel_admin || 1}` }] : []),
-  ];
-
-  const aplicar = async () => {
-    setSaving(true);
-    try {
-      const patch = { permissoes: draft.permissoes };
-      if (ehCliente) patch.empresas_permitidas = draft.empresas_permitidas;
-      if (podeNivel) patch.nivel_admin = draft.nivel_admin;
-      await onSave(usuario, patch);
-    } finally { setSaving(false); }
-  };
-
-  if (!usuario) return null;
-
-  return (
-    <Modal open={open} onClose={onClose} title={`Permissões · ${usuario.nome}`} size="md"
-      footer={(
-        <div className="flex items-center justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button onClick={aplicar} disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Aplicar
-          </button>
-        </div>
-      )}>
-      {/* Abas segmentadas */}
-      <div className="flex gap-1 rounded-lg bg-gray-100 p-1 mb-3">
-        {abas.map(a => (
-          <button key={a.id} type="button" onClick={() => setAba(a.id)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-              aba === a.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            {a.icon}<span>{a.label}</span>
-            {a.badge !== undefined && a.badge !== '' && (
-              <span className={`rounded px-1 text-[9px] font-semibold ${aba === a.id ? 'bg-blue-50 text-blue-600' : 'bg-gray-200 text-gray-500'}`}>{a.badge}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      <div className="min-h-[240px] max-h-[52vh] overflow-y-auto pr-1">
-        {aba === 'permissoes' && (
-          <>
-            <div className="flex justify-end gap-2 mb-2 text-[11px]">
-              <button type="button" onClick={() => setDraft(d => ({ ...d, permissoes: usuariosService.todasPermissoes(usuario.tipo) }))}
-                className="font-medium text-blue-600 hover:underline">Marcar todas</button>
-              <span className="text-gray-300">·</span>
-              <button type="button" onClick={() => setDraft(d => ({ ...d, permissoes: [] }))}
-                className="font-medium text-gray-500 hover:underline">Limpar</button>
-            </div>
-            <SeletorPermissoes catalogo={catalogo} value={draft.permissoes}
-              onChange={(arr) => setDraft(d => ({ ...d, permissoes: arr }))}
-              tipoCliente={ehCliente ? redeTipo : undefined} />
-          </>
-        )}
-
-        {aba === 'empresas' && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] text-gray-500">
-                {acessoTotal ? 'Acesso total (todas as empresas, incl. futuras)' : `${(draft.empresas_permitidas || []).length}/${empresasDaRede.length} empresas`}
-              </p>
-              <button type="button" onClick={() => setDraft(d => ({ ...d, empresas_permitidas: null }))}
-                className="text-[11px] font-medium text-blue-600 hover:underline">Acesso total</button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {empresasDaRede.map(emp => {
-                const on = empPermitida(emp.id);
-                return (
-                  <button key={emp.id} type="button" onClick={() => toggleEmp(emp.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
-                      on ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                    }`}>
-                    <span className={`flex h-3 w-3 items-center justify-center rounded-[3px] border ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300'}`}>
-                      {on && <Check className="h-2 w-2" strokeWidth={3.5} />}
-                    </span>
-                    {emp.nome}
-                  </button>
-                );
-              })}
-              {empresasDaRede.length === 0 && <p className="text-xs text-gray-400">Nenhuma empresa nesta rede.</p>}
-            </div>
-          </div>
-        )}
-
-        {aba === 'nivel' && (
-          <div className="space-y-2">
-            <p className="text-[11px] text-gray-500 mb-1">Só administradores nível 3 podem alterar o nível.</p>
-            {usuariosService.NIVEIS_ADMIN.map(n => {
-              const on = (draft.nivel_admin || 1) === n.v;
-              return (
-                <button key={n.v} type="button" onClick={() => setDraft(d => ({ ...d, nivel_admin: n.v }))}
-                  className={`w-full flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all ${
-                    on ? 'border-blue-400 bg-blue-50/60' : 'border-gray-200 hover:border-gray-300 bg-white'
-                  }`}>
-                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${on ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                    <Shield className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{n.label}</p>
-                    <p className="text-[11px] text-gray-500">{n.desc}</p>
-                  </div>
-                  {on && <Check className="ml-auto h-4 w-4 text-blue-600" />}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </Modal>
-  );
+// Empresas da rede do usuário cliente (aba Empresas do painel de acessos).
+function empresasDoUsuario(u, clientes) {
+  if (u.tipo !== 'cliente') return [];
+  return (clientes || []).filter(c =>
+    (u.chave_api_id && c.chave_api_id === u.chave_api_id) || (u.as_rede_id && c.as_rede_id === u.as_rede_id));
 }
 
 function StatCard({ label, valor, icon: Icon, color }) {
@@ -556,7 +439,7 @@ const STEPS = [
   { id: 3, titulo: 'Permissões', icon: ShieldCheck },
 ];
 
-function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede, clientes, onClose, onSave }) {
+function ModalUsuario({ open, data, perfis = [], concedivelPara, chavesApi, redesAutosystem, empresasPorRede, clientes, onClose, onSave }) {
   const [form, setForm] = useState({});
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -605,6 +488,7 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
       const atuais = Array.isArray(f.empresas_permitidas) ? [...f.empresas_permitidas] : empresasDaRede.map(e => e.id);
       const idx = atuais.indexOf(empId);
       if (idx >= 0) atuais.splice(idx, 1); else atuais.push(empId);
+      if (!atuais.length) return f; // lista vazia = acesso total: mantém ao menos uma
       // Se selecionou todas, volta para null (acesso total)
       if (atuais.length === empresasDaRede.length) return { ...f, empresas_permitidas: null };
       return { ...f, empresas_permitidas: atuais };
@@ -612,7 +496,6 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
   };
 
   const marcarTodasEmpresas = () => setForm(f => ({ ...f, empresas_permitidas: null }));
-  const desmarcarTodasEmpresas = () => setForm(f => ({ ...f, empresas_permitidas: [] }));
 
   const empresaEstaPermitida = (empId) => {
     if (acessoTotalEmpresas) return true;
@@ -640,14 +523,6 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
       as_rede_id: novoRedeTipo === 'autosystem' ? f.as_rede_id : null,
       empresas_permitidas: null,
     }));
-  };
-
-  const marcarTodas = () => {
-    setForm(f => ({ ...f, permissoes: usuariosService.todasPermissoes(f.tipo) }));
-  };
-
-  const desmarcarTodas = () => {
-    setForm(f => ({ ...f, permissoes: [] }));
   };
 
   // Validacao por passo
@@ -958,25 +833,14 @@ function ModalUsuario({ open, data, chavesApi, redesAutosystem, empresasPorRede,
         )}
 
         {step === 3 && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-700">Selecione as permissões</label>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={marcarTodas}
-                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800">Marcar todas</button>
-                <span className="text-gray-300">|</span>
-                <button type="button" onClick={desmarcarTodas}
-                  className="text-[11px] font-medium text-gray-500 hover:text-gray-800">Limpar</button>
-              </div>
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-3">
-              <SeletorPermissoes
-                catalogo={permsDisponiveis}
-                value={form.permissoes || []}
-                onChange={(arr) => setForm(f => ({ ...f, permissoes: arr }))}
-                tipoCliente={form.rede_tipo}
-              />
-            </div>
+          <div className="-mx-4 -mt-2 px-4 sm:-mx-6 sm:px-6">
+            <EditorPermissoes catalogo={permsDisponiveis} tipo={form.tipo === 'admin' ? 'admin' : 'cliente'}
+              value={form.permissoes || []}
+              onChange={(arr) => setForm(f => ({ ...f, permissoes: arr }))}
+              tipoCliente={form.tipo === 'cliente' ? form.rede_tipo : undefined}
+              original={data?.id ? (data.permissoes || []) : null}
+              concedivel={concedivelPara ? concedivelPara(form.tipo) : null}
+              perfis={perfis.filter(p => p.tipo === form.tipo && p.ativo)} />
           </div>
         )}
       </div>

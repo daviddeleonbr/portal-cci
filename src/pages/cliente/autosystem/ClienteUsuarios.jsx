@@ -7,12 +7,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, Pencil, Trash2, Loader2, Search, Users, Mail, Building2,
-  Check, Eye, EyeOff, KeyRound, ShieldCheck, AlertCircle, Clock,
+  Check, ShieldCheck, AlertCircle, Clock,
 } from 'lucide-react';
 import PageHeader from '../../../components/ui/PageHeader';
 import Toast from '../../../components/ui/Toast';
 import Modal from '../../../components/ui/Modal';
-import SeletorPermissoes from '../../../components/usuarios/SeletorPermissoes';
+import PainelAcessosUsuario from '../../../components/usuarios/PainelAcessosUsuario';
+import * as perfisService from '../../../services/perfisPermissaoService';
 import ModalExpediente from '../../../components/usuarios/ModalExpediente';
 import { useClienteSession } from '../../../hooks/useAuth';
 import * as usuariosService from '../../../services/usuariosSistemaService';
@@ -31,6 +32,10 @@ export default function ClienteUsuarios() {
   const [modal, setModal] = useState({ open: false, data: null });
   const [confirm, setConfirm] = useState({ open: false });
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
+  const [perfis, setPerfis] = useState([]); // modelos de permissão de cliente (migration 235)
+  // Migration 234: o gerente só concede o que tem e, se restrito, só as empresas dele.
+  const minhasPerms = useMemo(() => new Set(usuarioLogado?.permissoes || []), [usuarioLogado]);
+  const restrito = Array.isArray(usuarioLogado?.empresas_permitidas) && usuarioLogado.empresas_permitidas.length > 0;
 
   const showToast = (type, message) => {
     setToast({ show: true, type, message });
@@ -48,26 +53,22 @@ export default function ClienteUsuarios() {
   }, [asRede?.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { perfisService.listarPerfis('cliente').then(setPerfis).catch(() => setPerfis([])); }, []);
 
-  const salvar = async (form) => {
+  // Painel de acessos: erro sobe para o painel (fica aberto com a mensagem).
+  const salvar = async (patch) => {
+    const u = modal.data;
+    // Força tipo=cliente e a rede do gerente (o banco ignora rede vinda do cliente)
+    const payload = { ...patch, tipo: 'cliente', as_rede_id: asRede.id, chave_api_id: null };
     try {
-      // Forca tipo=cliente e a rede do admin logado (Autosystem)
-      const payload = { ...form, tipo: 'cliente', as_rede_id: asRede.id, chave_api_id: null };
-      if (form.id) {
-        await usuariosService.atualizarUsuario(form.id, payload);
-        showToast('success', 'Usuário atualizado');
-      } else {
-        await usuariosService.criarUsuario(payload);
-        showToast('success', 'Usuário criado');
-      }
-      setModal({ open: false, data: null });
-      await carregar();
+      if (u?.id) await usuariosService.atualizarUsuario(u.id, payload);
+      else await usuariosService.criarUsuario(payload);
     } catch (err) {
-      const msg = err.message?.includes('duplicate') || err.message?.includes('unique')
-        ? 'Já existe um usuário com esse e-mail.'
-        : err.message;
-      showToast('error', msg);
+      throw new Error(/duplicate|unique/i.test(err.message || '') ? 'Já existe um usuário com esse e-mail.' : err.message);
     }
+    showToast('success', u?.id ? `Acessos de ${u.nome} atualizados` : 'Usuário criado');
+    setModal({ open: false, data: null });
+    await carregar();
   };
 
   const excluir = async (id) => {
@@ -191,6 +192,9 @@ export default function ClienteUsuarios() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {u.id === usuarioLogado?.id ? (
+                            <span className="text-[10px] text-gray-400" title="Suas permissões são definidas por outro gestor da rede ou pela CCI">você</span>
+                          ) : (<>
                           <button onClick={() => setExpediente(u)} title="Horário de trabalho (avisos de tarefa)"
                             className="rounded p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
                             <Clock className="h-3.5 w-3.5" />
@@ -199,13 +203,12 @@ export default function ClienteUsuarios() {
                             className="rounded p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
-                          {u.id !== usuarioLogado?.id && (
-                            <button onClick={() => setConfirm({ open: true, nome: u.nome, onConfirm: () => excluir(u.id) })}
-                              title="Excluir"
-                              className="rounded p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
+                          <button onClick={() => setConfirm({ open: true, nome: u.nome, onConfirm: () => excluir(u.id) })}
+                            title="Excluir"
+                            className="rounded p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                          </>)}
                         </div>
                       </td>
                     </tr>
@@ -219,7 +222,10 @@ export default function ClienteUsuarios() {
 
       {expediente && <ModalExpediente usuario={expediente} onClose={() => setExpediente(null)}
         onSalvo={(exp) => { setUsuarios(l => l.map(x => (x.id === expediente.id ? { ...x, expediente: exp } : x))); showToast('success', 'Horário de trabalho salvo.'); }} />}
-      <ModalUsuarioRede open={modal.open} data={modal.data} empresas={empresasDisponiveis}
+      <PainelAcessosUsuario open={modal.open} usuario={modal.data} tipoAlvo="cliente" tipoCliente="autosystem"
+        comDados catalogo={usuariosService.PERMISSOES_CLIENTE} concedivel={minhasPerms} perfis={perfis}
+        empresas={empresasDisponiveis} soSelecionadas={restrito}
+        contexto={asRede?.nome || ''}
         onClose={() => setModal({ open: false, data: null })} onSave={salvar} />
 
       <Modal open={confirm.open} onClose={() => setConfirm({ open: false })} title="Excluir usuário" size="sm">
@@ -232,151 +238,5 @@ export default function ClienteUsuarios() {
         </div>
       </Modal>
     </div>
-  );
-}
-
-function ModalUsuarioRede({ open, data, empresas, onClose, onSave }) {
-  const [form, setForm] = useState({});
-  const [saving, setSaving] = useState(false);
-  const [mostrarSenha, setMostrarSenha] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    if (data?.id) {
-      setForm({ ...data, senha: '', empresas_permitidas: data.empresas_permitidas || null });
-    } else {
-      setForm({
-        nome: '', email: '', senha: '',
-        empresas_permitidas: null, // acesso total por padrao
-        permissoes: ['dashboard', 'dre', 'fluxo_caixa'], // defaults razoaveis
-        status: 'ativo',
-      });
-    }
-    setMostrarSenha(false);
-  }, [open, data]);
-
-  const acessoTotal = !form.empresas_permitidas || form.empresas_permitidas.length === 0;
-  const empresaOk = (id) => acessoTotal || (form.empresas_permitidas || []).includes(id);
-
-  const toggleEmpresa = (id) => {
-    setForm(f => {
-      const atuais = Array.isArray(f.empresas_permitidas) ? [...f.empresas_permitidas] : empresas.map(e => e.id);
-      const idx = atuais.indexOf(id);
-      if (idx >= 0) atuais.splice(idx, 1); else atuais.push(id);
-      if (atuais.length === empresas.length) return { ...f, empresas_permitidas: null };
-      return { ...f, empresas_permitidas: atuais };
-    });
-  };
-
-  const setPermissoes = (arr) => setForm(f => ({ ...f, permissoes: arr }));
-
-  const submit = async () => {
-    if (!form.nome?.trim() || !form.email?.trim()) return;
-    if (!data?.id && !form.senha?.trim()) return;
-    setSaving(true);
-    try { await onSave(form); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={data?.id ? 'Editar Usuário' : 'Novo Usuário da Rede'} size="lg"
-      footer={(
-        <div className="flex justify-end gap-3">
-          <button type="button" onClick={onClose}
-            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
-          <button type="button" onClick={submit}
-            disabled={saving || !form.nome?.trim() || !form.email?.trim() || (!data?.id && !form.senha?.trim())}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {data?.id ? 'Salvar alteracoes' : 'Criar usuário'}
-          </button>
-        </div>
-      )}>
-      <div className="space-y-4">
-        {/* Dados */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nome *</label>
-            <input type="text" autoFocus value={form.nome || ''}
-              onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">E-mail *</label>
-            <input type="email" value={form.email || ''}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              {data?.id ? 'Nova senha (deixe em branco para manter)' : 'Senha inicial *'}
-            </label>
-            <div className="relative">
-              <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input type={mostrarSenha ? 'text' : 'password'}
-                value={form.senha || ''}
-                onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
-                placeholder={data?.id ? '••••••••' : 'Mínimo 6 caracteres'}
-                className="w-full h-10 rounded-lg border border-gray-200 pl-9 pr-10 text-sm font-mono focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-              <button type="button" onClick={() => setMostrarSenha(s => !s)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-gray-700">
-                {mostrarSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-            <select value={form.status || 'ativo'}
-              onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-              className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-              <option value="ativo">Ativo</option>
-              <option value="inativo">Inativo</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Empresas */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-medium text-gray-700">
-              Empresas permitidas ({acessoTotal ? empresas.length : (form.empresas_permitidas || []).length}/{empresas.length})
-            </label>
-            <button type="button" onClick={() => setForm(f => ({ ...f, empresas_permitidas: null }))}
-              className="text-[11px] font-medium text-blue-600 hover:text-blue-800">Acesso total</button>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-2 max-h-32 overflow-y-auto space-y-1">
-            {empresas.map(emp => (
-              <label key={emp.id}
-                className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer transition-all ${
-                  empresaOk(emp.id) ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                }`}>
-                <input type="checkbox" checked={empresaOk(emp.id)}
-                  onChange={() => toggleEmpresa(emp.id)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
-                <span className="flex-1 truncate">{emp.nome}</span>
-                {emp.cnpj && <span className="text-[10px] text-gray-400 font-mono">{emp.cnpj}</span>}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Permissoes */}
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1.5">Permissões</label>
-          <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-3">
-            <SeletorPermissoes
-              catalogo={usuariosService.PERMISSOES_CLIENTE}
-              value={form.permissoes || []}
-              onChange={setPermissoes}
-              tipoCliente="autosystem"
-            />
-          </div>
-        </div>
-
-      </div>
-    </Modal>
   );
 }

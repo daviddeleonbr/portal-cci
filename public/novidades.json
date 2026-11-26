@@ -2,6 +2,43 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.24.0",
+      "data": "2026-11-26",
+      "resumo": "Nova tela de permissões e acessos, mais segurança na gestão de usuários e faturas pagas em parte no Contas a Receber.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "Nova tela de permissões",
+          "descricao": "Os acessos de cada usuário abrem num painel ao lado da lista, com as permissões organizadas por área, busca, descrição de cada uma e um resumo do que vai mudar antes de salvar. Retirar um acesso pede confirmação."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Modelos de permissão",
+          "descricao": "Em Usuários, o botão Modelos cria atalhos como Gerente, Financeiro, Operacional e Consulta. Ao editar um usuário, use \"Aplicar modelo\" para marcar as permissões de uma vez."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Gestão de usuários da rede mais segura",
+          "descricao": "Quem gerencia usuários só concede as permissões e as empresas que ele próprio tem, e não altera o próprio acesso. Só quem gerencia usuários troca a senha de outra pessoa."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Telas protegidas pela permissão",
+          "descricao": "Cada tela do portal admin agora exige a mesma permissão que mostra o item no menu, inclusive Contratos, que ganhou permissão própria. Quem não tem o Painel entra direto na primeira tela liberada."
+        },
+        {
+          "tipo": "correcao",
+          "publico": "todos",
+          "titulo": "Faturas pagas em parte no Contas a Receber",
+          "descricao": "Faturas com pagamento parcial voltaram a aparecer em aberto, pelo saldo que falta receber."
+        }
+      ]
+    },
+    {
       "versao": "1.23.1",
       "data": "2026-11-26",
       "resumo": "Sangrias do Relatório geral com retiradas e valor a depositar.",
