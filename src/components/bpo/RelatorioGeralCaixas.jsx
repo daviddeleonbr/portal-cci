@@ -277,11 +277,10 @@ function Corpo({ m, sangrias, variosDias }) {
   );
 }
 
-// Sangrias (dinheiro) por funcionário: contagem do cliente × sistema.
+// Sangrias (dinheiro) por funcionário: apurado (sistema) × apresentado (contado), as
+// retiradas de cada um antes do depósito e o que vai para o banco.
 function Sangrias({ s, variosDias }) {
   const v = (x) => (x == null ? <span className="rg-mudo">–</span> : moeda(x));
-  const sinal = (x) => (x == null || zero(x) ? <span className="rg-mudo">–</span> : `${x > 0 ? '+' : ''}${formatCurrency(x)}`);
-  const fim = (x) => (x == null ? <span className="rg-mudo">–</span> : <Dif v={x} />);
   const quem = (s?.conferencias || []).map(c => `${variosDias ? `${dataBR(c.dia)}: ` : ''}${c.por || 'sem nome'} em ${new Date(c.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`).join('; ');
   return (
     <section className={s?.linhas?.length > 14 ? 'rg-longa' : undefined}>
@@ -291,29 +290,43 @@ function Sangrias({ s, variosDias }) {
         <div className="rg-rolagem">
           <table className="rg-tab rg-zebra rg-func">
             <colgroup>{variosDias && <col style={{ width: '10%' }} />}<col style={{ width: '13%' }} /><col style={{ width: '27%' }} /><col /><col /><col /><col /></colgroup>
-            <thead><tr>{variosDias && <th>Data</th>}<th>Turno</th><th>Funcionário</th><th className="n">Apurado</th><th className="n">Apresentado</th><th className="n">Alterações</th><th className="n">Diferença</th></tr></thead>
+            <thead><tr>{variosDias && <th>Data</th>}<th>Turno</th><th>Funcionário</th><th className="n">Apurado</th><th className="n">Apresentado</th><th className="n">Retiradas</th><th className="n">A depositar</th></tr></thead>
             <tbody>
               {s.linhas.map((l, i) => (
-                <tr key={i} className={l.retirada ? 'rg-retirada' : undefined}>{variosDias && <td>{dataBR(l.dia)}</td>}
-                  {l.retirada
-                    ? <td colSpan={2} style={l.detalhe ? { paddingLeft: 22 } : undefined}><em>{l.detalhe ? '↳ ' : ''}(−) Retirada antes do depósito: {l.nome}</em></td>
+                <tr key={i}>{variosDias && <td>{dataBR(l.dia)}</td>}
+                  {l.semFuncionario
+                    ? <td colSpan={2}><em>{l.nome}{l.descRetiradas?.length ? ` (${l.descRetiradas.join('; ')})` : ''}</em></td>
                     : <><td>{l.turno || '–'}</td><td>{l.nome}</td></>}
-                  <td className="n">{l.retirada ? <span className="rg-mudo">–</span> : v(l.apurado)}</td><td className="n">{v(l.apresentado)}</td>
-                  {/* retirada: valor sem cor (não é falta), mas soma no total */}
-                  <td className="n">{sinal(l.alteracoes)}</td><td className="n">{l.retirada ? sinal(l.diferenca) : fim(l.diferenca)}</td></tr>
+                  <td className="n">{v(l.apurado)}</td><td className="n">{v(l.apresentado)}</td>
+                  <td className="n" title={l.descRetiradas?.join('; ') || undefined}>{v(l.retiradas)}</td>
+                  <td className="n">{v(l.aDepositar)}</td></tr>
               ))}
               {s.linhas.length === 0 && <tr><td colSpan={variosDias ? 7 : 6} className="rg-mudo">Nenhuma sangria no período.</td></tr>}
             </tbody>
             {s.linhas.length > 0 && (
-              <tfoot><tr><td colSpan={variosDias ? 3 : 2}>Total</td><td className="n">{v(s.totais.apurado)}</td><td className="n">{v(s.totais.apresentado)}</td><td className="n">{sinal(s.totais.alteracoes)}</td><td className="n">{fim(s.totais.diferenca)}</td></tr></tfoot>
+              <tfoot><tr><td colSpan={variosDias ? 3 : 2}>Total</td><td className="n">{v(s.totais.apurado)}</td><td className="n">{v(s.totais.apresentado)}</td><td className="n">{v(s.totais.retiradas)}</td><td className="n">{v(s.totais.aDepositar)}</td></tr></tfoot>
             )}
           </table>
         </div>
       )}
-      {s?.linhas?.length > 0 && <p className="rg-nota">Apurado: sangria no sistema quando o cliente confirmou a contagem. Alterações: o que mudou no sistema depois disso. Diferença: apresentado − (apurado + alterações). Retiradas antes do depósito (lançadas pelo cliente na conferência) saem do apresentado: do funcionário de quem saiu o dinheiro (mostrada logo abaixo dele) ou, quando não foi informado, numa linha no fim do dia.</p>}
+      {s?.retiradas?.length > 0 && (
+        <div className="rg-rolagem" style={{ marginTop: 10 }}>
+          <table className="rg-tab rg-zebra rg-func">
+            <colgroup>{variosDias && <col style={{ width: '10%' }} />}<col style={{ width: '13%' }} /><col style={{ width: '27%' }} /><col /><col style={{ width: '16%' }} /></colgroup>
+            <thead><tr>{variosDias && <th>Data</th>}<th>Turno</th><th>Funcionário</th><th>Histórico da retirada</th><th className="n">Valor</th></tr></thead>
+            <tbody>
+              {s.retiradas.map((r, i) => (
+                <tr key={i}>{variosDias && <td>{dataBR(r.dia)}</td>}<td>{r.turno || '–'}</td>
+                  <td>{r.funcionario || <span className="rg-mudo">Não informado</span>}</td><td>{r.historico || '–'}</td><td className="n">{moeda(r.valor)}</td></tr>
+              ))}
+            </tbody>
+            <tfoot><tr><td colSpan={variosDias ? 4 : 3}>Total de retiradas</td><td className="n">{moeda(s.totais.retiradas)}</td></tr></tfoot>
+          </table>
+        </div>
+      )}
+      {s?.linhas?.length > 0 && <p className="rg-nota">Apurado: sangria no sistema quando o cliente confirmou a contagem. Apresentado: dinheiro contado pelo cliente. Retiradas: o que saiu do dinheiro do funcionário antes do depósito. A depositar: apresentado − retiradas.</p>}
       {variosDias && quem && <p className="rg-nota">Conferida por: {quem}.</p>}
       {s?.semConferencia?.length > 0 && <p className="rg-nota rg-pos">Ainda sem conferência do cliente: {s.semConferencia.map(dataBR).join(', ')}. Nesses dias, o apurado é o valor atual no sistema.</p>}
-      {s?.atualIndisponivel && <p className="rg-nota rg-pos">Não foi possível consultar as sangrias no sistema agora (ou nenhuma conta está habilitada para sangrias): as alterações não foram calculadas.</p>}
     </section>
   );
 }

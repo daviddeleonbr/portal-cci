@@ -60,25 +60,25 @@ describe('relatório geral — sangrias com retiradas antes do depósito', () =>
     { dia: '2026-11-25', func: 201638, caixa: 3, nome: 'MIRELLE', turno: '3º TURNO', ordem: 3, valor: 2085 },
   ];
 
-  it('retirada com funcionário: sai do apresentado dele (= sistema) e aparece logo abaixo', () => {
+  it('retirada com funcionário: coluna Retiradas e A depositar na linha dele, sem linha extra', () => {
     const comFunc = [{ ...fechamentos[0], retiradas: [{ descricao: 'combustível para deposito', valor: 40, funcionario_codigo: 195657, caixa_codigo: 2, funcionario_nome: 'KASSANDRA' }] }];
     const s = modeloSangrias({ fechamentos: comFunc, atuais });
-    const nomes = s.linhas.map(l => (l.detalhe ? `↳ ${l.nome}` : l.nome));
-    expect(nomes).toEqual(['DERIVAN', 'KASSANDRA', '↳ combustível para deposito', 'MIRELLE']);
-    const kas = s.linhas.find(l => l.nome === 'KASSANDRA');
-    expect(kas.apresentado).toBeCloseTo(6109.75);
-    expect(kas.diferenca).toBeCloseTo(0);
-    expect(s.totais.apresentado).toBeCloseTo(8654.75); // detalhe não conta de novo
-    expect(s.totais.diferenca).toBeCloseTo(0);
+    expect(s.linhas.map(l => l.nome)).toEqual(['DERIVAN', 'KASSANDRA', 'MIRELLE']);
+    expect(s.linhas[1]).toMatchObject({ apurado: 6149.75, apresentado: 6149.75, retiradas: 40, aDepositar: 6109.75 });
+    expect(s.linhas[0]).toMatchObject({ retiradas: 0, aDepositar: 460 });
+    expect(s.totais).toMatchObject({ apurado: 8684.43, apresentado: 8694.75, retiradas: 40, aDepositar: 8654.75 });
+    expect(s.retiradas).toEqual([{ dia: '2026-11-25', funcionario: 'KASSANDRA', turno: '', historico: 'combustível para deposito', valor: 40 }]);
   });
 
-  it('retirada sem funcionário (antiga): linha no fim do dia', () => {
+  it('retirada sem funcionário (antiga): uma linha no fim só para o total a depositar bater', () => {
     const s = modeloSangrias({ fechamentos, atuais });
-    const ret = s.linhas.find(l => l.retirada);
-    expect(ret).toMatchObject({ nome: 'combustível para deposito', apresentado: -40, diferenca: -40 });
-    expect(s.linhas.at(-1).retirada).toBe(true); // vem depois dos funcionários
-    expect(s.totais.apresentado).toBeCloseTo(8654.75);
-    expect(s.totais.alteracoes).toBeCloseTo(-29.68);
-    expect(s.totais.diferenca).toBeCloseTo(0);
+    expect(s.linhas.at(-1)).toMatchObject({ semFuncionario: true, retiradas: 40, aDepositar: -40, apresentado: null });
+    expect(s.totais.aDepositar).toBeCloseTo(8654.75);
+  });
+
+  it('dia sem conferência: só o apurado atual do sistema', () => {
+    const s = modeloSangrias({ fechamentos: [], atuais });
+    expect(s.semConferencia).toEqual(['2026-11-25']);
+    expect(s.linhas[1]).toMatchObject({ nome: 'KASSANDRA', apurado: 6109.75, apresentado: null, aDepositar: null });
   });
 });

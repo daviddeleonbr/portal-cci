@@ -198,70 +198,58 @@ export function modeloAutosystem({ vendas = [], recebimentos = [], outrasEntrada
 
 // ─── Sangrias por funcionário ───────────────────────────────────
 // Apurado = sangria no sistema quando o cliente confirmou a contagem (fica gravada);
-// apresentado = contado pelo cliente; alterações = valor de AGORA no sistema − apurado
-// (a confirmação trava a contagem, mas a sangria ainda pode ser mexida no sistema);
-// diferença = apresentado − (apurado + alterações).
-// Retiradas antes do depósito (combustível p/ ir ao banco etc.) saem do dinheiro contado:
-//   • com funcionário (lançada dizendo de quem saiu): o apresentado dele já vem sem ela
-//     (bate com o "Din. Apres." do sistema quando a sangria foi acertada lá) e a retirada
-//     aparece logo abaixo, só para informar (detalhe: fora dos totais);
-//   • sem funcionário (retiradas antigas): linha própria no fim do dia, com apresentado
-//     negativo. Nos dois casos o total apresentado = valor a depositar.
-// Dia sem confirmação: só o apurado atual; o resto fica null ("–").
+// apresentado = contado pelo cliente; retiradas = o que saiu do dinheiro dele antes do
+// depósito (lançadas na conferência dizendo de quem saiu); a depositar = apresentado −
+// retiradas (bate com o "Din. Apres." do sistema quando a sangria foi acertada lá).
+// Total a depositar = valor a depositar do fechamento.
+// Retiradas antigas, sem funcionário: uma linha "sem funcionário informado" no fim do
+// dia, só para o total a depositar bater.
+// Dia sem confirmação: só o apurado atual no sistema; o resto fica null ("–").
 //   fechamentos: cliente_sangrias_fechamento do período
 //   atuais: [{ dia, func, caixa, nome, turno, ordem, valor }] | null (não deu para consultar)
 const centavos = (v) => Math.round(v * 100) / 100;
 export function modeloSangrias({ fechamentos = [], atuais = null }) {
   const linhas = [];
-  const porDia = new Map();
-  (atuais || []).forEach(a => porDia.set(a.dia, [...(porDia.get(a.dia) || []), { ...a, livre: true }]));
+  const detalheRetiradas = []; // lista abaixo da tabela: funcionário, histórico, valor
   const conferidos = new Map(fechamentos.map(f => [String(f.data).slice(0, 10), f]));
 
   conferidos.forEach((f, dia) => {
-    const doDia = porDia.get(dia) || [];
-    // Com caixa primeiro: o que sobra do funcionário vai p/ o registro sem caixa (manual/Autosystem)
-    const regs = [...(f.registros || [])].sort((x, y) => (x.caixaCodigo == null) - (y.caixaCodigo == null));
     const retiradas = (f.retiradas || []).map(r => ({ ...r, valor: centavos(num(r.valor)), livre: true })).filter(r => r.valor);
+    retiradas.forEach(r => detalheRetiradas.push({ dia, funcionario: r.funcionario_nome || '', turno: r.turno || '', historico: r.descricao || '', valor: r.valor }));
+    // Com caixa primeiro: retirada sem caixa casa com o registro do funcionário que sobrar
+    const regs = [...(f.registros || [])].sort((x, y) => (x.caixaCodigo == null) - (y.caixaCodigo == null));
     regs.forEach(r => {
-      const achados = doDia.filter(a => a.livre && String(a.func) === String(r.funcionarioCodigo)
-        && (r.caixaCodigo == null || String(a.caixa ?? '') === String(r.caixaCodigo)));
-      achados.forEach(a => { a.livre = false; });
       const dele = retiradas.filter(x => x.livre && x.funcionario_codigo != null && String(x.funcionario_codigo) === String(r.funcionarioCodigo)
         && (x.caixa_codigo == null || r.caixaCodigo == null || String(x.caixa_codigo) === String(r.caixaCodigo)));
       dele.forEach(x => { x.livre = false; });
-      const apurado = num(r.dinheiroApurado), apresentado = centavos(num(r.dinheiroApresentado) - somar(dele, 'valor'));
-      const alteracoes = atuais ? centavos(somar(achados, 'valor') - apurado) : null;
-      const base = { dia, turno: r.turno || achados[0]?.turno || '', ordem: r.turnoOrdem ?? achados[0]?.ordem ?? 99, ordNome: r.nome || 'Sem funcionário' };
-      linhas.push({ ...base, nome: base.ordNome, apurado, apresentado, alteracoes, diferenca: centavos(apresentado - apurado - (alteracoes || 0)) });
-      dele.forEach(x => linhas.push({ ...base, sub: 1, detalhe: true, retirada: true, nome: x.descricao || 'Retirada',
-        apurado: null, apresentado: -x.valor, alteracoes: null, diferenca: null }));
+      const apresentado = num(r.dinheiroApresentado), ret = centavos(somar(dele, 'valor'));
+      linhas.push({
+        dia, nome: r.nome || 'Sem funcionário', turno: r.turno || '', ordem: r.turnoOrdem ?? 99,
+        apurado: num(r.dinheiroApurado), apresentado, retiradas: ret, aDepositar: centavos(apresentado - ret),
+        descRetiradas: dele.map(x => x.descricao).filter(Boolean),
+      });
     });
-    retiradas.filter(x => x.livre).forEach(x => {
-      linhas.push({ dia, nome: x.descricao || 'Retirada', turno: '', ordem: 1000, retirada: true,
-        apurado: 0, apresentado: -x.valor, alteracoes: atuais ? 0 : null, diferenca: -x.valor });
-    });
-    // Entrou no sistema depois da confirmação, de quem não estava na contagem
-    doDia.filter(a => a.livre).forEach(a => {
-      a.livre = false;
-      linhas.push({ dia, nome: a.nome, turno: a.turno, ordem: a.ordem, apurado: 0, apresentado: 0, alteracoes: a.valor, diferenca: centavos(-a.valor) });
-    });
+    const soltas = retiradas.filter(x => x.livre);
+    if (soltas.length) {
+      const ret = centavos(somar(soltas, 'valor'));
+      linhas.push({ dia, nome: 'Retiradas sem funcionário informado', turno: '', ordem: 1000, semFuncionario: true,
+        apurado: null, apresentado: null, retiradas: ret, aDepositar: -ret, descRetiradas: soltas.map(x => x.descricao).filter(Boolean) });
+    }
   });
-  porDia.forEach((lista, dia) => {
-    if (conferidos.has(dia)) return;
-    lista.forEach(a => linhas.push({ dia, nome: a.nome, turno: a.turno, ordem: a.ordem, apurado: a.valor, apresentado: null, alteracoes: null, diferenca: null }));
+  const semConferencia = new Set();
+  (atuais || []).forEach(a => {
+    if (conferidos.has(a.dia)) return;
+    semConferencia.add(a.dia);
+    linhas.push({ dia: a.dia, nome: a.nome, turno: a.turno, ordem: a.ordem, apurado: a.valor, apresentado: null, retiradas: null, aDepositar: null });
   });
-  // retirada com funcionário (sub) logo abaixo dele; detalhe não entra nos totais
-  const ordNome = (l) => l.ordNome || l.nome;
-  linhas.sort((x, y) => x.dia.localeCompare(y.dia) || x.ordem - y.ordem || x.turno.localeCompare(y.turno)
-    || ordNome(x).localeCompare(ordNome(y)) || (x.sub || 0) - (y.sub || 0));
-  const contam = linhas.filter(l => !l.detalhe);
-  const total = (k) => (contam.some(l => l[k] != null) ? centavos(somar(contam, k)) : null);
+  linhas.sort((x, y) => x.dia.localeCompare(y.dia) || x.ordem - y.ordem || x.turno.localeCompare(y.turno) || x.nome.localeCompare(y.nome));
+  const total = (k) => (linhas.some(l => l[k] != null) ? centavos(somar(linhas, k)) : null);
   return {
     linhas,
-    totais: { apurado: total('apurado'), apresentado: total('apresentado'), alteracoes: total('alteracoes'), diferenca: total('diferenca') },
+    totais: { apurado: total('apurado'), apresentado: total('apresentado'), retiradas: total('retiradas'), aDepositar: total('aDepositar') },
     conferencias: [...conferidos.entries()].sort().map(([dia, f]) => ({ dia, por: f.confirmado_por || '', em: f.confirmado_em })),
-    semConferencia: [...porDia.keys()].filter(d => !conferidos.has(d)).sort(),
-    atualIndisponivel: !atuais && conferidos.size > 0,
+    semConferencia: [...semConferencia].sort(),
+    retiradas: detalheRetiradas.sort((a, b) => a.dia.localeCompare(b.dia) || a.turno.localeCompare(b.turno) || a.funcionario.localeCompare(b.funcionario)),
   };
 }
 

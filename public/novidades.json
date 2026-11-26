@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.23.1",
+      "data": "2026-11-26",
+      "resumo": "Sangrias do Relatório geral com retiradas e valor a depositar.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Sangrias no Relatório geral",
+          "descricao": "A tabela de sangrias mostra apurado, apresentado, retiradas e valor a depositar de cada funcionário. Logo abaixo vem o detalhe das retiradas: funcionário, histórico e valor."
+        }
+      ]
+    },
+    {
       "versao": "1.23.0",
       "data": "2026-11-26",
       "resumo": "Retiradas por funcionário nas sangrias e novo nome do PDF do Relatório geral.",
