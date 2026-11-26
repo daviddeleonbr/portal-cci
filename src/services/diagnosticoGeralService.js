@@ -2,6 +2,7 @@
 // e pede a Claude uma sintese cross-cut: vendas -> margem -> caixa.
 
 import { chamarClaudeAPI, round } from './iaSharedHelpers';
+import { getAtivo as demoAtivo, mascararEmpresa, mascararRede } from './anonimizarService';
 
 const SYSTEM_PROMPT = `Você e um consultor estrategico senior para postos de combustível. Sua missao e conectar as 3 dimensões (Vendas, DRE, Caixa) em um diagnóstico integrado.
 
@@ -103,8 +104,10 @@ export function agregarDadosDiagnosticoGeral({ cliente, periodoLabel, vendas, dr
 
   return {
     empresa: {
-      nome: cliente?.nome || 'Empresa',
-      cnpj: cliente?.cnpj || null,
+      nome: demoAtivo()
+        ? (cliente?._empresaCodigos ? mascararRede(cliente?.nome, cliente?.id, true) : mascararEmpresa(cliente, true))
+        : (cliente?.nome || 'Empresa'),
+      cnpj: demoAtivo() ? null : (cliente?.cnpj || null),
     },
     periodo: periodoLabel,
     sintese_vendas: sintetizar(vendas?.insights),

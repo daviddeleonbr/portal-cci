@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle,
+  ArrowLeft, ChevronRight, Layers, Loader2, AlertCircle, CheckCircle2,
   Building2, Zap, RefreshCw, Wallet, Printer,
   EyeOff, Eye, ChevronLeft as ChevLeft, Download,
   LineChart as LineChartIcon, TrendingUp, TrendingDown, X, CalendarRange, Scale, Activity, Truck, Sparkles, CalendarClock,
@@ -27,22 +27,22 @@ import { formatCurrency } from '../utils/format';
 import { useAnonimizador } from '../services/anonimizarService';
 import { nomeEmpresa } from '../utils/nomeEmpresa';
 import { useUsarApelido } from '../lib/apelidoPref';
-import ApelidoToggle from '../components/ui/ApelidoToggle';
+import FiltrosFluxo from '../components/fluxo/FiltrosFluxo';
+import {
+  SEM_PLANO_PREFIX, TRANSFER_TIPO_DOC, TRANSFER_CODE, lancamentosAutosystemParaMovimentos, indexarMovimentos,
+  montarArvoreFluxo, montarSemClassificacao, montarTransferencias, aplicarCalculosFluxo, totalGeralFluxo, codigosMapeados,
+  conciliarFluxoComSaldos,
+} from '../utils/fluxoCaixa/motor';
+import { analisarIntercompany, removerMovimentos } from '../utils/fluxoCaixa/intercompany';
+import { detectarAnomalias } from '../utils/fluxoCaixa/anomalias';
+import { ModalContasIntercompany, PontosAtencao, TransferenciasEntreEmpresas } from '../components/fluxo/PainelPontosAtencao';
+import * as contasIntercompanyService from '../services/contasIntercompanyService';
 import { isoDataBR } from '../utils/dataBR';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 // Codigo sintetico usado para agrupar movimentos sem planoContaGerencial
-// (ou com plano nao mapeado) no fluxo. Nao colide com codigos reais.
-const SEM_PLANO_PREFIX = '__sem_plano__';
-
-// Rótulo/código do grupo sintético de transferências entre contas próprias.
-// Só aparece quando o usuário filtra um subconjunto de contas (Autosystem):
-// transferências vindas de contas fora da seleção contam como entrada/saída
-// real e vão pra ESTE grupo, que É somado na Variação de Caixa (diferente de
-// "Sem classificação", que fica de fora).
-const TRANSFER_TIPO_DOC = 'Transferências entre contas';
-const TRANSFER_CODE = `${SEM_PLANO_PREFIX}${TRANSFER_TIPO_DOC}`;
+// (ou com plano nao mapeado) no fluxo — definidos no motor (utils/fluxoCaixa/motor).
 
 function rangeMes(ano, mes) {
   const mm = String(mes).padStart(2, '0');
@@ -106,6 +106,11 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [periodoData, setPeriodoData] = useState(null);
 
   const [dadosPorMes, setDadosPorMes] = useState({});
+  // Contas com movimento nas empresas do fluxo montado: conta → Set(empresaCodigo).
+  // Alimenta a lista de contas dos Filtros (só contas das empresas selecionadas).
+  // Com filtro de contas ativo, o Autosystem busca só as marcadas — aí a lista soma
+  // com a da última montagem da mesma seleção, para não encolher.
+  const [contasDoPeriodo, setContasDoPeriodo] = useState({ chave: '', porConta: new Map() });
   // Saldo de abertura REAL por conta (código -> saldo), obtido do último movimento
   // ANTES do início do período (mesmo mecanismo do fechamento, que bate com a Quality).
   const [aberturaPorConta, setAberturaPorConta] = useState(() => new Map());
@@ -130,6 +135,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   const [error, setError] = useState(null);
 
   const [ocultarZeradas, setOcultarZeradas] = useState(true);
+  // Visão da rede: tira do consolidado as transferências casadas entre empresas
+  const [eliminarIntercompany, setEliminarIntercompany] = useState(true);
+  // Contas de transferência entre filiais cadastradas para a rede (migration 231)
+  const [contasIC, setContasIC] = useState([]);
+  const [modalContasIC, setModalContasIC] = useState(false);
+  const [salvandoContasIC, setSalvandoContasIC] = useState(false);
+  // AH (análise horizontal): variação de cada mês sobre o anterior, ao lado do valor
+  const [mostrarAH, setMostrarAH] = useState(() => { try { return localStorage.getItem('fluxo:ah') !== '0'; } catch { return true; } });
+  const alternarAH = () => setMostrarAH(v => { try { localStorage.setItem('fluxo:ah', v ? '0' : '1'); } catch { /* sem storage */ } return !v; });
   const [tempoGeracao, setTempoGeracao] = useState(null); // ms
   const [expandedGrupos, setExpandedGrupos] = useState(new Set());
   const [expandedContas, setExpandedContas] = useState(new Set());
@@ -167,7 +181,6 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
   // Filtro por conta especifica (multiselecao). Vazio = todas.
   const [filtroContas, setFiltroContas] = useState(() => new Set());
-  const [filtroContasOpen, setFiltroContasOpen] = useState(false);
   // Metadados das contas (descricao) do endpoint CONTA, para exibir nomes no filtro
   const [contasMeta, setContasMeta] = useState([]);
   // Autosystem: códigos das contas marcadas como "aplicação financeira" (subconjunto
@@ -221,6 +234,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     }
     return arr;
   }, [mesFinal, qtdMeses, periodoData]);
+  const comAH = mostrarAH && meses.length > 1; // AH precisa de 2+ meses
 
   // ─── Init: cliente + mascaras ────────────────────────────
   // Em modo rede monta cliente virtual com chave_api_id e lista de empresas.
@@ -446,6 +460,22 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 
   // ─── Fetch MOVIMENTO_CONTA + TITULO_PAGAR ─────────────────
   const carregarDados = useCallback(async () => {
+    const registrarContasDoPeriodo = (mapa) => {
+      const chave = `${cliente?.id}|${meses.map(m => m.key).join(',')}`;
+      const porConta = new Map();
+      Object.values(mapa || {}).forEach(d => (d.movimentos || []).forEach(m => {
+        if (m.contaCodigo == null) return;
+        const cod = String(m.contaCodigo);
+        if (!porConta.has(cod)) porConta.set(cod, new Set());
+        porConta.get(cod).add(String(m.empresaCodigo ?? ''));
+      }));
+      setContasDoPeriodo(prev => {
+        if (filtroContas.size === 0 || prev.chave !== chave) return { chave, porConta };
+        const junto = new Map(prev.porConta);
+        porConta.forEach((emps, cod) => junto.set(cod, new Set([...(junto.get(cod) || []), ...emps])));
+        return { chave, porConta: junto };
+      });
+    };
     if (!cliente) return;
 
     // ─ Autosystem: usa contas caixa/banco + lançamentos do movto ─
@@ -546,66 +576,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           // Cada entrada é uma despesa real (conta debitada da provisão ligada via
           // movto.child/parent) com seu valor. Presente só p/ pagamentos contra 2.1.1
           // que baixaram provisões — resolve o caso "N títulos num pagamento só".
-          const rateioPorLanc = new Map();
-          (r.rateio || []).forEach(x => {
-            const id = x?.lancamento_id;
-            if (id == null) return;
-            const cod = String(x.codigo ?? '').trim();
-            if (!cod) return;
-            const key = String(id);
-            if (!rateioPorLanc.has(key)) rateioPorLanc.set(key, []);
-            rateioPorLanc.get(key).push({ codigo: cod, nome: x.nome || '', valor: Math.abs(Number(x.valor || 0)) });
-          });
-          const movs = (r.lancs || []).map(l => {
-            const sinal = Number(l.sinal) || 0;
-            const tipo = sinal > 0 ? 'Crédito' : 'Débito';
-            // Códigos vêm da movto (colunas char podem ter espaços) → trim pra
-            // casar com o mapeamento/contas caixa (salvos sem espaço).
-            const cpBruto = String(l.contraparte_codigo ?? '').trim();
-            const cpResolv = l.contraparte_resolvida_codigo != null
-              ? String(l.contraparte_resolvida_codigo).trim()
-              : null;
-            const isPonte211 = /^2\.1\.1/.test(cpBruto);
-            // Provisões da baixa em lote deste lançamento (via child/parent).
-            const rateioLanc = l.lancamento_id != null ? rateioPorLanc.get(String(l.lancamento_id)) : null;
-            const temRateio = Array.isArray(rateioLanc) && rateioLanc.length > 0;
-            // "Não classificada" só quando é ponte 2.1.1 SEM resolução alguma —
-            // nem doc/valor (cpResolv) nem rateio child/parent.
-            const naoClassificada = isPonte211 && !cpResolv && !temRateio;
-            if (naoClassificada) naoClassificadas211++;
-            // Transferência entre contas próprias: a contraparte é caixa/banco —
-            // seja diretamente, seja RESOLVIDA via provisão (pagamento roteado por
-            // conta-ponte 2.1.1 que na origem debita outra conta caixa). Vai pro
-            // grupo "Transferências entre contas" (não vira despesa/receita).
-            const ehTransferencia = !!l.contraparte_eh_caixa || !!l.contraparte_resolvida_eh_caixa;
-            const planoEfetivo = ehTransferencia ? null : (cpResolv || cpBruto);
-            return {
-              codigo: l.lancamento_id != null ? `as-${l.lancamento_id}` : undefined,
-              movimentoContaCodigo: l.lancamento_id ?? null,
-              contaCodigo: (l.lado_caixa === 'debito' ? String(l.debito_codigo ?? '') : String(l.credito_codigo ?? '')).trim(),
-              planoContaGerencialCodigo: planoEfetivo,
-              planoContaGerencialDescricao: l.contraparte_resolvida_nome || l.contraparte_nome || null,
-              // Campos extras pra diagnóstico/badge no front
-              _viaProvisao: !!l.via_provisao || temRateio,
-              _naoClassificada211: naoClassificada,
-              _contraparteBruta: cpBruto,
-              // Baixa em lote: despesas reais das provisões ligadas via child/parent.
-              // Não aplica a transferências (elas vão pro grupo de transferências).
-              _rateioProvisao: ehTransferencia ? null : (temRateio ? rateioLanc : null),
-              tipo,
-              valor: Math.abs(Number(l.valor || 0)),
-              dataMovimento: String(l.data ?? '').slice(0, 10),
-              descricao: [
-                ehTransferencia ? `↔ ${l.contraparte_nome || ('conta ' + cpBruto)}` : '',
-                naoClassificada ? '[2.1.1 sem provisão]' : '',
-                l.documento ? `Nº ${l.documento}` : '',
-                l.pessoa_nome || '',
-                l.obs || '',
-              ].filter(Boolean).join(' · '),
-              tipoDocumentoOrigem: ehTransferencia ? TRANSFER_TIPO_DOC : 'AUTOSYSTEM',
-              empresaCodigo: l.empresa,
-            };
-          });
+          // Conversão lançamento → movimento: utils/fluxoCaixa/motor (mesma regra da IA)
+          const { movimentos: movs, naoClassificadas211: nc211 } = lancamentosAutosystemParaMovimentos(r.lancs, r.rateio);
+          naoClassificadas211 += nc211;
           totalConvertidos += movs.length;
           mapa[r.key] = { movimentos: movs };
         });
@@ -619,6 +592,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         });
 
         setDadosPorMes(mapa);
+        registrarContasDoPeriodo(mapa);
         setSaldosIniciaisContaPorEmpresa(saldosIniciaisContaPeriodo);
         setSaldosFinaisContaPorEmpresa(saldosFinaisContaPeriodo);
         setMovimentacaoContaPorEmpresa(movimentacaoAcc);
@@ -687,6 +661,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
       const mapa = {};
       results.forEach(r => { mapa[r.key] = { movimentos: r.movimentos.map(ajustarCartao) }; });
       setDadosPorMes(mapa);
+      registrarContasDoPeriodo(mapa);
 
       // ─── Saldo de ABERTURA real por conta ───────────────────────────
       // O campo `saldo` do MOVIMENTO_CONTA é lançado em lote/retro-datado, então
@@ -847,12 +822,22 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Respeita o toggle de tipos (tiposContaAtivos) - conta de tipo nao selecionado
   // nao entra nem no dropdown nem nos calculos.
   const contasDisponiveis = useMemo(() => {
-    // Fonte ESTÁVEL = contas classificadas como caixa/banco (config), pra que o
-    // dropdown não colapse quando o fetch é filtrado por seleção (Autosystem).
-    // Fallback (redes sem classificação carregada): deriva dos movimentos.
+    // Só as contas que tiveram movimento nas empresas do fluxo montado (e da
+    // categoria filtrada); as já marcadas ficam sempre, para poder desmarcar.
+    // Antes de montar o fluxo a lista fica vazia (o modal avisa).
+    // Só vale a montagem da empresa/período atuais (trocou a seleção → vazio até montar)
+    const atual = contasDoPeriodo.chave === `${cliente?.id}|${meses.map(m => m.key).join(',')}`;
+    const daSelecao = (cod) => {
+      if (filtroContas.has(cod)) return true;
+      const emps = atual ? contasDoPeriodo.porConta.get(cod) : null;
+      if (!emps) return false;
+      return !empresaFiltroSet || [...emps].some(e => empresaFiltroSet.has(e));
+    };
+    // Nome e tipo vêm das contas classificadas como caixa/banco (config).
     if (contasClassificadas.length > 0) {
       return contasClassificadas
-        .filter(c => c.ativo !== false && (c.tipo === 'bancaria' || c.tipo === 'caixa') && tiposContaAtivos.has(c.tipo))
+        .filter(c => c.ativo !== false && (c.tipo === 'bancaria' || c.tipo === 'caixa') && tiposContaAtivos.has(c.tipo)
+          && daSelecao(String(c.conta_codigo)))
         .map(c => {
           const cod = String(c.conta_codigo);
           return { codigo: cod, nome: descricaoPorConta.get(cod) || `Conta #${cod}` };
@@ -867,6 +852,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
         const tipoConta = tipoPorConta.get(cod);
         if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
         if (!tiposContaAtivos.has(tipoConta)) return;
+        if (empresaFiltroSet && !empresaFiltroSet.has(String(m.empresaCodigo ?? ''))) return;
         if (!set.has(cod)) {
           set.set(cod, descricaoPorConta.get(cod) || `Conta #${cod}`);
         }
@@ -875,170 +861,64 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
     return Array.from(set.entries())
       .map(([codigo, nome]) => ({ codigo, nome }))
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-  }, [contasClassificadas, dadosPorMes, tipoPorConta, descricaoPorConta, tiposContaAtivos]);
+  }, [contasClassificadas, dadosPorMes, tipoPorConta, descricaoPorConta, tiposContaAtivos, contasDoPeriodo, filtroContas, empresaFiltroSet, cliente, meses]);
 
   // ─── Indexar movimentos por conta + mes ───────────────────
   // Crédito = +valor (entrou caixa). Débito = -valor (saiu caixa).
   // Aplica filtros: tipo de conta + contas especificas.
   // Códigos mapeados diretamente na máscara atual — usados pra priorizar o
   // mapeamento direto sobre a resolução por provisão (ex.: empréstimos 2.1.1.7.x).
-  const mapCodesSet = useMemo(
-    () => new Set(mapeamentos.map(m => String(m.plano_conta_codigo || '').trim())),
-    [mapeamentos],
+  const mapCodesSet = useMemo(() => codigosMapeados(mapeamentos), [mapeamentos]);
+
+  // Índice por plano/contrapartida e mês (rateio de baixa em lote, títulos pagos,
+  // prioridade do mapeamento direto, sem plano por tipo de documento): motor do fluxo.
+  // Transferências entre empresas da rede (utils/fluxoCaixa/intercompany): casa a
+  // saída de uma com a entrada da outra; no consolidado, os pares saem do fluxo.
+  const empresasDaRedeFluxo = useMemo(() => (modoRede ? (cliente?._empresas || []) : []), [modoRede, cliente]);
+  const redeIC = useMemo(() => (!modoRede ? null
+    : redeContexto.asRedeId ? { tipo: 'autosystem', id: redeContexto.asRedeId } : { tipo: 'webposto', id: redeContexto.chaveApiId }), [modoRede, redeContexto]);
+  useEffect(() => {
+    if (!redeIC || modoCliente) return undefined;
+    let vivo = true;
+    contasIntercompanyService.listar(redeIC).then(l => { if (vivo) setContasIC(l); }).catch(e => console.warn('[fluxo] contas de transferência', e));
+    return () => { vivo = false; };
+  }, [redeIC, modoCliente]);
+  const contasICSet = useMemo(() => new Set(contasIC.map(c => String(c.codigo).trim())), [contasIC]);
+  const intercompany = useMemo(() => {
+    if (!modoRede || empresasDaRedeFluxo.length < 2) return null;
+    const movimentos = Object.values(dadosPorMes).flatMap(d => d.movimentos || []);
+    return analisarIntercompany({ movimentos, tipoPorConta, empresas: empresasDaRedeFluxo, contasIntercompany: contasICSet, visaoRede: true });
+  }, [modoRede, empresasDaRedeFluxo, dadosPorMes, tipoPorConta, contasICSet]);
+  // Candidatas ao cadastro: planos/contrapartidas que movimentaram no período
+  const candidatasIC = useMemo(() => {
+    const m = new Map();
+    Object.values(dadosPorMes).forEach(d => (d.movimentos || []).forEach(mv => {
+      [mv.planoContaGerencialCodigo, mv._contraparteBruta].filter(c => c != null && String(c).trim()).forEach(c => {
+        const cod = String(c).trim();
+        const cur = m.get(cod) || { codigo: cod, nome: mv.planoContaGerencialDescricao || nomePlanoGerencial.get(cod) || '', qtd: 0 };
+        cur.qtd += 1;
+        if (!cur.nome && mv.planoContaGerencialDescricao) cur.nome = mv.planoContaGerencialDescricao;
+        m.set(cod, cur);
+      });
+    }));
+    return [...m.values()];
+  }, [dadosPorMes, nomePlanoGerencial]);
+  const salvarContasIC = async (lista) => {
+    setSalvandoContasIC(true);
+    try {
+      setContasIC(await contasIntercompanyService.salvar(redeIC, lista));
+      setModalContasIC(false);
+    } catch (e) { setError('Erro ao salvar as contas de transferência: ' + (e?.message || e)); }
+    finally { setSalvandoContasIC(false); }
+  };
+  const dadosDoFluxo = useMemo(
+    () => (eliminarIntercompany && intercompany?.idsEliminaveis.size ? removerMovimentos(dadosPorMes, intercompany.idsEliminaveis) : dadosPorMes),
+    [eliminarIntercompany, intercompany, dadosPorMes],
   );
 
-  const { totaisPorConta, totaisPorContaLado, lancamentosPorConta, nomesPorPlano } = useMemo(() => {
-    const totais = {};
-    // Totais SEPARADOS por direção (crédito/entrada 'C' vs débito/saída 'D') por
-    // conta+mês. Usado pelo mapeamento por direção do Autosystem (mesma conta em
-    // grupos diferentes conforme debitada/creditada). 'C' guarda entradas (>0),
-    // 'D' guarda saídas (<0).
-    const totaisLado = {};
-    const addLado = (codigo, mesKey, valorSignado, sinal) => {
-      const dir = sinal > 0 ? 'C' : 'D';
-      if (!totaisLado[codigo]) totaisLado[codigo] = { C: {}, D: {} };
-      totaisLado[codigo][dir][mesKey] = (totaisLado[codigo][dir][mesKey] || 0) + valorSignado;
-    };
-    const lancs = {};
-    const nomes = {}; // codigo do plano -> nome da conta gerencial (p/ diagnostico)
-    Object.entries(dadosPorMes).forEach(([mesKey, dados]) => {
-      (dados.movimentos || []).forEach(m => {
-        if (m.contaCodigo == null) return;
-        // Filtro por categoria de empresa (em cache): só empresas da categoria.
-        if (empresaFiltroSet && !empresaFiltroSet.has(String(m.empresaCodigo ?? ''))) return;
-        const cod = String(m.contaCodigo);
-        // 1. Filtro por classificacao - precisa ser explicita em Cadastros > Clientes.
-        //    Conta sem classificacao (ou aplicacao/outras) NAO entra no fluxo.
-        const tipoConta = tipoPorConta.get(cod);
-        if (tipoConta !== 'bancaria' && tipoConta !== 'caixa') return;
-        if (!tiposContaAtivos.has(tipoConta)) return;
-        // 2. Filtro por conta especifica (multiselect); vazio = todas
-        if (filtroContas.size > 0 && !filtroContas.has(cod)) return;
-
-        // Movimentos sem planoContaGerencialCodigo (ex: transferencias internas,
-        // caixa, suprimento etc) sao agrupados por tipoDocumentoOrigem num
-        // bucket "Sem classificacao" para nao sumirem do relatorio.
-        let planoBruto = m.planoContaGerencialCodigo;
-        // Prioridade do mapeamento DIRETO: se a contrapartida CRUA (ex.: uma conta
-        // 2.1.1.7.x de empréstimo a pagar) foi mapeada na máscara, ela vence a
-        // resolução por provisão — que poderia levar o pagamento pro grupo errado
-        // (ex.: casar por valor/pessoa com uma provisão de tarifas).
-        const cpBruta = m._contraparteBruta != null ? String(m._contraparteBruta).trim() : null;
-        if (cpBruta && cpBruta !== String(planoBruto ?? '').trim() && mapCodesSet.has(cpBruta)) {
-          planoBruto = cpBruta;
-        }
-        let temPlano = planoBruto != null && planoBruto !== 0 && planoBruto !== '';
-
-        const sinal = m.tipo === 'Crédito' ? 1 : -1;
-        const valorAbs = Math.abs(Number(m.valor || 0));
-        const valor = valorAbs * sinal;
-        const idBase = m.codigo || `${m.movimentoContaCodigo}`;
-
-        // ─ BAIXA EM LOTE (Autosystem): 1 pagamento (contra 2.1.1) baixou N provisões ─
-        //   O ERP liga a baixa às provisões via movto.child/parent → `_rateioProvisao`
-        //   traz a despesa real de cada título. Distribui o valor do pagamento entre
-        //   elas (proporcional ao valor de cada provisão; resíduo na última parte pra
-        //   a soma bater EXATAMENTE com o pagamento → preserva a reconciliação).
-        //   EXCEÇÃO: se a própria conta-ponte foi mapeada na máscara (cpBruta em
-        //   mapCodesSet), ela vence e NÃO rateamos (respeita o mapeamento direto).
-        const pontePropriaMapeada = !!(cpBruta && mapCodesSet.has(cpBruta));
-        const rateio = m._rateioProvisao;
-        if (!pontePropriaMapeada && Array.isArray(rateio) && rateio.length > 0) {
-          const somaR = rateio.reduce((s, x) => s + Math.abs(Number(x.valor || 0)), 0);
-          if (somaR > 0) {
-            let acumuladoAbs = 0;
-            rateio.forEach((x, idx) => {
-              const planoKey = String(x.codigo);
-              const parcelaAbs = idx === rateio.length - 1
-                ? valorAbs - acumuladoAbs
-                : Math.round(valorAbs * (Math.abs(Number(x.valor || 0)) / somaR) * 100) / 100;
-              acumuladoAbs += parcelaAbs;
-              const parcela = parcelaAbs * sinal;
-              if (x.nome && !nomes[planoKey]) nomes[planoKey] = x.nome;
-              if (!totais[planoKey]) totais[planoKey] = {};
-              totais[planoKey][mesKey] = (totais[planoKey][mesKey] || 0) + parcela;
-              addLado(planoKey, mesKey, parcela, sinal);
-              if (!lancs[planoKey]) lancs[planoKey] = [];
-              const parte = rateio.length > 1 ? ` · parte da baixa em lote (${idx + 1}/${rateio.length})` : '';
-              lancs[planoKey].push({
-                id: rateio.length > 1 ? `${idBase}-r${idx}` : idBase,
-                mesKey,
-                data: m.dataMovimento,
-                descricao: `${(m.descricao || '').trim() || '—'}${parte}`,
-                tipoDoc: m.tipoDocumentoOrigem,
-                movimentoContaCodigo: m.movimentoContaCodigo ?? null,
-                valor: parcelaAbs,
-                sinal,
-              });
-            });
-            return; // pagamento distribuído via rateio child/parent, pula o push normal
-          }
-        }
-
-        // ─ TITULO_PAGAR_PAGAMENTO: liga via titulo.pagamento[].codigoDocumento ─
-        //   codigoDocumento == MOVIMENTO_CONTA.movimentoContaCodigo.
-        //   Valor consumido no fluxo vem do TITULO_PAGAR (pagamento[].valorPago),
-        //   NAO do m.valor. Multiplos titulos podem compartilhar o mesmo
-        //   movimentoContaCodigo quando o pagamento foi feito em lote.
-        //   Lógica compartilhada com a IA (qualityApiService.distribuirPagamentoTitulos).
-        const entradasComPlano = qualityApi.distribuirPagamentoTitulos(m, titulosPorPagamento);
-        if (entradasComPlano) {
-          // Distribui cada pedaco no plano do seu titulo, com o valor do TITULO_PAGAR.
-          entradasComPlano.forEach((x, idx) => {
-            const parcela = x.valorTitulo * sinal;
-            const planoKey = String(x.planoCod);
-            if (x.titulo.planoContaGerencialDescricao && !nomes[planoKey]) {
-              nomes[planoKey] = x.titulo.planoContaGerencialDescricao;
-            }
-            if (!totais[planoKey]) totais[planoKey] = {};
-            totais[planoKey][mesKey] = (totais[planoKey][mesKey] || 0) + parcela;
-            addLado(planoKey, mesKey, parcela, sinal);
-            if (!lancs[planoKey]) lancs[planoKey] = [];
-            const tituloCod = x.titulo.tituloPagarCodigo ?? x.titulo.codigo ?? null;
-            const partLabel = entradasComPlano.length > 1
-              ? ` · parte do lote (${idx + 1}/${entradasComPlano.length}) · título #${tituloCod ?? '—'}`
-              : ` · título #${tituloCod ?? '—'}`;
-            lancs[planoKey].push({
-              id: entradasComPlano.length > 1 ? `${idBase}-p${idx}` : idBase,
-              mesKey,
-              data: m.dataMovimento,
-              descricao: `${(m.descricao || '').trim() || '—'}${partLabel}`,
-              tipoDoc: m.tipoDocumentoOrigem,
-              movimentoContaCodigo: m.movimentoContaCodigo ?? null,
-              tituloPagarCodigo: tituloCod,
-              valor: x.valorTitulo,
-              sinal,
-            });
-          });
-          return; // movimento distribuido via TITULO_PAGAR, pula o push normal
-        }
-
-        const codigo = temPlano
-          ? String(planoBruto)
-          : `${SEM_PLANO_PREFIX}${m.tipoDocumentoOrigem || 'OUTROS'}`;
-        if (temPlano && m.planoContaGerencialDescricao && !nomes[codigo]) {
-          nomes[codigo] = m.planoContaGerencialDescricao;
-        }
-
-        if (!totais[codigo]) totais[codigo] = {};
-        totais[codigo][mesKey] = (totais[codigo][mesKey] || 0) + valor;
-        addLado(codigo, mesKey, valor, sinal);
-
-        if (!lancs[codigo]) lancs[codigo] = [];
-        lancs[codigo].push({
-          id: idBase,
-          mesKey,
-          data: m.dataMovimento,
-          descricao: (m.descricao || '').trim() || '—',
-          tipoDoc: m.tipoDocumentoOrigem,
-          movimentoContaCodigo: m.movimentoContaCodigo ?? null,
-          valor: valorAbs,
-          sinal,
-        });
-      });
-    });
-    return { totaisPorConta: totais, totaisPorContaLado: totaisLado, lancamentosPorConta: lancs, nomesPorPlano: nomes };
-  }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento, mapCodesSet, empresaFiltroSet]);
+  const indiceFluxo = useMemo(() => indexarMovimentos({
+    dadosPorMes: dadosDoFluxo, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento, mapCodesSet, empresaFiltroSet,
+  }), [dadosDoFluxo, tipoPorConta, tiposContaAtivos, filtroContas, titulosPorPagamento, mapCodesSet, empresaFiltroSet]);
 
   // ─── Composicao do saldo por conta (saldo inicial + movs = saldo atual) ─
   // Respeita os mesmos filtros aplicados ao fluxo (bancaria/caixa + multi-select).
@@ -1197,62 +1077,8 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   }, [dadosPorMes, tipoPorConta, tiposContaAtivos, filtroContas, empresaFiltroSet]);
 
   // ─── Build Fluxo tree ─────────────────────────────────────
-  const fluxoTree = useMemo(() => {
-    if (!grupos.length) return [];
-
-    function buildNode(grupo) {
-      const contasMapeadas = mapeamentos.filter(m => m.grupo_fluxo_id === grupo.id);
-      const contas = contasMapeadas.map(m => {
-        const codKey = String(m.plano_conta_codigo);
-        // Direção (Autosystem): 'C' usa só entradas, 'D' só saídas, null = líquido.
-        const fonte = m.lado === 'C' ? (totaisPorContaLado[codKey]?.C)
-          : m.lado === 'D' ? (totaisPorContaLado[codKey]?.D)
-          : totaisPorConta[codKey];
-        const valoresPorMes = {};
-        let totalPeriodo = 0;
-        meses.forEach(mes => {
-          const v = fonte?.[mes.key] || 0;
-          valoresPorMes[mes.key] = v;
-          totalPeriodo += v;
-        });
-        let lancs = lancamentosPorConta[codKey] || [];
-        if (m.lado === 'C') lancs = lancs.filter(l => l.sinal > 0);
-        else if (m.lado === 'D') lancs = lancs.filter(l => l.sinal < 0);
-        lancs = lancs.slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
-        return {
-          id: m.id,
-          codigo: m.plano_conta_codigo,
-          descricao: m.plano_conta_descricao,
-          lado: m.lado,
-          isManual: m.isManual,
-          valoresPorMes,
-          totalPeriodo,
-          lancamentos: lancs,
-        };
-      });
-
-      const children = grupos
-        .filter(g => g.parent_id === grupo.id)
-        .sort((a, b) => a.ordem - b.ordem)
-        .map(buildNode);
-
-      const valoresPorMes = {};
-      let totalPeriodo = 0;
-      meses.forEach(mes => {
-        const fromContas = contas.reduce((s, c) => s + (c.valoresPorMes[mes.key] || 0), 0);
-        const fromChildren = children.reduce((s, c) => s + (c.valoresPorMes[mes.key] || 0), 0);
-        valoresPorMes[mes.key] = fromContas + fromChildren;
-        totalPeriodo += valoresPorMes[mes.key];
-      });
-
-      return { ...grupo, contas, children, valoresPorMes, totalPeriodo };
-    }
-
-    return grupos
-      .filter(g => !g.parent_id)
-      .sort((a, b) => a.ordem - b.ordem)
-      .map(buildNode);
-  }, [grupos, mapeamentos, totaisPorConta, totaisPorContaLado, lancamentosPorConta, meses]);
+  const fluxoTree = useMemo(() => montarArvoreFluxo({ grupos, mapeamentos, indice: indiceFluxo, meses }),
+    [grupos, mapeamentos, indiceFluxo, meses]);
 
   // ─── Grupo sintetico "Sem classificacao" ───────────────────
   // Captura movimentos que nao foram alocados em nenhum grupo da mascara:
@@ -1261,105 +1087,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // Fica fora do calculo de subtotais/resultado (nao vira "Variacao de Caixa")
   // pra evitar mascarar inconsistencias do DRE gerencial. E renderizado em bloco
   // separado abaixo da arvore principal, puramente informativo.
-  const semClassificacaoNode = useMemo(() => {
-    // Mapeamento sensível à direção (Autosystem): 'null'=ambos, 'C'=crédito, 'D'=débito.
-    const mapNull = new Set(mapeamentos.filter(m => !m.lado).map(m => String(m.plano_conta_codigo)));
-    const mapC = new Set(mapeamentos.filter(m => m.lado === 'C').map(m => String(m.plano_conta_codigo)));
-    const mapD = new Set(mapeamentos.filter(m => m.lado === 'D').map(m => String(m.plano_conta_codigo)));
-    // Códigos marcados como conta caixa/banco (refSet) — se um deles aparece aqui
-    // como contrapartida, é uma transferência que deveria ter sido excluída.
-    const caixaSet = new Set(contasClassificadas.filter(c => c.ativo !== false).map(c => String(c.conta_codigo)));
-    const contas = [];
-    Object.entries(totaisPorConta).forEach(([codigo, valoresPorMesAll]) => {
-      if (codigo === TRANSFER_CODE) return; // vai pro grupo "Transferências", não aqui
-      if (mapNull.has(codigo)) return; // vínculo "ambos" cobre a conta inteira
-      // Direções ainda NÃO mapeadas desta conta (se só um lado tem vínculo, o
-      // outro fica sem classificação — ex.: conta só mapeada como crédito).
-      const dirsNaoMapeadas = [];
-      if (!mapC.has(codigo)) dirsNaoMapeadas.push('C');
-      if (!mapD.has(codigo)) dirsNaoMapeadas.push('D');
-      if (dirsNaoMapeadas.length === 0) return; // ambas direções já mapeadas
-      const soUmaDirecao = dirsNaoMapeadas.length === 1;
-
-      const semPlano = codigo.startsWith(SEM_PLANO_PREFIX);
-      const tipoDoc = semPlano ? codigo.substring(SEM_PLANO_PREFIX.length) : null;
-      const nomeConta = semPlano
-        ? null
-        : ((nomesPorPlano && nomesPorPlano[codigo]) || nomePlanoGerencial.get(String(codigo)) || null);
-      // Nome principal: para plano, o nome da conta gerencial (se houver);
-      // para grupos sem plano, o proprio tipo de documento.
-      const descricao = semPlano
-        ? (tipoDoc || 'OUTROS').replace(/_/g, ' ')
-        : (nomeConta || `Plano #${codigo} (sem mapeamento)`);
-
-      const valoresPorMes = {};
-      let totalPeriodo = 0;
-      meses.forEach(mes => {
-        // Se só uma direção está sem mapa, mostra apenas o valor daquela direção;
-        // se ambas, o total líquido da conta.
-        const v = soUmaDirecao
-          ? (totaisPorContaLado[codigo]?.[dirsNaoMapeadas[0]]?.[mes.key] || 0)
-          : (valoresPorMesAll[mes.key] || 0);
-        valoresPorMes[mes.key] = v;
-        totalPeriodo += v;
-      });
-
-      let lancs = lancamentosPorConta[codigo] || [];
-      if (soUmaDirecao) {
-        const d = dirsNaoMapeadas[0];
-        lancs = lancs.filter(l => (l.sinal > 0 ? 'C' : 'D') === d);
-      }
-      lancs = lancs.slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
-
-      // Tipos de documento distintos que compoem este grupo
-      const tiposDoc = semPlano
-        ? [(tipoDoc || 'OUTROS').replace(/_/g, ' ')]
-        : [...new Set(lancs.map(l => l.tipoDoc).filter(Boolean))];
-
-      // Motivo (diagnóstico): por que caiu no "não mapeado".
-      const motivo = caixaSet.has(codigo)
-        ? 'É conta caixa/banco — deveria ser transferência (código não bate com a lista de caixa)'
-        : (mapC.has(codigo) || mapD.has(codigo))
-          ? `Mapeada só no lado ${mapC.has(codigo) ? 'crédito' : 'débito'} — o outro lado fica sem classificação`
-          : 'Sem vínculo nesta máscara (código não encontrado no mapeamento)';
-
-      contas.push({
-        id: `sc-${codigo}`,
-        codigo,
-        semPlano,
-        nomeConta,
-        tiposDoc,
-        descricao,
-        motivo,
-        valoresPorMes,
-        totalPeriodo,
-        lancamentos: lancs,
-      });
-    });
-
-    if (contas.length === 0) return null;
-
-    // Ordena por |totalPeriodo| desc para trazer o maior impacto primeiro
-    contas.sort((a, b) => Math.abs(b.totalPeriodo) - Math.abs(a.totalPeriodo));
-
-    const valoresPorMes = {};
-    let totalPeriodo = 0;
-    meses.forEach(mes => {
-      valoresPorMes[mes.key] = contas.reduce((s, c) => s + (c.valoresPorMes[mes.key] || 0), 0);
-      totalPeriodo += valoresPorMes[mes.key];
-    });
-
-    return {
-      id: '__sem_classificacao__',
-      nome: 'Sem classificação',
-      tipo: 'grupo',
-      contas,
-      children: [],
-      valoresPorMes,
-      totalPeriodo,
-      isSemClassificacao: true,
-    };
-  }, [totaisPorConta, totaisPorContaLado, lancamentosPorConta, nomesPorPlano, nomePlanoGerencial, mapeamentos, meses, contasClassificadas]);
+  const semClassificacaoNode = useMemo(() => montarSemClassificacao({
+    indice: indiceFluxo, mapeamentos, meses, contasClassificadas, nomePlanoGerencial,
+  }), [indiceFluxo, mapeamentos, meses, contasClassificadas, nomePlanoGerencial]);
 
   // Exporta o bloco "não mapeados" para XLSX (resumo por grupo + lançamentos).
   const exportarNaoMapeadosXlsx = useCallback(() => {
@@ -1400,74 +1130,36 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   // cruzaram a fronteira da seleção). Diferente de "Sem classificação", ESTE
   // grupo É somado na Variação de Caixa — é o que faz o total bater com o
   // extrato quando se filtra uma conta.
-  const transferenciasNode = useMemo(() => {
-    const valoresPorMesAll = totaisPorConta[TRANSFER_CODE];
-    if (!valoresPorMesAll) return null;
-    const valoresPorMes = {};
-    let totalPeriodo = 0;
-    meses.forEach(mes => { const v = valoresPorMesAll[mes.key] || 0; valoresPorMes[mes.key] = v; totalPeriodo += v; });
-    const temValor = Math.abs(totalPeriodo) > 0.005 || meses.some(m => Math.abs(valoresPorMes[m.key]) > 0.005);
-    if (!temValor) return null;
-    const lancs = (lancamentosPorConta[TRANSFER_CODE] || [])
-      .slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
-    return {
-      id: '__transferencias__',
-      nome: TRANSFER_TIPO_DOC,
-      tipo: 'grupo',
-      contas: [{ id: 'tr-contas', codigo: TRANSFER_CODE, descricao: 'Entre contas próprias', valoresPorMes, totalPeriodo, lancamentos: lancs }],
-      children: [],
-      valoresPorMes,
-      totalPeriodo,
-      isTransferencias: true,
-    };
-  }, [totaisPorConta, lancamentosPorConta, meses]);
+  const transferenciasNode = useMemo(() => montarTransferencias({ indice: indiceFluxo, meses }), [indiceFluxo, meses]);
 
   // ─── Acumulado para subtotais/resultados ───────────────────
-  const fluxoComCalculos = useMemo(() => {
-    const acumPorMes = {};
-    let acumTotal = 0;
-    meses.forEach(m => { acumPorMes[m.key] = 0; });
+  const fluxoComCalculos = useMemo(() => aplicarCalculosFluxo({ arvore: fluxoTree, transferencias: transferenciasNode, meses }),
+    [fluxoTree, transferenciasNode, meses]);
 
-    // Insere o grupo de transferências imediatamente ANTES da linha de resultado
-    // final (Variação de Caixa), pra que ela some as transferências no total.
-    let nodes = fluxoTree;
-    if (transferenciasNode) {
-      nodes = [...fluxoTree];
-      let idx = -1;
-      for (let i = nodes.length - 1; i >= 0; i--) { if (nodes[i].tipo === 'resultado') { idx = i; break; } }
-      if (idx === -1) nodes.push(transferenciasNode);
-      else nodes.splice(idx, 0, transferenciasNode);
-    }
+  const totalGeral = useMemo(() => totalGeralFluxo({ comCalculos: fluxoComCalculos, arvore: fluxoTree, transferencias: transferenciasNode }),
+    [fluxoComCalculos, fluxoTree, transferenciasNode]);
 
-    // Total GERAL = todos os grupos (não as linhas de cálculo), INDEPENDENTE da
-    // posição. Se um grupo estiver posicionado depois da linha de resultado, o
-    // valor ainda entra no total (senão sumiria — era a causa da diferença).
-    const ehCalc = (n) => n.tipo === 'subtotal' || n.tipo === 'resultado';
-    const grandTotal = nodes.reduce((s, n) => s + (ehCalc(n) ? 0 : n.totalPeriodo), 0);
-    const grandPorMes = {};
-    meses.forEach(m => { grandPorMes[m.key] = nodes.reduce((s, n) => s + (ehCalc(n) ? 0 : (n.valoresPorMes[m.key] || 0)), 0); });
+  // Conciliação: Σ(saldo atual − saldo inicial) das contas × Variação de Caixa do
+  // fluxo. O que fica de fora ("Sem classificação") explica parte da diferença.
+  const conciliacao = useMemo(() => conciliarFluxoComSaldos({
+    composicao: composicaoSaldo, totalGeral, semClassificacaoTotal: semClassificacaoNode?.totalPeriodo || 0,
+  }), [composicaoSaldo, totalGeral, semClassificacaoNode]);
 
-    return nodes.map(node => {
-      if (node.tipo === 'resultado') {
-        // Resultado final = total de TODOS os grupos (independe da ordem).
-        return { ...node, isCalc: true, valoresPorMes: { ...grandPorMes }, totalPeriodo: grandTotal };
-      }
-      if (node.tipo === 'subtotal') {
-        // Subtotal = acumulado até aqui (inclui contas próprias, se houver).
-        meses.forEach(m => { acumPorMes[m.key] += (node.valoresPorMes[m.key] || 0); });
-        acumTotal += node.totalPeriodo;
-        return { ...node, isCalc: true, valoresPorMes: { ...acumPorMes }, totalPeriodo: acumTotal };
-      }
-      meses.forEach(m => { acumPorMes[m.key] += (node.valoresPorMes[m.key] || 0); });
-      acumTotal += node.totalPeriodo;
-      return node;
+  // Pontos de atenção por regra (utils/fluxoCaixa/anomalias): duplicidades, picos,
+  // contas que zeraram, classificação suspeita, sem classificação, conciliação,
+  // transferências entre empresas sem par.
+  const nomeEmpresaPorCodigo = useCallback((cod) => {
+    const e = (cliente?._empresas || []).find(x => String(x.empresa_codigo) === String(cod));
+    return e ? labelEmpresa(e) : (String(cliente?.empresa_codigo) === String(cod) ? labelEmpresa(cliente) : `Empresa ${cod}`);
+  }, [cliente, labelEmpresa]);
+  const pontosAtencao = useMemo(() => {
+    if (!dadosCarregados) return [];
+    const movimentoBruto = Object.values(indiceFluxo.lancamentosPorConta).reduce((s, l) => s + l.reduce((t, x) => t + x.valor, 0), 0);
+    return detectarAnomalias({
+      indice: indiceFluxo, arvore: fluxoTree, meses, semClassificacao: semClassificacaoNode, conciliacao,
+      intercompany, movimentoBruto, nomeEmpresa: nomeEmpresaPorCodigo,
     });
-  }, [fluxoTree, transferenciasNode, meses]);
-
-  const totalGeral = useMemo(() =>
-    fluxoComCalculos.find(n => n.tipo === 'resultado')?.totalPeriodo
-    ?? (fluxoTree.reduce((s, n) => s + ((n.tipo === 'subtotal' || n.tipo === 'resultado') ? 0 : n.totalPeriodo), 0) + (transferenciasNode?.totalPeriodo || 0))
-  , [fluxoComCalculos, fluxoTree, transferenciasNode]);
+  }, [dadosCarregados, indiceFluxo, fluxoTree, meses, semClassificacaoNode, conciliacao, intercompany, nomeEmpresaPorCodigo]);
 
 
 
@@ -2225,6 +1917,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
   };
 
   const handlePrint = () => window.print();
+  const pdfPaisagem = meses.length > 1; // PDF: 1 mês retrato, 2+ meses paisagem
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>;
@@ -2335,8 +2028,9 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
           .pdf-rule-amber { background: #fcb619 !important; }
           .pdf-footer { display: block !important; position: fixed; left: 0; right: 0; bottom: 0; }
 
-          /* Margem inferior maior reserva espaço pro rodapé fixo. */
-          @page { size: A4 portrait; margin: 9mm 8mm 20mm 8mm; }
+          /* 1 mês: A4 retrato; 2+ meses (mais colunas, com AH): A4 paisagem.
+             Margem inferior maior reserva espaço pro rodapé fixo. */
+          @page { size: A4 ${pdfPaisagem ? 'landscape' : 'portrait'}; margin: 9mm 8mm 20mm 8mm; }
         }
         .print-only { display: none; }
         .pdf-footer { display: none; }
@@ -2564,49 +2258,13 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 ml-auto flex-wrap h-8">
-            <ApelidoToggle empresas={redeContexto?.empresas} somenteQuandoHaApelidos={false} />
-            {/* Filtros de tipo e conta específica ficam só para admin */}
-            {!modoCliente && (
-              <>
-                <div className="flex items-center gap-0.5 bg-gray-100/80 rounded-lg p-0.5 h-8">
-                  <span className="px-1.5 text-[9px] font-semibold text-gray-500 uppercase tracking-wider">Tipo:</span>
-                  {[
-                    { key: 'bancaria', label: 'Bancária' },
-                    { key: 'caixa', label: 'Caixa' },
-                  ].map(opt => {
-                    const ativo = tiposContaAtivos.has(opt.key);
-                    return (
-                      <button key={opt.key} type="button"
-                        onClick={() => setTiposContaAtivos(prev => {
-                          const next = new Set(prev);
-                          next.has(opt.key) ? next.delete(opt.key) : next.add(opt.key);
-                          return next.size === 0 ? prev : next;
-                        })}
-                        className={`rounded-md px-2 py-0.5 text-[10.5px] font-medium transition-all ${
-                          ativo ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-700'
-                        }`}>
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <MultiSelectContas
-                  contas={contasDisponiveis}
-                  selecionadas={filtroContas}
-                  onChange={setFiltroContas}
-                  open={filtroContasOpen}
-                  setOpen={setFiltroContasOpen}
-                />
-              </>
-            )}
-            <button onClick={() => setOcultarZeradas(!ocultarZeradas)}
-              className={`flex items-center gap-1 h-8 rounded-lg px-2.5 text-[10.5px] font-medium transition-all border ${
-                ocultarZeradas ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}>
-              {ocultarZeradas ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-              Ocultar zeradas
-            </button>
+          <div className="ml-auto flex h-8 items-center">
+            <FiltrosFluxo comFiltrosConta={!modoCliente}
+              tiposAtivos={tiposContaAtivos} onTiposAtivos={setTiposContaAtivos}
+              contas={contasDisponiveis} contasSelecionadas={filtroContas} onContasSelecionadas={setFiltroContas}
+              avisoContas={dadosCarregados ? 'Nenhuma conta com movimento nas empresas selecionadas.' : 'Monte o fluxo para ver as contas das empresas selecionadas.'}
+              ocultarZeradas={ocultarZeradas} onOcultarZeradas={setOcultarZeradas}
+              podeAH={meses.length > 1} mostrarAH={mostrarAH} onAlternarAH={alternarAH} />
           </div>
         </div>
       </motion.div>
@@ -2784,7 +2442,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                       ))}
                     </div>
                   </div>
-                  <div className="evol-chart-fit" style={{ '--evol-scale': evolucaoCaixa.larguraPx ? Math.min(1, 700 / (74 + evolucaoCaixa.larguraPx)) : 1 }}>
+                  <div className="evol-chart-fit" style={{ '--evol-scale': evolucaoCaixa.larguraPx ? Math.min(1, (pdfPaisagem ? 1060 : 700) / (74 + evolucaoCaixa.larguraPx)) : 1 }}>
                   <div className="flex evol-chart-flex">
                     {/* Eixo Y fixo — não acompanha o scroll horizontal. Renderiza só o
                         eixo (mesmo domínio do gráfico ao lado), pra rótulos ficarem visíveis. */}
@@ -3345,6 +3003,15 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                   <span className="text-[11px] text-gray-400">
                     · Saldo inicial (dia anterior ao período) + movimentos = Saldo atual (fim do período)
                   </span>
+                  {conciliacao && (
+                    <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${
+                      conciliacao.bate ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    }`} title={`Variação dos saldos: ${formatCurrency(conciliacao.variacaoSaldos)} · Variação do fluxo: ${formatCurrency(conciliacao.totalFluxo)}${conciliacao.explicadaPorSemClassificacao ? ` · Sem classificação: ${formatCurrency(conciliacao.explicadaPorSemClassificacao)}` : ''}`}>
+                      {conciliacao.bate
+                        ? <><CheckCircle2 className="h-3 w-3" /> Confere com o fluxo</>
+                        : <><AlertCircle className="h-3 w-3" /> Diferença de {formatCurrency(conciliacao.naoExplicada)} com o fluxo</>}
+                    </span>
+                  )}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm print-comp-table">
@@ -3464,19 +3131,30 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-[12px]" style={{ tableLayout: 'fixed', minWidth: 490 + meses.length * 120 + 140 }}>
+              <table className="w-full text-[12px]" style={{ tableLayout: 'fixed', minWidth: 490 + meses.length * 120 + 140 + (comAH ? (meses.length - 1) * 70 : 0) }}>
                 <colgroup>
                   <col style={{ width: 490 }} />
-                  {meses.map(m => <col key={`${m.key}-v`} style={{ width: 120 }} />)}
+                  {meses.map((m, i) => (
+                    <React.Fragment key={`${m.key}-cg`}>
+                      <col style={{ width: 120 }} />
+                      {comAH && i > 0 && <col style={{ width: 70 }} />}
+                    </React.Fragment>
+                  ))}
                   <col style={{ width: 140 }} />
                 </colgroup>
                 <thead className="bg-gray-50/80">
                   <tr className="text-gray-500">
                     <th className="text-left px-4 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">Linha</th>
-                    {meses.map(m => (
-                      <th key={`${m.key}-h`} className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">
-                        {m.label} (R$)
-                      </th>
+                    {meses.map((m, i) => (
+                      <React.Fragment key={`${m.key}-h`}>
+                        <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap">
+                          {m.label} (R$)
+                        </th>
+                        {comAH && i > 0 && (
+                          <th title={`Análise horizontal: ${m.label} sobre ${meses[i - 1].label}`}
+                            className="text-right pl-1 pr-3 py-2.5 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap text-gray-400">AH %</th>
+                        )}
+                      </React.Fragment>
                     ))}
                     <th className="text-right px-3 py-2.5 font-medium uppercase text-[10px] tracking-wider bg-gray-100/60 whitespace-nowrap">Total (R$)</th>
                   </tr>
@@ -3484,7 +3162,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
                 <tbody>
                   {fluxoComCalculos.map(node => (
                     <FluxoNodeRows key={node.id} node={node} depth={0}
-                      meses={meses}
+                      meses={meses} comAH={comAH}
                       expandedGrupos={expandedGrupos}
                       expandedContas={expandedContas}
                       onToggleGrupo={toggleGrupo}
@@ -3500,6 +3178,19 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
               </table>
             </div>
             </div>
+
+            {/* Transferências entre empresas (rede) e pontos de atenção — só admin, fora da impressão */}
+            {!modoCliente && !clienteIdOverride && (
+              <>
+                <TransferenciasEntreEmpresas analise={intercompany} eliminar={eliminarIntercompany} onEliminar={setEliminarIntercompany} nomeEmpresa={nomeEmpresaPorCodigo}
+                  qtdContas={contasIC.length} onConfigurar={redeIC ? () => setModalContasIC(true) : undefined} />
+                {modalContasIC && (
+                  <ModalContasIntercompany aberto candidatos={candidatasIC} selecionadas={contasIC.map(c => String(c.codigo).trim())}
+                    salvando={salvandoContasIC} onSalvar={salvarContasIC} onFechar={() => setModalContasIC(false)} />
+                )}
+                <PontosAtencao achados={pontosAtencao} nomeEmpresa={nomeEmpresaPorCodigo} />
+              </>
+            )}
 
             {/* Contas, chaves e lancamentos nao mapeados (diagnostico — apenas admin, fora de impressao) */}
             {!modoCliente && !clienteIdOverride && semClassificacaoNode && semClassificacaoNode.contas.length > 0 && (
@@ -3654,7 +3345,7 @@ export default function RelatorioFluxoCaixa({ clienteIdOverride, backHref, redeC
 }
 
 // ─── Recursive row renderer ─────────────────────────────────
-function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onToggleGrupo, onToggleConta, ocultarZeradas, expandedLancamentos, onToggleLancamento, tituloPagarMap, titulosPorPagamento }) {
+function FluxoNodeRows({ node, depth, meses, comAH = false, expandedGrupos, expandedContas, onToggleGrupo, onToggleConta, ocultarZeradas, expandedLancamentos, onToggleLancamento, tituloPagarMap, titulosPorPagamento }) {
   const isCalc = node.tipo === 'subtotal' || node.tipo === 'resultado';
   const isResultado = node.tipo === 'resultado';
   const isExpanded = expandedGrupos.has(node.id);
@@ -3712,16 +3403,19 @@ function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onT
             }`}>{node.nome}</span>
           </div>
         </td>
-        {meses.map(m => {
+        {meses.map((m, i) => {
           const v = node.valoresPorMes[m.key] || 0;
           return (
-            <td key={`${m.key}-v`} className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap ${
-              isResultado ? `font-bold ${v >= 0 ? 'text-emerald-700' : 'text-red-600'}`
-                : isCalc ? 'font-semibold text-gray-700'
-                  : v >= 0 ? 'text-emerald-700' : 'text-red-600'
-            }`}>
-              {formatCurrencyCompact(v)}
-            </td>
+            <React.Fragment key={`${m.key}-v`}>
+              <td className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap ${
+                isResultado ? `font-bold ${v >= 0 ? 'text-emerald-700' : 'text-red-600'}`
+                  : isCalc ? 'font-semibold text-gray-700'
+                    : v >= 0 ? 'text-emerald-700' : 'text-red-600'
+              }`}>
+                {formatCurrencyCompact(v)}
+              </td>
+              {comAH && i > 0 && <CelulaAH atual={v} anterior={node.valoresPorMes[meses[i - 1].key] || 0} />}
+            </React.Fragment>
           );
         })}
         <td className={`text-right px-3 py-2 font-mono tabular-nums whitespace-nowrap bg-gray-50/40 ${
@@ -3736,7 +3430,7 @@ function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onT
       <AnimatePresence>
         {isExpanded && !isCalc && childrenFiltrados.map(child => (
           <FluxoNodeRows key={child.id} node={child} depth={depth + 1}
-            meses={meses}
+            meses={meses} comAH={comAH}
             expandedGrupos={expandedGrupos}
             expandedContas={expandedContas}
             onToggleGrupo={onToggleGrupo}
@@ -3755,7 +3449,7 @@ function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onT
         const temLancs = conta.lancamentos && conta.lancamentos.length > 0;
         return (
           <ExpandedConta key={conta.id} conta={conta} indent={indent}
-            meses={meses} isContaExpanded={isContaExpanded} temLancs={temLancs}
+            meses={meses} comAH={comAH} isContaExpanded={isContaExpanded} temLancs={temLancs}
             onToggleConta={onToggleConta}
             expandedLancamentos={expandedLancamentos}
             onToggleLancamento={onToggleLancamento}
@@ -3768,7 +3462,7 @@ function FluxoNodeRows({ node, depth, meses, expandedGrupos, expandedContas, onT
   );
 }
 
-function ExpandedConta({ conta, indent, meses, isContaExpanded, temLancs, onToggleConta, expandedLancamentos, onToggleLancamento, tituloPagarMap, titulosPorPagamento }) {
+function ExpandedConta({ conta, indent, meses, comAH = false, isContaExpanded, temLancs, onToggleConta, expandedLancamentos, onToggleLancamento, tituloPagarMap, titulosPorPagamento }) {
   return (
     <>
       <tr className="border-b border-gray-50 hover:bg-emerald-50/20">
@@ -3792,14 +3486,17 @@ function ExpandedConta({ conta, indent, meses, isContaExpanded, temLancs, onTogg
             )}
           </div>
         </td>
-        {meses.map(m => {
+        {meses.map((m, i) => {
           const v = conta.valoresPorMes[m.key] || 0;
           return (
-            <td key={`${m.key}-v`} className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11px] whitespace-nowrap ${
-              v >= 0 ? 'text-emerald-700' : 'text-red-600'
-            }`}>
-              {formatCurrencyCompact(v)}
-            </td>
+            <React.Fragment key={`${m.key}-v`}>
+              <td className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11px] whitespace-nowrap ${
+                v >= 0 ? 'text-emerald-700' : 'text-red-600'
+              }`}>
+                {formatCurrencyCompact(v)}
+              </td>
+              {comAH && i > 0 && <CelulaAH atual={v} anterior={conta.valoresPorMes[meses[i - 1].key] || 0} pequeno />}
+            </React.Fragment>
           );
         })}
         <td className={`text-right px-3 py-1.5 font-mono tabular-nums text-[11px] bg-gray-50/40 whitespace-nowrap ${
@@ -3849,10 +3546,13 @@ function ExpandedConta({ conta, indent, meses, isContaExpanded, temLancs, onTogg
                   )}
                 </div>
               </td>
-              {meses.map(m => (
-                <td key={`${m.key}-v`} className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] whitespace-nowrap ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                  {l.mesKey === m.key ? formatCurrencyCompact(l.valor * l.sinal) : ''}
-                </td>
+              {meses.map((m, i) => (
+                <React.Fragment key={`${m.key}-v`}>
+                  <td className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] whitespace-nowrap ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                    {l.mesKey === m.key ? formatCurrencyCompact(l.valor * l.sinal) : ''}
+                  </td>
+                  {comAH && i > 0 && <td />}
+                </React.Fragment>
               ))}
               <td className={`text-right px-3 py-1 font-mono tabular-nums text-[10.5px] bg-gray-100/40 whitespace-nowrap ${l.sinal > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                 {formatCurrencyCompact(l.valor * l.sinal)}
@@ -3860,7 +3560,7 @@ function ExpandedConta({ conta, indent, meses, isContaExpanded, temLancs, onTogg
             </tr>
             {isLancExpanded && titulosDoLancamento.length > 0 && (
               <tr className="border-b border-gray-100 bg-blue-50/40">
-                <td colSpan={meses.length + 2} className="px-4 py-2" style={{ paddingLeft: 12 + indent + 70 }}>
+                <td colSpan={meses.length + 2 + (comAH ? meses.length - 1 : 0)} className="px-4 py-2" style={{ paddingLeft: 12 + indent + 70 }}>
                   {titulosDoLancamento.length === 1 ? (
                     <TituloDetalhe titulo={titulosDoLancamento[0]} valorPago={l.valor * l.sinal} />
                   ) : (
@@ -4023,85 +3723,34 @@ function formatDataBR(d) {
   return `${dd}/${m}/${y.slice(2)}`;
 }
 
+// AH: quanto o valor do mês cresceu (+) ou caiu (−) sobre o mês anterior, em tamanho
+// (saídas de 100 para 120 = +20%). Cor pelo efeito no caixa: verde se o mês deixou
+// mais dinheiro que o anterior, vermelho se deixou menos. Sem base (anterior zerado)
+// ou com troca de sinal: "—".
+function variacaoAH(atual, anterior) {
+  if (!anterior || Math.abs(anterior) < 0.005 || Math.abs(atual) < 0.005 || Math.sign(atual) !== Math.sign(anterior)) return null;
+  return atual / anterior - 1;
+}
+function CelulaAH({ atual, anterior, pequeno = false }) {
+  const ah = variacaoAH(atual, anterior);
+  const tam = pequeno ? 'text-[10px]' : 'text-[10.5px]';
+  if (ah == null || Math.abs(ah) < 0.0005) {
+    return <td className={`text-right pl-1 pr-3 py-1.5 font-mono tabular-nums ${tam} text-gray-300 whitespace-nowrap`}>{ah == null ? '—' : '0,0%'}</td>;
+  }
+  const melhorou = atual - anterior > 0;
+  const txt = `${ah > 0 ? '+' : '−'}${Math.abs(ah * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  return (
+    <td title={`Mês anterior: ${formatCurrencyCompact(anterior)}`}
+      className={`text-right pl-1 pr-3 py-1.5 font-mono tabular-nums ${tam} whitespace-nowrap ${melhorou ? 'text-emerald-600' : 'text-red-500'}`}>
+      {txt}
+    </td>
+  );
+}
+
 function formatCurrencyCompact(value) {
   if (value == null || isNaN(value)) return '';
   return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
-
-function MultiSelectContas({ contas, selecionadas, onChange, open, setOpen }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open, setOpen]);
-
-  const toggle = (codigo) => {
-    const next = new Set(selecionadas);
-    next.has(codigo) ? next.delete(codigo) : next.add(codigo);
-    onChange(next);
-  };
-  const marcarTodas = () => onChange(new Set(contas.map(c => c.codigo)));
-  const limpar = () => onChange(new Set());
-
-  const label = selecionadas.size === 0
-    ? 'Todas as contas'
-    : selecionadas.size === 1
-      ? (contas.find(c => c.codigo === [...selecionadas][0])?.nome || '1 conta')
-      : `${selecionadas.size} contas`;
-
-  return (
-    <div ref={ref} className="relative min-w-[200px]">
-      <button type="button" onClick={() => setOpen(!open)}
-        className="w-full h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-left flex items-center gap-2 hover:border-blue-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
-        <span className="flex-1 truncate text-gray-700">{label}</span>
-        {selecionadas.size > 0 && (
-          <span className="rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold px-1.5 py-0.5 flex-shrink-0">
-            {selecionadas.size}
-          </span>
-        )}
-        <span className={`text-gray-400 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`}>▾</span>
-      </button>
-      {open && (
-        <div className="absolute top-full mt-1 right-0 z-30 w-[260px] bg-white rounded-lg border border-gray-200 shadow-lg overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/60">
-            <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">Contas</p>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={marcarTodas}
-                className="text-[10px] font-medium text-blue-600 hover:text-blue-800">Todas</button>
-              <span className="text-gray-300">|</span>
-              <button type="button" onClick={limpar}
-                className="text-[10px] font-medium text-gray-500 hover:text-gray-800">Limpar</button>
-            </div>
-          </div>
-          <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
-            {contas.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-gray-500">Nenhuma conta com movimento no período.</p>
-            ) : contas.map(c => {
-              const marcada = selecionadas.has(c.codigo);
-              return (
-                <label key={c.codigo}
-                  className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${marcada ? 'bg-blue-50/40' : 'hover:bg-gray-50'}`}>
-                  <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${
-                    marcada ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
-                  }`}>
-                    {marcada && <span className="text-white text-[10px] leading-none">✓</span>}
-                  </div>
-                  <input type="checkbox" className="hidden" checked={marcada} onChange={() => toggle(c.codigo)} />
-                  <span className="flex-1 text-xs text-gray-800 truncate">{c.nome}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 // Linha (recursiva) de um grupo no consumo da sobra — drill até a conta.
 // `base` = sobra do mês (análise vertical: participação de cada item na sobra).

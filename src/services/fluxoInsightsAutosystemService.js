@@ -11,6 +11,7 @@
 import * as mascaraFluxoService from './mascaraFluxoCaixaService';
 import * as autosystemService from './autosystemService';
 import { agregarFluxoPorGrupo, montarConcentracaoRisco } from './fluxoInsightsService';
+import { lancamentosAutosystemParaMovimentos } from '../utils/fluxoCaixa/motor';
 import { calcularPeriodos, round, variacaoPct } from './iaSharedHelpers';
 import { getAtivo as demoAtivo, mascararRede } from './anonimizarService';
 
@@ -18,50 +19,27 @@ import { getAtivo as demoAtivo, mascararRede } from './anonimizarService';
 function construirTipoPorConta(contasCaixaBanco) {
   const mapa = new Map();
   (contasCaixaBanco || []).forEach(c => {
-    mapa.set(Number(c.codigo), 'caixa');
+    mapa.set(String(c.codigo ?? '').trim(), 'caixa');
   });
   return mapa;
-}
-
-// Converte os lançamentos do fluxo Autosystem no shape de movimento do core.
-// Paridade com o branch Autosystem de RelatorioFluxoCaixa:
-//   • conta caixa/banco (lado_caixa) → contaCodigo (o core filtra por ela);
-//   • contraparte → planoContaGerencialCodigo (casa com o mapeamento de fluxo);
-//     se a contraparte é conta-ponte 2.1.1.x, prefere a `resolvida`;
-//   • sinal > 0 = Crédito (entrada), sinal < 0 = Débito (saída);
-//   • transferência entre contas próprias (contraparte também caixa) → sem
-//     plano (cai em sem_plano; ainda conta na variação, como no webposto).
-function lancsParaMovimentos(lancs) {
-  return (lancs || []).map(l => {
-    const sinal = Number(l.sinal) || 0;
-    const tipo = sinal > 0 ? 'Crédito' : 'Débito';
-    const cpBruto = String(l.contraparte_codigo ?? '');
-    const cpResolv = l.contraparte_resolvida_codigo != null ? String(l.contraparte_resolvida_codigo) : null;
-    const ehTransferencia = !!l.contraparte_eh_caixa;
-    const planoEfetivo = ehTransferencia ? null : (cpResolv || cpBruto);
-    return {
-      contaCodigo: l.lado_caixa === 'debito' ? String(l.debito_codigo ?? '') : String(l.credito_codigo ?? ''),
-      planoContaGerencialCodigo: planoEfetivo,
-      planoContaGerencialNome: l.contraparte_nome || (planoEfetivo ? `Conta ${planoEfetivo}` : 'Transferência'),
-      tipo,
-      valor: Math.abs(Number(l.valor || 0)),
-    };
-  });
 }
 
 // ─── Fetch de UM período (lançamentos de fluxo → movimentos) ──
 async function carregarMovimentosPeriodo(redeId, empresaCodigos, contasCaixaBanco, { dataInicial, dataFinal }) {
   let lancs = [];
+  let rateio = [];
   try {
     const out = await autosystemService.buscarFluxoCaixaAutosystem(
       redeId, empresaCodigos,
       { data_de: dataInicial, data_ate: dataFinal, contas_caixa_banco: contasCaixaBanco },
     );
     lancs = out?.lancamentos || [];
+    rateio = out?.rateioProvisao || [];
   } catch {
     lancs = [];
   }
-  return { movimentos: lancsParaMovimentos(lancs) };
+  // Mesma conversão da tela (utils/fluxoCaixa/motor): provisão 2.1.1, baixa em lote, transferências
+  return { movimentos: lancamentosAutosystemParaMovimentos(lancs, rateio).movimentos };
 }
 
 // ─── Agregador principal para Fluxo (Autosystem) ────────────────
@@ -161,7 +139,7 @@ export async function agregarDadosFluxoAutosystem({ rede, empresaCodigos, mascar
   // Concentração pela estrutura da máscara (base = saídas dos grupos).
   const concentracaoRisco = montarConcentracaoRisco(aggAtual);
 
-  return {
+  const payload = {
     empresa: {
       nome: demoAtivo() ? mascararRede(rede?.nome, rede?.id, true) : (rede?.nome || 'Rede'),
       cnpj: null,
@@ -207,4 +185,7 @@ export async function agregarDadosFluxoAutosystem({ rede, empresaCodigos, mascar
       concentracao_risco: concentracaoRisco,
     },
   };
+  // Dados brutos para o pacote "controller" (não enumerável: fora do JSON salvo/prompt)
+  Object.defineProperty(payload, '_bruto', { value: { dadosPorMes: { ...dadosAtual, ...dadosYoY, ...tendencia6mPorMes }, grupos, mapeamentos, tipoPorConta, titulosPorPagamento: null, empresaCodigos: codigos, periodos }, enumerable: false });
+  return payload;
 }

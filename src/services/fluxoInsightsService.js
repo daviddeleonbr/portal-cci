@@ -6,6 +6,7 @@ import * as mascaraFluxoService from './mascaraFluxoCaixaService';
 import * as contasBancariasService from './clienteContasBancariasService';
 import { chamarClaudeAPI, calcularPeriodos, round, variacaoPct } from './iaSharedHelpers';
 import { getAtivo as demoAtivo, mascararEmpresa, mascararRede } from './anonimizarService';
+import { montarFluxo } from '../utils/fluxoCaixa/motor';
 
 const SYSTEM_PROMPT = `Voce e um consultor de tesouraria especializado em postos de combustiveis.
 
@@ -88,102 +89,68 @@ REGRAS:
 - Variacao de margem/percentual = pp. Variacao de receita/saldo = %.
 - Responda APENAS o JSON, sem texto adicional, sem markdown, sem code fences.`;
 
-// ─── Filtra contas bancaria/caixa como na pagina de Fluxo ─────
+// ─── Contas bancária/caixa (chave = código da conta em texto, como na tela) ──
 function construirTipoPorConta(contasClassificadas) {
   const mapa = new Map();
   (contasClassificadas || []).forEach(c => {
     if (c.ativo === false) return;
-    mapa.set(Number(c.conta_codigo), c.tipo);
+    mapa.set(String(c.conta_codigo).trim(), c.tipo);
   });
   return mapa;
 }
 
-function contaEntra(mapa, contaCodigo) {
-  // Mapa por Number (Webposto) ou por String (tela de Fluxo / Autosystem).
-  const tipo = mapa.get(Number(contaCodigo)) ?? mapa.get(String(contaCodigo));
-  return tipo === 'bancaria' || tipo === 'caixa';
-}
-
-// ─── Agrega movimentos por grupo da mascara de fluxo ──────────
-// dadosPorMes: { mesKey: { movimentos } }
-// grupos: lista de grupos da mascara fluxo
-// mapeamentos: [{plano_conta_codigo, grupo_fluxo_id}]
-// tipoPorConta: Map<contaCodigo, 'bancaria'|'caixa'|...>
-// titulosPorPagamento (opcional, Webposto): resolve TITULO_PAGAR_PAGAMENTO sem
-// plano pelos títulos quitados (igual à tela de Fluxo) — sem isso esses
-// pagamentos caíam todos em "Saídas sem classificação".
+// ─── Agrega movimentos por grupo da máscara de fluxo ──────────
+// Usa o MOTOR do fluxo (utils/fluxoCaixa/motor) — a mesma regra da tela: rateio
+// de baixa em lote, títulos pagos no plano de cada título, prioridade do
+// mapeamento direto, mapeamento por direção (C/D) e "sem classificação".
+// dadosPorMes: { mesKey: { movimentos } }; tipoPorConta: Map<código, tipo>.
+// Cada grupo vale o LÍQUIDO das contas mapeadas DIRETAMENTE nele (sem somar os
+// filhos): negativo = saída, positivo = entrada. Os totais brutos
+// (entradas_total/saidas_total) incluem transferências entre contas próprias.
 export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorConta, titulosPorPagamento = null) {
-  // Roteamento sensível à direção (Autosystem, partida dobrada): a mesma conta
-  // pode ir a grupos diferentes conforme debitada/creditada. 'C'=crédito (entrada),
-  // 'D'=débito (saída), null=ambos. Direção específica tem prioridade sobre 'ambos'.
-  const mapC = new Map();
-  const mapD = new Map();
-  const mapNull = new Map();
-  (mapeamentos || []).forEach(m => {
-    const cod = String(m.plano_conta_codigo);
-    if (m.lado === 'C') mapC.set(cod, m.grupo_fluxo_id);
-    else if (m.lado === 'D') mapD.set(cod, m.grupo_fluxo_id);
-    else mapNull.set(cod, m.grupo_fluxo_id);
+  const chaves = Object.keys(dadosPorMes || {});
+  const meses = chaves.map(key => ({ key }));
+  // Aceita mapa com chave numérica (legado) ou texto
+  const tipos = new Map();
+  (tipoPorConta || new Map()).forEach((v, k) => tipos.set(String(k).trim(), v));
+  const tipoDe = (cod) => tipos.get(String(cod ?? '').trim());
+
+  const fluxo = montarFluxo({
+    dadosPorMes, tipoPorConta: tipos, titulosPorPagamento, grupos: grupos || [], mapeamentos: mapeamentos || [], meses,
   });
 
-  // Igual à árvore da tela de Fluxo de Caixa: cada grupo vale o LÍQUIDO
-  // (entradas − saídas) das contas mapeadas nele — estorno abate do próprio
-  // grupo em vez de virar saída/entrada à parte. Grupo líquido negativo = saída,
-  // positivo = entrada. "Sem classificação" também é líquido (transferências
-  // entre contas próprias, ex.: depósito do caixa no banco, se anulam).
-  // Os totais brutos (entradas_total/saidas_total) seguem batendo com a
-  // "Composição do saldo" da tela; os % usam a soma dos GRUPOS (mesma base
-  // em barra, tabela, concentração e payload da IA).
-  const liquidoPorGrupo = new Map(); // grupoId -> líquido (+ entrada / − saída)
-  const totalPorConta = new Map();   // plano -> {nome, liquido}
+  // Totais brutos: todo movimento das contas bancária/caixa (como antes)
   let entradasTotal = 0;
   let saidasTotal = 0;
-  let semPlanoLiquido = 0;
+  chaves.forEach(k => (dadosPorMes[k].movimentos || []).forEach(m => {
+    const tipo = tipoDe(m.contaCodigo);
+    if (tipo !== 'bancaria' && tipo !== 'caixa') return;
+    const valor = Math.abs(Number(m.valor || 0));
+    if (m.tipo === 'Crédito' || m.tipo === 'Credito' || m.tipo === 'C') entradasTotal += valor; else saidasTotal += valor;
+  }));
 
-  Object.values(dadosPorMes || {}).forEach(periodo => {
-    (periodo.movimentos || []).forEach(m => {
-      if (!contaEntra(tipoPorConta, m.contaCodigo)) return;
-      const isCredito = m.tipo === 'Crédito' || m.tipo === 'Credito' || m.tipo === 'C';
-      const valor = Math.abs(Number(m.valor || 0));
-      if (isCredito) entradasTotal += valor; else saidasTotal += valor;
-      const sinal = isCredito ? 1 : -1;
-
-      // Aloca um pedaço (plano, valor) no grupo da máscara ou em "sem plano".
-      const alocar = (codigoPlano, v, nomePlano) => {
-        const grupoId = codigoPlano
-          ? (isCredito
-              ? (mapC.get(codigoPlano) ?? mapNull.get(codigoPlano))
-              : (mapD.get(codigoPlano) ?? mapNull.get(codigoPlano)))
-          : null;
-        if (!grupoId) {
-          semPlanoLiquido += v * sinal;
-          return;
-        }
-        liquidoPorGrupo.set(grupoId, (liquidoPorGrupo.get(grupoId) || 0) + v * sinal);
-
-        const nome = nomePlano || `Plano ${codigoPlano}`;
-        const curConta = totalPorConta.get(codigoPlano) || { nome, liquido: 0 };
-        curConta.liquido += v * sinal;
-        totalPorConta.set(codigoPlano, curConta);
-      };
-
-      // Pagamento de título (em lote): cada título no seu plano, com o valorPago dele.
-      const partes = titulosPorPagamento ? qualityApi.distribuirPagamentoTitulos(m, titulosPorPagamento) : null;
-      if (partes) {
-        partes.forEach(x => alocar(String(x.planoCod), x.valorTitulo, x.titulo.planoContaGerencialDescricao));
-        return;
-      }
-
-      alocar(String(m.planoContaGerencialCodigo || ''), valor, m.planoContaGerencialNome);
+  // Líquido de cada grupo = só as contas mapeadas nele; e por conta (top contas)
+  const liquidoPorGrupo = new Map();
+  const totalPorConta = new Map();
+  const visitar = (no) => {
+    let proprio = 0;
+    (no.contas || []).forEach(c => {
+      proprio += c.totalPeriodo;
+      const cod = String(c.codigo);
+      const nome = c.descricao || fluxo.indice.nomesPorPlano[cod] || `Plano ${cod}`;
+      const cur = totalPorConta.get(cod) || { nome, liquido: 0 };
+      cur.liquido += c.totalPeriodo;
+      totalPorConta.set(cod, cur);
     });
-  });
+    if (Math.abs(proprio) > 0) liquidoPorGrupo.set(no.id, (liquidoPorGrupo.get(no.id) || 0) + proprio);
+    (no.children || []).forEach(visitar);
+  };
+  fluxo.arvore.forEach(visitar);
 
-  // Base dos % = soma dos grupos (líquidos) de saída / de entrada.
   let saidasGrupos = 0;
   let entradasGrupos = 0;
   liquidoPorGrupo.forEach(v => { if (v < 0) saidasGrupos += -v; else entradasGrupos += v; });
 
-  // Monta linhas por grupo (respeitando ordem da mascara)
   const porGrupo = (grupos || [])
     .filter(g => g.tipo !== 'subtotal' && g.tipo !== 'resultado')
     .slice()
@@ -204,9 +171,9 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
       };
     });
 
-  // Top contas gerenciais (por |liquido|)
   const topContas = Array.from(totalPorConta.entries())
     .map(([codigo, v]) => ({ codigo, nome: v.nome, liquido: round(v.liquido) }))
+    .filter(c => Math.abs(c.liquido) > 0.004)
     .sort((a, b) => Math.abs(b.liquido) - Math.abs(a.liquido))
     .slice(0, 10);
 
@@ -216,7 +183,9 @@ export function agregarFluxoPorGrupo(dadosPorMes, grupos, mapeamentos, tipoPorCo
     variacao_caixa: round(entradasTotal - saidasTotal),
     entradas_grupos_total: round(entradasGrupos),
     saidas_grupos_total: round(saidasGrupos),
-    sem_plano: { liquido: round(semPlanoLiquido) },
+    // Fora da Variação de Caixa da tela ("Sem classificação"); transferências
+    // entre contas próprias (grupo sintético) somam aqui também
+    sem_plano: { liquido: round((fluxo.semClassificacao?.totalPeriodo || 0) + (fluxo.transferencias?.totalPeriodo || 0)) },
     por_grupo: porGrupo,
     top_contas_gerenciais: topContas,
   };
@@ -244,7 +213,7 @@ async function carregarMovimentos(apiKey, empresaCodigos, { dataInicial, dataFin
   for (const ec of empresaCodigos) {
     const filtros = { dataInicial, dataFinal, empresaCodigo: ec };
     const movs = await qualityApi.buscarMovimentoConta(apiKey, filtros).catch(() => []);
-    (movs || []).forEach(m => all.push(qualityApi.ajustarMovimentoCartao(m, liquidoPorRemessa)));
+    (movs || []).forEach(m => all.push({ ...qualityApi.ajustarMovimentoCartao(m, liquidoPorRemessa), empresaCodigo: m.empresaCodigo ?? ec }));
   }
   return { movimentos: all };
 }
@@ -354,7 +323,7 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
   // Concentracao pela estrutura da mascara de fluxo (base = saídas dos grupos).
   const concentracaoRisco = montarConcentracaoRisco(aggAtual);
 
-  return {
+  const payload = {
     empresa: {
       nome: demoAtivo()
         ? (modoRede ? mascararRede(cliente?.nome, cliente?.id, true) : mascararEmpresa(cliente, true))
@@ -402,6 +371,9 @@ export async function agregarDadosFluxo({ cliente, modoRede = false, chaveApi, m
       concentracao_risco: concentracaoRisco,
     },
   };
+  // Dados brutos para o pacote "controller" (não enumerável: fora do JSON salvo/prompt)
+  Object.defineProperty(payload, '_bruto', { value: { dadosPorMes: { ...dadosAtual, ...dadosYoY, ...tendencia6mPorMes }, grupos, mapeamentos, tipoPorConta, titulosPorPagamento, empresaCodigos, periodos }, enumerable: false });
+  return payload;
 }
 
 export async function gerarAnaliseFluxoIA(dados, apiKey) {

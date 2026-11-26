@@ -2,6 +2,55 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.19.0",
+      "data": "2026-11-26",
+      "resumo": "Análise Controller com IA e Fluxo de Caixa mais completo.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Análise Controller",
+          "descricao": "Nova aba na Análise de IA que investiga por que o caixa mudou: atividades, contas e lançamentos, DRE × caixa, transferências entre empresas, contas a receber e a pagar e combustíveis. Cada conclusão mostra se é comprovada, provável ou hipótese, com os números que a sustentam; valores que não batem com os dados ficam marcados."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Transferências entre empresas",
+          "descricao": "No Fluxo de Caixa da rede, as transferências entre as empresas são casadas e podem ser tiradas do consolidado. Dá para cadastrar as contas usadas nessas transferências."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Pontos de atenção no Fluxo",
+          "descricao": "O Fluxo aponta possíveis duplicidades, picos fora do padrão, contas que pararam de movimentar, classificação suspeita e quando o fluxo não fecha com os saldos."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "AH % no Fluxo de Caixa",
+          "descricao": "Coluna de análise horizontal: quanto cada linha variou em relação ao mês anterior."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Filtros do Fluxo de Caixa",
+          "descricao": "Os filtros ficaram num botão só, com painel compacto; a lista de contas mostra só as das empresas selecionadas."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "PDF do Fluxo",
+          "descricao": "Um mês sai em retrato; dois ou mais meses, em paisagem."
+        },
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Análise de IA",
+          "descricao": "A IA passa a usar os mesmos cálculos das telas de Fluxo e DRE (antes podia divergir no Autosystem), e corrigimos campos que apareciam vazios no Diagnóstico Geral e na DRE."
+        }
+      ]
+    },
+    {
       "versao": "1.18.0",
       "data": "2026-11-25",
       "resumo": "Avisos de tarefa no horário de trabalho e relatórios direto no menu.",

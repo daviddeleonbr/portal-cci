@@ -17,7 +17,7 @@ export default function AnaliseIaView({ insights, modoRede = false, usage = null
 
   return (
     <div className="space-y-5">
-      <ResumoExecutivo insights={insights} usage={usage} />
+      {insights.resumo_executivo && <ResumoExecutivo insights={insights} usage={usage} />}
 
       {/* Cards de Vendas */}
       {insights.mix_produto && <CardMixProduto mix={insights.mix_produto} />}
@@ -485,7 +485,7 @@ function CardLinhasCriticas({ linhas }) {
           <span className={`font-mono tabular-nums font-semibold ${(l.variacao_yoy_pct || l.variacao_pct) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
             {(l.variacao_yoy_pct ?? l.variacao_pct) != null ? `${Number(l.variacao_yoy_pct ?? l.variacao_pct) >= 0 ? '+' : ''}${Number(l.variacao_yoy_pct ?? l.variacao_pct).toFixed(1)}%` : '—'}
           </span>,
-          <Badge cor={l.impacto === 'alto' ? 'red' : l.impacto === 'medio' ? 'amber' : 'gray'}>{l.impacto}</Badge>,
+          <Badge cor={(l.impacto_no_resultado ?? l.impacto) === 'alto' ? 'red' : (l.impacto_no_resultado ?? l.impacto) === 'medio' ? 'amber' : 'gray'}>{l.impacto_no_resultado ?? l.impacto}</Badge>,
         ])} />
       {linhas.some(l => l.comentario) && (
         <ul className="space-y-1 mt-3 border-t border-gray-100 pt-3">
@@ -712,7 +712,8 @@ function CardContradicoes({ c }) {
 }
 
 function CardPlano90({ p }) {
-  const itensNota = (p || []).map(item => ({ chave: chaveNota('plano-item', item.acao), rotulo: item.acao }));
+  const acaoDe = (item) => item.acao ?? item['ação'] ?? '';
+  const itensNota = (p || []).map(item => ({ chave: chaveNota('plano-item', acaoDe(item)), rotulo: acaoDe(item) }));
   return (
     <Card icon={Calendar} color="blue" titulo="Plano de 90 dias" itensNota={itensNota}>
       <div className="space-y-2">
@@ -720,7 +721,7 @@ function CardPlano90({ p }) {
           <div key={i} className="rounded-lg border border-gray-200 bg-white p-3">
             <div className="flex items-center gap-2 mb-1">
               <span className="inline-block rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold uppercase px-2 py-0.5">{item.semana}</span>
-              <span className="text-[12.5px] font-semibold flex-1">{item.acao}</span>
+              <span className="text-[12.5px] font-semibold flex-1">{acaoDe(item)}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-gray-600 ml-1">
               {item.responsavel_sugerido && <div><span className="font-semibold">Resp:</span> {item.responsavel_sugerido}</div>}

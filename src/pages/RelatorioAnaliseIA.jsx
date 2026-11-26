@@ -3,8 +3,10 @@ import { motion } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Sparkles, Loader2, AlertCircle, Building2, Network, Zap, Key,
-  RefreshCw, Wand2, Info, ShoppingCart, FileBarChart, Wallet, GitBranch, Lock, Printer,
+  RefreshCw, Wand2, Info, ShoppingCart, FileBarChart, Wallet, GitBranch, Lock, Printer, Scale,
 } from 'lucide-react';
+import * as controllerIA from '../services/analiseControllerService';
+import RelatorioController from '../components/ia/RelatorioController';
 import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as mascaraDreService from '../services/mascaraDreService';
@@ -72,7 +74,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
   const [mascaraFluxoId, setMascaraFluxoId] = useState('');
 
   // Resultados por aba: { vendas, dre, fluxo, geral } → { insights, usage, dados, mesKey }
-  const [resultados, setResultados] = useState({ vendas: null, dre: null, fluxo: null, geral: null });
+  const [resultados, setResultados] = useState({ vendas: null, dre: null, fluxo: null, geral: null, controller: null });
   const [loadingAba, setLoadingAba] = useState(null);
   const [progress, setProgress] = useState('');
   // Notas explicativas do consultor (por aba) — persistidas no banco e impressas no PDF.
@@ -179,9 +181,9 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
 
   // Quando troca mes, limpa a tela na hora (a carga do cache abaixo repopula).
   useEffect(() => {
-    setResultados({ vendas: null, dre: null, fluxo: null, geral: null });
-    setNotas({ vendas: '', dre: '', fluxo: '', geral: '' });
-    setNotasItens({ vendas: {}, dre: {}, fluxo: {}, geral: {} });
+    setResultados({ vendas: null, dre: null, fluxo: null, geral: null, controller: null });
+    setNotas({ vendas: '', dre: '', fluxo: '', geral: '', controller: '' });
+    setNotasItens({ vendas: {}, dre: {}, fluxo: {}, geral: {}, controller: {} });
     setNotaStatus('idle');
   }, [mesKey]);
 
@@ -219,9 +221,9 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
 
   // Trocar a categoria limpa a tela na hora (o cache da categoria repopula).
   useEffect(() => {
-    setResultados({ vendas: null, dre: null, fluxo: null, geral: null });
-    setNotas({ vendas: '', dre: '', fluxo: '', geral: '' });
-    setNotasItens({ vendas: {}, dre: {}, fluxo: {}, geral: {} });
+    setResultados({ vendas: null, dre: null, fluxo: null, geral: null, controller: null });
+    setNotas({ vendas: '', dre: '', fluxo: '', geral: '', controller: '' });
+    setNotasItens({ vendas: {}, dre: {}, fluxo: {}, geral: {}, controller: {} });
     setNotaStatus('idle');
   }, [categoriaIA]);
 
@@ -256,10 +258,10 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
       try {
         const mapa = await carregarRelatorios({ escopo: escopoCtx.escopo, ano: mesRef.ano, mes: mesRef.mes });
         if (cancelado) return;
-        const novoRes = { vendas: null, dre: null, fluxo: null, geral: null };
-        const novasNotas = { vendas: '', dre: '', fluxo: '', geral: '' };
-        const novasNotasItens = { vendas: {}, dre: {}, fluxo: {}, geral: {} };
-        ['vendas', 'dre', 'fluxo', 'geral'].forEach(aba => {
+        const novoRes = { vendas: null, dre: null, fluxo: null, geral: null, controller: null };
+        const novasNotas = { vendas: '', dre: '', fluxo: '', geral: '', controller: '' };
+        const novasNotasItens = { vendas: {}, dre: {}, fluxo: {}, geral: {}, controller: {} };
+        ['vendas', 'dre', 'fluxo', 'geral', 'controller'].forEach(aba => {
           const row = mapa[aba];
           if (!row) return;
           novasNotas[aba] = row.nota || '';
@@ -437,6 +439,36 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     finally { setLoadingAba(null); setProgress(''); }
   }, [contexto, apiKey, mesRef, modoRede, mesKey, mascaraFluxoId, chaveApiId, persistirResultado]);
 
+  // Controller: investiga as causas da variação do caixa (fluxo + DRE + transferências
+  // entre empresas + capital de giro + combustíveis). Reaproveita a DRE e as Vendas já
+  // geradas no mês; sem DRE gerada, busca os dados da DRE (sem custo de IA).
+  const gerarController = useCallback(async () => {
+    if (!contexto || !garantirApiKey()) return;
+    if (!mascaraFluxoId) { setErr('Selecione uma máscara de Fluxo'); return; }
+    setLoadingAba('controller'); setErr(null);
+    try {
+      const dreDoMes = resultados.dre?.mesKey === mesKey && (!resultados.dre.dados?.mascara_dre?.id || resultados.dre.dados.mascara_dre.id === mascaraDreId)
+        ? resultados.dre.dados : null;
+      let dadosDre = dreDoMes;
+      if (!dadosDre && mascaraDreId) {
+        setProgress('Buscando a DRE do período...');
+        dadosDre = isAutosystem
+          ? await dreAutoIA.agregarDadosDREAutosystem({ rede: contexto.rede, empresaCodigos: contexto.empresaCodigos, empresas: contexto.empresas, mascaraId: mascaraDreId, mesRef, onProgress: setProgress })
+          : await dreIA.agregarDadosDRE({ cliente: contexto.cliente, modoRede, chaveApi: contexto.chaveApi,
+            chaveApiId: modoRede ? chaveApiId : contexto.cliente.chave_api_id, mascaraId: mascaraDreId, mesRef, onProgress: setProgress });
+      }
+      const dadosVendas = resultados.vendas?.mesKey === mesKey ? resultados.vendas.dados : null;
+      const pacote = await controllerIA.montarPacote({
+        contexto, isAutosystem, modoRede, chaveApiId, mascaraFluxoId, mesRef, dadosDre, dadosVendas, onProgress: setProgress,
+      });
+      setProgress('A IA está investigando as causas...');
+      const r = await controllerIA.gerarAnaliseController(pacote);
+      setResultados(prev => ({ ...prev, controller: { insights: r.insights, usage: r.usage, dados: pacote, mesKey } }));
+      persistirResultado('controller', r, pacote);
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setLoadingAba(null); setProgress(''); }
+  }, [contexto, mesRef, modoRede, mesKey, mascaraFluxoId, mascaraDreId, chaveApiId, resultados.dre, resultados.vendas, persistirResultado]);
+
   const gerarGeral = useCallback(async () => {
     if (!contexto || !garantirApiKey()) return;
     const { vendas, dre, fluxo } = resultados;
@@ -501,6 +533,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     { id: 'dre', label: 'DRE', icon: FileBarChart, color: 'blue' },
     { id: 'fluxo', label: 'Fluxo de Caixa', icon: Wallet, color: 'emerald' },
     { id: 'geral', label: 'Diagnóstico Geral', icon: GitBranch, color: 'violet' },
+    { id: 'controller', label: 'Controller', icon: Scale, color: 'blue' },
   ];
 
   // Análise de DRE salva com OUTRA máscara não vale para a máscara selecionada
@@ -710,6 +743,18 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
               : null}
           />
         );
+        if (tab === 'controller') return (
+          <PaneAnalise {...paneProps}
+            titulo="Controller — por que o caixa mudou"
+            descricao="Investiga as causas da variação do caixa: atividades, contas e lançamentos, DRE × caixa, transferências entre empresas, capital de giro e combustíveis. Toda conclusão vem com as evidências e o grau (comprovado, provável, hipótese)."
+            carregando={loadingAba === 'controller'}
+            progresso={progress}
+            resultado={resultados.controller}
+            onGerar={gerarController}
+            aviso={!mascaraFluxoId ? 'Selecione uma máscara de Fluxo para continuar' : null}
+            renderResultado={(res) => <RelatorioController insights={res.insights} pacote={res.dados} />}
+          />
+        );
         return null;
       })()}
 
@@ -743,7 +788,7 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
   );
 }
 
-function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGerar, modoRede, aviso, tab, empresa, periodoLabel, nota, onNotaChange, onSalvarNota, notaStatus, notasItens, onSalvarNotaItem }) {
+function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGerar, modoRede, aviso, tab, empresa, periodoLabel, nota, onNotaChange, onSalvarNota, notaStatus, notasItens, onSalvarNotaItem, renderResultado }) {
   return (
     <div>
       <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm mb-5 no-print">
@@ -829,6 +874,7 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 leading-relaxed focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 resize-y"
             />
           </div>
+          {renderResultado ? renderResultado(resultado) : (<>
           <div className="no-print">
             <NotasItensProvider notas={notasItens} onSalvar={onSalvarNotaItem}>
               <AnaliseIaView insights={resultado.insights} usage={resultado.usage} modoRede={modoRede} />
@@ -844,6 +890,7 @@ function PaneAnalise({ titulo, descricao, carregando, progresso, resultado, onGe
             nota={nota}
             notasItens={notasItens}
           />
+          </>)}
         </>
       )}
     </div>

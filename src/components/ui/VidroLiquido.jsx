@@ -22,7 +22,7 @@ function mapaLente(w, h, raio) {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-export default function VidroLiquido({ raio = 22, className = '', children, ...props }) {
+export default function VidroLiquido({ raio = 22, className = '', style, children, ...props }) {
   const ref = useRef(null);
   const idFiltro = `vidro${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const [tam, setTam] = useState(null);
@@ -41,7 +41,7 @@ export default function VidroLiquido({ raio = 22, className = '', children, ...p
 
   return (
     <div ref={ref} {...props} className={`vidro-liquido ${tam ? 'vidro-refrata' : ''} ${className}`}
-      style={{ borderRadius: raio, ...(tam ? { '--vidro-filtro': `url(#${idFiltro})` } : {}) }}>
+      style={{ ...style, borderRadius: raio, ...(tam ? { '--vidro-filtro': `url(#${idFiltro})` } : {}) }}>
       {tam && (
         <svg className="pointer-events-none absolute h-0 w-0" aria-hidden="true" focusable="false">
           <filter id={idFiltro} x="0" y="0" width={tam.w} height={tam.h}

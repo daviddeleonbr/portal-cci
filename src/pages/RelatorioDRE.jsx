@@ -24,6 +24,7 @@ import { useUsarApelido } from '../lib/apelidoPref';
 import ApelidoToggle from '../components/ui/ApelidoToggle';
 import { useAnonimizador } from '../services/anonimizarService';
 import { isoDataBR } from '../utils/dataBR';
+import { distribuirLancamentosAutosystemDre, somarVendasAutosystemPorCategoria } from '../utils/dre/motorDre';
 
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -625,23 +626,19 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
         const gruposIgnoradosSet = new Set();
         results.forEach(r => {
           const target = r.isPrev ? anterior : atual;
-          (r.vendas || []).forEach(v => {
-            const gp = Number(v.grupo_produto_codigo ?? 0);
-            const categoria = categoriasGruposProduto.get(gp);
-            if (!categoria) {
-              ignoradosSemCategoria++;
-              gruposIgnoradosSet.add(gp);
-              return;
-            }
-            aproveitados++;
-            const ec = String(v.empresa ?? '');
-            const valor = Number(v.valor || 0);
-            const custo = Number(v.valor_custo || 0);
+          // Regra compartilhada com a IA: utils/dre/motorDre
+          const s = somarVendasAutosystemPorCategoria(r.vendas, categoriasGruposProduto);
+          ignoradosSemCategoria += s.ignorados;
+          aproveitados += s.aproveitados;
+          s.gruposIgnorados.forEach(g => gruposIgnoradosSet.add(g));
+          Object.entries(s.porCategoria).forEach(([categoria, porEmpresa]) => {
             if (!target[categoria]) target[categoria] = {};
             if (!target[categoria][r.key]) target[categoria][r.key] = {};
-            if (!target[categoria][r.key][ec]) target[categoria][r.key][ec] = { venda: 0, custo: 0 };
-            target[categoria][r.key][ec].venda += valor;
-            target[categoria][r.key][ec].custo += custo;
+            Object.entries(porEmpresa).forEach(([ec, x]) => {
+              if (!target[categoria][r.key][ec]) target[categoria][r.key][ec] = { venda: 0, custo: 0 };
+              target[categoria][r.key][ec].venda += x.venda;
+              target[categoria][r.key][ec].custo += x.custo;
+            });
           });
         });
         if (ignoradosSemCategoria > 0) {
@@ -652,90 +649,21 @@ export default function RelatorioDRE({ clienteIdOverride, backHref, redeContexto
           });
         }
 
-        // Converte lançamentos Autosystem para o formato titulosReceber/Pagar
-        // usado pela indexação Webposto. Regra contábil:
-        //   • lado = 'credito' → soma + (vai pra titulosReceber)
-        //   • lado = 'debito'  → soma − (vai pra titulosPagar)
-        //   • lado = 'ambos'   → insere em ambos (raríssimo; conta consigo mesma)
-        // O `planoContaGerencialCodigo` é o conta_codigo daquele lado.
-        function lancToTitulo(l, codigo, lado) {
-          return {
-            codigo: l.lancamento_id != null ? `as-${l.lancamento_id}-${lado}` : undefined,
-            planoContaGerencialCodigo: codigo,
-            // nome do plano de contas daquele lado (para a seção "Contas não mapeadas")
-            planoContaGerencialDescricao: (lado === 'debito' ? l.debito_nome : l.credito_nome) || '',
-            empresaCodigo: l.empresa,
-            // movto.data como única fonte de data do lançamento
-            dataMovimento: l.data,
-            dataPagamento: l.data,
-            vencimento: l.data,
-            valor: Number(l.valor || 0),
-            valorPago: Number(l.valor || 0),
-            // descricao base vazia → composição mostra só doc + fornecedor + obs
-            descricao: '',
-            numeroTitulo: l.documento || '',
-            nomeFornecedor: l.pessoa_nome || '',
-            nomeCliente: l.pessoa_nome || '',
-            observacao: (l.obs || '').trim(),
-            situacao: 'pago',
-          };
-        }
+        // Lançamentos das contas mapeadas → titulosReceber (+) / titulosPagar (−),
+        // com a regra de competência da conta de passagem 2.1.1 (provisão vale, baixa
+        // é ignorada). Regra compartilhada com a IA: utils/dre/motorDre.
         const dadosAtualPorMes = {};
         const dadosAnteriorPorMes = {};
         let totalLancsCarregados = 0;
         let lancsSemMatch = 0;
-        // Conta de PASSAGEM = 2.1.1.x (contas a pagar). A DRE é por COMPETÊNCIA: vale
-        // a PROVISÃO (o crédito na conta a pagar, ex.: distribuição de lucros a pagar).
-        // A BAIXA/pagamento (débito na mesma conta) é IGNORADA — senão o pagamento
-        // anula a provisão da mesma conta e o valor zera na DRE.
-        const ehPassagem = (c) => /^2\.1\.1/.test(String(c));
-        const setContasMapeadas = new Set(contasCodigosMapeados);
         results.forEach(r => {
           const bucket = r.isPrev ? dadosAnteriorPorMes : dadosAtualPorMes;
           if (!bucket[r.key]) bucket[r.key] = { titulosReceber: [], titulosPagar: [], vendaItens: [], vendas: [] };
-          (r.lancs || []).forEach(l => {
-            // trim: os códigos do movto (char) podem ter espaços; a máscara guarda sem
-            // espaço → sem isso a chave não casa na árvore e a conta não aparece.
-            const cred = String(l.credito_codigo ?? '').trim();
-            const deb  = String(l.debito_codigo ?? '').trim();
-            const credEhPass = ehPassagem(cred);
-            const debEhPass = ehPassagem(deb);
-            // Mapeamento é decidido pela pertença ao conjunto (robusto a espaços do
-            // char do movto), não pelo `lado` do edge (que compara sem trim).
-            const credMap = !!cred && setContasMapeadas.has(cred);
-            const debMap  = !!deb  && setContasMapeadas.has(deb);
-            let matched = false;
-
-            // ── CORPO DA DRE: SÓ contas MAPEADAS ─────────────────────────────
-            if (credMap) {
-              if (credEhPass) {
-                // Crédito na passagem = PROVISÃO (obrigação incorrida, ex.: lucro a
-                // distribuir) → conta pela passagem, SAÍDA (−).
-                bucket[r.key].titulosPagar.push(lancToTitulo(l, cred, 'credito'));
-              } else if (!(debMap && debEhPass)) {
-                // Receita normal (+). Se o DÉBITO é passagem mapeada, a PASSAGEM vence
-                // (evita dupla contagem) e a contrapartida não conta aqui.
-                bucket[r.key].titulosReceber.push(lancToTitulo(l, cred, 'credito'));
-              }
-              matched = true;
-            }
-            if (debMap) {
-              if (debEhPass) {
-                // Débito na passagem = BAIXA/pagamento. Na competência é IGNORADO —
-                // senão a baixa (+) anula a provisão (−) da mesma conta e o valor zera.
-              } else if (!(credMap && credEhPass)) {
-                // Despesa normal (−). Se o CRÉDITO é passagem mapeada, a PASSAGEM vence.
-                bucket[r.key].titulosPagar.push(lancToTitulo(l, deb, 'debito'));
-              }
-              matched = true;
-            }
-
-            // A seção "Contas não mapeadas" NÃO é mais alimentada por aqui: ela vem
-            // do resumo do edge (buscarContasComMovimentoAutosystem), que lista TODAS
-            // as contas com movimento — inclusive as que nunca tocam uma conta mapeada.
-            if (matched) totalLancsCarregados++;
-            else lancsSemMatch++;
-          });
+          const d = distribuirLancamentosAutosystemDre(r.lancs, contasCodigosMapeados);
+          bucket[r.key].titulosReceber.push(...d.titulosReceber);
+          bucket[r.key].titulosPagar.push(...d.titulosPagar);
+          totalLancsCarregados += d.casados;
+          lancsSemMatch += d.semMatch;
         });
         if (lancsSemMatch > 0) {
           console.warn('[DRE Autosystem] Lancamentos sem lado/codigo:', { semMatch: lancsSemMatch });

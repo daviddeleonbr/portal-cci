@@ -15,17 +15,7 @@ import * as autosystemService from './autosystemService';
 import { agregarDrePorGrupo } from './dreInsightsService';
 import { calcularPeriodos, round, variacaoPct } from './iaSharedHelpers';
 import { getAtivo as demoAtivo, mascararRede } from './anonimizarService';
-
-// ─── Converte um lançamento Autosystem em "título" (paridade RelatorioDRE) ──
-// O agregador só lê `planoContaGerencialCodigo`, `valor` e `empresaCodigo`
-// (este último pra recorte por empresa) — mantemos o mínimo.
-function lancToTitulo(l, codigo) {
-  return {
-    planoContaGerencialCodigo: codigo,
-    empresaCodigo: l.empresa,
-    valor: Number(l.valor || 0),
-  };
-}
+import { distribuirLancamentosAutosystemDre, somarVendasAutosystemPorCategoria } from '../utils/dre/motorDre';
 
 // ─── Fetch de UM período (vendas agregadas + lançamentos das contas mapeadas) ──
 // Retorna { titulosReceber, titulosPagar, vendasPorCategoria } onde
@@ -53,28 +43,11 @@ async function carregarDadosPeriodoAutosystem(
     vendas = []; lancs = [];
   }
 
-  // Vendas → { categoria: { empresaCodigo: { venda, custo } } }. Itens cujo
-  // grupo de produto não está categorizado em as_rede_grupo_produto são ignorados.
-  const vendasPorCategoria = {};
-  (vendas || []).forEach(v => {
-    const gp = Number(v.grupo_produto_codigo ?? 0);
-    const categoria = categoriasGruposProduto.get(gp);
-    if (!categoria) return;
-    const ec = String(v.empresa ?? '');
-    if (!vendasPorCategoria[categoria]) vendasPorCategoria[categoria] = {};
-    if (!vendasPorCategoria[categoria][ec]) vendasPorCategoria[categoria][ec] = { venda: 0, custo: 0 };
-    vendasPorCategoria[categoria][ec].venda += Number(v.valor || 0);
-    vendasPorCategoria[categoria][ec].custo += Number(v.valor_custo || 0);
-  });
-
-  // Lançamentos → titulosReceber (crédito, +) / titulosPagar (débito, −).
-  const titulosReceber = [], titulosPagar = [];
-  (lancs || []).forEach(l => {
-    const cred = String(l.credito_codigo ?? '');
-    const deb = String(l.debito_codigo ?? '');
-    if ((l.lado === 'credito' || l.lado === 'ambos') && cred) titulosReceber.push(lancToTitulo(l, cred));
-    if ((l.lado === 'debito' || l.lado === 'ambos') && deb) titulosPagar.push(lancToTitulo(l, deb));
-  });
+  // Mesma regra da tela (utils/dre/motorDre): vendas por categoria e lançamentos
+  // das contas mapeadas, com a competência da conta de passagem 2.1.1 (provisão
+  // vale, baixa é ignorada) e códigos com trim.
+  const { porCategoria: vendasPorCategoria } = somarVendasAutosystemPorCategoria(vendas, categoriasGruposProduto);
+  const { titulosReceber, titulosPagar } = distribuirLancamentosAutosystemDre(lancs, contasCodigosMapeados);
 
   return { titulosReceber, titulosPagar, vendasPorCategoria };
 }

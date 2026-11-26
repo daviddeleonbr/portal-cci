@@ -566,6 +566,9 @@ html.dark .vidro-liquido {
   transform: translateX(-140%) skewX(-18deg);
   animation: vidro-reflexo 1.5s 0.45s ease-out 1 both;
 }
+.vidro-pop { animation: vidro-pop 0.16s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.vidro-pop::after { animation: none; }
+@keyframes vidro-pop { from { opacity: 0; transform: scale(0.96) translateY(-4px); } to { opacity: 1; transform: none; } }
 .vidro-entra { animation: vidro-entra 0.5s cubic-bezier(0.2, 1.2, 0.3, 1) both; }
 .vidro-texto-2 { color: var(--vidro-texto-2); }
 .vidro-icone { background: var(--vidro-icone-fundo); color: var(--vidro-icone); box-shadow: inset 0 1px 0 var(--vidro-brilho-2); }
@@ -583,7 +586,7 @@ html.dark .vidro-liquido {
 @keyframes vidro-entra { from { transform: translateY(24px) scale(0.94); } to { transform: none; } }
 @keyframes vidro-reflexo { 0% { opacity: 0; transform: translateX(-140%) skewX(-18deg); } 30% { opacity: 0.8; } 100% { opacity: 0; transform: translateX(380%) skewX(-18deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .vidro-entra, .vidro-liquido::after { animation: none; }
+  .vidro-entra, .vidro-pop, .vidro-liquido::after { animation: none; }
 }
 /* Windows com "efeitos de transparência" desligados: continua vidro, bem menos translúcido */
 @media (prefers-reduced-transparency: reduce) {
