@@ -469,6 +469,39 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
     finally { setLoadingAba(null); setProgress(''); }
   }, [contexto, mesRef, modoRede, mesKey, mascaraFluxoId, mascaraDreId, chaveApiId, resultados.dre, resultados.vendas, persistirResultado]);
 
+  // Fase 5: investigar uma conta / pergunta do proprietário. A resposta entra no
+  // resultado do controller (insights.investigacoes / insights.perguntas) e é salva.
+  const [ocupadoController, setOcupadoController] = useState(null);
+  const atualizarController = useCallback((alterar, usage) => {
+    setResultados(prev => {
+      const atual = prev.controller;
+      if (!atual) return prev;
+      const insights = alterar(atual.insights || {});
+      persistirResultado('controller', { insights, usage: usage || atual.usage }, atual.dados);
+      return { ...prev, controller: { ...atual, insights } };
+    });
+  }, [persistirResultado]);
+  const investigarContaController = useCallback(async (conta) => {
+    const res = resultados.controller;
+    if (!res) return;
+    setOcupadoController(`conta:${conta}`); setErr(null);
+    try {
+      const inv = await controllerIA.investigarConta(res.dados, res.insights, conta);
+      atualizarController(ins => ({ ...ins, investigacoes: { ...(ins.investigacoes || {}), [conta]: inv } }));
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setOcupadoController(null); }
+  }, [resultados.controller, atualizarController]);
+  const perguntarAoController = useCallback(async (pergunta) => {
+    const res = resultados.controller;
+    if (!res) return;
+    setOcupadoController('pergunta'); setErr(null);
+    try {
+      const p = await controllerIA.perguntarController(res.dados, res.insights, pergunta);
+      atualizarController(ins => ({ ...ins, perguntas: [...(ins.perguntas || []), p].slice(-20) }));
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setOcupadoController(null); }
+  }, [resultados.controller, atualizarController]);
+
   const gerarGeral = useCallback(async () => {
     if (!contexto || !garantirApiKey()) return;
     const { vendas, dre, fluxo } = resultados;
@@ -752,7 +785,8 @@ export default function RelatorioAnaliseIA({ modoRede = false, origem = 'webpost
             resultado={resultados.controller}
             onGerar={gerarController}
             aviso={!mascaraFluxoId ? 'Selecione uma máscara de Fluxo para continuar' : null}
-            renderResultado={(res) => <RelatorioController insights={res.insights} pacote={res.dados} />}
+            renderResultado={(res) => <RelatorioController insights={res.insights} pacote={res.dados}
+              onInvestigar={investigarContaController} onPerguntar={perguntarAoController} ocupado={ocupadoController} sugeridas={controllerIA.PERGUNTAS_SUGERIDAS} />}
           />
         );
         return null;

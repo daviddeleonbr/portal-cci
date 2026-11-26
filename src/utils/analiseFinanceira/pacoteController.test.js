@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { montarFluxo } from '../fluxoCaixa/motor';
-import { montarPacoteController, validarRespostaController } from './pacoteController';
+import { montarPacoteController, validarRespostaController, validarRespostaFocada } from './pacoteController';
 
 const tipoPorConta = new Map([['101', 'bancaria']]);
 const grupos = [
@@ -67,5 +67,29 @@ describe('validação da resposta', () => {
     expect(insights.resumo_executivo.fator_negativo._evidenciasInvalidas).toEqual(['F999']);
     expect(insights.resumo_executivo.fator_negativo._valoresNaoEncontrados).toEqual([123456.78]);
     expect(problemas.some(x => /seção ausente: plano_acao/.test(x))).toBe(true);
+  });
+});
+
+describe('Fase 5: detalhe por conta e respostas focadas', () => {
+  it('detalhe da conta: pessoas que explicam a variação, série e lançamentos (fatos D…)', () => {
+    const p = pacote();
+    const det = p.detalheContas.find(d => d.conta === 'Combustível');
+    const fd = (id) => p.fatosDetalhe.find(x => x.id === id);
+    expect(det.qtdLancamentos).toEqual({ anterior: 1, atual: 1 });
+    const dist = det.porPessoa.find(x => x.pessoa === 'DISTRIBUIDORA X');
+    expect(fd(dist.atual).valor).toBe(-700000);
+    expect(det.serie6m).toHaveLength(2);
+    expect(p.fatosDetalhe.every(x => x.id.startsWith('D'))).toBe(true);
+  });
+
+  it('valida resposta focada com fatos do detalhe', () => {
+    const p = pacote();
+    const det = p.detalheContas.find(d => d.conta === 'Combustível');
+    const { resposta, problemas } = validarRespostaFocada({
+      resumo: 'A DISTRIBUIDORA X recebeu R$ 700.000,00; R$ 1.234,00 não existe.', evidencias: [det.atual, 'D9999'],
+    }, p);
+    expect(resposta._valoresNaoEncontrados).toEqual([1234]);
+    expect(resposta._evidenciasInvalidas).toEqual(['D9999']);
+    expect(problemas.length).toBe(2);
   });
 });

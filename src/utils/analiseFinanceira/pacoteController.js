@@ -10,11 +10,11 @@ import { indicadoresCapitalGiro } from './capitalGiro';
 import { decomporVolumePreco } from './posto';
 
 // ─── Registro de fatos ────────────────────────────────────────────
-export function criarRegistroFatos() {
+export function criarRegistroFatos(prefixo = 'F') {
   const fatos = [];
   const add = (rotulo, valor, unidade = 'R$') => {
     if (valor == null || !Number.isFinite(Number(valor))) return null;
-    const id = `F${fatos.length + 1}`;
+    const id = `${prefixo}${fatos.length + 1}`;
     fatos.push({ id, rotulo, valor: unidade === 'R$' ? r2(valor) : Math.round(Number(valor) * 1000) / 1000, unidade });
     return id;
   };
@@ -61,6 +61,12 @@ function maioresFatores(arvore, { atual, anterior }, meses6 = [], limite = 10) {
         media6m: serie.length ? serie.reduce((s, v) => s + v, 0) / serie.length : null,
         lancamentos: (c.lancamentos || []).filter(l => l.mesKey === atual).sort((x, y) => y.valor - x.valor).slice(0, 3)
           .map(l => ({ data: l.data, valor: r2(l.valor * l.sinal), pessoa: l.pessoaNome || null, descricao: l.descricao })),
+        // para "Investigar esta conta" (Fase 5)
+        bruto: {
+          serie: meses6.map(k => ({ mes: k, valor: valorMes(c, k) })),
+          lancAtual: (c.lancamentos || []).filter(l => l.mesKey === atual),
+          lancAnterior: (c.lancamentos || []).filter(l => l.mesKey === anterior),
+        },
       });
     });
     (no.children || []).forEach(f => visitar(f, `${caminho} › ${f.nome}`));
@@ -92,6 +98,7 @@ export function montarPacoteController({ meta, fluxo, intercompany = null, anoma
   const variacao = (k) => arvore.find(n => n.tipo === 'resultado')?.valoresPorMes?.[k]
     ?? arvore.filter(n => !ehCalc(n)).reduce((s, n) => s + valorMes(n, k), 0);
   const media6 = (f) => (meses6.length ? meses6.reduce((s, k) => s + f(k), 0) / meses6.length : null);
+  const fatoresBrutos = maioresFatores(arvore, chaves, meses6);
   const caixa = {
     reconhecidas: atv.atual.reconhecidas,
     origem: atv.atual.origem,
@@ -113,7 +120,7 @@ export function montarPacoteController({ meta, fluxo, intercompany = null, anoma
       return { nome: l.caminho, nivel: l.nivel, ...addComp(l.caminho, c, rA, rB),
         anoAnterior: l.anoAnterior != null ? add(`${l.caminho} · ${rY}`, l.anoAnterior) : null };
     }),
-    maioresFatores: maioresFatores(arvore, chaves, meses6).map(f => ({
+    maioresFatores: fatoresBrutos.map(f => ({
       conta: f.conta, caminho: f.caminho,
       ...addComp(`${f.conta}`, comparar(f.anterior, f.atual), rA, rB),
       mesesComMovimento6m: f.mesesComMovimento,
@@ -204,7 +211,36 @@ export function montarPacoteController({ meta, fluxo, intercompany = null, anoma
     };
   } else ausentes.push('vendas por produto (litros, preço e custo médio) — gere a análise de Vendas para incluir');
 
+  // ─── Detalhe por conta para "Investigar esta conta" (fatos D…) ───
+  const regD = criarRegistroFatos('D');
+  const porPessoa = (lancs) => {
+    const m = new Map();
+    lancs.forEach(l => { const k = (l.pessoaNome || '').trim() || '(sem pessoa)'; m.set(k, (m.get(k) || 0) + l.valor * l.sinal); });
+    return m;
+  };
+  const resumoLanc = (l) => ({ data: l.data, pessoa: l.pessoaNome || null, descricao: l.descricao, empresa: l.empresaCodigo ?? null,
+    fato: regD.add(`Lançamento ${l.data} ${l.pessoaNome || l.descricao}`, l.valor * l.sinal) });
+  const detalheContas = fatoresBrutos.map(f => {
+    const pa = porPessoa(f.bruto.lancAnterior);
+    const pb = porPessoa(f.bruto.lancAtual);
+    const pessoas = [...new Set([...pa.keys(), ...pb.keys()])]
+      .map(p => ({ pessoa: p, anterior: pa.get(p) || 0, atual: pb.get(p) || 0 }))
+      .sort((x, y) => Math.abs(y.atual - y.anterior) - Math.abs(x.atual - x.anterior)).slice(0, 12)
+      .map(p => ({ pessoa: p.pessoa, anterior: regD.add(`${f.conta} · ${p.pessoa} · ${rA}`, p.anterior), atual: regD.add(`${f.conta} · ${p.pessoa} · ${rB}`, p.atual),
+        diferenca: regD.add(`${f.conta} · ${p.pessoa} · diferença`, p.atual - p.anterior) }));
+    const maiores = (l) => l.slice().sort((x, y) => y.valor - x.valor).slice(0, 20).map(resumoLanc);
+    return {
+      conta: f.conta, caminho: f.caminho,
+      anterior: regD.add(`${f.conta} · ${rA}`, f.anterior), atual: regD.add(`${f.conta} · ${rB}`, f.atual), diferenca: regD.add(`${f.conta} · diferença`, f.diferenca),
+      qtdLancamentos: { anterior: f.bruto.lancAnterior.length, atual: f.bruto.lancAtual.length },
+      serie6m: f.bruto.serie.map(s => ({ mes: rotulos[s.mes] || s.mes, fato: regD.add(`${f.conta} · ${rotulos[s.mes] || s.mes}`, s.valor) })),
+      porPessoa: pessoas,
+      lancamentos: { atual: maiores(f.bruto.lancAtual), anterior: maiores(f.bruto.lancAnterior) },
+    };
+  });
+
   return {
+    detalheContas, fatosDetalhe: regD.fatos,
     meta: { ...meta, periodos: { atual: rB, anterior: rA, anoAnterior: rY } },
     caixa, transferenciasEntreEmpresas: ic, pontosDeAtencao: pontos, dre: dreBloco, cruzamentoDreCaixa: cruzamento,
     capitalDeGiro: giroBloco, posto: postoBloco, dadosAusentes: ausentes, fatos: reg.fatos,
@@ -219,12 +255,18 @@ const paraNumero = (s) => Number(String(s).replace(/\./g, '').replace(',', '.'))
 // → { insights (com marcas de verificação), problemas: [...] }
 // Marca em cada item: _evidenciasInvalidas (ids que não existem), _valoresNaoEncontrados
 // (R$ citados que não estão no pacote). Não apaga nada: a tela mostra o aviso.
-export function validarRespostaController(insights, pacote) {
+export function validarRespostaFocada(resposta, pacote) {
+  const { insights, problemas } = validarRespostaController({ _foco: resposta }, pacote, ['_foco']);
+  return { resposta: insights._foco, problemas };
+}
+
+export function validarRespostaController(insights, pacote, secoes = SECOES) {
   const problemas = [];
   const out = insights && typeof insights === 'object' ? insights : {};
-  SECOES.forEach(s => { if (out[s] == null) problemas.push(`seção ausente: ${s}`); });
-  const ids = new Set((pacote?.fatos || []).map(f => f.id));
-  const valores = (pacote?.fatos || []).filter(f => f.unidade === 'R$').map(f => Math.abs(f.valor));
+  secoes.forEach(s => { if (out[s] == null) problemas.push(`seção ausente: ${s}`); });
+  const todos = [...(pacote?.fatos || []), ...(pacote?.fatosDetalhe || [])];
+  const ids = new Set(todos.map(f => f.id));
+  const valores = todos.filter(f => f.unidade === 'R$').map(f => Math.abs(f.valor));
   const existe = (v) => valores.some(x => Math.abs(x - v) <= Math.max(1, x * 0.005));
   const visitar = (no) => {
     if (Array.isArray(no)) { no.forEach(visitar); return; }
@@ -238,6 +280,6 @@ export function validarRespostaController(insights, pacote) {
     if (nao.length) { no._valoresNaoEncontrados = [...new Set(nao)]; problemas.push(`valor não encontrado no pacote: ${nao.join(', ')}`); }
     Object.values(no).forEach(v => { if (v && typeof v === 'object') visitar(v); });
   };
-  SECOES.forEach(s => visitar(out[s]));
+  secoes.forEach(s => visitar(out[s]));
   return { insights: out, problemas };
 }

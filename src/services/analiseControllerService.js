@@ -13,7 +13,7 @@ import { getAtivo as demoAtivo, mascararEmpresa, mascararRede } from './anonimiz
 import { montarFluxo } from '../utils/fluxoCaixa/motor';
 import { analisarIntercompany, removerMovimentos } from '../utils/fluxoCaixa/intercompany';
 import { detectarAnomalias } from '../utils/fluxoCaixa/anomalias';
-import { montarPacoteController, validarRespostaController } from '../utils/analiseFinanceira/pacoteController';
+import { montarPacoteController, validarRespostaController, validarRespostaFocada } from '../utils/analiseFinanceira/pacoteController';
 import { isoDataBR } from '../utils/dataBR';
 
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
@@ -199,7 +199,9 @@ RESPONDA SÓ COM ESTE JSON (sem markdown):
 Máximo: 6 itens em investigacao_variacoes, 5 em anomalias, 3 ações por prazo. Cenários só se situacao_critica = true.`;
 
 export async function gerarAnaliseController(pacote) {
-  const user = `Pacote de evidências (${pacote.meta.empresa} · ${pacote.meta.periodos.atual}):\n${JSON.stringify(pacote)}`;
+  // O detalhe por conta (Fase 5) fica fora do prompt principal
+  const { detalheContas: _d, fatosDetalhe: _fd, ...principal } = pacote;
+  const user = `Pacote de evidências (${pacote.meta.empresa} · ${pacote.meta.periodos.atual}):\n${JSON.stringify(principal)}`;
   let r;
   try {
     r = await chamarClaudeAPI({ system: SYSTEM_PROMPT, user });
@@ -210,4 +212,58 @@ export async function gerarAnaliseController(pacote) {
   }
   const { insights, problemas } = validarRespostaController(r.insights, pacote);
   return { insights: { ...insights, _validacao: { problemas, verificadoEm: new Date().toISOString() } }, usage: r.usage };
+}
+
+// ─── Fase 5: investigar uma conta / perguntas do proprietário ─────
+const REGRAS_FOCO = `REGRAS: use só números que estão em "fatos" ou "fatosDetalhe" (mesmo valor) e cite os ids em "evidencias". Não calcule totais novos. Separe comprovado / provavel / hipotese / insuficiente. Lucro (DRE) não é caixa; pagar menos não é economia se o custo não caiu. Não acuse fraude: aponte o que conferir. Linguagem simples para o dono do posto. Responda SÓ o JSON pedido, sem markdown.`;
+
+async function chamarComRetentativa(system, user) {
+  try { return await chamarClaudeAPI({ system, user }); }
+  catch (e) {
+    if (e.code !== 'INVALID_JSON') throw e;
+    return chamarClaudeAPI({ system, user: `${user}
+
+ATENÇÃO: responda SOMENTE o objeto JSON, completo e válido.` });
+  }
+}
+const contextoAnalise = (insights) => (insights ? {
+  resumo: insights.resumo_executivo?.conclusao, diagnostico: insights.diagnostico, conclusao: insights.conclusao,
+} : null);
+
+// Investiga UMA conta em camadas, com todos os lançamentos do mês atual e do anterior,
+// quem pagou/recebeu (pessoas) e a série de 6 meses.
+export async function investigarConta(pacote, insights, nomeConta) {
+  const det = (pacote.detalheContas || []).find(d => d.conta === nomeConta);
+  if (!det) throw new Error('Esta conta não tem detalhe no pacote. Gere a análise Controller de novo.');
+  const system = `Você é o controller financeiro de um grupo de postos. Investigue UMA conta do fluxo de caixa: por que ela mudou entre ${pacote.meta.periodos.anterior} e ${pacote.meta.periodos.atual}.
+Camadas: 1) o que mudou (valor e %); 2) quem explica (pessoas/fornecedores e lançamentos que mais pesaram, comparando os dois meses: número de lançamentos, valores, quem entrou ou saiu); 3) cruzamento com DRE/vendas/estoque do pacote; 4) é pontual ou recorrente (série de 6 meses); 5) causa mais provável; 6) consequência; 7) recomendação prática.
+${REGRAS_FOCO}
+JSON: {"conta": "...", "resumo": "2 frases", "camadas": {"o_que_mudou": "...", "quem_explica": "...", "cruzamento": "...", "recorrencia": "...", "causa_provavel": "...", "consequencia": "...", "recomendacao": "..."}, "grau": "comprovado|provavel|hipotese|insuficiente", "evidencias": ["F..", "D.."], "conferir": ["o que checar nos lançamentos"], "dados_faltando": ["..."]}`;
+  const { detalheContas: _d, fatosDetalhe: _fd, ...principal } = pacote;
+  const user = JSON.stringify({ conta_investigada: det, fatosDetalhe: pacote.fatosDetalhe.filter(f => JSON.stringify(det).includes(`"${f.id}"`)), pacote: principal, analise_atual: contextoAnalise(insights) });
+  const r = await chamarComRetentativa(system, user);
+  const { resposta, problemas } = validarRespostaFocada(r.insights, pacote);
+  return { conta: nomeConta, resposta, problemas, usage: r.usage, em: new Date().toISOString() };
+}
+
+// Pergunta livre do proprietário, respondida com o pacote (e a análise já feita).
+export const PERGUNTAS_SUGERIDAS = [
+  'Por que meu caixa caiu?',
+  'Estou vendendo menos ou recebendo mais tarde?',
+  'Estou pagando menos porque comprei menos ou porque estou consumindo estoque?',
+  'Minha empresa está gerando dinheiro com a operação ou depende de outras empresas?',
+  'Meu lucro está se transformando em caixa?',
+  'Quais contas estão provocando a piora do caixa?',
+  'O que preciso fazer para reverter essa situação?',
+];
+export async function perguntarController(pacote, insights, pergunta) {
+  const q = String(pergunta || '').trim();
+  if (q.length < 5) throw new Error('Escreva a pergunta.');
+  const system = `Você é o controller financeiro de um grupo de postos e responde a uma pergunta do dono sobre o caixa de ${pacote.meta.periodos.atual}, usando o pacote de evidências e a análise já feita. Responda de forma direta (comece pela resposta), mostre as evidências e diga claramente quando os dados não permitem concluir e o que faltaria.
+${REGRAS_FOCO}
+JSON: {"resposta": "resposta direta em 2-4 frases", "pontos": [{"texto": "...", "grau": "comprovado|provavel|hipotese|insuficiente", "evidencias": ["F.."]}], "o_que_falta": "dado que faltou (se faltou)", "proximo_passo": "o que fazer ou investigar"}`;
+  const user = JSON.stringify({ pergunta: q, pacote, analise_atual: contextoAnalise(insights) });
+  const r = await chamarComRetentativa(system, user);
+  const { resposta, problemas } = validarRespostaFocada(r.insights, pacote);
+  return { pergunta: q, resposta, problemas, usage: r.usage, em: new Date().toISOString() };
 }

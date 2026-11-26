@@ -19,13 +19,14 @@ const RE_OPERACIONAL = /alug|energia|luz|agua|água|sal[aá]ri|folha|f[eé]rias|
 const evid = (l) => ({ data: l.data, descricao: l.descricao, valor: r2((l.valor || 0) * (l.sinal || 1)), empresaCodigo: l.empresaCodigo ?? null, contaCodigo: l.contaCodigo ?? null, pessoa: l.pessoaNome || null });
 
 // ─── 1. Possíveis duplicidades ────────────────────────────────────
-// Mesma conta de caixa, mesma data, mesmo valor e sentido, mesmo plano e mesmo
-// histórico — em movimentos DIFERENTES.
+// SAÍDAS na mesma conta de caixa, mesma data, mesmo valor, mesmo plano e mesmo
+// histórico, em 2 ou 3 movimentos DIFERENTES (pagamento repetido).
 export function duplicidades(indice) {
   const achados = [];
   Object.entries(indice?.lancamentosPorConta || {}).forEach(([plano, lancs]) => {
     const grupos = new Map();
     lancs.forEach(l => {
+      if (l.sinal > 0) return; // entradas de mesmo valor no dia são normais no posto (vendas iguais)
       if (String(l.id).match(/-(r|p)\d+$/)) return; // partes de rateio/lote: não são duplicidade
       const k = [l.contaCodigo, l.empresaCodigo, l.data, l.sinal, r2(l.valor), (l.descricao || '').trim().toUpperCase()].join('|');
       if (!grupos.has(k)) grupos.set(k, []);
@@ -33,7 +34,8 @@ export function duplicidades(indice) {
     });
     grupos.forEach(g => {
       const distintos = new Set(g.map(l => l.id));
-      if (distintos.size < 2 || r2(g[0].valor) < 1) return;
+      // 4+ iguais no mesmo dia = padrão (tarifas, parcelas), não pagamento repetido
+      if (distintos.size < 2 || distintos.size > 3 || r2(g[0].valor) < 1) return;
       const extra = r2(g[0].valor * (distintos.size - 1));
       achados.push({
         id: `dup-${plano}-${g[0].data}-${r2(g[0].valor)}`,

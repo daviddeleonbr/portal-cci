@@ -2,6 +2,31 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.20.0",
+      "data": "2026-11-26",
+      "resumo": "Investigar contas e perguntar ao Controller.",
+      "itens": [
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Investigar esta conta",
+          "descricao": "No Controller, cada conta que mais mudou tem o botão Investigar: a IA mostra quem explica a variação (pessoas e lançamentos), se é pontual ou recorrente, a causa provável e o que fazer."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Pergunte ao controller",
+          "descricao": "Faça perguntas sobre o caixa do período (ou use as sugestões, como \"Por que meu caixa caiu?\"). As respostas vêm com as evidências e dizem quando faltam dados."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Pontos de atenção do Fluxo",
+          "descricao": "O quadro vem recolhido e a busca de duplicidades ficou mais precisa: só aponta pagamentos repetidos, não vendas de mesmo valor."
+        }
+      ]
+    },
+    {
       "versao": "1.19.0",
       "data": "2026-11-26",
       "resumo": "Análise Controller com IA e Fluxo de Caixa mais completo.",

@@ -2,8 +2,8 @@
 // da IA. Cada afirmação mostra o grau (comprovado / provável / hipótese) e as
 // evidências (fatos do pacote) que a sustentam; valores que não conferem com os
 // dados ficam marcados.
-import { createElement } from 'react';
-import { AlertTriangle, ArrowRightLeft, CheckCircle2, ClipboardList, FileSearch, Gauge, Lightbulb, ListChecks, Scale, SearchCheck, ShieldAlert, Target, TrendingUp } from 'lucide-react';
+import { createElement, Fragment, useState } from 'react';
+import { Loader2, MessageCircleQuestion, Search, Send, AlertTriangle, ArrowRightLeft, CheckCircle2, ClipboardList, FileSearch, Gauge, Lightbulb, ListChecks, Scale, SearchCheck, ShieldAlert, Target, TrendingUp } from 'lucide-react';
 import { formatCurrency } from '../../utils/format';
 
 const GRAU = {
@@ -72,6 +72,70 @@ const Item = ({ titulo, texto, grau, ids, f, item, children }) => (
   </li>
 );
 
+// Resultado de "Investigar esta conta" (Fase 5)
+function Investigacao({ inv, f }) {
+  const r = inv?.resposta || {};
+  const cam = r.camadas || {};
+  return (
+    <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3 text-[12px]">
+      <div className="flex items-start gap-2">
+        <p className="min-w-0 flex-1 text-[12.5px] font-medium leading-relaxed text-gray-900">{r.resumo}</p>
+        <Grau g={r.grau} />
+      </div>
+      <dl className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+        {[['O que mudou', cam.o_que_mudou], ['Quem explica', cam.quem_explica], ['Cruzamento', cam.cruzamento], ['Pontual ou recorrente', cam.recorrencia],
+          ['Causa mais provável', cam.causa_provavel], ['Consequência', cam.consequencia], ['O que fazer', cam.recomendacao]].filter(([, v]) => v).map(([k, v]) => (
+          <div key={k}><dt className="text-[10.5px] font-semibold uppercase tracking-wide text-gray-500">{k}</dt><dd className="leading-relaxed text-gray-800">{v}</dd></div>
+        ))}
+      </dl>
+      {(r.conferir || []).length > 0 && <p className="mt-2 text-gray-700"><strong>Conferir:</strong> {r.conferir.join('; ')}</p>}
+      {(r.dados_faltando || []).length > 0 && <p className="mt-1 text-gray-500">Faltou: {r.dados_faltando.join('; ')}</p>}
+      <Evidencias ids={r.evidencias} f={f} /><Avisos item={r} />
+    </div>
+  );
+}
+
+// Perguntas do proprietário (Fase 5)
+function Perguntas({ perguntas = [], sugeridas = [], onPerguntar, ocupado, f }) {
+  const [texto, setTexto] = useState('');
+  const enviar = (q) => { const p = (q ?? texto).trim(); if (!p || ocupado) return; onPerguntar(p); setTexto(''); };
+  return (
+    <Card icon={MessageCircleQuestion} titulo="Pergunte ao controller" extra="respostas com base nos dados desta análise">
+      <div className="flex flex-wrap gap-1.5">
+        {sugeridas.map(s => (
+          <button key={s} type="button" disabled={!!ocupado} onClick={() => enviar(s)}
+            className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11.5px] text-gray-700 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50">{s}</button>
+        ))}
+      </div>
+      <div className="mt-3 flex gap-2">
+        <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar(); }} disabled={!!ocupado}
+          placeholder="Faça uma pergunta sobre o caixa deste período…" maxLength={300}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+        <button type="button" onClick={() => enviar()} disabled={!!ocupado || texto.trim().length < 5}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {ocupado === 'pergunta' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />} Perguntar
+        </button>
+      </div>
+      <ul className="mt-3 space-y-3">
+        {perguntas.slice().reverse().map((p, i) => (
+          <li key={i} className="rounded-xl bg-gray-50 p-3">
+            <p className="text-[12px] font-semibold text-gray-900">{p.pergunta}</p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-gray-800">{p.resposta?.resposta}</p>
+            {(p.resposta?.pontos || []).length > 0 && (
+              <ul className="mt-2 space-y-1.5">{p.resposta.pontos.map((x, j) => (
+                <li key={j} className="flex items-start gap-2 text-[12px] text-gray-700"><Grau g={x.grau} /><span className="min-w-0 flex-1">{x.texto}<Evidencias ids={x.evidencias} f={f} /><Avisos item={x} /></span></li>
+              ))}</ul>
+            )}
+            {p.resposta?.o_que_falta && <p className="mt-1.5 text-[11.5px] text-gray-500">Faltou: {p.resposta.o_que_falta}</p>}
+            {p.resposta?.proximo_passo && <p className="mt-1 text-[11.5px] text-gray-700"><strong>Próximo passo:</strong> {p.resposta.proximo_passo}</p>}
+            <Avisos item={p.resposta} />
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 // Cascata: atividades do mês atual → variação de caixa
 function Cascata({ pacote, f }) {
   const atv = Object.fromEntries((pacote.caixa?.atividades || []).map(a => [a.campo, a]));
@@ -106,8 +170,16 @@ function Cascata({ pacote, f }) {
   );
 }
 
-export default function RelatorioController({ insights: ia = {}, pacote = {} }) {
+// onInvestigar(conta) / onPerguntar(texto): Fase 5 (sem eles, os botões não aparecem)
+export default function RelatorioController({ insights: ia = {}, pacote = {}, onInvestigar, onPerguntar, ocupado = null, sugeridas = [] }) {
   const f = useFatos(pacote);
+  const [abertas, setAbertas] = useState(() => new Set());
+  const investigacoes = ia.investigacoes || {};
+  const podeInvestigar = !!onInvestigar && (pacote.detalheContas || []).length > 0;
+  const investigar = (conta) => {
+    setAbertas(s => new Set(s).add(conta));
+    if (!investigacoes[conta]) onInvestigar(conta);
+  };
   const re = ia.resumo_executivo || {};
   const sit = SITUACAO[re.situacao] || SITUACAO.alerta;
   const per = pacote.meta?.periodos || {};
@@ -157,6 +229,8 @@ export default function RelatorioController({ insights: ia = {}, pacote = {} }) 
         </div>
       </section>
 
+      {onPerguntar && <Perguntas perguntas={ia.perguntas || []} sugeridas={sugeridas} onPerguntar={onPerguntar} ocupado={ocupado} f={f} />}
+
       {/* B. Geração de caixa */}
       <Card icon={TrendingUp} titulo="Geração de caixa">
         <Cascata pacote={pacote} f={f} />
@@ -172,17 +246,32 @@ export default function RelatorioController({ insights: ia = {}, pacote = {} }) 
           <div className="mb-4 overflow-x-auto">
             <table className="w-full min-w-[560px] text-[12px]">
               <thead className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                <tr><th className="py-1.5">Conta</th><th className="py-1.5 text-right">{per.anterior}</th><th className="py-1.5 text-right">{per.atual}</th><th className="py-1.5 text-right">Diferença</th><th className="py-1.5 text-right">%</th></tr>
+                <tr><th className="py-1.5">Conta</th><th className="py-1.5 text-right">{per.anterior}</th><th className="py-1.5 text-right">{per.atual}</th><th className="py-1.5 text-right">Diferença</th><th className="py-1.5 text-right">%</th>{podeInvestigar && <th className="no-print" />}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {pacote.caixa.maioresFatores.map(m => (
-                  <tr key={m.conta + m.caminho}>
+                  <Fragment key={m.conta + m.caminho}>
+                  <tr>
                     <td className="py-1.5 pr-2"><p className="font-medium text-gray-900">{m.conta}</p><p className="text-[10.5px] text-gray-500">{m.caminho} · movimentou em {m.mesesComMovimento6m} de 6 meses</p></td>
                     <td className="py-1.5 text-right font-mono tabular-nums text-gray-600">{f.texto(m.anterior)}</td>
                     <td className="py-1.5 text-right font-mono tabular-nums text-gray-900">{f.texto(m.atual)}</td>
                     <td className="py-1.5 text-right font-mono tabular-nums font-semibold text-gray-900">{f.texto(m.diferenca)}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-600">{m.pct == null ? '—' : `${m.pct > 0 ? '+' : ''}${m.pct.toLocaleString('pt-BR')}%`}</td>
+                    {podeInvestigar && (
+                      <td className="py-1.5 pl-2 text-right no-print">
+                        <button type="button" onClick={() => (abertas.has(m.conta) && investigacoes[m.conta] ? setAbertas(s => { const n = new Set(s); n.delete(m.conta); return n; }) : investigar(m.conta))}
+                          disabled={ocupado === `conta:${m.conta}`}
+                          className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60">
+                          {ocupado === `conta:${m.conta}` ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Search className="h-3 w-3" aria-hidden="true" />}
+                          {investigacoes[m.conta] ? (abertas.has(m.conta) ? 'Ocultar' : 'Ver investigação') : 'Investigar'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
+                  {abertas.has(m.conta) && investigacoes[m.conta] && (
+                    <tr><td colSpan={6} className="pb-3 pt-1"><Investigacao inv={investigacoes[m.conta]} f={f} /></td></tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

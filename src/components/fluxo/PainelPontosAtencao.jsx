@@ -130,13 +130,16 @@ export function ModalContasIntercompany({ aberto, candidatos = [], selecionadas 
 export function PontosAtencao({ achados = [], nomeEmpresa }) {
   const [abertos, setAbertos] = useState(() => new Set());
   const [todos, setTodos] = useState(false);
+  const [expandido, setExpandido] = useState(false); // vem recolhido
   if (!achados.length) return null;
   const visiveis = todos ? achados : achados.slice(0, 8);
   const alternar = (id) => setAbertos(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const cont = achados.reduce((m, a) => ({ ...m, [a.nivel]: (m[a.nivel] || 0) + 1 }), {});
   return (
     <div className="mt-4 overflow-hidden rounded-2xl border border-gray-200/60 bg-white shadow-sm no-print">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-5 py-3">
+      <button type="button" onClick={() => setExpandido(e => !e)} aria-expanded={expandido}
+        className={`flex w-full flex-wrap items-center gap-2 px-5 py-3 text-left hover:bg-gray-50/60 ${expandido ? 'border-b border-gray-100' : ''}`}>
+        <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${expandido ? 'rotate-90' : ''}`} aria-hidden="true" />
         <SearchCheck className="h-4 w-4 text-blue-600" aria-hidden="true" />
         <h3 className="text-sm font-semibold text-gray-800">Pontos de atenção</h3>
         <span className="text-[11px] text-gray-500">
@@ -145,7 +148,8 @@ export function PontosAtencao({ achados = [], nomeEmpresa }) {
         <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-gray-400">
           <Info className="h-3 w-3" aria-hidden="true" /> Indícios para conferir — nada foi alterado
         </span>
-      </div>
+      </button>
+      {expandido && (<>
       <ul className="divide-y divide-gray-100">
         {visiveis.map(a => {
           const aberto = abertos.has(a.id);
@@ -186,6 +190,7 @@ export function PontosAtencao({ achados = [], nomeEmpresa }) {
           <ListChecks className="h-3.5 w-3.5" aria-hidden="true" /> {todos ? 'Mostrar menos' : `Ver todos (${achados.length})`}
         </button>
       )}
+      </>)}
     </div>
   );
 }
