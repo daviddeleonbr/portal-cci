@@ -101,7 +101,7 @@ export async function resolverCaixaCartoes(chave, empresaCodigo, de, ate, lista)
     qualityApi.buscarCaixas(chave, f),
     qualityApi.buscarFuncionarios(chave).catch(() => []),
   ]);
-  const caixaDaVenda = new Map((vendas || []).map(v => [v.vendaCodigo ?? v.codigo, v.caixaCodigo]));
+  const vendaPorCod = new Map((vendas || []).map(v => [v.vendaCodigo ?? v.codigo, v]));
   const caixaPorCod = new Map((caixas || []).map(c => [c.caixaCodigo ?? c.codigo, c]));
   const nomeFunc = new Map((funcs || []).map(x => [x.funcionarioCodigo ?? x.codigo, x.nome]));
   const rotulos = [...new Set(lista.map(i => i.caixa).filter(Boolean))];
@@ -110,12 +110,16 @@ export async function resolverCaixaCartoes(chave, empresaCodigo, de, ate, lista)
     const adm = i.ctx.Bandeira || i.antes.Administradora || i.depois.Administradora || '';
     const candidatos = (cartoes || []).filter(c => String(c.autorizacao || '').trim() === aut);
     const cartao = candidatos.find(c => c.adiministradoraDescricao === adm || c.adiministradoraDescricao === i.depois.Administradora) || candidatos[0];
-    const cx = cartao && caixaPorCod.get(caixaDaVenda.get(cartao.vendaCodigo));
+    const venda = cartao && vendaPorCod.get(cartao.vendaCodigo);
+    const cx = venda && caixaPorCod.get(venda.caixaCodigo);
     if (!cx) return;
     const dataBR = String(cx.dataMovimento).slice(0, 10).split('-').reverse().join('/');
     i.caixa = rotulos.find(r => r.includes(cx.turno) && r.includes(dataBR)) || `${cx.turno}, ${dataBR}`;
     i.dataTurno = dataTurnoDoItem(i.caixa);
-    i.donoQuality = nomeFunc.get(cx.funcionarioCodigo) || '';
+    // Funcionário = o da VENDA (é por ele que o Fechamento de Caixa Apresentado do
+    // Webposto separa os cartões). O do CAIXA é só quem abriu o turno — num turno com
+    // vários frentistas os cartões de todos caíam nele (Trivela 26/11: Thais × Gladson).
+    i.donoQuality = nomeFunc.get(venda.funcionarioCodigo) || nomeFunc.get(cx.funcionarioCodigo) || '';
   });
 }
 
@@ -166,7 +170,10 @@ export async function buscarAlteracoesCaixasWebposto({ chave, empresaCodigo, de,
       donoCaixa.set(i.caixa, i.ctx['Funcionário']);
     }
   });
-  lista.forEach(i => { i.funcionario = i.ctx['Funcionário'] || donoCaixa.get(i.caixa) || i.donoQuality || 'Sem funcionário'; });
+  // Cartão resolvido pela Quality: o funcionário da venda vem antes do rótulo — o
+  // rótulo é só PDV/turno/data, que vários frentistas dividem; por ele o cartão
+  // caía no 1º funcionário visto no turno (Gladson → Richard).
+  lista.forEach(i => { i.funcionario = i.ctx['Funcionário'] || i.donoQuality || donoCaixa.get(i.caixa) || 'Sem funcionário'; });
   // "Caixa Apresentado" e "Caixa" (fechamento/reabertura do turno) não
   // interessam — servem só p/ descobrir o funcionário acima, e saem daqui.
   // Só o que é dos caixas/turnos do período.

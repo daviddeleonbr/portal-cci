@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.27.2",
+      "data": "2026-11-27",
+      "resumo": "Alterações de cartão no funcionário certo (Webposto).",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Alterações de cartão no funcionário certo (Webposto)",
+          "descricao": "Nas alterações em caixas e no Relatório geral, as alterações de cartão agora aparecem no frentista que fez a venda. Antes, num turno com vários frentistas, elas podiam cair no nome de outro funcionário."
+        }
+      ]
+    },
+    {
       "versao": "1.27.1",
       "data": "2026-11-27",
       "resumo": "Sobras e faltas dos caixas consolidados no Relatório geral e nova página Análise de cartões.",
