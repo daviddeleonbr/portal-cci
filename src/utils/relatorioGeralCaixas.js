@@ -170,11 +170,14 @@ export function modeloAutosystem({ vendas = [], recebimentos = [], outrasEntrada
     const debito = r.modo_recebimento ? categoriaConta.get(String(r.modo_recebimento)) : null;
     // Sobra/falta: vai para o RESPONSÁVEL do PDV/turno (como no relatório do Autosystem),
     // não para quem lançou (muitas vezes a CCI). Sem responsável (Edge antiga), quem lançou.
+    // Contas separadas: vários funcionários no mesmo PDV/turno → a pessoa do lançamento.
     const ehSF = (c) => c === 'sobra_caixa' || c === 'falta_caixa';
     if (ehSF(credito) || ehSF(debito)) {
-      const f = r.responsavel_pessoa_id != null || r.responsavel_nome
-        ? func(r.responsavel_pessoa_id, r.responsavel_nome)
-        : func(r.usuario_pessoa_id, nomeDe(r.usuario_nome, r.usuario));
+      const f = contasSeparadas && r.pessoa_id != null
+        ? func(r.pessoa_id, r.pessoa_nome)
+        : r.responsavel_pessoa_id != null || r.responsavel_nome
+          ? func(r.responsavel_pessoa_id, r.responsavel_nome)
+          : func(r.usuario_pessoa_id, nomeDe(r.usuario_nome, r.usuario));
       // Conta única, pelo lado: creditada = sobra (PDV debitado); debitada = falta (PDV creditado)
       const ehSobra = contasSeparadas ? (ehSF(credito) ? credito : debito) === 'sobra_caixa' : ehSF(credito);
       if (ehSobra) f.sobra += Math.abs(valor); else f.falta += Math.abs(valor);

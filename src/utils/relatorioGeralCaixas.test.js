@@ -58,6 +58,36 @@ describe('relatório geral — sobras e faltas do Autosystem', () => {
     expect(m.faltas).toBeCloseTo(142.10);
   });
 
+  // Trivellin 24/11/2026: todos no PDV 01 turno 1 (responsável do caixa = Leonardo), mas
+  // cada lançamento traz o funcionário em movto.pessoa — o relatório do Autosystem separa por ela.
+  it('com contas separadas, cada sobra/falta vai para a pessoa do lançamento', () => {
+    const separadas = new Map([['1.5.1', 'sobra_caixa'], ['1.5.2', 'falta_caixa']]);
+    const doPdv = (debitar, creditar, valor, pessoa, nome) => ({
+      ...rec(debitar, creditar, valor, 4527, 'LEONARDO'), pessoa_id: pessoa, pessoa_nome: nome,
+    });
+    const m = modeloAutosystem({
+      categoriaConta: separadas,
+      recebimentos: [
+        doPdv('1.5.2', '1.1.2.3', 50, 4221, 'DIONATAN'),
+        doPdv('1.1.2.3', '1.5.1', 0.18, 4525, 'RIAN'),
+        doPdv('1.5.2', '1.1.2.3', 23.08, 4527, 'LEONARDO'),
+        doPdv('1.1.2.3', '1.5.1', 64.68, 6702, 'JOSELIA'),
+      ],
+    });
+    const por = Object.fromEntries(m.funcionarios.map(f => [f.nome, f]));
+    expect(por.DIONATAN.falta).toBeCloseTo(50);
+    expect(por.RIAN.sobra).toBeCloseTo(0.18);
+    expect(por.LEONARDO.falta).toBeCloseTo(23.08);
+    expect(por.LEONARDO.sobra).toBe(0);
+    expect(por.JOSELIA.sobra).toBeCloseTo(64.68);
+  });
+
+  it('com conta única, segue o responsável do caixa mesmo com pessoa no lançamento', () => {
+    const r = { ...rec('1.5', '1.1.2.1', 10, 115, 'ANGELICA'), pessoa_id: 999, pessoa_nome: 'OUTRO' };
+    const m = modeloAutosystem({ categoriaConta, recebimentos: [r] });
+    expect(m.funcionarios.map(f => [f.nome, f.falta])).toEqual([['ANGELICA', 10]]);
+  });
+
   it('sem responsável (consulta antiga), fica com quem lançou', () => {
     const r = { ...rec('1.5', '1.1.2.1', 10, null, ''), responsavel_pessoa_id: undefined, responsavel_nome: undefined };
     const m = modeloAutosystem({ categoriaConta, recebimentos: [r] });

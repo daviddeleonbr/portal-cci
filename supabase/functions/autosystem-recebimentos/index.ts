@@ -43,7 +43,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const TEXT_COLUMNS = new Set(['conta_debitar', 'conta_creditar', 'modo_recebimento', 'documento', 'usuario', 'usuario_nome', 'responsavel_nome']);
+const TEXT_COLUMNS = new Set(['conta_debitar', 'conta_creditar', 'modo_recebimento', 'documento', 'usuario', 'usuario_nome', 'responsavel_nome', 'pessoa_nome']);
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -106,8 +106,13 @@ serve(async (req) => {
         u.pessoa                                                      as usuario_pessoa_id,
         convert_to(coalesce(pe.nome::text, ''), 'LATIN1')             as usuario_nome,
         cx.pessoa                                                     as responsavel_pessoa_id,
-        convert_to(coalesce(pr.nome::text, ''), 'LATIN1')             as responsavel_nome
+        convert_to(coalesce(pr.nome::text, ''), 'LATIN1')             as responsavel_nome,
+        -- Pessoa do próprio lançamento: na sobra/falta é o funcionário (redes com contas
+        -- separadas lançam vários por PDV/turno; o relatório do Autosystem agrupa por ela)
+        m.pessoa                                                      as pessoa_id,
+        convert_to(coalesce(pm.nome::text, ''), 'LATIN1')             as pessoa_nome
       from movto m
+      left join pessoa  pm on pm.grid   = m.pessoa
       left join usuario u  on u.nome    = m.usuario
       left join pessoa  pe on pe.grid   = u.pessoa
       -- Responsável do PDV/turno (tela Conferência de Caixa): (empresa, data, turno, conta)

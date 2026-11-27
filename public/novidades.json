@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.26.2",
+      "data": "2026-11-27",
+      "resumo": "Relatório geral dos caixas: sobras e faltas por funcionário nas redes com contas próprias.",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Sobras e faltas de cada funcionário (Autosystem)",
+          "descricao": "Nas redes que usam uma conta para sobra e outra para falta, as sobras e faltas de todos os funcionários do mesmo caixa ficavam com o responsável. Agora cada funcionário aparece com as suas, como no relatório do sistema."
+        }
+      ]
+    },
+    {
       "versao": "1.26.1",
       "data": "2026-11-27",
       "resumo": "Relatório geral dos caixas: sobras e faltas separadas nas redes com contas próprias.",
