@@ -12,12 +12,10 @@ import * as clientesService from '../services/clientesService';
 import * as mapService from '../services/mapeamentoService';
 import * as qualityApi from '../services/qualityApiService';
 import { periodoPadraoLmc } from '../utils/lmc';
-import { useAdminSession } from '../hooks/useAuth';
 
 const inp = 'h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
 export default function AdminLmc() {
-  const sessao = useAdminSession();
   const [clientes, setClientes] = useState([]);
   const [chaves, setChaves] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -105,7 +103,7 @@ export default function AdminLmc() {
         <>
           <p className="mb-3 text-sm text-gray-700"><strong>{consulta.nome}</strong> · {consulta.de.split('-').reverse().join('/')} a {consulta.ate.split('-').reverse().join('/')}</p>
           <PainelLmc apiKey={consulta.apiKey} empresaCodigo={consulta.empresaCodigo} empresaNome={consulta.nome}
-            clienteId={consulta.clienteId} podeEditarReal usuarioNome={sessao?.usuario?.nome || ''}
+            clienteId={consulta.clienteId} podeEditarReal podeReabrir
             dataInicial={consulta.de} dataFinal={consulta.ate} recarga={consulta.seq} />
         </>
       ) : (

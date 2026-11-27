@@ -22,16 +22,20 @@
 //                        (escritural, perda/sobra e % ficam em branco). O
 //                        lançamento é feito no "Lançar medições" (todos os
 //                        tanques de um dia, com escritural real e motivo).
+//                        Salvou = DIA FECHADO (lmc_real_dia, migração 239): não
+//                        dá pra lançar de novo até a CCI reabrir (com motivo).
+//                        Tudo vai pro histórico (HistoricoLmc).
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Eye, MessageSquareText, PencilLine, Save, ShieldCheck, ClipboardEdit, FileDown, FileSpreadsheet, MessageCircle, Fuel, Loader2, TrendingDown, TrendingUp, FileText, Gauge, Droplets,
+  AlertTriangle, Check, CheckCircle2, History, Lock, LockOpen, ChevronLeft, ChevronRight, Eye, MessageSquareText, PencilLine, Save, ShieldCheck, ClipboardEdit, FileDown, FileSpreadsheet, MessageCircle, Fuel, Loader2, TrendingDown, TrendingUp, FileText, Gauge, Droplets,
 } from 'lucide-react';
 import * as qualityApi from '../../services/qualityApiService';
 import { formatCurrency } from '../../utils/format';
 import * as lmcRealService from '../../services/lmcRealService';
 import Modal from '../ui/Modal';
 import GraficoTanquesLmc from './GraficoTanquesLmc';
+import HistoricoLmc from './HistoricoLmc';
 
 const TOLERANCIA_ANP = 0.006; // 0,6% do estoque disponível
 
@@ -165,12 +169,14 @@ const corPerda = (v) => (v == null || Math.abs(v) < 0.5 ? 'text-gray-700' : v < 
 
 export default function PainelLmc({
   apiKey, empresaCodigo, dataInicial, dataFinal, recarga = 0, empresaNome = '',
-  clienteId = null, podeEditarReal = false, usuarioNome = '',
+  clienteId = null, podeEditarReal = false, podeReabrir = false,
 }) {
   const [linhasOficiais, setLinhasOficiais] = useState([]);
   const [visao, setVisao] = useState('oficial'); // 'oficial' | 'real'
   const [ajustes, setAjustes] = useState(new Map()); // "data|produto" → linha de lmc_real
+  const [fechados, setFechados] = useState(new Map()); // "data" → dia fechado (lmc_real_dia)
   const [erroAjustes, setErroAjustes] = useState(null);
+  const [historico, setHistorico] = useState(null); // { data? } → modal do histórico aberto
   const [nomes, setNomes] = useState(new Map());
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -207,8 +213,11 @@ export default function PainelLmc({
   useEffect(() => {
     if (!clienteId || !dataInicial || !dataFinal) return undefined;
     let cancelado = false;
-    lmcRealService.listarAjustes(clienteId, { de: dataInicial, ate: dataFinal })
-      .then(m => { if (!cancelado) { setAjustes(m); setErroAjustes(null); } })
+    Promise.all([
+      lmcRealService.listarAjustes(clienteId, { de: dataInicial, ate: dataFinal }),
+      lmcRealService.listarDiasFechados(clienteId, { de: dataInicial, ate: dataFinal }),
+    ])
+      .then(([m, f]) => { if (!cancelado) { setAjustes(m); setFechados(f); setErroAjustes(null); } })
       .catch(e => { if (!cancelado) setErroAjustes(e.message); });
     return () => { cancelado = true; };
   }, [clienteId, dataInicial, dataFinal, recarga]);
@@ -224,18 +233,28 @@ export default function PainelLmc({
   }, [visao, linhas]);
   const datasDoPeriodo = useMemo(() => [...new Set(linhasOficiais.map(l => l.data))].sort((a, b) => b.localeCompare(a)), [linhasOficiais]);
 
-  // "Lançar medições": salva o dia inteiro (todos os combustíveis)
+  // "Lançar medições": salva o dia inteiro (todos os combustíveis) e FECHA o dia
   const salvarLancamento = async (data, itens) => {
-    const { salvas, removidas } = await lmcRealService.salvarLancamentosDia({ clienteId, data, itens, usuarioNome });
+    const { linhas: doDia, fechamento } = await lmcRealService.salvarLancamentosDia({ clienteId, data, itens });
     setAjustes(m => {
-      const n = new Map(m);
-      removidas.forEach(pc => n.delete(`${data}|${pc}`));
-      salvas.forEach(r => n.set(`${r.data}|${r.produto_chave}`, r));
+      const n = new Map([...m].filter(([k]) => !k.startsWith(`${data}|`)));
+      doDia.forEach(r => n.set(`${r.data}|${r.produto_chave}`, r));
       return n;
     });
+    setFechados(m => new Map(m).set(data, fechamento || { data, fechado_em: new Date().toISOString() }));
+  };
+  // Reabrir o dia (só CCI): volta a aceitar lançamento
+  const reabrirDia = async (data, motivo) => {
+    await lmcRealService.reabrirDia({ clienteId, data, motivo });
+    setFechados(m => { const n = new Map(m); n.delete(data); return n; });
   };
 
   const nomeProduto = (codigos) => codigos.map(c => nomes.get(String(c)) || `Produto ${c}`).join(' / ') || 'Combustível';
+  // nome pelo produto_chave (histórico); sem LMC no período, mostra os códigos
+  const nomeChave = (k) => {
+    const l = linhasOficiais.find(x => x.chaveProduto === String(k));
+    return l ? nomeProduto(l.produtos) : nomeProduto(String(k ?? '').split('+').filter(Boolean));
+  };
 
   // Resumo por combustível (período)
   const produtos = useMemo(() => {
@@ -346,11 +365,19 @@ export default function PainelLmc({
             : <>Só os dias com escritural real lançado são calculados · medição do Webposto · <strong>não altera o LMC do Webposto</strong>
               {contagemLancados && <> · {contagemLancados.lancados} de {contagemLancados.total} lançamento(s) (combustível × dia)</>}.</>}
         </p>
-        {visao === 'real' && podeEditarReal && (
-          <button type="button" onClick={() => setLancamentoData(datasDoPeriodo[0] || null)} disabled={!datasDoPeriodo.length}
-            className="inline-flex h-11 sm:h-10 items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50 sm:ml-auto">
-            <ClipboardEdit className="h-4 w-4" aria-hidden="true" /> Lançar medições
-          </button>
+        {visao === 'real' && (
+          <div className="grid grid-cols-2 gap-2 sm:ml-auto sm:flex">
+            <button type="button" onClick={() => setHistorico({})}
+              className={`inline-flex h-11 sm:h-10 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 hover:bg-gray-50 ${podeEditarReal ? '' : 'col-span-2'}`}>
+              <History className="h-4 w-4" aria-hidden="true" /> Histórico
+            </button>
+            {podeEditarReal && (
+              <button type="button" onClick={() => setLancamentoData(datasDoPeriodo.find(d => !fechados.has(d)) || datasDoPeriodo[0] || null)} disabled={!datasDoPeriodo.length}
+                className="inline-flex h-11 sm:h-10 items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">
+                <ClipboardEdit className="h-4 w-4" aria-hidden="true" /> Lançar medições
+              </button>
+            )}
+          </div>
         )}
       </div>
       {visao === 'real' && erroAjustes && (
@@ -485,12 +512,18 @@ export default function PainelLmc({
         </>} />
       <ModalDia dias={dias} id={diaAbertoId} nomeProduto={nomeProduto(produtos.find(p => p.chave === ativo)?.codigos || [])}
         onTrocar={setDiaAbertoId} onFechar={() => setDiaAbertoId(null)}
-        podeEditar={visao === 'real' && podeEditarReal}
+        podeEditar={visao === 'real' && podeEditarReal} fechados={fechados}
         onLancar={(data) => { setDiaAbertoId(null); setLancamentoData(data); }} />
       {lancamentoData && (
         <ModalLancamento key={lancamentoData} data={lancamentoData} datas={datasDoPeriodo}
           linhasOficiais={linhasOficiais} ajustes={ajustes} nomeDe={(l) => nomeProduto(l.produtos)}
+          fechados={fechados} podeReabrir={podeReabrir} onReabrir={reabrirDia}
+          onHistorico={(data) => setHistorico({ data })}
           onTrocarData={setLancamentoData} onFechar={() => setLancamentoData(null)} onSalvar={salvarLancamento} />
+      )}
+      {historico && clienteId && (
+        <HistoricoLmc clienteId={clienteId} de={dataInicial} ate={dataFinal} data={historico.data || null}
+          nomeChave={nomeChave} onFechar={() => setHistorico(null)} />
       )}
     </div>
   );
@@ -635,7 +668,7 @@ function CardDia({ l, onAbrir }) {
 
 // Modal do dia: resumo + detalhe (tanques, bicos, notas). As setas andam pelos
 // dias da lista atual (mesma ordem e filtro da tabela); ← → no teclado também.
-function ModalDia({ dias, id, nomeProduto, onTrocar, onFechar, podeEditar = false, onLancar }) {
+function ModalDia({ dias, id, nomeProduto, onTrocar, onFechar, podeEditar = false, fechados, onLancar }) {
   const idx = dias.findIndex(d => d.id === id);
   const l = idx >= 0 ? dias[idx] : null;
   // dias vem do mais recente para o mais antigo: "anterior" = idx + 1
@@ -706,7 +739,7 @@ function ModalDia({ dias, id, nomeProduto, onTrocar, onFechar, podeEditar = fals
             </p>
           )}
           {/* Gerencial: o que foi lançado no dia (só leitura) + atalho p/ lançar */}
-          {l.real && <ResumoGerencial l={l} podeEditar={podeEditar} onLancar={() => onLancar(l.data)} />}
+          {l.real && <ResumoGerencial l={l} podeEditar={podeEditar} fechado={fechados?.get(l.data)} onLancar={() => onLancar(l.data)} />}
           <DetalheDia l={l} />
         </div>
       )}
@@ -715,7 +748,7 @@ function ModalDia({ dias, id, nomeProduto, onTrocar, onFechar, podeEditar = fals
 }
 
 // Gerencial — o que foi lançado no dia para este combustível (só leitura).
-function ResumoGerencial({ l, podeEditar, onLancar }) {
+function ResumoGerencial({ l, podeEditar, fechado, onLancar }) {
   const linhasTq = l.tanques.length
     ? l.tanques.map(t => ({ k: t.tanqueCodigo, rot: `Tanque ${t.tanqueCodigo}`, medido: num(t.fechamento), esc: t.escritural, dif: t.dif, pct: t.pctTanque, motivo: t.motivo }))
     : [{ k: '_', rot: 'Combustível', medido: l.fechamento, esc: l.escritural, dif: l.perdaSobra, pct: l.pct, motivo: l.motivo }];
@@ -725,11 +758,12 @@ function ResumoGerencial({ l, podeEditar, onLancar }) {
         <h4 id="titulo-gerencial" className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
           <PencilLine className="h-4 w-4 text-violet-700" aria-hidden="true" /> Lançamento gerencial
         </h4>
+        {fechado && <span className="inline-flex items-center gap-1 text-[12px] font-medium text-gray-700"><Lock className="h-3.5 w-3.5" aria-hidden="true" /> Dia fechado</span>}
         {!l.lancado && <span className="text-[12px] text-gray-600">{l.parcial ? 'Faltam tanques para calcular o dia.' : 'Sem lançamento neste dia.'}</span>}
         {podeEditar && (
           <button type="button" onClick={onLancar}
             className="ml-auto inline-flex h-10 sm:h-9 items-center gap-1.5 rounded-lg bg-blue-700 px-3 text-sm font-semibold text-white hover:bg-blue-800">
-            <ClipboardEdit className="h-4 w-4" aria-hidden="true" /> {l.lancado || l.parcial ? 'Editar medições do dia' : 'Lançar medições do dia'}
+            <ClipboardEdit className="h-4 w-4" aria-hidden="true" /> {fechado ? 'Ver medições do dia' : l.lancado || l.parcial ? 'Editar medições do dia' : 'Lançar medições do dia'}
           </button>
         )}
       </div>
@@ -765,7 +799,13 @@ function ResumoGerencial({ l, podeEditar, onLancar }) {
 // estoque do dia (medição do Webposto), escritural real (digitado),
 // sobra/falta e % (ao vivo) e motivo. Salva o dia inteiro de uma vez.
 // % do tanque = sobra/falta ÷ disponível do tanque (abertura + notas recebidas).
-function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, onTrocarData, onFechar, onSalvar }) {
+// Depois de salvo o dia FECHA: tudo fica só leitura até a CCI reabrir (com motivo).
+function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, fechados, podeReabrir = false, onReabrir, onHistorico, onTrocarData, onFechar, onSalvar }) {
+  const fechamento = fechados.get(data) || null;
+  const travado = !!fechamento;
+  const [reabrindo, setReabrindo] = useState(false); // painel do motivo aberto
+  const [motivoReab, setMotivoReab] = useState('');
+  const [enviandoReab, setEnviandoReab] = useState(false);
   const doDia = useMemo(() => linhasOficiais
     .filter(l => l.data === data)
     .sort((a, b) => nomeDe(a).localeCompare(nomeDe(b))),
@@ -803,8 +843,21 @@ function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, onTroca
   const irPara = (d) => { if (!d || (sujo && !confirm('Há medições não salvas neste dia. Trocar de dia mesmo assim?'))) return; onTrocarData(d); };
   const fechar = () => { if (sujo && !confirm('Há medições não salvas. Fechar mesmo assim?')) return; onFechar(); };
 
+  const reabrir = async () => {
+    if (motivoReab.trim().length < 5) { setErro('Informe o motivo da reabertura (mínimo 5 caracteres).'); return; }
+    setEnviandoReab(true); setErro(null);
+    try {
+      await onReabrir(data, motivoReab.trim());
+      setReabrindo(false); setMotivoReab(''); setOk(false);
+    } catch (e) { setErro(e.message || String(e)); }
+    finally { setEnviandoReab(false); }
+  };
+
   const salvar = async () => {
+    if (travado) return;
+    if (!preenchidos) { setErro('Preencha o escritural real de ao menos um tanque antes de salvar.'); return; }
     if (invalidos.length) { setErro(`Confira o escritural de: ${invalidos.map(it => `${nomeDe(it.l)} ${it.rot}`).join(', ')} (use só números, ex.: 5.521,50).`); return; }
+    if (!confirm(`Depois de salvar, as medições de ${fmtData(data)} ficam fechadas e só podem ser alteradas se a CCI reabrir o dia. Salvar?`)) return;
     setSalvando(true); setErro(null);
     try {
       const porProduto = doDia.map(l => {
@@ -827,7 +880,7 @@ function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, onTroca
     finally { setSalvando(false); }
   };
 
-  const inp = 'h-11 sm:h-9 w-full rounded-lg border border-gray-300 bg-white px-2.5 text-base sm:text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100';
+  const inp = 'h-11 sm:h-9 w-full rounded-lg border border-gray-300 bg-white px-2.5 text-base sm:text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-800';
   return (
     <Modal open onClose={fechar} size="xxl"
       title={<span className="flex items-center gap-2"><ClipboardEdit className="h-4 w-4 text-blue-700" aria-hidden="true" /> Lançar medições</span>}
@@ -836,12 +889,23 @@ function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, onTroca
           <span className="text-xs text-gray-600">{preenchidos} de {itens.length} tanque(s) com escritural real</span>
           <span className="hidden flex-1 sm:block" />
           {erro && <span className="text-[13px] text-red-700" role="alert">{erro}</span>}
-          {ok && !sujo && <span className="text-[13px] font-medium text-emerald-700" role="status">Medições salvas.</span>}
-          <button type="button" onClick={fechar} className="h-11 sm:h-9 rounded-lg px-3 text-sm font-medium text-gray-700 hover:bg-gray-100">Fechar</button>
-          <button type="button" onClick={salvar} disabled={salvando}
-            className="inline-flex h-12 sm:h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-4 text-base sm:text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">
-            {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />} Salvar medições
+          {ok && !sujo && <span className="text-[13px] font-medium text-emerald-700" role="status">Medições salvas · dia fechado.</span>}
+          <button type="button" onClick={() => onHistorico(data)}
+            className="inline-flex h-11 sm:h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium text-gray-700 hover:bg-gray-100">
+            <History className="h-4 w-4" aria-hidden="true" /> Histórico do dia
           </button>
+          <button type="button" onClick={fechar} className="h-11 sm:h-9 rounded-lg px-3 text-sm font-medium text-gray-700 hover:bg-gray-100">Fechar</button>
+          {travado ? (podeReabrir && !reabrindo && (
+            <button type="button" onClick={() => { setReabrindo(true); setErro(null); }}
+              className="inline-flex h-12 sm:h-9 items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-4 text-base sm:text-sm font-semibold text-amber-900 hover:bg-amber-100">
+              <LockOpen className="h-4 w-4" aria-hidden="true" /> Reabrir dia
+            </button>
+          )) : (
+            <button type="button" onClick={salvar} disabled={salvando}
+              className="inline-flex h-12 sm:h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-4 text-base sm:text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />} Salvar medições
+            </button>
+          )}
         </div>
       )}>
       {/* Dia */}
@@ -853,14 +917,45 @@ function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, onTroca
         <label className="sr-only" htmlFor="data-lancamento">Dia</label>
         <select id="data-lancamento" value={data} onChange={e => irPara(e.target.value)}
           className="h-11 sm:h-9 min-w-0 flex-1 sm:flex-none rounded-lg border border-gray-200 bg-white px-3 text-base sm:text-sm font-medium text-gray-900">
-          {datas.map(d => <option key={d} value={d}>{fmtData(d)} · {diaSemana(d)}</option>)}
+          {datas.map(d => <option key={d} value={d}>{fmtData(d)} · {diaSemana(d)}{fechados.has(d) ? ' · fechado' : ''}</option>)}
         </select>
         <button type="button" onClick={() => irPara(datas[idx - 1])} disabled={idx <= 0} aria-label="Próximo dia"
           className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
           <ChevronRight className="h-4 w-4" />
         </button>
-        <p className="hidden text-[12px] text-gray-600 md:block">Estoque do dia = medição do Webposto. Digite o escritural real; sobra/falta e % calculam na hora.</p>
+        <p className="hidden text-[12px] text-gray-600 md:block">Estoque do dia = medição do Webposto. Digite o escritural real; sobra/falta e % calculam na hora. Ao salvar, o dia fecha.</p>
       </div>
+
+      {/* Dia fechado: só leitura (+ reabrir, só CCI) */}
+      {travado && (
+        <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-800">
+          <p className="flex flex-wrap items-center gap-x-1.5">
+            <Lock className="h-4 w-4 text-gray-600" aria-hidden="true" />
+            <strong>Dia fechado.</strong>
+            {fechamento.fechado_por_nome && <>Medições salvas por <strong>{fechamento.fechado_por_nome}</strong></>}
+            {fechamento.fechado_em && <> em {new Date(fechamento.fechado_em).toLocaleString('pt-BR')}</>}.
+            {!podeReabrir && <span className="text-gray-600">Para alterar, peça à CCI para reabrir o dia.</span>}
+          </p>
+          {reabrindo && (
+            <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-start">
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">Motivo da reabertura</span>
+                <textarea value={motivoReab} onChange={e => setMotivoReab(e.target.value.slice(0, 1000))} rows={2} autoFocus
+                  placeholder="Motivo da reabertura (obrigatório, fica no histórico)"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-base sm:text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+              </label>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setReabrindo(false); setMotivoReab(''); setErro(null); }}
+                  className="h-10 rounded-lg px-3 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancelar</button>
+                <button type="button" onClick={reabrir} disabled={enviandoReab || motivoReab.trim().length < 5}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-amber-600 px-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50">
+                  {enviandoReab ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LockOpen className="h-4 w-4" aria-hidden="true" />} Confirmar reabertura
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {itens.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-600">Sem LMC neste dia.</p>
@@ -884,14 +979,14 @@ function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, onTroca
                   <td className="py-2 text-left text-gray-700">{it.rot}</td>
                   <td className="py-2 text-gray-900">{fmtL(it.medido)}</td>
                   <td className="py-2 pl-3">
-                    <input type="text" inputMode="decimal" value={form[it.chave]?.esc ?? ''} onChange={e => mudar(it.chave, 'esc', e.target.value)}
+                    <input type="text" inputMode="decimal" disabled={travado} value={form[it.chave]?.esc ?? ''} onChange={e => mudar(it.chave, 'esc', e.target.value)}
                       aria-label={`Escritural real — ${nomeDe(it.l)} ${it.rot}`} placeholder="0,00"
                       className={`${inp} text-right tabular-nums ${Number.isNaN(c.esc) ? '!border-red-500' : ''}`} />
                   </td>
                   <td className={`py-2 font-semibold ${corPerda(c.dif)}`}>{c.dif == null ? '' : fmtLs(c.dif)}</td>
                   <td className={`py-2 ${acima(c.pct) ? 'font-semibold text-red-700' : 'text-gray-700'}`}>{c.dif == null ? '' : fmtPct(c.pct)}</td>
                   <td className="py-2 pl-3">
-                    <input type="text" value={form[it.chave]?.mot ?? ''} onChange={e => mudar(it.chave, 'mot', e.target.value.slice(0, 500))}
+                    <input type="text" disabled={travado} value={form[it.chave]?.mot ?? ''} onChange={e => mudar(it.chave, 'mot', e.target.value.slice(0, 500))}
                       aria-label={`Motivo — ${nomeDe(it.l)} ${it.rot}`} placeholder="Motivo da diferença (opcional)" className={inp} />
                   </td>
                 </tr>
@@ -912,7 +1007,7 @@ function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, onTroca
                 <div className="mt-2 grid grid-cols-2 items-end gap-3">
                   <label className="block">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">Escritural real</span>
-                    <input type="text" inputMode="decimal" value={form[it.chave]?.esc ?? ''} onChange={e => mudar(it.chave, 'esc', e.target.value)}
+                    <input type="text" inputMode="decimal" disabled={travado} value={form[it.chave]?.esc ?? ''} onChange={e => mudar(it.chave, 'esc', e.target.value)}
                       placeholder="0,00" className={`${inp} mt-1 text-right tabular-nums ${Number.isNaN(c.esc) ? '!border-red-500' : ''}`} />
                   </label>
                   <div className="pb-1 text-right">
@@ -920,7 +1015,7 @@ function ModalLancamento({ data, datas, linhasOficiais, ajustes, nomeDe, onTroca
                     <p className={`text-xs tabular-nums ${acima(c.pct) ? 'font-semibold text-red-700' : 'text-gray-600'}`}>{c.dif == null ? '' : fmtPct(c.pct)}</p>
                   </div>
                 </div>
-                <input type="text" value={form[it.chave]?.mot ?? ''} onChange={e => mudar(it.chave, 'mot', e.target.value.slice(0, 500))}
+                <input type="text" disabled={travado} value={form[it.chave]?.mot ?? ''} onChange={e => mudar(it.chave, 'mot', e.target.value.slice(0, 500))}
                   placeholder="Motivo da diferença (opcional)" aria-label={`Motivo — ${nomeDe(it.l)} ${it.rot}`} className={`${inp} mt-2`} />
               </li>
             );

@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.26.0",
+      "data": "2026-11-27",
+      "resumo": "LMC gerencial: dia fecha ao salvar as medições, com histórico.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "todos",
+          "titulo": "Medições do LMC fecham o dia",
+          "descricao": "No LMC gerencial, depois de salvar as medições de um dia, ele fica fechado e não pode ser lançado de novo. Para corrigir, a CCI reabre o dia informando o motivo."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "todos",
+          "titulo": "Histórico das medições do LMC",
+          "descricao": "Novo botão Histórico no LMC gerencial: mostra cada lançamento, alteração (valor antes e depois), fechamento e reabertura de dia, com quem fez e quando."
+        }
+      ]
+    },
+    {
       "versao": "1.25.0",
       "data": "2026-11-26",
       "resumo": "Redes e empresas por admin nível 1.",
