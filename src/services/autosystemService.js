@@ -723,6 +723,22 @@ export async function buscarRecebimentosAutosystem(redeId, empresaCodigos, filtr
   return Array.isArray(data?.recebimentos) ? data.recebimentos : [];
 }
 
+// ─── Baixas de cartões (Consultoria > Análise de cartões) ─────
+// Pela data da baixa. `contasCartao` = contas classificadas como Cartão/PIX.
+// → { dias: [{ data, conta, conta_nome, bruto, taxa, liquido, ajuste, baixas }],
+//     produtos: [{ conta, grupo_produto_codigo, valor, taxa, custo, itens_sem_custo, vendas }] }
+export async function buscarBaixasCartoesAutosystem(redeId, empresaCodigos, { data_de, data_ate, contasCartao = [] } = {}) {
+  if (!redeId) throw new Error('rede_id é obrigatório');
+  if (!Array.isArray(empresaCodigos) || empresaCodigos.length === 0) throw new Error('Selecione ao menos uma empresa.');
+  if (!data_de || !data_ate) throw new Error('data_de e data_ate são obrigatórios.');
+  const { data, error } = await supabase.functions.invoke('autosystem-cartoes-baixas', {
+    body: { rede_id: redeId, empresa_codigos: empresaCodigos, data_de, data_ate, contas_cartao: contasCartao },
+  });
+  if (error) throw await _extrairErroFn(error, 'Falha ao buscar as baixas de cartões');
+  if (data?.error) throw new Error(data.detail || data.error);
+  return { dias: data?.dias || [], produtos: data?.produtos || [] };
+}
+
 // ─── Vendas (banco remoto Autosystem) ────────────────────────
 // Filtros:
 //   - empresaCodigos: array de empresa_codigo (grids) das empresas selecionadas
