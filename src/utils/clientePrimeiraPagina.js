@@ -30,7 +30,6 @@ const PAGINAS_ORDEM = [
   { rota: '/bpo/contas-receber',         permissao: 'bpo_contas_receber' },
   { rota: '/financeiro/notas-fiscais',   permissao: 'notas_fiscais' },
   { rota: '/bpo/outras-contas',          permissao: 'outras_contas' },
-  { rota: '/bpo',                        permissao: 'bpo' },
   { rota: '/acessos',                    permissao: 'acessos' },
   // Também dependem de permissão (iguais à sidebar e às rotas).
   // Administração da rede (só pra quem gerencia)

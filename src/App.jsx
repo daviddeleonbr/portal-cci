@@ -51,7 +51,6 @@ import ClienteCriarSenha from './pages/cliente/ClienteCriarSenha';
 import WpDashboard from './pages/cliente/webposto/ClienteDashboard';
 import WpDRE from './pages/cliente/webposto/ClienteDRE';
 import WpFluxoCaixa from './pages/cliente/webposto/ClienteFluxoCaixa';
-import WpBPO from './pages/cliente/webposto/ClienteBPO';
 import WpDocumentos from './pages/cliente/webposto/ClienteDocumentos';
 import WpContasPagar from './pages/cliente/webposto/ClienteContasPagar';
 import WpContasReceber from './pages/cliente/webposto/ClienteContasReceber';
@@ -81,7 +80,6 @@ import AsDashboard from './pages/cliente/autosystem/ClienteDashboard';
 import AsDRE from './pages/cliente/autosystem/ClienteDRE';
 import AsCompras from './pages/cliente/autosystem/ClienteCompras';
 import AsFluxoCaixa from './pages/cliente/autosystem/ClienteFluxoCaixa';
-import AsBPO from './pages/cliente/autosystem/ClienteBPO';
 import AsDocumentos from './pages/cliente/autosystem/ClienteDocumentos';
 import AsContasPagar from './pages/cliente/autosystem/ClienteContasPagar';
 import AsContasReceber from './pages/cliente/autosystem/ClienteContasReceber';
@@ -232,7 +230,7 @@ export default function App() {
           <Route path="/cliente/webposto/dashboard" element={<RequireDashboardCliente><WpDashboard /></RequireDashboardCliente>} />
           <Route path="/cliente/webposto/dre" element={<RequirePermissaoCliente permissao="dre"><WpDRE /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/fluxo-caixa" element={<RequirePermissaoCliente permissao="fluxo_caixa"><WpFluxoCaixa /></RequirePermissaoCliente>} />
-          <Route path="/cliente/webposto/bpo" element={<RequirePermissaoCliente permissao="bpo"><WpBPO /></RequirePermissaoCliente>} />
+          <Route path="/cliente/webposto/bpo" element={<Navigate to="/cliente/webposto/dashboard" replace />} />{/* Serviços BPO descontinuado (1.27.0) */}
           <Route path="/cliente/webposto/documentos" element={<RequirePermissaoCliente permissao="documentos"><WpDocumentos /></RequirePermissaoCliente>} />
           <Route path="/cliente/webposto/financeiro" element={<Navigate to="/cliente/webposto/financeiro/contas-pagar" replace />} />
           <Route path="/cliente/webposto/financeiro/contas-pagar" element={<RequirePermissaoCliente permissao="financeiro"><WpContasPagar /></RequirePermissaoCliente>} />
@@ -265,7 +263,7 @@ export default function App() {
           <Route path="/cliente/autosystem/dre" element={<RequirePermissaoCliente permissao="dre"><AsDRE /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/compras" element={<RequirePermissaoCliente permissao="compras"><AsCompras /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/fluxo-caixa" element={<RequirePermissaoCliente permissao="fluxo_caixa"><AsFluxoCaixa /></RequirePermissaoCliente>} />
-          <Route path="/cliente/autosystem/bpo" element={<RequirePermissaoCliente permissao="bpo"><AsBPO /></RequirePermissaoCliente>} />
+          <Route path="/cliente/autosystem/bpo" element={<Navigate to="/cliente/autosystem/dashboard" replace />} />{/* Serviços BPO descontinuado (1.27.0) */}
           <Route path="/cliente/autosystem/documentos" element={<RequirePermissaoCliente permissao="documentos"><AsDocumentos /></RequirePermissaoCliente>} />
           <Route path="/cliente/autosystem/financeiro" element={<Navigate to="/cliente/autosystem/financeiro/contas-pagar" replace />} />
           <Route path="/cliente/autosystem/financeiro/contas-pagar" element={<RequirePermissaoCliente permissao="financeiro"><AsContasPagar /></RequirePermissaoCliente>} />

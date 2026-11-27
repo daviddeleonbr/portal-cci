@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.27.0",
+      "data": "2026-11-27",
+      "resumo": "Conciliação de caixas substituída pelo Relatório geral.",
+      "itens": [
+        {
+          "tipo": "melhoria",
+          "publico": "admin",
+          "titulo": "Relatório geral no lugar da Conciliação de caixas",
+          "descricao": "A aba Conciliação de caixas saiu. O Relatório geral, que reúne vendas, recebimentos, sobras e faltas por funcionário, agora abre primeiro na página."
+        },
+        {
+          "tipo": "melhoria",
+          "publico": "cliente",
+          "titulo": "Serviços BPO saiu do menu",
+          "descricao": "A tela Serviços BPO, com os relatórios de conciliação de caixa por dia, foi descontinuada. O fechamento e as sangrias continuam nas suas telas de sempre."
+        }
+      ]
+    },
+    {
       "versao": "1.26.2",
       "data": "2026-11-27",
       "resumo": "Relatório geral dos caixas: sobras e faltas por funcionário nas redes com contas próprias.",

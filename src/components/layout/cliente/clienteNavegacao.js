@@ -58,7 +58,6 @@ export function buildNavigation(prefix, tipoCliente = 'webposto') {
         { name: 'Contas a Receber', href: `${prefix}/bpo/contas-receber`, icon: ArrowDownLeft, permissao: 'bpo_contas_receber', curto: 'Receb. BPO' },
         // Outras Contas: a página só existe no Webposto (no Autosystem o link caía em `/`)
         ...(tipoCliente === 'webposto' ? [{ name: 'Outras Contas', href: `${prefix}/bpo/outras-contas`, icon: Receipt, permissao: 'outras_contas', curto: 'Outras', barraMobile: true }] : []),
-        { name: 'Serviços BPO', href: `${prefix}/bpo`, icon: ClipboardCheck, permissao: 'bpo', curto: 'Serviços' },
         { name: 'Acessos', href: `${prefix}/acessos`, icon: KeyRound, permissao: 'acessos', curto: 'Acessos' },
         // LMC: por enquanto só Webposto (endpoint /INTEGRACAO/V1/LMCS)
         ...(tipoCliente === 'webposto' ? [{ name: 'LMC', href: `${prefix}/lmc`, icon: Fuel, permissao: 'lmc', curto: 'LMC' }] : []),

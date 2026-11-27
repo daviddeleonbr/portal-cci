@@ -37,7 +37,6 @@ const META_CLIENTE = {
   lmc_editar:                 { modulo: 'Operacional', acao: 'editar', desc: 'Lançar o escritural real e o motivo no LMC gerencial.', depende: ['lmc'] },
   notas_fiscais:              { modulo: 'Operacional', acao: 'editar', desc: 'Manifestação das notas de entrada.' },
   documentos:                 { modulo: 'Operacional', acao: 'ver', desc: 'Documentos compartilhados pela CCI.' },
-  bpo:                        { modulo: 'Operacional', acao: 'ver', desc: 'Serviços BPO contratados.' },
   financeiro:                 { modulo: 'Financeiro', acao: 'ver', desc: 'Contas a pagar e a receber e cards financeiros do painel.' },
   bpo_contas_pagar:           { modulo: 'Financeiro', acao: 'ver', desc: 'Agenda de pagamentos do BPO.' },
   bpo_contas_pagar_autorizar: { modulo: 'Financeiro', acao: 'aprovar', desc: 'Marcar pagamentos como autorizados no banco.', depende: ['bpo_contas_pagar'] },

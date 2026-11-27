@@ -129,7 +129,6 @@ export const PERMISSOES_CLIENTE = [
   { key: 'sangrias_consultar', label: 'Consultar sangrias (só visualiza os fechamentos enviados)', grupo: 'Operacional' },
   { key: 'fechamento_caixa', label: 'Fechamento de caixa (vendas, recebimentos, ajustes, devoluções e aferições)', grupo: 'Operacional' },
   { key: 'sangrias_tarefa_deposito', label: 'Sangrias · Criar tarefa de depósito em banco', grupo: 'Operacional' },
-  { key: 'bpo', label: 'Serviços BPO', grupo: 'Operacional' },
   { key: 'documentos', label: 'Documentos', grupo: 'Operacional' },
   { key: 'financeiro', label: 'Financeiro', grupo: 'Operacional' },
   { key: 'notas_fiscais', label: 'Notas Fiscais (manifestação)', grupo: 'Operacional' },

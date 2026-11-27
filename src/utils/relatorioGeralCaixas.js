@@ -1,7 +1,6 @@
 // Relatório geral dos caixas (admin) — modelos puros, sem rede nem tela.
-// Mesmas fórmulas da aba Conciliação de caixas (BpoConciliacaoCaixas); mudou uma
-// regra lá, mude aqui também. Alterações de Webposto e Autosystem saem num formato
-// único (uma linha por alteração).
+// Substitui a antiga aba Conciliação de caixas (descontinuada na 1.27.0). Alterações
+// de Webposto e Autosystem saem num formato único (uma linha por alteração).
 import { classificarItem } from '../services/mapeamentoVendasService';
 import { formatCurrency } from './format';
 import { camposAlterados, ehTabelaCaixa, fmtDataHora } from '../services/alteracoesCaixasWebpostoService';
