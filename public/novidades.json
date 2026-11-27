@@ -2,6 +2,19 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.26.1",
+      "data": "2026-11-27",
+      "resumo": "Relatório geral dos caixas: sobras e faltas separadas nas redes com contas próprias.",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Sobras e faltas no Relatório geral (Autosystem)",
+          "descricao": "Nas redes que usam uma conta para sobra e outra para falta, as sobras apareciam somadas às faltas. Agora cada uma aparece no seu lugar."
+        }
+      ]
+    },
+    {
       "versao": "1.26.0",
       "data": "2026-11-27",
       "resumo": "LMC gerencial: dia fecha ao salvar as medições, com histórico.",

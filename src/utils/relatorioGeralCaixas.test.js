@@ -37,6 +37,27 @@ describe('relatório geral — sobras e faltas do Autosystem', () => {
     expect(m.totalRecebido).toBeCloseTo(50);
   });
 
+  // Caso Trivellin (25/11/2026): contas separadas 1.5.1 SOBRA / 1.5.2 FALTA — manda a conta,
+  // não o lado (o lançamento na conta de sobra não pode virar falta).
+  it('com contas separadas, sobra e falta saem pela categoria da conta', () => {
+    const separadas = new Map([['1.5.1', 'sobra_caixa'], ['1.5.2', 'falta_caixa']]);
+    const m = modeloAutosystem({
+      categoriaConta: separadas,
+      recebimentos: [
+        rec('1.5.1', '1.1.2.1', 10, 115, 'ANGELICA'),   // sobra lançada com o PDV creditado
+        rec('1.1.2.2', '1.5.1', 2.5, 102, 'RONAN'),     // sobra no sentido usual
+        rec('1.5.2', '1.1.2.1', 142.10, 746, 'LUCAS'),  // falta
+      ],
+    });
+    const por = Object.fromEntries(m.funcionarios.map(f => [f.nome, f]));
+    expect(por.ANGELICA.sobra).toBeCloseTo(10);
+    expect(por.ANGELICA.falta).toBe(0);
+    expect(por.RONAN.sobra).toBeCloseTo(2.5);
+    expect(por.LUCAS.falta).toBeCloseTo(142.10);
+    expect(m.sobras).toBeCloseTo(12.5);
+    expect(m.faltas).toBeCloseTo(142.10);
+  });
+
   it('sem responsável (consulta antiga), fica com quem lançou', () => {
     const r = { ...rec('1.5', '1.1.2.1', 10, null, ''), responsavel_pessoa_id: undefined, responsavel_nome: undefined };
     const m = modeloAutosystem({ categoriaConta, recebimentos: [r] });

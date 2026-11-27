@@ -159,20 +159,25 @@ export function modeloAutosystem({ vendas = [], recebimentos = [], outrasEntrada
 
   const formas = Object.fromEntries(FORMAS_AS.map(([k]) => [k, 0]));
   let semConta = 0;
+  // Rede com contas SEPARADAS (ex. Trivellin: 1.5.1 SOBRA / 1.5.2 FALTA) → manda a
+  // categoria da conta, seja qual for o lado do lançamento. Conta ÚNICA 'sobra e falta'
+  // (ex. 1.5 em Diamante Negro/Bom Sucesso, cadastrada só como falta) → manda o lado.
+  const cats = new Set(categoriaConta.values());
+  const contasSeparadas = cats.has('sobra_caixa') && cats.has('falta_caixa');
   recebimentos.forEach(r => {
     const valor = num(r.valor);
     const credito = r.conta_creditar ? categoriaConta.get(String(r.conta_creditar)) : null;
     const debito = r.modo_recebimento ? categoriaConta.get(String(r.modo_recebimento)) : null;
     // Sobra/falta: vai para o RESPONSÁVEL do PDV/turno (como no relatório do Autosystem),
     // não para quem lançou (muitas vezes a CCI). Sem responsável (Edge antiga), quem lançou.
-    // Pelo lado do lançamento: conta de sobra/falta creditada = sobra (PDV debitado);
-    // debitada = falta (PDV creditado) — vale para conta única 'sobra e falta' e separadas.
     const ehSF = (c) => c === 'sobra_caixa' || c === 'falta_caixa';
     if (ehSF(credito) || ehSF(debito)) {
       const f = r.responsavel_pessoa_id != null || r.responsavel_nome
         ? func(r.responsavel_pessoa_id, r.responsavel_nome)
         : func(r.usuario_pessoa_id, nomeDe(r.usuario_nome, r.usuario));
-      if (ehSF(credito)) f.sobra += valor; else f.falta += valor;
+      // Conta única, pelo lado: creditada = sobra (PDV debitado); debitada = falta (PDV creditado)
+      const ehSobra = contasSeparadas ? (ehSF(credito) ? credito : debito) === 'sobra_caixa' : ehSF(credito);
+      if (ehSobra) f.sobra += Math.abs(valor); else f.falta += Math.abs(valor);
       return;
     }
     if (!debito) semConta += 1;
