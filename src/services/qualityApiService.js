@@ -1079,6 +1079,17 @@ export async function buscarCaixasIndividuais(apiKey, { dataInicial, dataFinal, 
   });
 }
 
+// Vales de funcionário. Ao CONSOLIDAR o caixa, o Webposto zera a diferença do fechamento
+// e lança a sobra/falta de cada funcionário aqui: origem 'Falta de Caixa' | 'Sobra de
+// Caixa', valor sempre positivo, com caixaCodigo e funcionarioCodigo. Outras origens são
+// vales comuns (adiantamento etc.). Filtra a empresa (por garantia, como no CAIXA_APRESENTADO).
+export async function buscarValesFuncionario(apiKey, { dataInicial, dataFinal, empresaCodigo } = {}, urlBase = DEFAULT_URL_BASE) {
+  const raw = await fetchPagParalelo(urlBase, 'VALE_FUNCIONARIO', apiKey, {
+    limite: LIMITE_PADRAO, dataInicial, dataFinal, empresaCodigo,
+  });
+  return (raw || []).filter(v => empresaCodigo == null || Number(v.empresaCodigo) === Number(empresaCodigo));
+}
+
 // LMC — Livro de Movimentação de Combustíveis (endpoint /INTEGRACAO/V1/LMCS).
 // Uma linha por produto (combustível) por dia, com o detalhe por tanque
 // (lmcTanque), por bico (lmcBico: encerrantes, aferição, venda) e as notas de

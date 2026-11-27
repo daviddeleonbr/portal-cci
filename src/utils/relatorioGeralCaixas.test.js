@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { modeloAutosystem, modeloSangrias } from './relatorioGeralCaixas';
+import { modeloAutosystem, modeloSangrias, modeloWebposto } from './relatorioGeralCaixas';
 
 // Caso Diamante Negro (26/11/2026): conta única 1.5 "SOBRA E FALTA DE CAIXA" cadastrada
 // como falta; quem lança é a CCI, mas o relatório do Autosystem agrupa pelo responsável do PDV.
@@ -131,5 +131,52 @@ describe('relatório geral — sangrias com retiradas antes do depósito', () =>
     const s = modeloSangrias({ fechamentos: [], atuais });
     expect(s.semConferencia).toEqual(['2026-11-25']);
     expect(s.linhas[1]).toMatchObject({ nome: 'KASSANDRA', apurado: 6109.75, apresentado: null, aDepositar: null });
+  });
+});
+
+// Webposto: caixa CONSOLIDADO zera o fechamento e lança a sobra/falta de cada funcionário
+// como vale (VALE_FUNCIONARIO); não consolidado, a diferença fica nos caixas individuais.
+describe('relatório geral — sobras e faltas do Webposto', () => {
+  const funcionarios = [
+    { funcionarioCodigo: 3577, nome: 'GLADSON' }, { funcionarioCodigo: 138506, nome: 'RHUAN' },
+    { funcionarioCodigo: 140004, nome: 'THAIS' }, { funcionarioCodigo: 187144, nome: 'DERIVAN' },
+  ];
+  const fechamento = (caixaCodigo, apurado, apresentado) => ({
+    empresaCodigo: 1, caixaCodigo, dinheiroApurado: apurado, dinheiroApresentado: apresentado,
+  });
+
+  // Trivela 25/11/2026: caixa 2328821 consolidado, fechamento zerado, faltas/sobra em vales
+  it('caixa consolidado: sobra e falta saem dos vales de funcionário', () => {
+    const m = modeloWebposto({
+      funcionarios,
+      caixas: [{ caixaCodigo: 2328821, fechado: true, consolidado: true, funcionarioCodigo: 140716 }],
+      apresentados: [fechamento(2328821, 7360.25, 7360.25)],
+      individuais: [{ caixaCodigo: 2328821, funcionarioCodigo: 3577, diferenca: 0 }],
+      vales: [
+        { caixaCodigo: 2328821, funcionarioCodigo: 3577, origem: 'Falta de Caixa', valor: 338.42 },
+        { caixaCodigo: 2328821, funcionarioCodigo: 140004, origem: 'Falta de Caixa', valor: 5.13 },
+        { caixaCodigo: 2328821, funcionarioCodigo: 138506, origem: 'Sobra de Caixa', valor: 0.51 },
+        { caixaCodigo: 2328821, funcionarioCodigo: 3577, origem: 'Adiantamento', valor: 100 }, // vale comum: fora
+      ],
+    });
+    const por = Object.fromEntries(m.funcionarios.map(f => [f.nome, f]));
+    expect(por.GLADSON.falta).toBeCloseTo(338.42);
+    expect(por.THAIS.falta).toBeCloseTo(5.13);
+    expect(por.RHUAN.sobra).toBeCloseTo(0.51);
+    expect(m.faltas).toBeCloseTo(343.55);
+    expect(m.sobras).toBeCloseTo(0.51);
+  });
+
+  // Dona Rosa 17/11/2026: não consolidado, −6,16 no caixa individual, sem vales
+  it('caixa não consolidado: segue pelos caixas individuais', () => {
+    const m = modeloWebposto({
+      funcionarios,
+      caixas: [{ caixaCodigo: 3160816, fechado: true, consolidado: false, funcionarioCodigo: 187144 }],
+      apresentados: [fechamento(3160816, 1000, 993.84)],
+      individuais: [{ caixaCodigo: 3160816, funcionarioCodigo: 187144, diferenca: -6.16 }],
+      vales: [],
+    });
+    expect(m.funcionarios.map(f => [f.nome, f.falta])).toEqual([['DERIVAN', 6.16]]);
+    expect(m.caixasSemDetalhe).toBe(0);
   });
 });

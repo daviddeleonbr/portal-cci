@@ -2,6 +2,25 @@
   "_como_usar": "A cada deploy com mudança visível, adicione uma entrada NO TOPO de `versoes` (a 1ª é a versão atual do app). tipo: novidade | melhoria | correcao. publico: cliente | admin | todos. Textos curtos, na linguagem de quem usa.",
   "versoes": [
     {
+      "versao": "1.27.1",
+      "data": "2026-11-27",
+      "resumo": "Sobras e faltas dos caixas consolidados no Relatório geral e nova página Análise de cartões.",
+      "itens": [
+        {
+          "tipo": "correcao",
+          "publico": "admin",
+          "titulo": "Sobras e faltas de caixas consolidados (Webposto)",
+          "descricao": "No Relatório geral, os caixas já consolidados no Webposto agora mostram a sobra e a falta de cada funcionário, lidas dos vales de funcionário."
+        },
+        {
+          "tipo": "novidade",
+          "publico": "admin",
+          "titulo": "Análise de cartões na Consultoria",
+          "descricao": "Nova página Análise de cartões no menu Consultoria, ainda em construção."
+        }
+      ]
+    },
+    {
       "versao": "1.27.0",
       "data": "2026-11-27",
       "resumo": "Conciliação de caixas substituída pelo Relatório geral.",

@@ -50,8 +50,23 @@ function difPorFuncionario(individuais = []) {
   return m;
 }
 
-export function modeloWebposto({ vendas = [], canceladas = [], itens = [], produtos = [], grupos = [], formas = [], caixas = [], apresentados = [], funcionarios = [], individuais = [] }) {
+// Vales de sobra/falta de caixa (caixa CONSOLIDADO) → Map(caixa → [{ func, dif }]).
+// Sobra entra positiva, falta negativa; vales comuns (adiantamento etc.) ficam de fora.
+function difPorVale(vales = []) {
+  const m = new Map();
+  vales.forEach(v => {
+    const origem = String(v.origem || v.descricao || '');
+    const sinal = /sobra de caixa/i.test(origem) ? 1 : /falta de caixa/i.test(origem) ? -1 : 0;
+    if (!sinal || v.caixaCodigo == null) return;
+    const k = Number(v.caixaCodigo);
+    m.set(k, [...(m.get(k) || []), { func: v.funcionarioCodigo, dif: sinal * Math.abs(num(v.valor)) }]);
+  });
+  return m;
+}
+
+export function modeloWebposto({ vendas = [], canceladas = [], itens = [], produtos = [], grupos = [], formas = [], caixas = [], apresentados = [], funcionarios = [], individuais = [], individuaisFalhou = false, vales = [], valesFalhou = false }) {
   const difPorCaixa = difPorFuncionario(individuais);
+  const valesPorCaixa = difPorVale(vales);
   const validas = vendas.filter(v => v.cancelada !== 'S');
   const porVenda = new Map(validas.map(v => [v.vendaCodigo || v.codigo, v]));
   const prods = new Map(produtos.map(p => [p.produtoCodigo || p.codigo, p]));
@@ -100,6 +115,10 @@ export function modeloWebposto({ vendas = [], canceladas = [], itens = [], produ
       if (v > CENTAVO) func(cod).sobra += v;
       else if (v < -CENTAVO) func(cod).falta += -v;
     };
+    // Caixa consolidado: o Webposto zerou o fechamento e lançou a sobra/falta de cada um
+    // como vale — os vales mandam (e não há diferença a distribuir, então sem contar duas vezes).
+    const porVale = valesPorCaixa.get(Number(ca.caixaCodigo));
+    if (porVale) { porVale.forEach(d => lancar(d.func, d.dif)); return; }
     const detalhe = difPorCaixa.get(Number(ca.caixaCodigo));
     (detalhe || []).forEach(d => lancar(d.func, d.dif));
     const resto = dif - somaDif(detalhe);
@@ -121,7 +140,15 @@ export function modeloWebposto({ vendas = [], canceladas = [], itens = [], produ
     funcionarios: lista,
     acrescimos: somar(lista, 'acrescimos'), descontos: somar(lista, 'descontos'), sobras: somar(lista, 'sobra'), faltas: somar(lista, 'falta'),
     qtdVendas: validas.length, canceladas: { qtd: canceladas.length, valor: somar(canceladas, 'totalVenda') },
-    caixas: caixas.length, caixasSemFechamento: caixas.length - comFechamento.size, caixasSemDetalhe, avisos: [],
+    caixas: caixas.length, caixasSemFechamento: caixas.length - comFechamento.size, caixasSemDetalhe,
+    // Sem os caixas individuais, a sobra de um funcionário e a falta de outro no mesmo
+    // caixa se anulam e somem (o caixa fecha zerado): avisa em vez de mostrar "–".
+    avisos: [
+      individuaisFalhou && comFechamento.size > 0
+        && 'Não foi possível buscar os caixas individuais no Webposto: as sobras e faltas por funcionário podem estar incompletas.',
+      valesFalhou && caixas.some(c => c.consolidado)
+        && 'Não foi possível buscar os vales de funcionário no Webposto: as sobras e faltas dos caixas consolidados podem não aparecer.',
+    ].filter(Boolean),
   };
 }
 

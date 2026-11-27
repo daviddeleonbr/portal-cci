@@ -3,7 +3,7 @@ import {
   Coins, WalletCards, PieChart, Settings,
   RefreshCw, Eye, AlertTriangle,
   Activity, FileSpreadsheet, Receipt, FileSignature, FileDown, ListChecks, KeyRound,
-  Fuel, ArrowUpRight, ArrowDownLeft, FileBarChart, Sparkles, FlaskConical,
+  Fuel, ArrowUpRight, ArrowDownLeft, FileBarChart, Sparkles, FlaskConical, CreditCard,
 } from 'lucide-react';
 import { nivelAdmin } from '../../services/usuariosSistemaService';
 
@@ -55,6 +55,7 @@ const navigationAll = [
       { name: 'Fluxo de Caixa', href: '/admin/consultoria/fluxo-caixa', icon: Wallet, permissao: 'relatorios_cliente' },
       { name: 'Análise de IA', href: '/admin/consultoria/analise-ia', icon: Sparkles, permissaoTodas: ['relatorios_cliente', 'analise_ia'] },
       { name: 'Análise de Lançamentos', href: '/admin/consultoria/analise-lancamentos', icon: FlaskConical, permissao: 'relatorios_cliente' },
+      { name: 'Análise de Cartões', href: '/admin/consultoria/analise-cartoes', icon: CreditCard, permissao: 'relatorios_cliente' },
       { name: 'Relatórios BI', href: '/admin/relatorios-bi', icon: PieChart, permissao: 'relatorios_bi' },
       { name: 'Caixa Administrativo', href: '/admin/bpo/caixa-administrativo', icon: WalletCards, permissao: 'caixa_administrativo' },
     ],

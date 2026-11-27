@@ -38,7 +38,7 @@ export async function carregarRelatorio({ empresa, chave, de, ate }) {
   if (!chave) throw new Error('Chave da API não encontrada para esta rede.');
   const f = { dataInicial: de, dataFinal: ate, empresaCodigo: empresa.empresa_codigo };
   // Sem `.catch` nas vendas/itens: relatório incompleto não pode parecer completo.
-  const [vendas, canceladas, itens, produtos, grupos, formas, caixas, apresentados, funcionarios, individuais] = await Promise.all([
+  const [vendas, canceladas, itens, produtos, grupos, formas, caixas, apresentados, funcionarios, individuais, vales] = await Promise.all([
     qualityApi.buscarVendas(chave, { ...f, situacao: 'A' }),
     qualityApi.buscarVendas(chave, { ...f, situacao: 'C' }),
     qualityApi.buscarVendaItens(chave, { ...f, situacao: 'A' }),
@@ -49,11 +49,17 @@ export async function carregarRelatorio({ empresa, chave, de, ate }) {
     qualityApi.buscarCaixasApresentados(chave, f),
     qualityApi.buscarFuncionarios(chave),
     // Sobra/falta por funcionário; se falhar, a diferença fica com o responsável (com aviso)
-    qualityApi.buscarCaixasIndividuais(chave, f).catch(e => { console.warn('[relatorio geral] caixas individuais', e); return []; }),
+    qualityApi.buscarCaixasIndividuais(chave, f).catch(e => { console.warn('[relatorio geral] caixas individuais', e); return null; }),
+    // Caixa consolidado: a sobra/falta de cada funcionário vira vale (o fechamento fica zerado)
+    qualityApi.buscarValesFuncionario(chave, f).catch(e => { console.warn('[relatorio geral] vales de funcionário', e); return null; }),
   ]);
   // A API ignora empresaCodigo em CAIXA_APRESENTADO
   const daEmpresa = (apresentados || []).filter(a => a.empresaCodigo === empresa.empresa_codigo);
-  return modeloWebposto({ vendas, canceladas, itens, produtos, grupos, formas, caixas, funcionarios, apresentados: daEmpresa, individuais });
+  return modeloWebposto({
+    vendas, canceladas, itens, produtos, grupos, formas, caixas, funcionarios, apresentados: daEmpresa,
+    individuais: individuais || [], individuaisFalhou: individuais === null,
+    vales: vales || [], valesFalhou: vales === null,
+  });
 }
 
 // Sangrias por funcionário: contagem confirmada pelo cliente × valor atual no sistema.

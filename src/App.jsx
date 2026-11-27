@@ -36,6 +36,7 @@ import CciContasPagar from './pages/CciContasPagar';
 import CciMotivos from './pages/CciMotivos';
 import CciUsuarios from './pages/CciUsuarios';
 import BpoConciliacaoCaixas from './pages/BpoConciliacaoCaixas';
+import ConsultoriaAnaliseCartoes from './pages/ConsultoriaAnaliseCartoes';
 import BpoCaixaAdministrativo from './pages/BpoCaixaAdministrativo';
 import BpoAlteracoesCaixas from './pages/BpoAlteracoesCaixas';
 import CciRelatoriosBi from './pages/CciRelatoriosBi';
@@ -192,6 +193,7 @@ export default function App() {
           <Route path="/admin/ferramentas/exportacao-contabil" element={<RequireNivelAdmin nivel={3}><AdminExportacaoContabil /></RequireNivelAdmin>} />
 
           {/* Relatórios da consultoria: um item por relatório na sidebar, com rede/empresa no topo */}
+          <Route path="/admin/consultoria/analise-cartoes" element={<RequirePermissaoAdmin permissao="relatorios_cliente"><ConsultoriaAnaliseCartoes /></RequirePermissaoAdmin>} />
           <Route path="/admin/consultoria/:tipo" element={<RequirePermissaoAdmin permissao="relatorios_cliente"><RelatoriosConsultoria /></RequirePermissaoAdmin>}>
             <Route path="empresa/:clienteId" element={<RelatorioDaEmpresa />} />
             <Route path="rede/:chaveApiId" element={<RelatorioDaRede sistema="webposto" />} />
